@@ -1,0 +1,74 @@
+{
+  "layoutVersion": "1.0.0",
+  "description": "Intake package folder layout from the Chapter intake guide. Every manifest path starts with one folder name below. pathTemplate is the folder for a file of that folder's roles; the file name (which may contain subfolders, for mesh companions) follows it. {areaKey} is the floor or area key from the capture record; {captureId} is the capture id. Each manifest role belongs to exactly one folder. Folders produced downstream are never written by the capture app.",
+  "manifestPath": "Source Register/{captureId}/manifest.json",
+  "fileNames": {
+    "capture_record": "capture-record.json",
+    "field_controls": "field-controls.json",
+    "manifest": "manifest.json"
+  },
+  "folders": [
+    {
+      "id": "original_exports",
+      "name": "Original Exports",
+      "groupBy": ["areaKey", "captureId"],
+      "pathTemplate": "Original Exports/{areaKey}/{captureId}/",
+      "producedBy": "capture_app",
+      "roles": [
+        "raw_roomplan_json",
+        "raw_depth",
+        "plan_dxf",
+        "rooms_csv",
+        "plan_pdf",
+        "spatial_report_pdf",
+        "plan_png",
+        "plan_svg",
+        "mesh_glb",
+        "mesh_obj",
+        "mesh_mtl",
+        "texture",
+        "point_cloud_las"
+      ]
+    },
+    {
+      "id": "site_photos",
+      "name": "Site Photos",
+      "groupBy": ["areaKey", "captureId"],
+      "pathTemplate": "Site Photos/{areaKey}/{captureId}/",
+      "producedBy": "capture_app",
+      "roles": ["photo"]
+    },
+    {
+      "id": "field_measurements",
+      "name": "Field Measurements",
+      "groupBy": ["captureId"],
+      "pathTemplate": "Field Measurements/{captureId}/",
+      "producedBy": "capture_app",
+      "roles": ["field_controls"]
+    },
+    {
+      "id": "source_register",
+      "name": "Source Register",
+      "groupBy": ["captureId"],
+      "pathTemplate": "Source Register/{captureId}/",
+      "producedBy": "capture_app",
+      "roles": ["capture_record"]
+    },
+    {
+      "id": "working_conversions",
+      "name": "Working Conversions",
+      "groupBy": ["areaKey", "captureId"],
+      "pathTemplate": "Working Conversions/{areaKey}/{captureId}/",
+      "producedBy": "downstream",
+      "roles": []
+    },
+    {
+      "id": "issued_outputs",
+      "name": "Issued Outputs",
+      "groupBy": ["areaKey", "captureId"],
+      "pathTemplate": "Issued Outputs/{areaKey}/{captureId}/",
+      "producedBy": "downstream",
+      "roles": []
+    }
+  ]
+}

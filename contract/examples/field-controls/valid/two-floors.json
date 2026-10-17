@@ -1,0 +1,95 @@
+{
+  "schemaVersion": "1.0.0",
+  "captureId": "3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35",
+  "distances": [
+    {
+      "id": "f1-distance-a",
+      "areaKey": "floor-1",
+      "axis": "A",
+      "from": "Kitchen east wall",
+      "to": "Living west wall",
+      "measurement": {
+        "valueMm": 7518.4,
+        "enteredUnit": "ft_in",
+        "enteredText": "24' 8\"",
+        "method": "laser",
+        "recordedAt": "2026-10-17T14:50:00Z"
+      }
+    },
+    {
+      "id": "f1-distance-b",
+      "areaKey": "floor-1",
+      "axis": "B",
+      "from": "Entry",
+      "to": "Rear wall",
+      "measurement": {
+        "valueMm": 11239.5,
+        "enteredUnit": "ft_in",
+        "enteredText": "36' 10 1/2\"",
+        "method": "laser",
+        "recordedAt": "2026-10-17T14:50:00Z"
+      }
+    }
+  ],
+  "ceilingHeights": [
+    {
+      "id": "f1-ceiling-kitchen",
+      "areaKey": "floor-1",
+      "room": "Kitchen",
+      "location": "Centre of room",
+      "measurement": {
+        "valueMm": 2690,
+        "enteredUnit": "mm",
+        "enteredText": "2690",
+        "method": "tape",
+        "recordedAt": "2026-10-17T14:50:00Z"
+      }
+    }
+  ],
+  "openings": [
+    {
+      "id": "f1-opening-entry",
+      "areaKey": "floor-1",
+      "room": "Kitchen",
+      "label": "Entry door",
+      "width": {
+        "valueMm": 914.4,
+        "enteredUnit": "in",
+        "enteredText": "36",
+        "method": "tape",
+        "recordedAt": "2026-10-17T14:50:00Z"
+      },
+      "height": {
+        "valueMm": 2032,
+        "enteredUnit": "in",
+        "enteredText": "80",
+        "method": "tape",
+        "recordedAt": "2026-10-17T14:50:00Z"
+      }
+    }
+  ],
+  "floorToFloor": [
+    {
+      "id": "f1-f2-stair",
+      "lowerAreaKey": "floor-1",
+      "upperAreaKey": "floor-2",
+      "location": "At stair",
+      "measurement": {
+        "valueMm": 2950,
+        "enteredUnit": "cm",
+        "enteredText": "295",
+        "method": "laser",
+        "recordedAt": "2026-10-17T14:50:00Z"
+      }
+    }
+  ],
+  "landmarks": [
+    {
+      "id": "landmark-newel",
+      "label": "Stair newel post",
+      "description": "Top of the newel post at the bottom of the stair.",
+      "areaKeys": ["floor-1", "floor-2"],
+      "photoPaths": ["Site Photos/floor-1/3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35/photo-0014.jpg"]
+    }
+  ]
+}

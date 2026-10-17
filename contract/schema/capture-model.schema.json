@@ -1,0 +1,246 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hellochapter.com/schemas/chapter-capture/v1/capture-model.schema.json",
+  "title": "CaptureModel",
+  "description": "Normalized geometry of one capture session, the single input of every plan and mesh exporter. Lengths in metres; right-handed coordinates with +Y up, so plan coordinates are X and Z. Each floor uses its own local capture frame: separate floors are not aligned to each other by this model. Ids are unique within their floor. Optional fields are omitted, never null.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "captureId", "coordinateSystem", "floors"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "captureId": { "$ref": "#/$defs/uuid" },
+    "coordinateSystem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["units", "handedness", "up"],
+      "properties": {
+        "units": { "const": "m" },
+        "handedness": { "const": "right" },
+        "up": { "const": "+Y" }
+      }
+    },
+    "floors": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/floor" }
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "description": "Lowercase RFC 9562 UUID.",
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "areaKey": {
+      "description": "Key of the floor or area in the capture record, for example floor-1.",
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "maxLength": 64
+    },
+    "id": {
+      "description": "Element id, unique within its floor.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "relativePath": {
+      "description": "Path relative to the package root, forward slashes, no '.' or '..' segments.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^(?!/)(?!.*//)(?!.*/$)(?!(.*/)?\\.{1,2}(/|$))[^\\\\\\x00-\\x1f]+$"
+    },
+    "vec3": {
+      "description": "Point or vector [x, y, z] in metres.",
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "positiveSize3": {
+      "description": "Box size [x, y, z] in metres, along the box's local axes.",
+      "type": "array",
+      "items": { "type": "number", "exclusiveMinimum": 0 },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "quaternion": {
+      "description": "Unit rotation quaternion [x, y, z, w].",
+      "type": "array",
+      "items": { "type": "number", "minimum": -1, "maximum": 1 },
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "confidence": {
+      "description": "Detection confidence reported by the capture framework.",
+      "enum": ["low", "medium", "high"]
+    },
+    "sourceRole": {
+      "description": "Subset of the manifest file roles that a floor's geometry can come from.",
+      "enum": ["raw_roomplan_json", "raw_depth", "mesh_glb", "mesh_obj", "point_cloud_las"]
+    },
+    "floor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "areaKey",
+        "label",
+        "rooms",
+        "walls",
+        "doors",
+        "windows",
+        "openings",
+        "objects",
+        "refs"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "areaKey": { "$ref": "#/$defs/areaKey" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "rooms": { "type": "array", "items": { "$ref": "#/$defs/room" } },
+        "walls": { "type": "array", "items": { "$ref": "#/$defs/wall" } },
+        "doors": { "type": "array", "items": { "$ref": "#/$defs/wallOpening" } },
+        "windows": { "type": "array", "items": { "$ref": "#/$defs/wallOpening" } },
+        "openings": {
+          "description": "Openings without a door or window (passages, arches).",
+          "type": "array",
+          "items": { "$ref": "#/$defs/wallOpening" }
+        },
+        "objects": { "type": "array", "items": { "$ref": "#/$defs/object" } },
+        "refs": {
+          "description": "Package files this floor's geometry was derived from or is accompanied by.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/sourceRef" }
+        }
+      }
+    },
+    "room": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "polygon", "heightM"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": {
+          "description": "Room label shown to people, for example Kitchen.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "polygon": {
+          "description": "Floor outline as a closed loop of points at floor level (first point not repeated), counter-clockwise seen from +Y.",
+          "type": "array",
+          "minItems": 3,
+          "items": { "$ref": "#/$defs/vec3" }
+        },
+        "heightM": {
+          "description": "Floor-to-ceiling height in metres.",
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "wall": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "start", "end", "heightM", "thicknessM"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "start": {
+          "description": "Wall centreline start at the wall base.",
+          "$ref": "#/$defs/vec3"
+        },
+        "end": {
+          "description": "Wall centreline end at the wall base.",
+          "$ref": "#/$defs/vec3"
+        },
+        "heightM": { "type": "number", "exclusiveMinimum": 0 },
+        "thicknessM": { "type": "number", "minimum": 0 },
+        "roomIds": {
+          "description": "Rooms this wall bounds.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/id" }
+        },
+        "confidence": { "$ref": "#/$defs/confidence" }
+      }
+    },
+    "wallOpening": {
+      "description": "Door, window or opening placed in its parent wall.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "wallId", "offsetM", "bottomM", "widthM", "heightM"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "wallId": {
+          "description": "Id of the parent wall on the same floor.",
+          "$ref": "#/$defs/id"
+        },
+        "offsetM": {
+          "description": "Distance along the wall from its start to the centre of the opening.",
+          "type": "number",
+          "minimum": 0
+        },
+        "bottomM": {
+          "description": "Height of the bottom of the opening above the wall base (0 for doors).",
+          "type": "number",
+          "minimum": 0
+        },
+        "widthM": { "type": "number", "exclusiveMinimum": 0 },
+        "heightM": { "type": "number", "exclusiveMinimum": 0 },
+        "confidence": { "$ref": "#/$defs/confidence" }
+      }
+    },
+    "object": {
+      "description": "Recognized object with an oriented bounding box. Reference geometry only.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "category", "box"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "category": {
+          "enum": [
+            "bathtub",
+            "bed",
+            "chair",
+            "dishwasher",
+            "fireplace",
+            "oven",
+            "refrigerator",
+            "sink",
+            "sofa",
+            "stairs",
+            "storage",
+            "stove",
+            "table",
+            "television",
+            "toilet",
+            "washer_dryer",
+            "other"
+          ]
+        },
+        "roomId": { "$ref": "#/$defs/id" },
+        "box": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["center", "sizeM", "rotation"],
+          "properties": {
+            "center": { "$ref": "#/$defs/vec3" },
+            "sizeM": { "$ref": "#/$defs/positiveSize3" },
+            "rotation": { "$ref": "#/$defs/quaternion" }
+          }
+        },
+        "confidence": { "$ref": "#/$defs/confidence" }
+      }
+    },
+    "sourceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "path"],
+      "properties": {
+        "role": { "$ref": "#/$defs/sourceRole" },
+        "path": { "$ref": "#/$defs/relativePath" }
+      }
+    }
+  }
+}

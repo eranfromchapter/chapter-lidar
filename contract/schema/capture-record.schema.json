@@ -1,0 +1,269 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hellochapter.com/schemas/chapter-capture/v1/capture-record.schema.json",
+  "title": "CaptureRecord",
+  "description": "Who captured what, where, when and how, for one capture session at one property. One capture session covers one or more floors or areas, each scanned in one mode. Written by the app as Source Register/{captureId}/capture-record.json. Optional fields are omitted, never null.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "captureId",
+    "hub",
+    "address",
+    "operator",
+    "device",
+    "app",
+    "units",
+    "capturedAt",
+    "areas"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "captureId": {
+      "$ref": "#/$defs/uuid"
+    },
+    "hub": {
+      "description": "The HUB project this capture belongs to.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dealId"],
+      "properties": {
+        "dealId": {
+          "description": "HUB deal id, as returned by the HUB.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "projectName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      }
+    },
+    "address": {
+      "description": "Property address from the HUB and whether the operator confirmed it on site.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["formatted", "confirmedOnSite"],
+      "properties": {
+        "formatted": {
+          "description": "Single-line address exactly as shown by the HUB.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "confirmedOnSite": {
+          "description": "True only when the operator confirmed on site that this is the address being captured.",
+          "type": "boolean"
+        },
+        "confirmedAt": {
+          "$ref": "#/$defs/dateTime"
+        }
+      },
+      "if": {
+        "properties": {
+          "confirmedOnSite": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "confirmedAt": {
+            "$ref": "#/$defs/dateTime"
+          }
+        },
+        "required": ["confirmedAt"]
+      },
+      "else": {
+        "not": {
+          "properties": {
+            "confirmedAt": {
+              "$ref": "#/$defs/dateTime"
+            }
+          },
+          "required": ["confirmedAt"]
+        }
+      }
+    },
+    "operator": {
+      "description": "The signed-in person who made the capture.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "userId": {
+          "description": "Directory id of the signed-in user, when known.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
+    "device": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "osName", "osVersion", "hasLidar"],
+      "properties": {
+        "model": {
+          "description": "Hardware model identifier, for example iPhone17,1.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "marketingName": {
+          "description": "Human-readable model name, for example iPhone 16 Pro.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "osName": {
+          "enum": ["iOS", "iPadOS"]
+        },
+        "osVersion": {
+          "type": "string",
+          "pattern": "^[0-9]+(\\.[0-9]+){0,2}$"
+        },
+        "hasLidar": {
+          "type": "boolean"
+        }
+      }
+    },
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "build"],
+      "properties": {
+        "version": {
+          "description": "Marketing version of Chapter Capture.",
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "build": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        }
+      }
+    },
+    "units": {
+      "description": "Geometry is always metres. Display is the unit system shown to the operator.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["length", "display"],
+      "properties": {
+        "length": {
+          "const": "m"
+        },
+        "display": {
+          "enum": ["metric", "imperial"]
+        }
+      }
+    },
+    "capturedAt": {
+      "description": "Start of the capture session (the capture date).",
+      "$ref": "#/$defs/dateTime"
+    },
+    "areas": {
+      "description": "Every floor or area captured in this session. Keys are unique within the record.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/area"
+      }
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "description": "Lowercase RFC 9562 UUID.",
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "dateTime": {
+      "description": "UTC timestamp, whole seconds, RFC 3339 with Z.",
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "areaKey": {
+      "description": "Stable path-safe key of a floor or area, for example floor-1. Used in package folder paths.",
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "maxLength": 64
+    },
+    "captureMode": {
+      "description": "Shown to users as One room, Whole floor, Exterior.",
+      "enum": ["room", "floor", "exterior"]
+    },
+    "roomNote": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        }
+      }
+    },
+    "area": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "label", "mode", "coverageNotes", "omittedRooms", "inaccessibleRooms"],
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/areaKey"
+        },
+        "label": {
+          "description": "Floor or area label shown to people, for example Floor 1.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "mode": {
+          "$ref": "#/$defs/captureMode"
+        },
+        "startedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "finishedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "coverageNotes": {
+          "description": "Free-text notes on coverage, obscured surfaces and gaps. Empty string when there is nothing to note.",
+          "type": "string",
+          "maxLength": 2000
+        },
+        "omittedRooms": {
+          "description": "Rooms the operator chose not to scan. Empty when none.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/roomNote"
+          }
+        },
+        "inaccessibleRooms": {
+          "description": "Rooms or spaces that could not be entered. Empty when none.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/roomNote"
+          }
+        }
+      }
+    }
+  }
+}
