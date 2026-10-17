@@ -1,0 +1,41 @@
+{
+  "name": "@chapter/station-hub",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Chapter Capture station HUB publish: HUB client (upload, document search, deal lookup), verdict report PDF, HubPublisher and a fake HUB for tests.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./fake": {
+      "types": "./src/fake/index.ts",
+      "default": "./dist/fake/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test \"test/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@chapter/capture-contract": "1.0.0",
+    "pdfkit": "0.20.2"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "@types/pdfkit": "0.17.6",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "unpdf": "1.9.0"
+  }
+}
