@@ -1,0 +1,147 @@
+// Read access to the originals container (Azure Blob; Azurite locally).
+//
+// - Account URL (Azure): DefaultAzureCredential (the worker's managed identity). Read only; the
+//   worker never writes, overwrites or deletes an original.
+// - Connection string (Azurite locally).
+//
+// Blob names always come from package_files.blob_name (a re-uploaded file lives in
+// `<packageId>.retry-<n>/<path>`); the one exception is the sealed manifest, which the station
+// API stores at `<packageId>/Source Register/<visitId>/manifest.json` (manifestBlobName).
+// Errors are rethrown without request details, so no key or token reaches a log.
+
+import { createHash } from "node:crypto";
+import { DefaultAzureCredential, type TokenCredential } from "@azure/identity";
+import { BlobServiceClient, RestError, type ContainerClient } from "@azure/storage-blob";
+import type { WorkerConfig } from "./config.js";
+
+/** A blob read into memory with the digest the worker computed. */
+export interface BlobContent {
+  readonly data: Buffer;
+  readonly sha256: string;
+  readonly bytes: number;
+}
+
+export interface OriginalsReader {
+  readonly container: string;
+  /**
+   * Reads a blob of at most maxBytes. Undefined when it does not exist; "too_large" when it is
+   * bigger than maxBytes (the bytes are not kept).
+   */
+  read(blobName: string, maxBytes: number): Promise<BlobContent | "too_large" | undefined>;
+}
+
+/** A storage failure without request details (safe to log). Retryable. */
+export class StorageError extends Error {
+  readonly retryable = true;
+
+  constructor(
+    message: string,
+    readonly code: string,
+    readonly statusCode?: number,
+  ) {
+    super(message);
+    this.name = "StorageError";
+  }
+}
+
+/** Blob of the sealed manifest, as the station API stores it (storage/originals.ts). */
+export function manifestBlobName(packageId: string, visitId: string): string {
+  return `${packageId}/Source Register/${visitId}/manifest.json`;
+}
+
+/** Package path of the sealed manifest (contract layout.json manifestPath). */
+export function manifestPath(visitId: string): string {
+  return `Source Register/${visitId}/manifest.json`;
+}
+
+function wrap(error: unknown, operation: string): StorageError {
+  if (error instanceof StorageError) {
+    return error;
+  }
+  if (error instanceof RestError) {
+    return new StorageError(
+      `${operation} failed (${error.code ?? "RestError"}, HTTP ${error.statusCode ?? "n/a"})`,
+      error.code ?? "RestError",
+      error.statusCode,
+    );
+  }
+  const message =
+    error instanceof Error ? error.message.replace(/\s+/g, " ").slice(0, 200) : "unknown error";
+  return new StorageError(`${operation} failed: ${message}`, "ClientError");
+}
+
+export function createOriginalsReader(
+  config: WorkerConfig["storage"],
+  credential?: TokenCredential,
+): OriginalsReader {
+  let service: BlobServiceClient;
+  if (config.accountUrl !== undefined) {
+    service = new BlobServiceClient(config.accountUrl, credential ?? new DefaultAzureCredential());
+  } else if (config.connectionString !== undefined) {
+    try {
+      service = BlobServiceClient.fromConnectionString(config.connectionString);
+    } catch {
+      // The SDK error may quote the connection string: do not pass it on.
+      throw new StorageError(
+        "AZURE_STORAGE_CONNECTION_STRING is not a valid storage connection string",
+        "InvalidConnectionString",
+      );
+    }
+  } else {
+    throw new StorageError("originals storage is not configured", "NotConfigured");
+  }
+  return blobReader(service.getContainerClient(config.originalsContainer));
+}
+
+export function blobReader(container: ContainerClient): OriginalsReader {
+  return {
+    container: container.containerName,
+    async read(blobName, maxBytes) {
+      let response;
+      try {
+        response = await container.getBlobClient(blobName).download(0, undefined, {
+          maxRetryRequests: 5,
+        });
+      } catch (error) {
+        // Only a missing blob is "absent"; a missing container is a configuration fault.
+        if (
+          error instanceof RestError &&
+          error.statusCode === 404 &&
+          error.code === "BlobNotFound"
+        ) {
+          return undefined;
+        }
+        throw wrap(error, "blob download");
+      }
+      const body = response.readableStreamBody;
+      if (body === undefined) {
+        throw new StorageError("blob download returned no body", "NoBody");
+      }
+      if (response.contentLength !== undefined && response.contentLength > maxBytes) {
+        body.resume();
+        return "too_large";
+      }
+      const hash = createHash("sha256");
+      const chunks: Buffer[] = [];
+      let bytes = 0;
+      try {
+        for await (const chunk of body) {
+          const buffer = typeof chunk === "string" ? Buffer.from(chunk) : (chunk as Buffer);
+          bytes += buffer.length;
+          if (bytes > maxBytes) {
+            body.resume();
+            return "too_large";
+          }
+          hash.update(buffer);
+          chunks.push(buffer);
+        }
+      } catch (error) {
+        throw wrap(error, "blob read");
+      }
+      if (response.contentLength !== undefined && bytes !== response.contentLength) {
+        throw new StorageError("blob read ended before the end of the blob", "ShortRead");
+      }
+      return { data: Buffer.concat(chunks), sha256: hash.digest("hex"), bytes };
+    },
+  };
+}
