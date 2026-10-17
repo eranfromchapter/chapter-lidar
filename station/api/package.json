@@ -1,0 +1,38 @@
+{
+  "name": "@chapter/station-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Chapter Capture station API: Entra sign-in, HUB lookup, upload sessions, package registry.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "build": "tsc -p scripts/tsconfig.build.json",
+    "start": "node dist/server.js",
+    "dev": "tsx src/server.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node scripts/run-tests.mjs",
+    "test:db": "tsx scripts/test-db.ts",
+    "migrate": "tsx src/core/migrate-main.ts",
+    "migrate:check": "tsx scripts/migrate-check.ts",
+    "local:up": "bash scripts/local-up.sh",
+    "local:down": "bash scripts/local-down.sh"
+  },
+  "dependencies": {
+    "@azure/identity": "4.14.0",
+    "@chapter/capture-contract": "1.0.0",
+    "@fastify/autoload": "6.5.1",
+    "fastify": "5.12.7",
+    "fastify-plugin": "5.1.0",
+    "jose": "6.2.12",
+    "node-pg-migrate": "9.0.0",
+    "pg": "8.23.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "@types/pg": "8.23.1",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3"
+  }
+}

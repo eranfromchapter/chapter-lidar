@@ -1,0 +1,92 @@
+# Local station stack: Postgres, Azurite (blob) and the API with the fake HUB.
+# Start with station/api/scripts/local-up.sh, stop with station/api/scripts/local-down.sh.
+#
+#   API       http://localhost:8080   (GET /health)
+#   Postgres  127.0.0.1:55432          postgres://station@127.0.0.1:55432/station (trust auth)
+#   Azurite   127.0.0.1:10000          blob endpoint http://localhost:10000/devstoreaccount1
+
+name: chapter-station-local
+
+services:
+  postgres:
+    image: postgres:16.15-bookworm
+    environment:
+      POSTGRES_USER: station
+      POSTGRES_DB: station
+      # Local only, bound to 127.0.0.1: no password.
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "127.0.0.1:${STATION_PG_PORT:-55432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U station -d station"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:3.35.0
+    command:
+      - azurite-blob
+      - --blobHost
+      - 0.0.0.0
+      - --blobPort
+      - "10000"
+      - --location
+      - /data
+      - --skipApiVersionCheck
+    ports:
+      - "127.0.0.1:${STATION_AZURITE_PORT:-10000}:10000"
+    volumes:
+      - azurite-data:/data
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "require('net').connect(10000,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 3s
+
+  api:
+    build:
+      context: ../..
+      dockerfile: station/api/Dockerfile
+      args:
+        STATION_VERSION: local
+      # Optional CA certificate for npm behind a TLS-intercepting proxy (see Dockerfile).
+      secrets:
+        - build_ca
+    image: chapter/station-api:local
+    env_file:
+      - .env.example
+    depends_on:
+      postgres:
+        condition: service_healthy
+      azurite:
+        condition: service_healthy
+    ports:
+      - "${STATION_API_PORT:-8080}:8080"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8080/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 5s
+
+volumes:
+  postgres-data:
+  azurite-data:
+
+secrets:
+  build_ca:
+    # Empty unless local-up.sh (or the caller) sets STATION_BUILD_CA_FILE.
+    file: ${STATION_BUILD_CA_FILE:-/dev/null}
