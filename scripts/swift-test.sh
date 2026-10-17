@@ -5,7 +5,9 @@
 # - A package with an `.apple-only` marker file at its root is skipped (it needs
 #   Apple frameworks and is tested on the macOS runner). Each skip is printed.
 # - No Swift packages at all: prints that and exits 0.
-# - Packages exist but `swift` is not on PATH: fails loudly. Run
+# - `swift` not on PATH: uses the toolchain installed by scripts/bootstrap-swift.sh
+#   at ${SWIFT_INSTALL_PREFIX:-$HOME/.local/share/swift}/current/usr/bin if present.
+# - Packages exist and `swift` is still not found: fails loudly. Run
 #   scripts/bootstrap-swift.sh first.
 #
 # Usage: scripts/swift-test.sh
@@ -44,6 +46,16 @@ done
 if [[ ${#runnable[@]} -eq 0 ]]; then
   echo "swift-test: every Swift package is marked .apple-only; nothing to test on this host."
   exit 0
+fi
+
+# Gates run in fresh shells, so also look for the toolchain that
+# scripts/bootstrap-swift.sh installs (same prefix and `current` link).
+if ! command -v swift >/dev/null 2>&1; then
+  bootstrap_bin="${SWIFT_INSTALL_PREFIX:-${HOME}/.local/share/swift}/current/usr/bin"
+  if [[ -x "${bootstrap_bin}/swift" ]]; then
+    echo "swift-test: swift not on PATH; using the bootstrapped toolchain at ${bootstrap_bin}"
+    export PATH="${bootstrap_bin}:${PATH}"
+  fi
 fi
 
 if ! command -v swift >/dev/null 2>&1; then
