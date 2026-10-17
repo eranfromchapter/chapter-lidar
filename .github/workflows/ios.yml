@@ -1,0 +1,245 @@
+# iOS build and test on a macOS runner with a pinned Xcode, on every push.
+#
+# One job per Swift package plus `App`. Each job name equals the package name exactly, so
+# `scripts/wait-workflow.sh ios.yml <Name>` can wait for it. A package that has not landed
+# yet (no Package.swift, or for App no ios/project.yml) passes with a visible
+# "skipped: not present yet" step, so pushes stay green until it lands.
+#
+# Per package:
+#   - scheme: `<Name>-Package` when Xcode generates it (packages with several products),
+#     otherwise `<Name>`. Any other result fails the job.
+#   - `xcodebuild build` for generic iOS (no code signing).
+#   - `xcodebuild test` on the iOS simulator when the package has Swift files under Tests/.
+#     The .xcresult bundle is uploaded as an artifact.
+#
+# App (contract for ios/project.yml): XcodeGen generates exactly one ios/*.xcodeproj
+# with a scheme named by APP_SCHEME whose test action holds the UI tests.
+#
+# No secrets are used. Third-party actions are pinned to full commit SHAs, and XcodeGen
+# is a pinned release checked against its SHA-256 before use.
+name: ios
+
+on:
+  push:
+    branches: ["**"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  # Pinned Xcode on the macos-15 (arm64) image. Selected via DEVELOPER_DIR for every step.
+  XCODE_VERSION: "26.3"
+  DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+  SIMULATOR_DESTINATION: platform=iOS Simulator,name=iPhone 17 Pro,OS=latest
+  XCODEGEN_VERSION: 2.46.0
+  XCODEGEN_SHA256: 4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806
+  APP_SCHEME: App
+
+jobs:
+  package:
+    name: ${{ matrix.package }}
+    runs-on: macos-15
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: CaptureContract
+            path: contract/swift
+          - package: CaptureCore
+            path: ios/Packages/CaptureCore
+          - package: PlanExport
+            path: ios/Packages/PlanExport
+          - package: MeshExport
+            path: ios/Packages/MeshExport
+          - package: FieldKit
+            path: ios/Packages/FieldKit
+          - package: PackageKit
+            path: ios/Packages/PackageKit
+          - package: StationClient
+            path: ios/Packages/StationClient
+    env:
+      PACKAGE_NAME: ${{ matrix.package }}
+      PACKAGE_DIR: ${{ matrix.path }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check package is present
+        id: present
+        run: |
+          if [[ ! -f "${PACKAGE_DIR}/Package.swift" ]]; then
+            echo "skipped: not present yet (${PACKAGE_DIR}/Package.swift does not exist)"
+            echo "${PACKAGE_NAME}: skipped: not present yet" >>"${GITHUB_STEP_SUMMARY}"
+            echo "present=false" >>"${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          echo "present=true" >>"${GITHUB_OUTPUT}"
+          if [[ -d "${PACKAGE_DIR}/Tests" ]] && [[ -n "$(find "${PACKAGE_DIR}/Tests" -name '*.swift' -type f -print -quit)" ]]; then
+            echo "has_tests=true" >>"${GITHUB_OUTPUT}"
+          else
+            echo "${PACKAGE_NAME} has no Swift files under Tests/; the simulator test step will not run."
+            echo "has_tests=false" >>"${GITHUB_OUTPUT}"
+          fi
+
+      - name: Check pinned Xcode
+        if: steps.present.outputs.present == 'true'
+        run: |
+          if [[ ! -d "${DEVELOPER_DIR}" ]]; then
+            echo "::error::Pinned Xcode ${XCODE_VERSION} is not installed at ${DEVELOPER_DIR}. Installed:"
+            ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          xcodebuild -version
+
+      - name: Find scheme
+        if: steps.present.outputs.present == 'true'
+        id: scheme
+        working-directory: ${{ matrix.path }}
+        run: |
+          schemes="$(xcodebuild -list -json | jq -r '(.workspace // .project).schemes[]')"
+          if grep -Fxq "${PACKAGE_NAME}-Package" <<<"${schemes}"; then
+            scheme="${PACKAGE_NAME}-Package"
+          elif grep -Fxq "${PACKAGE_NAME}" <<<"${schemes}"; then
+            scheme="${PACKAGE_NAME}"
+          else
+            echo "::error::No scheme named ${PACKAGE_NAME}-Package or ${PACKAGE_NAME}. Schemes found:"
+            echo "${schemes}"
+            exit 1
+          fi
+          echo "Using scheme ${scheme}"
+          echo "name=${scheme}" >>"${GITHUB_OUTPUT}"
+
+      - name: Build for iOS
+        if: steps.present.outputs.present == 'true'
+        working-directory: ${{ matrix.path }}
+        env:
+          SCHEME: ${{ steps.scheme.outputs.name }}
+        run: |
+          xcodebuild build \
+            -scheme "${SCHEME}" \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "${RUNNER_TEMP}/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Test on iOS simulator
+        if: steps.present.outputs.present == 'true' && steps.present.outputs.has_tests == 'true'
+        working-directory: ${{ matrix.path }}
+        env:
+          SCHEME: ${{ steps.scheme.outputs.name }}
+        run: |
+          xcodebuild test \
+            -scheme "${SCHEME}" \
+            -destination "${SIMULATOR_DESTINATION}" \
+            -derivedDataPath "${RUNNER_TEMP}/DerivedData" \
+            -resultBundlePath "${RUNNER_TEMP}/results/${PACKAGE_NAME}.xcresult"
+
+      - name: Upload test results
+        if: always() && steps.present.outputs.present == 'true' && steps.present.outputs.has_tests == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: xcresult-${{ matrix.package }}
+          path: ${{ runner.temp }}/results
+          if-no-files-found: warn
+          retention-days: 14
+
+  app:
+    name: App
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check app project is present
+        id: present
+        run: |
+          if [[ ! -f ios/project.yml ]]; then
+            echo "skipped: not present yet (ios/project.yml does not exist)"
+            echo "App: skipped: not present yet" >>"${GITHUB_STEP_SUMMARY}"
+            echo "present=false" >>"${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          echo "present=true" >>"${GITHUB_OUTPUT}"
+
+      - name: Check pinned Xcode
+        if: steps.present.outputs.present == 'true'
+        run: |
+          if [[ ! -d "${DEVELOPER_DIR}" ]]; then
+            echo "::error::Pinned Xcode ${XCODE_VERSION} is not installed at ${DEVELOPER_DIR}. Installed:"
+            ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          xcodebuild -version
+
+      - name: Install XcodeGen ${{ env.XCODEGEN_VERSION }}
+        if: steps.present.outputs.present == 'true'
+        run: |
+          install_dir="${RUNNER_TEMP}/xcodegen-${XCODEGEN_VERSION}"
+          archive="${RUNNER_TEMP}/xcodegen-${XCODEGEN_VERSION}.zip"
+          curl --fail --location --silent --show-error --retry 3 -o "${archive}" \
+            "https://github.com/yonaskolb/XcodeGen/releases/download/${XCODEGEN_VERSION}/xcodegen.zip"
+          echo "${XCODEGEN_SHA256}  ${archive}" | shasum -a 256 --check --strict
+          mkdir -p "${install_dir}"
+          unzip -q "${archive}" -d "${install_dir}"
+          echo "${install_dir}/xcodegen/bin" >>"${GITHUB_PATH}"
+
+      - name: Generate Xcode project
+        if: steps.present.outputs.present == 'true'
+        id: project
+        run: |
+          xcodegen --version
+          xcodegen generate --spec ios/project.yml
+          shopt -s nullglob
+          projects=(ios/*.xcodeproj)
+          if [[ ${#projects[@]} -ne 1 ]]; then
+            echo "::error::Expected exactly one ios/*.xcodeproj after xcodegen, found ${#projects[@]}: ${projects[*]}"
+            exit 1
+          fi
+          echo "Using project ${projects[0]}"
+          echo "path=${projects[0]}" >>"${GITHUB_OUTPUT}"
+
+      - name: Build for iOS
+        if: steps.present.outputs.present == 'true'
+        env:
+          PROJECT: ${{ steps.project.outputs.path }}
+        run: |
+          xcodebuild build \
+            -project "${PROJECT}" \
+            -scheme "${APP_SCHEME}" \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "${RUNNER_TEMP}/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: UI tests on iOS simulator
+        if: steps.present.outputs.present == 'true'
+        env:
+          PROJECT: ${{ steps.project.outputs.path }}
+        run: |
+          xcodebuild test \
+            -project "${PROJECT}" \
+            -scheme "${APP_SCHEME}" \
+            -destination "${SIMULATOR_DESTINATION}" \
+            -derivedDataPath "${RUNNER_TEMP}/DerivedData" \
+            -resultBundlePath "${RUNNER_TEMP}/results/App.xcresult"
+
+      - name: Upload test results
+        if: always() && steps.present.outputs.present == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: xcresult-App
+          path: ${{ runner.temp }}/results
+          if-no-files-found: warn
+          retention-days: 14
