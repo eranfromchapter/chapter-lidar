@@ -1,17 +1,15 @@
-// Signed download links (src/routes/packages/download.ts): read-only, one blob, 10 minutes,
-// bim/admin only, verified files only, audited without the URL. Signed links are exercised
-// against a disposable Azurite container (it checks SAS signatures and permissions) and a
-// migrated throwaway Postgres.
+// Signed download links (src/routes/packages/download.ts) through the real route
+// GET /v1/packages/{packageId}/files/download (OpenAPI getFileDownloadLink): read-only, one
+// blob, 10 minutes, bim/admin only, verified files only, the blob the file was verified in
+// (package_files.blob_name, also a retry blob), audited without the URL. Signed links are
+// exercised against a disposable Azurite container (it checks SAS signatures and permissions)
+// and a migrated throwaway Postgres.
 //
-// The OpenAPI document has no download operation yet, so the tests mount issueDownloadLink on
-// a test-only route.
+// A test-only route with wider roles shows issueDownloadLink checks the role itself.
 
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { after, before, describe, it } from "node:test";
-import { BlobServiceClient, type UserDelegationKey } from "@azure/storage-blob";
+import type { UserDelegationKey } from "@azure/storage-blob";
 import type { FastifyInstance } from "fastify";
 import {
   CLOCK_SKEW_MS,
@@ -24,6 +22,7 @@ import {
   type ReadLinkSigner,
 } from "../../src/routes/packages/download.js";
 import { testConfig } from "../core/helpers.js";
+import { ORIGINALS_CONTAINER as CONTAINER, startAzurite, type TestAzurite } from "./azurite.js";
 import {
   PACKAGE_ID,
   PLAN_DXF_PATH,
@@ -31,109 +30,58 @@ import {
   UNKNOWN_ID,
   MANIFEST,
   seedRegistry,
+  seedRetriedFile,
   startStation,
+  type RetriedFile,
   type TestStation,
 } from "./support.js";
 
-const AZURITE_IMAGE = "mcr.microsoft.com/azure-storage/azurite:3.35.0";
-const CONTAINER = "originals";
-const LINK_ROUTE = "/v1/test-only/packages/:packageId/download";
+const LINK_ROUTE = "/v1/packages/:packageId/files/download";
 const CAPTURE_LINK_ROUTE = "/v1/test-only/capture/packages/:packageId/download";
 
-/** Azurite's published development account, as used by the local stack (.env.example). */
-function azuriteConnectionString(port: number): string {
-  const env = readFileSync(new URL("../../.env.example", import.meta.url), "utf8");
-  const line = env.split("\n").find((l) => l.startsWith("AZURE_STORAGE_CONNECTION_STRING="));
-  assert.ok(line, ".env.example has no AZURE_STORAGE_CONNECTION_STRING");
-  return line
-    .slice("AZURE_STORAGE_CONNECTION_STRING=".length)
-    .replace(/BlobEndpoint=[^;]*/, `BlobEndpoint=http://127.0.0.1:${port}/devstoreaccount1`);
-}
-
-function docker(args: string[]): string {
-  const result = spawnSync("docker", args, { encoding: "utf8" });
-  if (result.status !== 0) {
-    throw new Error(`docker ${args[0]} failed: ${result.error?.message ?? result.stderr.trim()}`);
-  }
-  return result.stdout.trim();
-}
-
-const containerName = `station-azurite-test-${randomBytes(6).toString("hex")}`;
+let azurite: TestAzurite;
 let connectionString: string;
 let blobPort: number;
-let service: BlobServiceClient;
 let station: TestStation;
 let signer: ReadLinkSigner;
+let retried: RetriedFile;
 
 const BLOB_BODY = "0\nSECTION\n2\nENTITIES\n0\nENDSEC\n0\nEOF\n";
 const OTHER_BODY = "other file";
 
 function linkRoutes(app: FastifyInstance): void {
-  const handler = async (request: { params: unknown; query: unknown }) => {
-    const { packageId } = request.params as { packageId: string };
-    const { path } = request.query as { path: string };
-    return issueDownloadLink(request as never, packageId, path);
-  };
-  app.get(LINK_ROUTE, { config: { roles: ["bim", "admin"] } }, handler);
-  // Wider route roles, to show issueDownloadLink checks the role itself.
-  app.get(CAPTURE_LINK_ROUTE, { config: { roles: ["capture", "bim", "admin"] } }, handler);
-}
-
-async function waitForAzurite(): Promise<void> {
-  const deadline = Date.now() + 60_000;
-  let lastError: unknown;
-  while (Date.now() < deadline) {
-    try {
-      await service.getContainerClient(CONTAINER).createIfNotExists();
-      return;
-    } catch (error) {
-      lastError = error;
-      await new Promise((resolve) => setTimeout(resolve, 500));
-    }
-  }
-  throw new Error(`Azurite did not start: ${String(lastError)}`);
+  // Wider route roles than the real route, to show issueDownloadLink checks the role itself.
+  app.get(
+    CAPTURE_LINK_ROUTE,
+    { config: { roles: ["capture", "bim", "admin"] } },
+    async (request: { params: unknown; query: unknown }) => {
+      const { packageId } = request.params as { packageId: string };
+      const { path } = request.query as { path: string };
+      return issueDownloadLink(request as never, packageId, path);
+    },
+  );
 }
 
 before(async () => {
-  docker([
-    "run",
-    "--detach",
-    "--rm",
-    "--name",
-    containerName,
-    "--publish",
-    "127.0.0.1::10000",
-    AZURITE_IMAGE,
-    "azurite-blob",
-    "--blobHost",
-    "0.0.0.0",
-    "--skipApiVersionCheck",
-  ]);
-  const mapping = docker(["port", containerName, "10000/tcp"]).split("\n")[0] ?? "";
-  blobPort = Number(/:(\d+)$/.exec(mapping)?.[1]);
-  connectionString = azuriteConnectionString(blobPort);
-  service = BlobServiceClient.fromConnectionString(connectionString);
-  await waitForAzurite();
-
-  const container = service.getContainerClient(CONTAINER);
-  await container
-    .getBlockBlobClient(`${PACKAGE_ID}/${PLAN_DXF_PATH}`)
-    .upload(BLOB_BODY, BLOB_BODY.length);
+  azurite = await startAzurite();
+  ({ connectionString, blobPort } = azurite);
+  await azurite.put(`${PACKAGE_ID}/${PLAN_DXF_PATH}`, BLOB_BODY);
   const otherPath = MANIFEST.files.find((f) => f.role === "rooms_csv")!.path;
-  await container
-    .getBlockBlobClient(`${PACKAGE_ID}/${otherPath}`)
-    .upload(OTHER_BODY, OTHER_BODY.length);
+  await azurite.put(`${PACKAGE_ID}/${otherPath}`, OTHER_BODY);
 
   signer = readLinkSignerFromConfig(
     testConfig({ AZURE_STORAGE_CONNECTION_STRING: connectionString }),
   );
   station = await startStation({ services: { downloadLinks: signer }, routes: linkRoutes });
   await seedRegistry(station.db);
+  retried = await seedRetriedFile(station.db);
+  await azurite.put(retried.rejectedBlobName, retried.rejectedBody);
+  await azurite.put(retried.blobName, retried.body);
 });
 
 after(async () => {
   await station?.close();
-  spawnSync("docker", ["rm", "--force", containerName], { stdio: "ignore" });
+  azurite?.stop();
 });
 
 async function requestLink(
@@ -155,8 +103,18 @@ describe("download links for bim and admin", () => {
     const started = Date.now();
     const response = await requestLink(PLAN_DXF_PATH);
     assert.equal(response.statusCode, 200, response.body);
-    const link = response.json() as { path: string; url: string; expiresAt: string };
+    const link = response.json() as {
+      path: string;
+      sha256: string;
+      bytes: number;
+      url: string;
+      expiresAt: string;
+    };
+    assert.deepEqual(Object.keys(link).sort(), ["bytes", "expiresAt", "path", "sha256", "url"]);
     assert.equal(link.path, PLAN_DXF_PATH);
+    const declared = MANIFEST.files.find((f) => f.path === PLAN_DXF_PATH)!;
+    assert.equal(link.sha256, declared.sha256);
+    assert.equal(link.bytes, declared.bytes);
     const expires = Date.parse(link.expiresAt);
     assert.ok(expires <= started + DOWNLOAD_LINK_TTL_MS + 1000);
     assert.ok(expires >= started + DOWNLOAD_LINK_TTL_MS - 2000);
@@ -172,6 +130,23 @@ describe("download links for bim and admin", () => {
     assert.equal(download.status, 200);
     assert.equal(await download.text(), BLOB_BODY);
     assert.equal(download.headers.get("content-disposition"), attachmentDisposition("plan.dxf"));
+  });
+
+  it("signs the blob the file was verified in (package_files.blob_name), not one built from the path", async () => {
+    const response = await requestLink(retried.path, ["bim"], LINK_ROUTE, retried.packageId);
+    assert.equal(response.statusCode, 200, response.body);
+    const link = response.json() as { path: string; sha256: string; bytes: number; url: string };
+    assert.equal(link.path, retried.path);
+    assert.equal(link.sha256, retried.sha256);
+    assert.equal(link.bytes, retried.bytes);
+    const url = new URL(link.url);
+    assert.ok(
+      decodeURIComponent(url.pathname).endsWith(`/${CONTAINER}/${retried.blobName}`),
+      url.pathname,
+    );
+    const download = await fetch(link.url);
+    assert.equal(download.status, 200);
+    assert.equal(await download.text(), retried.body);
   });
 
   it("cannot write, delete or read another blob with the link", async () => {
@@ -202,8 +177,8 @@ describe("download links for bim and admin", () => {
     const expired = createReadLinkSigner({
       kind: "shared-key",
       containerName: CONTAINER,
-      serviceUrl: service.url,
-      credential: service.credential as never,
+      serviceUrl: azurite.service.url,
+      credential: azurite.service.credential as never,
       now: () => Date.now() - DOWNLOAD_LINK_TTL_MS - 60_000,
     });
     const fresh = await past.signRead(`${PACKAGE_ID}/${PLAN_DXF_PATH}`);

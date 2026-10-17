@@ -1,7 +1,8 @@
 // Shared setup for the package and decision tests: a migrated throwaway Postgres (core's
 // helper: a database on DATABASE_URL's server, else a disposable Docker container), the app
 // with a loopback Entra stand-in, and seed rows written directly with SQL from the contract
-// examples (one site visit, two captures).
+// examples (one site visit, two captures), plus a file verified on a retry blob for the
+// download-link tests.
 
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
@@ -60,6 +61,8 @@ export const OTHER_DEAL_PACKAGE_ID = "3c4d5e6f-7a8b-4c9d-8e0f-2a3b4c5d6e7f";
 export const BROKEN_VERDICT_ID = "4d5e6f7a-8b9c-4d0e-9f1a-3b4c5d6e7f8a";
 /** A package id that is not in the registry. */
 export const UNKNOWN_ID = "5e6f7a8b-9c0d-4e1f-8a2b-4c5d6e7f8a9b";
+/** A package (seedRetriedFile) whose file was verified on its second upload attempt. */
+export const RETRIED_ID = "9d0e1f2a-3b4c-4d5e-8f6a-7b8c9d0e1f2a";
 
 export const FIELD_CONTROLS_PATH = MANIFEST.files.find((f) => f.role === "field_controls")!.path;
 export const CAPTURE_MODEL_PATH = MANIFEST.files.find(
@@ -239,6 +242,72 @@ function filesOf(manifest: { files: ManifestFile[] }): ManifestFile[] {
     sha256: file.sha256,
     bytes: file.bytes,
   }));
+}
+
+export interface RetriedFile {
+  readonly packageId: string;
+  readonly path: string;
+  /** Bytes of the verified upload (attempt 2). */
+  readonly body: string;
+  readonly sha256: string;
+  readonly bytes: number;
+  /** Where the verified upload is stored: `<packageId>.retry-2/<path>`. */
+  readonly blobName: string;
+  /** Attempt 1 (`<packageId>/<path>`), whose bytes did not match and stay there. */
+  readonly rejectedBlobName: string;
+  readonly rejectedBody: string;
+}
+
+/**
+ * Seeds RETRIED_ID: an uploading package with one file whose first upload was rejected and
+ * whose second upload (blob `<packageId>.retry-2/<path>`) is verified, as the upload routes
+ * record it. Upload the blobs yourself (Azurite).
+ */
+export async function seedRetriedFile(db: Database): Promise<RetriedFile> {
+  const base = MANIFEST.files.find((f) => f.role === "plan_dxf")!;
+  const body = "0\nSECTION\n2\nENTITIES\n0\nENDSEC\n0\nEOF\n# attempt 2\n";
+  const file: ManifestFile = { ...base, sha256: sha256Of(body), bytes: Buffer.byteLength(body) };
+  await insertPackage(
+    db,
+    {
+      packageId: RETRIED_ID,
+      visitId: "0a1b2c3d-4e5f-4a6b-9c7d-8e9f0a1b2c3d",
+      // Its own deal, so the listPackages expectations of the main seed do not change.
+      dealId: "HUB-3003",
+      revision: 1,
+      status: "uploading",
+      createdAt: "2026-10-17T18:00:00.000Z",
+    },
+    [file],
+  );
+  const blobName = `${RETRIED_ID}.retry-2/${file.path}`;
+  await db.query(
+    `INSERT INTO package_files
+       (package_id, path, role, capture_id, area_key, sha256, bytes, status, actual_sha256,
+        actual_bytes, checked_at, verified_at, blob_name)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, 'verified', $6, $7, $8, $8, $9)`,
+    [
+      RETRIED_ID,
+      file.path,
+      file.role,
+      file.captureId ?? null,
+      file.areaKey ?? null,
+      file.sha256,
+      file.bytes,
+      "2026-10-17T18:05:00.000Z",
+      blobName,
+    ],
+  );
+  return {
+    packageId: RETRIED_ID,
+    path: file.path,
+    body,
+    sha256: file.sha256,
+    bytes: file.bytes,
+    blobName,
+    rejectedBlobName: `${RETRIED_ID}/${file.path}`,
+    rejectedBody: "rejected first attempt",
+  };
 }
 
 /**

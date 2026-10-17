@@ -1,10 +1,14 @@
-// F7 AC6 (packages and verdicts area): listPackages, getPackage and getVerdict match
-// contract/openapi/station.yaml: the routes exist with the documented roles, query strings are
-// accepted or rejected exactly as the document says, and every response (status, content type
-// and body) validates against the document. Runs against a migrated throwaway Postgres.
+// F7 AC6 (packages and verdicts area): listPackages, getPackage, getVerdict and
+// getFileDownloadLink match contract/openapi/station.yaml: the routes exist with the documented
+// roles, query strings are accepted or rejected exactly as the document says, and every
+// response (status, content type and body) validates against the document. Runs against a
+// migrated throwaway Postgres and, for download links, a disposable Azurite container.
 
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
+import { readLinkSignerFromConfig } from "../../src/routes/packages/download.js";
+import { testConfig } from "../core/helpers.js";
+import { startAzurite, type TestAzurite } from "./azurite.js";
 import { OpenApi } from "./openapi.js";
 import {
   BROKEN_VERDICT_ID,
@@ -14,28 +18,46 @@ import {
   OTHER_DEAL_ID,
   OTHER_DEAL_PACKAGE_ID,
   PACKAGE_ID,
+  PLAN_DXF_PATH,
   QUEUED_ID,
   REVISION_2_ID,
   UNKNOWN_ID,
   VERDICT,
   VISIT_ID,
   seedRegistry,
+  seedRetriedFile,
   startStation,
+  type RetriedFile,
   type TestStation,
 } from "./support.js";
 
-const OPERATIONS = ["listPackages", "getPackage", "getVerdict"] as const;
+const OPERATIONS = ["listPackages", "getPackage", "getVerdict", "getFileDownloadLink"] as const;
 
 const openapi = new OpenApi();
 let station: TestStation;
+let azurite: TestAzurite;
+let retried: RetriedFile;
+const PLAN_DXF_BODY = "plan.dxf bytes";
 
 before(async () => {
-  station = await startStation();
+  azurite = await startAzurite();
+  station = await startStation({
+    services: {
+      downloadLinks: readLinkSignerFromConfig(
+        testConfig({ AZURE_STORAGE_CONNECTION_STRING: azurite.connectionString }),
+      ),
+    },
+  });
   await seedRegistry(station.db);
+  retried = await seedRetriedFile(station.db);
+  await azurite.put(`${PACKAGE_ID}/${PLAN_DXF_PATH}`, PLAN_DXF_BODY);
+  await azurite.put(retried.rejectedBlobName, retried.rejectedBody);
+  await azurite.put(retried.blobName, retried.body);
 });
 
 after(async () => {
   await station?.close();
+  azurite?.stop();
 });
 
 async function call(
@@ -231,5 +253,123 @@ describe("getVerdict", () => {
     assert.equal(response.statusCode, 500);
     assert.equal((response.json() as { code: string }).code, "internal_error");
     assert.ok(station.logs.some((line) => line.includes("does not match the contract")));
+  });
+});
+
+describe("getFileDownloadLink", () => {
+  const produced = new Set<number>();
+  const url = (packageId: string, path: string) =>
+    `/v1/packages/${packageId}/files/download?${new URLSearchParams({ path }).toString()}`;
+
+  async function download(
+    target: string,
+    roles: readonly ("capture" | "bim" | "admin")[] = ["bim"],
+  ) {
+    const response = await call("getFileDownloadLink", target, roles);
+    produced.add(response.statusCode);
+    return response;
+  }
+
+  it("200 for bim and admin: a working read-only link with the verified sha256 and size", async () => {
+    const declared = MANIFEST.files.find((file) => file.path === PLAN_DXF_PATH)!;
+    for (const role of ["bim", "admin"] as const) {
+      const response = await download(url(PACKAGE_ID, PLAN_DXF_PATH), [role]);
+      assert.equal(response.statusCode, 200, response.body);
+      const link = response.json() as Record<string, unknown>;
+      assert.equal(link.path, PLAN_DXF_PATH);
+      assert.equal(link.sha256, declared.sha256);
+      assert.equal(link.bytes, declared.bytes);
+      assert.equal(new URL(String(link.url)).searchParams.get("sp"), "r");
+      const fetched = await fetch(String(link.url));
+      assert.equal(fetched.status, 200);
+      assert.equal(await fetched.text(), PLAN_DXF_BODY);
+    }
+  });
+
+  it("200 for a file verified on a retry blob links that blob", async () => {
+    const response = await download(url(retried.packageId, retried.path));
+    assert.equal(response.statusCode, 200, response.body);
+    const link = response.json() as { sha256: string; bytes: number; url: string };
+    assert.equal(link.sha256, retried.sha256);
+    assert.equal(link.bytes, retried.bytes);
+    assert.equal(await (await fetch(link.url)).text(), retried.body);
+  });
+
+  const queries: [string, Record<string, string | string[]>][] = [
+    ["a manifest path", { path: PLAN_DXF_PATH }],
+    ["no path", {}],
+    ["an empty path", { path: "" }],
+    ["an absolute path", { path: `/${PLAN_DXF_PATH}` }],
+    ["a path with ..", { path: "Original Exports/../manifest.json" }],
+    ["an unknown parameter", { path: PLAN_DXF_PATH, as: "attachment" }],
+    ["a repeated path", { path: [PLAN_DXF_PATH, PLAN_DXF_PATH] }],
+  ];
+
+  for (const [label, query] of queries) {
+    it(`accepts or rejects ${label} as the document does`, async () => {
+      const search = new URLSearchParams();
+      for (const [name, value] of Object.entries(query)) {
+        for (const item of Array.isArray(value) ? value : [value]) {
+          search.append(name, item);
+        }
+      }
+      const response = await download(
+        `/v1/packages/${PACKAGE_ID}/files/download?${search.toString()}`,
+      );
+      const expected = openapi.queryErrors("getFileDownloadLink", query).length === 0 ? 200 : 400;
+      assert.equal(response.statusCode, expected, response.body);
+    });
+  }
+
+  it("401 without a token", async () => {
+    const response = await station.app.inject({
+      method: "GET",
+      url: url(PACKAGE_ID, PLAN_DXF_PATH),
+    });
+    assert.equal(response.statusCode, 401);
+    assert.deepEqual(openapi.responseErrors("getFileDownloadLink", response), []);
+    produced.add(response.statusCode);
+  });
+
+  it("403 for the capture role, and no link is audited", async () => {
+    const before = await station.db.query<{ n: number }>(
+      "SELECT count(*) AS n FROM audit_log WHERE action = 'package_file.download_link'",
+    );
+    const response = await download(url(PACKAGE_ID, PLAN_DXF_PATH), ["capture"]);
+    assert.equal(response.statusCode, 403);
+    assert.equal((response.json() as { code: string }).code, "forbidden");
+    const afterCount = await station.db.query<{ n: number }>(
+      "SELECT count(*) AS n FROM audit_log WHERE action = 'package_file.download_link'",
+    );
+    assert.equal(afterCount.rows[0]?.n, before.rows[0]?.n);
+  });
+
+  it("404 not_found for an unknown or malformed package or an unknown file", async () => {
+    for (const target of [
+      url(UNKNOWN_ID, PLAN_DXF_PATH),
+      url("not-a-uuid", PLAN_DXF_PATH),
+      url(PACKAGE_ID.toUpperCase(), PLAN_DXF_PATH),
+      url(PACKAGE_ID, "Original Exports/none.dxf"),
+    ]) {
+      const response = await download(target);
+      assert.equal(response.statusCode, 404, target);
+      assert.equal((response.json() as { code: string }).code, "not_found");
+    }
+  });
+
+  it("409 file_not_verified for every file state other than verified", async () => {
+    const unverified = MANIFEST.files.slice(0, 4).map((file) => file.path);
+    for (const path of unverified) {
+      const response = await download(url(REVISION_2_ID, path), ["admin"]);
+      assert.equal(response.statusCode, 409, path);
+      assert.equal((response.json() as { code: string }).code, "file_not_verified");
+    }
+  });
+
+  it("produced every documented status", () => {
+    const documented = Object.keys(
+      openapi.operation("getFileDownloadLink").node.responses as Record<string, unknown>,
+    ).sort();
+    assert.deepEqual([...produced].map(String).sort(), documented);
   });
 });

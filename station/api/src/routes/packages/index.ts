@@ -3,19 +3,22 @@
 //   GET /v1/packages?dealId&visitId          listPackages   capture, bim, admin
 //   GET /v1/packages/{packageId}             getPackage     capture, bim, admin
 //   GET /v1/packages/{packageId}/verdict     getVerdict     capture, bim, admin
+//   GET /v1/packages/{packageId}/files/download?path=
+//                                            getFileDownloadLink   bim, admin
 //
-// Reads only: nothing here writes, so nothing is audited. A packageId that is not a contract
-// UUID is answered 404 (these operations document no 400).
-//
-// Signed download links (download.ts) are not exposed here: the OpenAPI document defines no
-// download operation yet.
+// Reads only: nothing here writes the registry. The one exception to "nothing is audited" is
+// the download link: every link handed out is audited (download.ts). A packageId that is not a
+// contract UUID is answered 404 (these operations document no 400 for it).
 
 import { validateVerdict } from "@chapter/capture-contract";
 import type { FastifyInstance } from "fastify";
 import { ProblemError } from "../../core/problem.js";
+import { DOWNLOAD_ROLES, issueDownloadLink } from "./download.js";
 import {
+  fileDownloadQuerySchema,
   isContractUuid,
   listPackagesQuerySchema,
+  type FileDownloadQuery,
   type ListPackagesQuery,
   type PackageParams,
 } from "./schemas.js";
@@ -84,5 +87,11 @@ export default async function packageRoutes(app: FastifyInstance): Promise<void>
       }
       return checked.value;
     },
+  );
+
+  app.get<{ Params: PackageParams; Querystring: FileDownloadQuery }>(
+    "/packages/:packageId/files/download",
+    { config: { roles: DOWNLOAD_ROLES }, schema: { querystring: fileDownloadQuerySchema } },
+    async (request) => issueDownloadLink(request, request.params.packageId, request.query.path),
   );
 }

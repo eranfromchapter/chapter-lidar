@@ -51,6 +51,20 @@ export interface ListPackagesQuery {
   visitId?: string;
 }
 
+/** GET /packages/{packageId}/files/download query string. Unknown parameters are rejected (400). */
+export const fileDownloadQuerySchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["path"],
+  properties: {
+    path: relativePathSchema,
+  },
+} as const;
+
+export interface FileDownloadQuery {
+  path: string;
+}
+
 /** Path parameters of /packages/{packageId}/... routes. */
 export interface PackageParams {
   packageId: string;
