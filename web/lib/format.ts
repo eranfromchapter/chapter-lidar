@@ -108,8 +108,12 @@ export const MODE_LABEL: Record<CaptureMode, string> = {
   exterior: "exterior",
 };
 
-/** HUB upload cap rule shown on screen-review: files over 45 MB are linked, not uploaded. */
-export const HUB_LINK_THRESHOLD_BYTES = 45 * 1000 * 1000;
+/**
+ * HUB upload cap rule shown on screen-review: a file is linked, not uploaded, when its size is
+ * over this many bytes (45 MiB = 47,185,920). MUST match the limit used by station/hub, the
+ * authoritative publisher; the label keeps the design's wording "Linked (over 45 MB)".
+ */
+export const HUB_LINK_THRESHOLD_BYTES = 45 * 1024 * 1024;
 
 export function hubState(bytes: number): string {
   return bytes > HUB_LINK_THRESHOLD_BYTES ? "Linked (over 45 MB)" : "Uploaded";

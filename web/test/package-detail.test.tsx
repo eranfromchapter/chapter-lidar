@@ -7,6 +7,8 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   formatBytes,
+  HUB_LINK_THRESHOLD_BYTES,
+  hubState,
   outcomeHeadline,
   pathDisplayName,
   SEVERITY_ORDER,
@@ -163,13 +165,46 @@ describe.each(cases.map((fixture) => [fixture.name, fixture] as const))(
         expect(row.textContent).toContain(formatBytes(file.bytes));
         expect(within(row).getByTitle(file.sha256)).toBeTruthy();
         expect(row.textContent).toContain(
-          file.bytes > 45_000_000 ? "Linked (over 45 MB)" : "Uploaded",
+          file.bytes > 47_185_920 ? "Linked (over 45 MB)" : "Uploaded",
         );
         expect(within(row).getByRole("link", { name: /^Download / })).toBeTruthy();
       });
     });
   },
 );
+
+describe("HUB link rule (must match station/hub: 45 MiB)", () => {
+  it("uploads files up to 47,185,920 bytes and links anything larger", () => {
+    expect(HUB_LINK_THRESHOLD_BYTES).toBe(47_185_920);
+    expect(hubState(47_185_920)).toBe("Uploaded");
+    expect(hubState(47_185_921)).toBe("Linked (over 45 MB)");
+  });
+
+  it("shows the boundary on the files table", async () => {
+    const fixture = contractExampleCase();
+    const pkg = structuredClone(fixture.pkg);
+    const [first, second] = pkg.files;
+    if (first === undefined || second === undefined) {
+      throw new Error("contract example needs two files");
+    }
+    first.bytes = 47_185_920;
+    second.bytes = 47_185_921;
+    const station = createFakeStation({
+      projects: [fixture.project],
+      packages: [pkg],
+      verdicts: { [pkg.packageId]: fixture.verdict },
+      decisions: {},
+    });
+    await renderPackage({ ...fixture, pkg }, station);
+    const rowOf = (path: string) =>
+      [...document.querySelectorAll<HTMLElement>("tr[data-path]")].find(
+        (row) => row.getAttribute("data-path") === path,
+      ) as HTMLElement;
+    expect(rowOf(first.path).textContent).toContain("Uploaded");
+    expect(rowOf(first.path).textContent).not.toContain("Linked");
+    expect(rowOf(second.path).textContent).toContain("Linked (over 45 MB)");
+  });
+});
 
 describe("package detail states", () => {
   const fixture = contractExampleCase();
