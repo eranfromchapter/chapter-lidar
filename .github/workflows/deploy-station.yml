@@ -1,0 +1,303 @@
+# Builds the station API and worker images, pushes them to Azure Container Registry, runs the
+# database migrations, rolls the Container Apps to the new images and smoke-tests /health.
+#
+# - Push to main deploys to staging. A manual run can target staging or production.
+# - Production runs only through the GitHub "production" environment, which has required
+#   reviewers (see .github/BRANCH_PROTECTION.md), and only from main.
+# - Azure sign-in uses OIDC federated credentials. No Azure secret is stored in GitHub: the
+#   client, tenant and subscription ids are GitHub environment variables.
+# - Skips cleanly (no Azure sign-in) while station/api/Dockerfile or station/worker/Dockerfile
+#   does not exist yet.
+#
+# Resource names are fixed by docs/waves/specs/F12.md and shared with infra/ (Bicep):
+#   rg-chapter-capture-<env>, ca-capture-api-<env>, ca-capture-worker-<env>, acrchaptercapture.
+# The migration job caj-capture-migrate-<env> is a manually triggered Container Apps job that
+# runs `npm run migrate --workspace station/api` with the API's database settings.
+name: deploy-station
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [staging, production]
+        default: staging
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: deploy-station-${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY_NAME: acrchaptercapture
+  API_IMAGE_REPOSITORY: capture-api
+  WORKER_IMAGE_REPOSITORY: capture-worker
+  API_DOCKERFILE: station/api/Dockerfile
+  WORKER_DOCKERFILE: station/worker/Dockerfile
+
+jobs:
+  plan:
+    name: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      environment: ${{ steps.target.outputs.environment }}
+      ready: ${{ steps.dockerfiles.outputs.ready }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Choose the target environment
+        id: target
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_ENVIRONMENT: ${{ inputs.environment }}
+          GIT_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          case "${EVENT_NAME}" in
+            push) target="staging" ;;
+            workflow_dispatch) target="${INPUT_ENVIRONMENT}" ;;
+            *)
+              echo "::error::deploy-station does not run on '${EVENT_NAME}' events."
+              exit 1
+              ;;
+          esac
+          case "${target}" in
+            staging | production) ;;
+            *)
+              echo "::error::Unknown environment '${target}'. Use staging or production."
+              exit 1
+              ;;
+          esac
+          if [[ "${target}" == "production" && "${GIT_REF}" != "refs/heads/main" ]]; then
+            echo "::error::Production deploys only from main (this run is on ${GIT_REF})."
+            exit 1
+          fi
+          echo "environment=${target}" >>"${GITHUB_OUTPUT}"
+          echo "Target environment: ${target}"
+
+      - name: Check that both Dockerfiles exist
+        id: dockerfiles
+        run: |
+          set -euo pipefail
+          ready="true"
+          for dockerfile in "${API_DOCKERFILE}" "${WORKER_DOCKERFILE}"; do
+            if [[ ! -f "${dockerfile}" ]]; then
+              echo "::notice::${dockerfile} does not exist yet. Skipping the station deploy."
+              ready="false"
+            fi
+          done
+          echo "ready=${ready}" >>"${GITHUB_OUTPUT}"
+
+  deploy:
+    name: deploy
+    needs: plan
+    if: needs.plan.outputs.ready == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    environment:
+      name: ${{ needs.plan.outputs.environment }}
+      url: ${{ steps.smoke.outputs.url }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      TARGET_ENV: ${{ needs.plan.outputs.environment }}
+      IMAGE_TAG: ${{ github.sha }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check the Azure environment variables
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::GitHub environment '${TARGET_ENV}' has no variable ${name}. See .github/BRANCH_PROTECTION.md."
+              missing=1
+            fi
+          done
+          exit "${missing}"
+
+      - name: Sign in to Azure (OIDC)
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve resource and image names
+        run: |
+          set -euo pipefail
+          login_server="${REGISTRY_NAME}.azurecr.io"
+          {
+            echo "RESOURCE_GROUP=rg-chapter-capture-${TARGET_ENV}"
+            echo "API_APP=ca-capture-api-${TARGET_ENV}"
+            echo "WORKER_APP=ca-capture-worker-${TARGET_ENV}"
+            echo "MIGRATE_JOB=caj-capture-migrate-${TARGET_ENV}"
+            echo "API_IMAGE=${login_server}/${API_IMAGE_REPOSITORY}:${IMAGE_TAG}"
+            echo "WORKER_IMAGE=${login_server}/${WORKER_IMAGE_REPOSITORY}:${IMAGE_TAG}"
+          } >>"${GITHUB_ENV}"
+
+      - name: Build and push the images
+        run: |
+          set -euo pipefail
+          az acr login --name "${REGISTRY_NAME}"
+
+          # One image per commit. If the tag already exists (for example, staging built this
+          # commit before production), the same image is promoted instead of rebuilt.
+          push_image() {
+            local image="$1" dockerfile="$2"
+            if docker manifest inspect "${image}" >/dev/null 2>&1; then
+              echo "${image} already exists. Reusing it."
+              return 0
+            fi
+            # Build context is the repository root, so the image can use the npm workspaces.
+            docker build \
+              --file "${dockerfile}" \
+              --tag "${image}" \
+              --label "org.opencontainers.image.revision=${IMAGE_TAG}" \
+              --label "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+              .
+            docker push "${image}"
+          }
+
+          push_image "${API_IMAGE}" "${API_DOCKERFILE}"
+          push_image "${WORKER_IMAGE}" "${WORKER_DOCKERFILE}"
+
+      - name: Run the database migrations
+        run: |
+          set -euo pipefail
+          if ! az containerapp job show --name "${MIGRATE_JOB}" --resource-group "${RESOURCE_GROUP}" --output none; then
+            echo "::error::Container Apps job ${MIGRATE_JOB} was not found in ${RESOURCE_GROUP}. It is created by infra/ and runs the migrations. Nothing was deployed."
+            exit 1
+          fi
+
+          # Point the job at the new API image, then run it once and wait for the result.
+          az containerapp job update \
+            --name "${MIGRATE_JOB}" \
+            --resource-group "${RESOURCE_GROUP}" \
+            --image "${API_IMAGE}" \
+            --output none
+          execution="$(az containerapp job start \
+            --name "${MIGRATE_JOB}" \
+            --resource-group "${RESOURCE_GROUP}" \
+            --query name --output tsv)"
+          if [[ -z "${execution}" ]]; then
+            echo "::error::Could not start ${MIGRATE_JOB}."
+            exit 1
+          fi
+          echo "Migration execution: ${execution}"
+
+          deadline=$(($(date +%s) + 20 * 60))
+          while true; do
+            status="$(az containerapp job execution show \
+              --name "${MIGRATE_JOB}" \
+              --resource-group "${RESOURCE_GROUP}" \
+              --job-execution-name "${execution}" \
+              --query properties.status --output tsv)"
+            echo "Migration status: ${status}"
+            case "${status}" in
+              Succeeded) break ;;
+              Failed | Stopped | Degraded)
+                echo "::error::Migrations ended with status ${status} (execution ${execution}). The apps were not updated. Check the job logs in Log Analytics."
+                exit 1
+                ;;
+            esac
+            if (($(date +%s) >= deadline)); then
+              echo "::error::Migrations did not finish within 20 minutes (execution ${execution}). The apps were not updated."
+              exit 1
+            fi
+            sleep 10
+          done
+
+      - name: Deploy the API and the worker
+        run: |
+          set -euo pipefail
+          az containerapp update \
+            --name "${API_APP}" \
+            --resource-group "${RESOURCE_GROUP}" \
+            --image "${API_IMAGE}" \
+            --output none
+          az containerapp update \
+            --name "${WORKER_APP}" \
+            --resource-group "${RESOURCE_GROUP}" \
+            --image "${WORKER_IMAGE}" \
+            --output none
+
+          # Wait until the newest revision of each app runs the new image and is ready.
+          wait_ready() {
+            local app="$1" image="$2" deadline state provisioning latest ready current_image
+            deadline=$(($(date +%s) + 10 * 60))
+            while true; do
+              state="$(az containerapp show \
+                --name "${app}" \
+                --resource-group "${RESOURCE_GROUP}" \
+                --output json)"
+              provisioning="$(jq -r '.properties.provisioningState // ""' <<<"${state}")"
+              latest="$(jq -r '.properties.latestRevisionName // ""' <<<"${state}")"
+              ready="$(jq -r '.properties.latestReadyRevisionName // ""' <<<"${state}")"
+              current_image="$(jq -r '.properties.template.containers[0].image // ""' <<<"${state}")"
+              echo "${app}: provisioning=${provisioning} latest=${latest} ready=${ready} image=${current_image}"
+              if [[ "${provisioning}" == "Succeeded" && "${current_image}" == "${image}" && -n "${latest}" && "${latest}" == "${ready}" ]]; then
+                return 0
+              fi
+              if [[ "${provisioning}" == "Failed" ]]; then
+                echo "::error::${app} failed to provision the new revision."
+                return 1
+              fi
+              if (($(date +%s) >= deadline)); then
+                echo "::error::${app} was not ready on ${image} within 10 minutes."
+                return 1
+              fi
+              sleep 10
+            done
+          }
+
+          wait_ready "${API_APP}" "${API_IMAGE}"
+          wait_ready "${WORKER_APP}" "${WORKER_IMAGE}"
+
+      - name: Smoke-test /health
+        id: smoke
+        run: |
+          set -euo pipefail
+          fqdn="$(az containerapp show \
+            --name "${API_APP}" \
+            --resource-group "${RESOURCE_GROUP}" \
+            --query properties.configuration.ingress.fqdn --output tsv)"
+          if [[ -z "${fqdn}" ]]; then
+            echo "::error::${API_APP} has no ingress FQDN."
+            exit 1
+          fi
+          base_url="https://${fqdn}"
+          echo "url=${base_url}" >>"${GITHUB_OUTPUT}"
+
+          for attempt in $(seq 1 30); do
+            code="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+              --max-time 10 "${base_url}/health" || true)"
+            echo "Attempt ${attempt}: GET ${base_url}/health -> ${code}"
+            if [[ "${code}" == "200" ]]; then
+              echo "Smoke test passed."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::GET ${base_url}/health did not return 200 within 5 minutes."
+          exit 1
