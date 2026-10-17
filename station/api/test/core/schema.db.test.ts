@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { after, before, describe, it } from "node:test";
 import { ROLES, SCHEMAS } from "@chapter/capture-contract";
 import { writeAudit } from "../../src/core/audit.js";
-import { type Database, type Queryable, createDatabase } from "../../src/core/db.js";
+import { type Database, type Queryable, createDatabase, urlConnection } from "../../src/core/db.js";
 
 const url = process.env.STATION_TEST_DATABASE_URL;
 const skip = url ? false : "STATION_TEST_DATABASE_URL is not set (run npm run test:db)";
@@ -69,7 +69,7 @@ async function sealPackage(packageId: string): Promise<void> {
 
 describe("station schema", { skip }, () => {
   before(() => {
-    db = createDatabase({ url: url ?? "", poolMax: 4 });
+    db = createDatabase({ connection: urlConnection(url ?? ""), poolMax: 4 });
   });
   after(async () => {
     await db?.close();
@@ -224,7 +224,7 @@ describe("station schema", { skip }, () => {
 
 describe("jobs queue", { skip }, () => {
   before(() => {
-    db = createDatabase({ url: url ?? "", poolMax: 4 });
+    db = createDatabase({ connection: urlConnection(url ?? ""), poolMax: 4 });
   });
   after(async () => {
     await db?.close();
@@ -301,7 +301,7 @@ describe("jobs queue", { skip }, () => {
 
 describe("verdicts, publications and decisions", { skip }, () => {
   before(() => {
-    db = createDatabase({ url: url ?? "", poolMax: 4 });
+    db = createDatabase({ connection: urlConnection(url ?? ""), poolMax: 4 });
   });
   after(async () => {
     await db?.close();
@@ -417,7 +417,7 @@ describe("verdicts, publications and decisions", { skip }, () => {
 
 describe("audit log", { skip }, () => {
   before(() => {
-    db = createDatabase({ url: url ?? "", poolMax: 4 });
+    db = createDatabase({ connection: urlConnection(url ?? ""), poolMax: 4 });
   });
   after(async () => {
     await db?.close();

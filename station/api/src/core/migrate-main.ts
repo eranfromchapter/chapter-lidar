@@ -1,17 +1,28 @@
-// CLI: apply pending migrations to DATABASE_URL. Used by `npm run migrate` and the image
-// (node dist/core/migrate-main.js). Reads only DATABASE_URL.
+// CLI: apply pending migrations. Used by `npm run migrate` and by the image:
+//
+//   node dist/core/migrate-main.js        (working directory /app/station/api)
+//
+// Reads only NODE_ENV and the database variables (DB_AUTH=url: DATABASE_URL; DB_AUTH=entra:
+// PGHOST, PGPORT, PGDATABASE, PGUSER, PGSSLMODE, AZURE_CLIENT_ID), the same sign-in as the
+// server. Exit codes: 0 done, 1 migration failed, 2 invalid configuration.
 
+import { ConfigError, loadDatabaseConfig } from "./config.js";
+import { tokenProviderFor } from "./db.js";
 import { runMigrations } from "./migrate.js";
 
-const databaseUrl = process.env.DATABASE_URL?.trim();
-if (!databaseUrl) {
-  console.error("DATABASE_URL is required");
+let database;
+try {
+  ({ database } = loadDatabaseConfig());
+} catch (error) {
+  console.error(error instanceof ConfigError ? error.message : String(error));
   process.exit(2);
 }
 
 try {
+  const tokenProvider = tokenProviderFor(database.connection);
   const applied = await runMigrations({
-    databaseUrl,
+    connection: database.connection,
+    ...(tokenProvider === undefined ? {} : { tokenProvider }),
     logger: {
       info: (message) => console.log(message),
       warn: (message) => console.warn(message),

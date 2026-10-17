@@ -6,6 +6,8 @@
 
 import { fileURLToPath } from "node:url";
 import { runner } from "node-pg-migrate";
+import type { DatabaseConnection } from "./config.js";
+import { pgConnectionConfig, type TokenProvider } from "./db.js";
 
 /** station/db/migrations, from both src/core and dist/core. */
 export const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
@@ -20,8 +22,10 @@ export interface MigrationLogger {
 }
 
 export interface RunMigrationsOptions {
-  /** Postgres connection string. Secret: never log it. */
-  readonly databaseUrl: string;
+  /** Same connection settings as the server (url or Entra managed identity). */
+  readonly connection: DatabaseConnection;
+  /** Required for entra connections; see tokenProviderFor in db.ts. */
+  readonly tokenProvider?: TokenProvider;
   readonly dir?: string;
   readonly logger?: MigrationLogger;
 }
@@ -31,8 +35,9 @@ const quietLogger: MigrationLogger = { info() {}, warn() {}, error() {} };
 /** Applies every pending migration. Returns the names of the migrations it ran. */
 export async function runMigrations(options: RunMigrationsOptions): Promise<string[]> {
   const logger = options.logger ?? quietLogger;
+  const databaseUrl = pgConnectionConfig(options.connection, options.tokenProvider);
   const applied = await runner({
-    databaseUrl: options.databaseUrl,
+    databaseUrl,
     dir: options.dir ?? MIGRATIONS_DIR,
     // Only NNNN_name.sql files are migrations; anything else in the folder is ignored here
     // and rejected by migrate:check.

@@ -17,6 +17,7 @@ import {
   MIGRATIONS_TABLE,
   runMigrations,
 } from "../src/core/migrate.js";
+import { urlConnection } from "../src/core/db.js";
 import { withThrowawayDatabase } from "./lib/throwaway-postgres.js";
 
 const STATION_TABLES = [
@@ -142,7 +143,7 @@ async function main(): Promise<void> {
 
     assert.equal(await publicRelationCount(db.url), 0, "the throwaway database must be empty");
 
-    const first = await runMigrations({ databaseUrl: db.url });
+    const first = await runMigrations({ connection: urlConnection(db.url) });
     assert.deepEqual(first, names, "the first run must apply every migration, in order");
     console.log(`migrate:check: first run applied ${first.length}: ${first.join(", ")}`);
 
@@ -153,7 +154,7 @@ async function main(): Promise<void> {
     const missing = STATION_TABLES.filter((table) => !tables.has(table));
     assert.deepEqual(missing, [], `missing station tables: ${missing.join(", ")}`);
 
-    const second = await runMigrations({ databaseUrl: db.url });
+    const second = await runMigrations({ connection: urlConnection(db.url) });
     assert.deepEqual(second, [], "the second run must apply nothing");
 
     const afterSecond = await schemaSnapshot(db.url);

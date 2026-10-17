@@ -5,7 +5,7 @@ import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { buildServer } from "./core/app.js";
 import { ConfigError, describeConfig, loadConfig } from "./core/config.js";
-import { createDatabase } from "./core/db.js";
+import { createDatabase, tokenProviderFor } from "./core/db.js";
 import { runMigrations } from "./core/migrate.js";
 
 export { buildServer, type BuildServerOptions } from "./core/app.js";
@@ -23,8 +23,11 @@ async function main(): Promise<void> {
   }
 
   let app: Awaited<ReturnType<typeof buildServer>> | undefined;
+  // One token provider (and cache) for the pool and the migration run.
+  const tokenProvider = tokenProviderFor(config.database.connection);
   const db = createDatabase({
-    url: config.database.url,
+    connection: config.database.connection,
+    ...(tokenProvider === undefined ? {} : { tokenProvider }),
     poolMax: config.database.poolMax,
     onPoolError: (error) => app?.log.error({ err: error }, "idle database connection failed"),
   });
@@ -36,7 +39,8 @@ async function main(): Promise<void> {
     if (config.database.migrateOnStart) {
       const log = app.log;
       const applied = await runMigrations({
-        databaseUrl: config.database.url,
+        connection: config.database.connection,
+        ...(tokenProvider === undefined ? {} : { tokenProvider }),
         logger: {
           info: (message) => log.info({ migrate: message }),
           warn: (message) => log.warn({ migrate: message }),

@@ -1,12 +1,39 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { ConfigError, describeConfig, loadConfig } from "../../src/core/config.js";
+import {
+  ConfigError,
+  describeConfig,
+  loadConfig,
+  loadDatabaseConfig,
+} from "../../src/core/config.js";
 import { AUDIENCE, SECOND_AUDIENCE, TENANT_ID, testEnv } from "./helpers.js";
 
-function issuesOf(env: Record<string, string | undefined>): readonly string[] {
+const HUB_CREDENTIAL = "hub-credential-not-a-real-one-7f3a";
+
+/** A valid production environment: Entra database sign-in and the live HUB. */
+function productionEnv(overrides: Record<string, string | undefined> = {}) {
+  return testEnv({
+    NODE_ENV: "production",
+    DATABASE_URL: undefined,
+    DB_AUTH: "entra",
+    PGHOST: "chapter-station.postgres.database.azure.com",
+    PGDATABASE: "station",
+    PGUSER: "id-chapter-station-api",
+    PGSSLMODE: "require",
+    HUB_MODE: "live",
+    HUB_BASE_URL: "https://hub.hellochapter.com",
+    HUB_SERVICE_CREDENTIAL: HUB_CREDENTIAL,
+    ...overrides,
+  });
+}
+
+function issuesOf(
+  env: Record<string, string | undefined>,
+  load: (env: Record<string, string | undefined>) => unknown = loadConfig,
+): readonly string[] {
   try {
-    loadConfig(env);
+    load(env);
   } catch (error) {
     assert.ok(error instanceof ConfigError);
     return error.issues;
@@ -109,14 +136,9 @@ describe("loadConfig", () => {
 
   it("refuses the fake HUB in production", () => {
     assert.ok(
-      issuesOf(testEnv({ NODE_ENV: "production", HUB_MODE: "fake" })).some((issue) =>
-        issue.startsWith("HUB_MODE"),
-      ),
+      issuesOf(productionEnv({ HUB_MODE: "fake" })).some((issue) => issue.startsWith("HUB_MODE")),
     );
-    assert.equal(
-      loadConfig(testEnv({ NODE_ENV: "production", HUB_MODE: "live" })).hub.mode,
-      "live",
-    );
+    assert.equal(loadConfig(productionEnv()).hub.mode, "live");
   });
 
   it("parses booleans and integers", () => {
@@ -127,6 +149,26 @@ describe("loadConfig", () => {
     assert.equal(config.server.port, 9090);
     assert.equal(config.database.poolMax, 3);
     assert.equal(config.server.logLevel, "silent");
+  });
+
+  it("keeps secrets out of JSON and describeConfig", () => {
+    const local = loadConfig(
+      testEnv({
+        DATABASE_URL: ["postgres://station", "pw-123@db.internal:5432/station"].join(":"),
+        AZURE_STORAGE_CONNECTION_STRING: "AccountName=x;AccountKey=abc123==",
+        HUB_MODE: "live",
+        HUB_BASE_URL: "http://localhost:4010",
+        HUB_SERVICE_CREDENTIAL: HUB_CREDENTIAL,
+      }),
+    );
+    assert.equal(local.hub.serviceCredential, HUB_CREDENTIAL);
+    assert.equal(local.storage.connectionString, "AccountName=x;AccountKey=abc123==");
+    assert.equal(local.database.connection.auth, "url");
+    for (const text of [JSON.stringify(local), JSON.stringify(describeConfig(local))]) {
+      assert.ok(!text.includes("pw-123"), text);
+      assert.ok(!text.includes("abc123"), text);
+      assert.ok(!text.includes(HUB_CREDENTIAL), text);
+    }
   });
 
   it("describeConfig leaves out connection strings", () => {
@@ -141,5 +183,159 @@ describe("loadConfig", () => {
     assert.ok(!text.includes("pw-123"));
     assert.ok(!text.includes("abc123"));
     assert.match(text, /connection-string/);
+  });
+});
+
+describe("database sign-in (DB_AUTH)", () => {
+  it("defaults to url mode with DATABASE_URL", () => {
+    const { database } = loadDatabaseConfig({ DATABASE_URL: "postgres://station@db:5432/station" });
+    assert.equal(database.connection.auth, "url");
+    assert.equal(
+      database.connection.auth === "url" ? database.connection.url : "",
+      "postgres://station@db:5432/station",
+    );
+    assert.ok(issuesOf({}, loadDatabaseConfig).some((issue) => issue.startsWith("DATABASE_URL")));
+  });
+
+  it("reads only database variables for the migration entrypoint", () => {
+    const { env, database } = loadDatabaseConfig(productionEnv({ ENTRA_TENANT_ID: undefined }));
+    assert.equal(env, "production");
+    assert.deepEqual(database.connection, {
+      auth: "entra",
+      host: "chapter-station.postgres.database.azure.com",
+      port: 5432,
+      database: "station",
+      user: "id-chapter-station-api",
+      sslMode: "require",
+    });
+  });
+
+  it("requires Entra sign-in in production", () => {
+    const issues = issuesOf(
+      productionEnv({ DB_AUTH: "url", DATABASE_URL: "postgres://station@db:5432/station" }),
+    );
+    assert.ok(
+      issues.some((issue) => issue.startsWith("DB_AUTH must be entra")),
+      issues.join(),
+    );
+    assert.ok(
+      issuesOf(productionEnv({ DB_AUTH: undefined })).some((issue) => issue.startsWith("DB_AUTH")),
+    );
+  });
+
+  it("requires host, database and role, and verified TLS, in Entra mode", () => {
+    const issues = issuesOf(
+      productionEnv({
+        PGHOST: undefined,
+        PGDATABASE: undefined,
+        PGUSER: undefined,
+        PGSSLMODE: "disable",
+        PGPORT: "0",
+        AZURE_CLIENT_ID: "not-a-guid",
+      }),
+      loadDatabaseConfig,
+    );
+    for (const name of [
+      "PGHOST",
+      "PGDATABASE",
+      "PGUSER",
+      "PGSSLMODE",
+      "PGPORT",
+      "AZURE_CLIENT_ID",
+    ]) {
+      assert.ok(
+        issues.some((issue) => issue.startsWith(name)),
+        `${name}: ${issues.join("; ")}`,
+      );
+    }
+  });
+
+  it("never accepts a password or connection string in Entra mode", () => {
+    const password = "do-not-accept-me-42";
+    let message = "";
+    try {
+      loadDatabaseConfig(
+        productionEnv({
+          PGPASSWORD: password,
+          DATABASE_URL: ["postgres://station", `${password}@db:5432/station`].join(":"),
+        }),
+      );
+    } catch (error) {
+      assert.ok(error instanceof ConfigError);
+      message = error.message;
+    }
+    assert.match(message, /PGPASSWORD must not be set/);
+    assert.match(message, /DATABASE_URL must not be set/);
+    assert.ok(!message.includes(password));
+  });
+
+  it("accepts a user-assigned managed identity client id and sslmode verify-full", () => {
+    const { database } = loadDatabaseConfig(
+      productionEnv({
+        AZURE_CLIENT_ID: "6A1E0C55-0F7E-4F0A-8F43-1C2D3E4F5A6B",
+        PGSSLMODE: "verify-full",
+        PGPORT: "6432",
+      }),
+    );
+    assert.equal(database.connection.auth, "entra");
+    if (database.connection.auth === "entra") {
+      assert.equal(
+        database.connection.managedIdentityClientId,
+        "6a1e0c55-0f7e-4f0a-8f43-1c2d3e4f5a6b",
+      );
+      assert.equal(database.connection.sslMode, "verify-full");
+      assert.equal(database.connection.port, 6432);
+    }
+  });
+});
+
+describe("HUB live client settings", () => {
+  it("requires HUB_BASE_URL and HUB_SERVICE_CREDENTIAL when HUB_MODE is live", () => {
+    const issues = issuesOf(testEnv({ HUB_MODE: "live" }));
+    assert.ok(
+      issues.some((issue) => issue.startsWith("HUB_BASE_URL")),
+      issues.join(),
+    );
+    assert.ok(
+      issues.some((issue) => issue.startsWith("HUB_SERVICE_CREDENTIAL")),
+      issues.join(),
+    );
+  });
+
+  it("requires https for the HUB in production and allows http locally", () => {
+    assert.ok(
+      issuesOf(productionEnv({ HUB_BASE_URL: "http://hub.hellochapter.com" })).some((issue) =>
+        issue.startsWith("HUB_BASE_URL"),
+      ),
+    );
+    const local = loadConfig(
+      testEnv({
+        HUB_MODE: "live",
+        HUB_BASE_URL: "http://fake-hub:4010",
+        HUB_SERVICE_CREDENTIAL: "x",
+      }),
+    );
+    assert.equal(local.hub.baseUrl, "http://fake-hub:4010");
+    const prod = loadConfig(productionEnv());
+    assert.equal(prod.hub.baseUrl, "https://hub.hellochapter.com");
+    assert.equal(prod.hub.serviceCredential, HUB_CREDENTIAL);
+  });
+
+  it("never puts the HUB credential in errors", () => {
+    let message = "";
+    try {
+      loadConfig(productionEnv({ HUB_BASE_URL: "ftp://x", PORT: "nope" }));
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    assert.match(message, /HUB_BASE_URL/);
+    assert.ok(!message.includes(HUB_CREDENTIAL));
+  });
+
+  it("leaves the fake HUB without live settings", () => {
+    const config = loadConfig(testEnv());
+    assert.equal(config.hub.mode, "fake");
+    assert.equal(config.hub.baseUrl, undefined);
+    assert.equal(config.hub.serviceCredential, undefined);
   });
 });

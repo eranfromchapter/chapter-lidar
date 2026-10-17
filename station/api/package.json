@@ -20,6 +20,7 @@
     "local:down": "bash scripts/local-down.sh"
   },
   "dependencies": {
+    "@azure/identity": "4.14.0",
     "@chapter/capture-contract": "1.0.0",
     "@fastify/autoload": "6.5.1",
     "fastify": "5.12.7",
