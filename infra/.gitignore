@@ -1,0 +1,3 @@
+# Output of `az bicep build --file infra/main.bicep` (acceptance check AC2). Never commit it.
+main.json
+params/*.json
