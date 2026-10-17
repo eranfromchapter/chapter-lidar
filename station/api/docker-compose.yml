@@ -4,6 +4,7 @@
 #   API       http://localhost:8080   (GET /health)
 #   Postgres  127.0.0.1:55432          postgres://station@127.0.0.1:55432/station (trust auth)
 #   Azurite   127.0.0.1:10000          blob endpoint http://localhost:10000/devstoreaccount1
+#   dev-idp   127.0.0.1:8090           local test tokens (POST /token), JWKS at /keys
 
 name: chapter-station-local
 
@@ -71,6 +72,8 @@ services:
         condition: service_healthy
     ports:
       - "${STATION_API_PORT:-8080}:8080"
+      # dev-idp shares this container's network (see dev-idp below); local only.
+      - "127.0.0.1:${STATION_DEV_IDP_PORT:-8090}:8090"
     healthcheck:
       test:
         - CMD
@@ -81,6 +84,39 @@ services:
       timeout: 3s
       retries: 40
       start_period: 5s
+
+  # Local test sign-in (F13). LOCAL ONLY: issues test tokens the API accepts. It shares the
+  # api container's network namespace so the API reaches its keys at http://localhost:8090/keys
+  # (the station only allows http for loopback hosts). Its port is published on the api service.
+  dev-idp:
+    image: node:22.23.3-bookworm-slim
+    command: ["node", "/app/src/server.mjs"]
+    working_dir: /app
+    read_only: true
+    user: node
+    network_mode: "service:api"
+    depends_on:
+      api:
+        condition: service_started
+    volumes:
+      - ../dev-idp:/app:ro
+    environment:
+      NODE_ENV: development
+      HOST: 0.0.0.0
+      PORT: "8090"
+      DEV_IDP_ISSUER: http://localhost:8090/
+      DEV_IDP_AUDIENCE: api://chapter-capture-station-local
+      DEV_IDP_TENANT_ID: 00000000-0000-0000-0000-000000000000
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8090/keys').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 2s
 
 volumes:
   postgres-data:
