@@ -1,1 +1,35 @@
 .worktrees/
+
+# Node
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.next/
+npm-debug.log*
+
+# Swift
+.build/
+.swiftpm/
+DerivedData/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# Test output
+test-output/
+test-results/
+
+# Local environment and secrets (never commit)
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.mobileprovision
+
+# OS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
