@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Export options for the TestFlight build (.github/workflows/testflight.yml).
+
+  - method app-store-connect: an App Store Connect / TestFlight build.
+  - destination export: xcodebuild writes the .ipa locally; the workflow uploads it with
+    xcrun altool, so the upload step is separate and visible in the log.
+    (No double hyphens in this comment: XML comments must not contain them.)
+  - signingStyle automatic: Xcode signs with cloud-managed certificates, authenticated by the
+    App Store Connect API key the workflow passes to xcodebuild.
+  - teamID is a placeholder. The workflow copies this file to the runner temp folder and sets the
+    real team id there with `plutil -replace teamID`, from the GitHub environment variable
+    APPLE_TEAM_ID. Never commit a real team id, key or certificate here.
+  - manageAppVersionAndBuildNumber false: the workflow sets the build number itself.
+-->
+<plist version="1.0">
+<dict>
+	<key>destination</key>
+	<string>export</string>
+	<key>manageAppVersionAndBuildNumber</key>
+	<false/>
+	<key>method</key>
+	<string>app-store-connect</string>
+	<key>signingStyle</key>
+	<string>automatic</string>
+	<key>stripSwiftSymbols</key>
+	<true/>
+	<key>teamID</key>
+	<string>__APPLE_TEAM_ID__</string>
+	<key>uploadSymbols</key>
+	<true/>
+</dict>
+</plist>

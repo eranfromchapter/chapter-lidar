@@ -1,0 +1,249 @@
+# Archives the Chapter Capture app, exports it with ios/ci/ExportOptions.plist and uploads it to
+# TestFlight with `xcrun altool`.
+#
+# - Manual trigger only, through the GitHub "testflight" environment (required reviewers; see
+#   .github/BRANCH_PROTECTION.md).
+# - Signing is automatic (cloud-managed certificates), authenticated by an App Store Connect API
+#   key. The key id, issuer id and .p8 content are environment secrets. The .p8 is written to a
+#   file only the runner user can read and is deleted at the end of the job, also on failure.
+# - The Apple team id is the environment variable APPLE_TEAM_ID. It is never stored in the repo.
+# - Skips cleanly while ios/project.yml does not exist yet.
+name: testflight
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: Build number (CFBundleVersion). Leave empty to use the workflow run number.
+        type: string
+        required: false
+        default: ""
+
+permissions: {}
+
+concurrency:
+  group: testflight
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      ready: ${{ steps.project.outputs.ready }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check that ios/project.yml exists
+        id: project
+        run: |
+          set -euo pipefail
+          if [[ -f ios/project.yml ]]; then
+            echo "ready=true" >>"${GITHUB_OUTPUT}"
+          else
+            echo "::notice::ios/project.yml does not exist yet. Skipping the TestFlight build."
+            echo "ready=false" >>"${GITHUB_OUTPUT}"
+          fi
+
+  testflight:
+    name: testflight
+    needs: check
+    if: needs.check.outputs.ready == 'true'
+    runs-on: macos-15
+    timeout-minutes: 90
+    environment: testflight
+    permissions:
+      contents: read
+    env:
+      # Pinned Xcode. App Store Connect requires an Xcode 26 SDK build.
+      XCODE_VERSION: "26.3"
+      XCODEGEN_VERSION: "2.46.0"
+      XCODEGEN_SHA256: 4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806
+      SCHEME: App
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set the work folders
+        run: |
+          set -euo pipefail
+          {
+            echo "BUILD_DIR=${RUNNER_TEMP}/testflight-build"
+            echo "ASC_KEY_DIR=${RUNNER_TEMP}/asc-private-keys"
+          } >>"${GITHUB_ENV}"
+
+      - name: Check the TestFlight settings
+        id: settings
+        env:
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          INPUT_BUILD_NUMBER: ${{ inputs.build_number }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          failed=0
+          fail() {
+            echo "::error::$1 See .github/BRANCH_PROTECTION.md."
+            failed=1
+          }
+          [[ "${APPLE_TEAM_ID}" =~ ^[A-Z0-9]{10}$ ]] ||
+            fail "Variable APPLE_TEAM_ID in environment 'testflight' is missing or is not a 10-character team id."
+          [[ "${ASC_KEY_ID}" =~ ^[A-Z0-9]{10}$ ]] ||
+            fail "Secret APP_STORE_CONNECT_API_KEY_ID in environment 'testflight' is missing or is not a 10-character key id."
+          [[ "${ASC_ISSUER_ID}" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]] ||
+            fail "Secret APP_STORE_CONNECT_API_ISSUER_ID in environment 'testflight' is missing or is not a UUID."
+          [[ -n "${ASC_PRIVATE_KEY}" ]] ||
+            fail "Secret APP_STORE_CONNECT_API_KEY_P8 in environment 'testflight' is missing."
+
+          build_number="${INPUT_BUILD_NUMBER:-${RUN_NUMBER}}"
+          [[ "${build_number}" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]] ||
+            fail "Build number '${build_number}' must be up to three dot-separated numbers."
+          echo "build_number=${build_number}" >>"${GITHUB_OUTPUT}"
+          exit "${failed}"
+
+      - name: Select Xcode ${{ env.XCODE_VERSION }}
+        run: |
+          set -euo pipefail
+          xcode_app="/Applications/Xcode_${XCODE_VERSION}.app"
+          if [[ ! -d "${xcode_app}" ]]; then
+            echo "::error::${xcode_app} is not installed on this runner image."
+            exit 1
+          fi
+          sudo xcode-select --switch "${xcode_app}/Contents/Developer"
+          xcodebuild -version
+
+      - name: Install XcodeGen ${{ env.XCODEGEN_VERSION }}
+        run: |
+          set -euo pipefail
+          install_dir="${RUNNER_TEMP}/xcodegen-${XCODEGEN_VERSION}"
+          mkdir -p "${install_dir}"
+          curl --fail --location --silent --show-error --retry 3 \
+            --output "${install_dir}/xcodegen.zip" \
+            "https://github.com/yonaskolb/XcodeGen/releases/download/${XCODEGEN_VERSION}/xcodegen.zip"
+          echo "${XCODEGEN_SHA256}  ${install_dir}/xcodegen.zip" | shasum -a 256 -c -
+          unzip -q "${install_dir}/xcodegen.zip" -d "${install_dir}"
+          echo "${install_dir}/xcodegen/bin" >>"${GITHUB_PATH}"
+
+      - name: Generate the Xcode project
+        id: project
+        run: |
+          set -euo pipefail
+          xcodegen version
+          xcodegen generate --spec ios/project.yml
+          shopt -s nullglob
+          projects=(ios/*.xcodeproj)
+          if [[ ${#projects[@]} -ne 1 ]]; then
+            echo "::error::Expected exactly one .xcodeproj in ios/ after xcodegen, found ${#projects[@]}."
+            exit 1
+          fi
+          echo "path=${projects[0]}" >>"${GITHUB_OUTPUT}"
+
+      - name: Write the App Store Connect API key
+        env:
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "${ASC_KEY_DIR}"
+          chmod 700 "${ASC_KEY_DIR}"
+          key_path="${ASC_KEY_DIR}/AuthKey_${ASC_KEY_ID}.p8"
+          printf '%s\n' "${ASC_PRIVATE_KEY}" >"${key_path}"
+          chmod 600 "${key_path}"
+          # Parse the key without printing it, so a wrongly pasted secret fails here.
+          if ! openssl pkey -in "${key_path}" -noout 2>/dev/null; then
+            echo "::error::APP_STORE_CONNECT_API_KEY_P8 is not a valid .p8 private key. Paste the whole .p8 file content."
+            exit 1
+          fi
+
+      - name: Archive
+        env:
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          PROJECT_PATH: ${{ steps.project.outputs.path }}
+          BUILD_NUMBER: ${{ steps.settings.outputs.build_number }}
+        run: |
+          set -euo pipefail
+          archive_path="${BUILD_DIR}/App.xcarchive"
+          xcodebuild archive \
+            -project "${PROJECT_PATH}" \
+            -scheme "${SCHEME}" \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath "${archive_path}" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "${ASC_KEY_DIR}/AuthKey_${ASC_KEY_ID}.p8" \
+            -authenticationKeyID "${ASC_KEY_ID}" \
+            -authenticationKeyIssuerID "${ASC_ISSUER_ID}" \
+            DEVELOPMENT_TEAM="${APPLE_TEAM_ID}" \
+            CODE_SIGN_STYLE=Automatic \
+            CURRENT_PROJECT_VERSION="${BUILD_NUMBER}"
+
+          # TestFlight rejects a repeated build number, so make sure the override took effect.
+          archived_build="$(/usr/libexec/PlistBuddy -c "Print :ApplicationProperties:CFBundleVersion" "${archive_path}/Info.plist")"
+          if [[ "${archived_build}" != "${BUILD_NUMBER}" ]]; then
+            echo "::error::The archive has build number '${archived_build}', expected '${BUILD_NUMBER}'. ios/project.yml must take CFBundleVersion from CURRENT_PROJECT_VERSION."
+            exit 1
+          fi
+          echo "Archived build ${archived_build}."
+
+      - name: Export the .ipa
+        env:
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          export_options="${BUILD_DIR}/ExportOptions.plist"
+          cp ios/ci/ExportOptions.plist "${export_options}"
+          plutil -replace teamID -string "${APPLE_TEAM_ID}" "${export_options}"
+          plutil -lint "${export_options}"
+
+          xcodebuild -exportArchive \
+            -archivePath "${BUILD_DIR}/App.xcarchive" \
+            -exportPath "${BUILD_DIR}/export" \
+            -exportOptionsPlist "${export_options}" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "${ASC_KEY_DIR}/AuthKey_${ASC_KEY_ID}.p8" \
+            -authenticationKeyID "${ASC_KEY_ID}" \
+            -authenticationKeyIssuerID "${ASC_ISSUER_ID}"
+
+      - name: Upload to TestFlight
+        env:
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          ipas=("${BUILD_DIR}"/export/*.ipa)
+          if [[ ${#ipas[@]} -ne 1 ]]; then
+            echo "::error::Expected exactly one .ipa in the export folder, found ${#ipas[@]}."
+            exit 1
+          fi
+          # altool looks for AuthKey_<key id>.p8 in the folder named by API_PRIVATE_KEYS_DIR.
+          API_PRIVATE_KEYS_DIR="${ASC_KEY_DIR}" xcrun altool --upload-app \
+            --type ios \
+            --file "${ipas[0]}" \
+            --apiKey "${ASC_KEY_ID}" \
+            --apiIssuer "${ASC_ISSUER_ID}"
+
+      - name: Delete the App Store Connect API key
+        if: always()
+        run: |
+          if [[ -n "${ASC_KEY_DIR:-}" ]]; then
+            rm -rf "${ASC_KEY_DIR}"
+          fi
+          if [[ -n "${BUILD_DIR:-}" ]]; then
+            rm -f "${BUILD_DIR}/ExportOptions.plist"
+          fi
