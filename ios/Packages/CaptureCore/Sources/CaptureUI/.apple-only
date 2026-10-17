@@ -1,0 +1,2 @@
+Apple frameworks only (SwiftUI). Every source file is wrapped in #if canImport(SwiftUI),
+so this target compiles to nothing on Linux. It is built on the macOS runner (ios.yml).

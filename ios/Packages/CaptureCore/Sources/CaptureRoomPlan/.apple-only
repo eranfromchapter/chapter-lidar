@@ -1,0 +1,2 @@
+Apple frameworks only (RoomPlan, ARKit). Every source file is wrapped in #if canImport(RoomPlan),
+so this target compiles to nothing on Linux. It is built and tested on the macOS runner (ios.yml).
