@@ -21,7 +21,6 @@ import {
   type ModelingDecision,
   type ModelingDecisionInput,
 } from "./schemas.js";
-import { strictBodyValidator } from "./strict-validator.js";
 
 const DECISION_ROLES = ["bim", "admin"] as const;
 
@@ -128,8 +127,8 @@ export default async function decisionRoutes(app: FastifyInstance): Promise<void
     "/packages/:packageId/modeling-decisions",
     {
       config: { roles: DECISION_ROLES },
+      // Bodies are never type-coerced (core validation.ts): {"element": 5} is 400.
       schema: { body: modelingDecisionInputSchema },
-      validatorCompiler: strictBodyValidator,
     },
     async (request, reply) => {
       const principal = requirePrincipal(request);
