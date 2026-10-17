@@ -414,7 +414,7 @@ integration_checks: ["cmd:npm test"]
 ```yaml wave
 wave: 3
 phases: [P11a, P11b, P12a, P12b, P12c, P7a]
-integration_owned: [package.json, package-lock.json]
+integration_owned: [package.json, package-lock.json, .gitignore, .prettierignore]
 criteria: [F11.AC1, F11.AC2, F11.AC3, F11.AC4, F11.AC5, F12.AC1, F12.AC2, F12.AC3, F12.AC4, F12.AC5]
 integration_checks: ["cmd:npm test", "cmd:station/api/scripts/local-up.sh"]
 ```
@@ -491,12 +491,12 @@ W6: pending
 P1a: done
 P1b: done
 P1c: done
-P11a: running
-P11b: running
-P12a: running
-P12b: running
-P12c: running
-P7a: running
+P11a: gated
+P11b: gated
+P12a: gated
+P12b: gated
+P12c: gated
+P7a: gated
 P7b: pending
 P7c: pending
 P7d: pending
