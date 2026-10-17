@@ -10,9 +10,11 @@
 //   account key.
 // - Only bim and admin may get a link; only verified files with a stored blob; every link
 //   handed out is audited (the URL itself never is).
+// - The link signs package_files.blob_name, the blob the file was verified in. It is never
+//   rebuilt from the path: a re-uploaded file lives in `<packageId>.retry-<n>/<path>`.
 //
-// NOT EXPOSED YET: contract/openapi/station.yaml defines no download operation, so no route
-// calls issueDownloadLink. A route needs only an OpenAPI operation that maps to it.
+// Exposed as GET /v1/packages/{packageId}/files/download?path= (OpenAPI getFileDownloadLink)
+// in index.ts.
 //
 // DUPLICATION: the uploads area builds its own storage client (write SAS) in parallel. Merge
 // the credential and endpoint handling here with that module once both have landed.
@@ -246,8 +248,14 @@ export function downloadSigner(request: FastifyRequest): ReadLinkSigner {
   return services.downloadLinks;
 }
 
+/** OpenAPI components.schemas.DownloadLink. */
 export interface IssuedDownloadLink {
   readonly path: string;
+  /** Verified SHA-256 of the file. */
+  readonly sha256: string;
+  /** Verified size of the file. */
+  readonly bytes: number;
+  /** Read-only SAS URL. A secret: never log or audit it. */
   readonly url: string;
   /** Contract DateTime. */
   readonly expiresAt: string;
@@ -255,6 +263,8 @@ export interface IssuedDownloadLink {
 
 interface DownloadFileRow {
   status: string;
+  sha256: string;
+  bytes: number;
   blob_name: string | null;
 }
 
@@ -279,7 +289,8 @@ export async function issueDownloadLink(
   }
   const db = request.server.db;
   const result = await db.query<DownloadFileRow>(
-    "SELECT status, blob_name FROM package_files WHERE package_id = $1 AND path = $2",
+    `SELECT status, sha256, bytes, blob_name FROM package_files
+      WHERE package_id = $1 AND path = $2`,
     [packageId, path],
   );
   const row = result.rows[0];
@@ -303,5 +314,5 @@ export async function issueDownloadLink(
       expiresAt,
     },
   );
-  return { path, url: link.url, expiresAt };
+  return { path, sha256: row.sha256, bytes: row.bytes, url: link.url, expiresAt };
 }

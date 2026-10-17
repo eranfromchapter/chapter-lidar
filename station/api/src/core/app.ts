@@ -21,6 +21,7 @@ import { healthRoutes } from "./health.js";
 import { type LogDestination, loggerOptions } from "./logger.js";
 import { problems } from "./problem.js";
 import type { StationServices } from "./services.js";
+import { createRequestValidatorCompiler } from "./validation.js";
 
 /** src/routes (or dist/routes in the image). */
 export const ROUTES_DIR = fileURLToPath(new URL("../routes", import.meta.url));
@@ -51,11 +52,10 @@ export async function buildServer(options: BuildServerOptions): Promise<FastifyI
     logger: loggerOptions(config.server.logLevel, options.logStream),
     genReqId: () => randomUUID(),
     bodyLimit: config.server.bodyLimitBytes,
-    ajv: {
-      // Unknown properties are rejected (additionalProperties: false -> 400), not stripped.
-      customOptions: { removeAdditional: false },
-    },
   });
+  // Bodies are never type-coerced; query strings and path parameters are parsed to their
+  // declared types. Unknown properties are rejected, not stripped. See validation.ts.
+  app.setValidatorCompiler(createRequestValidatorCompiler());
 
   app.decorate("config", config);
   app.decorate("db", options.db);

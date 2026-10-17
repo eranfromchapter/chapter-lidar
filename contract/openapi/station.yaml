@@ -294,6 +294,48 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
+  /packages/{packageId}/files/download:
+    parameters:
+      - $ref: "#/components/parameters/PackageId"
+    get:
+      tags: [packages]
+      operationId: getFileDownloadLink
+      summary: Get a short-lived read-only download link for one verified file
+      description: |
+        Returns a read-only Azure Blob SAS URL for the stored original of one verified file of
+        the package, valid for 10 minutes. Files that are not verified have no link (409 with
+        code `file_not_verified`). Every link handed out is recorded in the audit log (who,
+        which file, when); the URL itself is never recorded.
+      x-roles: [bim, admin]
+      parameters:
+        - name: path
+          in: query
+          required: true
+          description: The file's path in the manifest.
+          schema:
+            $ref: "#/components/schemas/RelativePath"
+      responses:
+        "200":
+          description: Download link for the file.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DownloadLink"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The file has no verified upload yet (code `file_not_verified`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
   /packages/{packageId}/seal:
     parameters:
       - $ref: "#/components/parameters/PackageId"
@@ -767,6 +809,32 @@ components:
           $ref: "#/components/schemas/FileStatus"
         checkedAt:
           description: Time of the last server-side check. Omitted while pending.
+          $ref: "#/components/schemas/DateTime"
+
+    DownloadLink:
+      description: |
+        Read-only link to the stored original of one verified file. The URL carries a signature:
+        treat it as a secret until it expires (do not log or share it).
+      type: object
+      additionalProperties: false
+      required: [path, sha256, bytes, url, expiresAt]
+      properties:
+        path:
+          $ref: "#/components/schemas/RelativePath"
+        sha256:
+          description: Verified SHA-256 of the file, to check the download against.
+          $ref: "#/components/schemas/Sha256"
+        bytes:
+          description: Verified size of the file.
+          type: integer
+          format: int64
+          minimum: 0
+        url:
+          description: Azure Blob URL with a read-only SAS for this one file.
+          type: string
+          format: uri
+        expiresAt:
+          description: When the link stops working (10 minutes after it was issued).
           $ref: "#/components/schemas/DateTime"
 
     VerdictSummary:
