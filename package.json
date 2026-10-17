@@ -1,0 +1,38 @@
+{
+  "name": "chapter-capture",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Chapter Capture: LiDAR intake package app, station and shared contract.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0",
+    "npm": ">=10"
+  },
+  "workspaces": [
+    "contract/ts",
+    "fixtures/generator",
+    "station/*",
+    "web"
+  ],
+  "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint . && npm run lint:secrets",
+    "lint:secrets": "secretlint --secretlintrc scripts/secretlint/secretlintrc.json --secretlintignore .gitignore \"**/*\"",
+    "typecheck": "node scripts/workspaces.mjs typecheck",
+    "test": "node scripts/workspaces.mjs test && bash scripts/swift-test.sh"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@redocly/cli": "2.64.1",
+    "@secretlint/secretlint-rule-preset-recommend": "13.0.7",
+    "@types/node": "22.20.5",
+    "eslint": "10.13.0",
+    "globals": "17.13.0",
+    "gltf-validator": "2.0.0-dev.3.10",
+    "prettier": "3.9.10",
+    "secretlint": "13.0.7",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.71.2"
+  }
+}

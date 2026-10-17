@@ -1,0 +1,19 @@
+# Generated or vendored
+node_modules/
+package-lock.json
+dist/
+build/
+.build/
+coverage/
+test-output/
+test-results/
+.next/
+.swiftpm/
+.worktrees/
+
+# Planning documents are owned by the orchestrator and kept as written
+plan.md
+docs/
+
+# Native project files
+ios/

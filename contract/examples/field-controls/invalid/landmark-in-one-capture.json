@@ -1,0 +1,118 @@
+{
+  "schemaVersion": "1.0.0",
+  "visitId": "7c4e1b9a-2d3f-4a68-9b5c-e0f1a2b3c4d5",
+  "distances": [
+    {
+      "id": "f1-distance-a",
+      "capture": {
+        "captureId": "3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35",
+        "areaKey": "floor-1"
+      },
+      "axis": "A",
+      "from": "Kitchen east wall",
+      "to": "Living west wall",
+      "measurement": {
+        "valueMm": 7518.4,
+        "enteredUnit": "ft_in",
+        "enteredText": "24' 8\"",
+        "method": "laser",
+        "recordedAt": "2026-10-17T14:50:00Z"
+      }
+    },
+    {
+      "id": "f1-distance-b",
+      "capture": {
+        "captureId": "3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35",
+        "areaKey": "floor-1"
+      },
+      "axis": "B",
+      "from": "Entry",
+      "to": "Rear wall",
+      "measurement": {
+        "valueMm": 11239.5,
+        "enteredUnit": "ft_in",
+        "enteredText": "36' 10 1/2\"",
+        "method": "laser",
+        "recordedAt": "2026-10-17T14:50:00Z"
+      }
+    }
+  ],
+  "ceilingHeights": [
+    {
+      "id": "f1-ceiling-kitchen",
+      "capture": {
+        "captureId": "3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35",
+        "areaKey": "floor-1"
+      },
+      "room": "Kitchen",
+      "location": "Centre of room",
+      "measurement": {
+        "valueMm": 2690,
+        "enteredUnit": "mm",
+        "enteredText": "2690",
+        "method": "tape",
+        "recordedAt": "2026-10-17T14:50:00Z"
+      }
+    }
+  ],
+  "openings": [
+    {
+      "id": "f1-opening-entry",
+      "capture": {
+        "captureId": "3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35",
+        "areaKey": "floor-1"
+      },
+      "room": "Kitchen",
+      "label": "Entry door",
+      "width": {
+        "valueMm": 914.4,
+        "enteredUnit": "in",
+        "enteredText": "36",
+        "method": "tape",
+        "recordedAt": "2026-10-17T14:50:00Z"
+      },
+      "height": {
+        "valueMm": 2032,
+        "enteredUnit": "in",
+        "enteredText": "80",
+        "method": "tape",
+        "recordedAt": "2026-10-17T14:50:00Z"
+      }
+    }
+  ],
+  "floorToFloor": [
+    {
+      "id": "f1-f2-stair",
+      "lower": {
+        "captureId": "3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35",
+        "areaKey": "floor-1"
+      },
+      "upper": {
+        "captureId": "a81d5f03-6c2e-4b97-8d14-2f9e7b3c5a60",
+        "areaKey": "floor-2"
+      },
+      "location": "At stair",
+      "measurement": {
+        "valueMm": 2950,
+        "enteredUnit": "cm",
+        "enteredText": "295",
+        "method": "laser",
+        "recordedAt": "2026-10-17T14:50:00Z"
+      }
+    }
+  ],
+  "landmarks": [
+    {
+      "id": "landmark-newel",
+      "label": "Stair newel post",
+      "description": "Top of the newel post at the bottom of the stair.",
+      "captures": [
+        {
+          "captureId": "3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35",
+          "areaKey": "floor-1"
+        }
+      ],
+      "photoPaths": ["Site Photos/floor-1/3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35/photo-0014.jpg"]
+    }
+  ]
+}
