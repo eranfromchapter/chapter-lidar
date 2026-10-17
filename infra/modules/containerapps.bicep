@@ -1,14 +1,17 @@
-// Container Apps environment (logs to Log Analytics) with two apps:
-// - api: external HTTPS ingress to port 8080.
-// - worker: no ingress; polls the Postgres job queue.
-// Both use a system-assigned managed identity for ACR pulls, Key Vault references, Blob and
-// Postgres (Entra) access. No secret value is set here.
+// Container Apps environment (logs to Log Analytics) with:
+// - api: external HTTPS ingress to port 8080, /health readiness probe.
+// - worker: no ingress; polls the Postgres job queue, runs checks and HUB publish.
+// - migrate job: manually triggered; applies the Postgres migrations with the api image.
+// Each has a system-assigned managed identity for ACR pulls, Key Vault references and Blob
+// access. No secret value is set here: secrets are Key Vault references by name.
+//
+// Environment variable names match station/api/src/core/config.ts.
 //
 // `bootstrap` = true is for the very first deployment only. A system-assigned identity does not
-// exist until its app is created, so its AcrPull and Key Vault role assignments cannot exist yet
-// either. In bootstrap mode the apps skip the registry and Key Vault references and run the
-// public placeholder image. Run again with bootstrap = false once roles and the
-// `hub-service-credential` secret are in place.
+// exist until its app or job is created, so its AcrPull and Key Vault role assignments cannot
+// exist yet either. In bootstrap mode nothing references the registry or Key Vault, the api has
+// no /health probes, and everything runs the public placeholder image. Run again with
+// bootstrap = false once roles and the Key Vault secrets are in place.
 
 @description('Container Apps environment name.')
 param environmentName string
@@ -19,14 +22,14 @@ param apiAppName string
 @description('Worker container app name.')
 param workerAppName string
 
+@description('Migration job name.')
+param migrateJobName string
+
 @description('Azure region.')
 param location string
 
 @description('Resource tags.')
 param tags object
-
-@description('Deployment environment (staging or production), passed to the apps as STATION_ENV.')
-param stationEnv string
 
 @description('Existing Log Analytics workspace name in this resource group.')
 param logAnalyticsWorkspaceName string
@@ -43,16 +46,13 @@ param blobEndpoint string
 @description('Name of the originals container.')
 param originalsContainerName string
 
-@description('Postgres server FQDN.')
-param postgresHost string
+@description('Accepted Entra token audiences for the station API (comma-separated).')
+param entraAudience string
 
-@description('Postgres database name.')
-param postgresDatabase string
-
-@description('First deployment: no registry or Key Vault references yet.')
+@description('First deployment: no registry or Key Vault references and no probes yet.')
 param bootstrap bool
 
-@description('API image reference.')
+@description('API image reference (also used by the migration job).')
 param apiImage string
 
 @description('Worker image reference.')
@@ -82,8 +82,20 @@ param workerMinReplicas int
 @minValue(1)
 param workerMaxReplicas int
 
-// Name of the Key Vault secret that holds the HUB service credential. Only the name lives here.
+// Key Vault secret names. Only names live here; an admin sets the values.
 var hubSecretName = 'hub-service-credential'
+var databaseSecretName = 'database-url'
+
+// The api image's migration entrypoint (see station/api/src/core/migrate-main.ts). The runtime
+// image has production dependencies and dist/ only, so `npm run migrate` (tsx on src/) cannot
+// run in it. Working directory is the image's /app/station/api.
+var migrateCommand = [
+  'node'
+  'dist/core/migrate-main.js'
+]
+
+var loginEndpoint = environment().authentication.loginEndpoint
+var tenantId = tenant().tenantId
 
 var registries = bootstrap
   ? []
@@ -94,13 +106,27 @@ var registries = bootstrap
       }
     ]
 
-var hubSecrets = bootstrap
+var databaseSecret = {
+  name: databaseSecretName
+  keyVaultUrl: '${keyVaultUri}secrets/${databaseSecretName}'
+  identity: 'system'
+}
+
+var hubSecret = {
+  name: hubSecretName
+  keyVaultUrl: '${keyVaultUri}secrets/${hubSecretName}'
+  identity: 'system'
+}
+
+var appSecrets = bootstrap ? [] : [databaseSecret, hubSecret]
+var jobSecrets = bootstrap ? [] : [databaseSecret]
+
+var databaseEnv = bootstrap
   ? []
   : [
       {
-        name: hubSecretName
-        keyVaultUrl: '${keyVaultUri}secrets/${hubSecretName}'
-        identity: 'system'
+        name: 'DATABASE_URL'
+        secretRef: databaseSecretName
       }
     ]
 
@@ -113,44 +139,85 @@ var hubSecretEnv = bootstrap
       }
     ]
 
+// Settings shared by the api, the worker and the migration job (station/api/src/core/config.ts).
 var commonEnv = [
   {
     name: 'NODE_ENV'
     value: 'production'
   }
   {
-    name: 'STATION_ENV'
-    value: stationEnv
+    name: 'MIGRATE_ON_START'
+    value: 'false'
   }
   {
-    name: 'AZURE_STORAGE_BLOB_URL'
+    name: 'ENTRA_TENANT_ID'
+    value: tenantId
+  }
+  {
+    name: 'ENTRA_AUDIENCE'
+    value: entraAudience
+  }
+  {
+    name: 'ENTRA_ISSUER'
+    value: '${loginEndpoint}${tenantId}/v2.0'
+  }
+  {
+    name: 'ENTRA_JWKS_URL'
+    value: '${loginEndpoint}${tenantId}/discovery/v2.0/keys'
+  }
+  {
+    name: 'HUB_MODE'
+    value: 'live'
+  }
+  {
+    name: 'AZURE_STORAGE_ACCOUNT_URL'
     value: blobEndpoint
   }
   {
-    name: 'ORIGINALS_CONTAINER'
+    name: 'STORAGE_ORIGINALS_CONTAINER'
     value: originalsContainerName
   }
-  {
-    name: 'KEY_VAULT_URI'
-    value: keyVaultUri
-  }
-  {
-    name: 'PGHOST'
-    value: postgresHost
-  }
-  {
-    name: 'PGPORT'
-    value: '5432'
-  }
-  {
-    name: 'PGDATABASE'
-    value: postgresDatabase
-  }
-  {
-    name: 'PGSSLMODE'
-    value: 'require'
-  }
 ]
+
+// Readiness uses /health (503 while the registry database is unreachable, so traffic stops).
+// Liveness and startup only check the port, so a database outage does not restart replicas.
+var apiProbes = bootstrap
+  ? []
+  : [
+      {
+        type: 'Startup'
+        tcpSocket: {
+          port: 8080
+        }
+        initialDelaySeconds: 1
+        periodSeconds: 10
+        timeoutSeconds: 3
+        failureThreshold: 10
+      }
+      {
+        type: 'Readiness'
+        httpGet: {
+          path: '/health'
+          port: 8080
+          scheme: 'HTTP'
+        }
+        initialDelaySeconds: 5
+        periodSeconds: 10
+        timeoutSeconds: 3
+        successThreshold: 1
+        failureThreshold: 3
+      }
+      {
+        type: 'Liveness'
+        tcpSocket: {
+          port: 8080
+        }
+        initialDelaySeconds: 10
+        periodSeconds: 30
+        timeoutSeconds: 5
+        failureThreshold: 5
+      }
+    ]
 
 resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {
   name: logAnalyticsWorkspaceName
@@ -203,7 +270,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
         ]
       }
       registries: registries
-      secrets: hubSecrets
+      secrets: appSecrets
     }
     template: {
       containers: [
@@ -221,13 +288,11 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
                 name: 'PORT'
                 value: '8080'
               }
-              {
-                name: 'PGUSER'
-                value: apiAppName
-              }
             ],
+            databaseEnv,
             hubSecretEnv
           )
+          probes: apiProbes
         }
       ]
       scale: {
@@ -251,6 +316,7 @@ resource worker 'Microsoft.App/containerApps@2024-03-01' = {
     configuration: {
       activeRevisionsMode: 'Single'
       registries: registries
+      secrets: appSecrets
     }
     template: {
       containers: [
@@ -261,12 +327,7 @@ resource worker 'Microsoft.App/containerApps@2024-03-01' = {
             cpu: json(workerCpu)
             memory: workerMemory
           }
-          env: concat(commonEnv, [
-            {
-              name: 'PGUSER'
-              value: workerAppName
-            }
-          ])
+          env: concat(commonEnv, databaseEnv, hubSecretEnv)
         }
       ]
       scale: {
@@ -277,6 +338,45 @@ resource worker 'Microsoft.App/containerApps@2024-03-01' = {
   }
 }
 
+resource migrate 'Microsoft.App/jobs@2024-03-01' = {
+  name: migrateJobName
+  location: location
+  tags: tags
+  identity: {
+    type: 'SystemAssigned'
+  }
+  properties: {
+    environmentId: managedEnvironment.id
+    workloadProfileName: 'Consumption'
+    configuration: {
+      triggerType: 'Manual'
+      replicaTimeout: 600
+      replicaRetryLimit: 0
+      manualTriggerConfig: {
+        parallelism: 1
+        replicaCompletionCount: 1
+      }
+      registries: registries
+      secrets: jobSecrets
+    }
+    template: {
+      containers: [
+        {
+          name: 'migrate'
+          image: apiImage
+          command: migrateCommand
+          resources: {
+            cpu: json('0.5')
+            memory: '1Gi'
+          }
+          env: concat(commonEnv, databaseEnv)
+        }
+      ]
+    }
+  }
+}
+
 output apiPrincipalId string = api.identity.principalId
 output workerPrincipalId string = worker.identity.principalId
+output migratePrincipalId string = migrate.identity.principalId
 output apiFqdn string = api.properties.configuration.ingress.fqdn

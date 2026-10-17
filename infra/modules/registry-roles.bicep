@@ -1,5 +1,5 @@
 // Role assignments on the shared registry (deployed into the registry's resource group).
-// api and worker identities: AcrPull. GitHub deploy identity: AcrPush.
+// api, worker and migration job identities: AcrPull. GitHub deploy identity: AcrPush.
 
 @description('Registry name.')
 param registryName string
@@ -10,6 +10,9 @@ param apiAppName string
 @description('Worker container app name (used for stable role assignment names).')
 param workerAppName string
 
+@description('Migration job name (used for stable role assignment names).')
+param migrateJobName string
+
 @description('Deploy identity name (used for stable role assignment names).')
 param deployIdentityName string
 
@@ -18,6 +21,9 @@ param apiPrincipalId string
 
 @description('Principal ID of the worker system-assigned identity.')
 param workerPrincipalId string
+
+@description('Principal ID of the migration job system-assigned identity.')
+param migratePrincipalId string
 
 @description('Principal ID of the GitHub deploy identity.')
 param deployPrincipalId string
@@ -45,6 +51,16 @@ resource workerPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', acrPull)
     principalId: workerPrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource migratePull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(registry.id, migrateJobName, acrPull)
+  scope: registry
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', acrPull)
+    principalId: migratePrincipalId
     principalType: 'ServicePrincipal'
   }
 }

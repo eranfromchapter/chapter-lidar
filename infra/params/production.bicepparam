@@ -1,6 +1,7 @@
 // Production parameters. No secrets: every value here is safe to commit.
-// The admin group object ID and name come from environment variables at deploy time
-// (see infra/README.md); they are identifiers, not secrets, but are tenant-specific.
+// The admin group object ID and name and the Entra audience come from environment variables
+// at deploy time (see infra/README.md). They are identifiers, not secrets, but are
+// tenant-specific.
 using '../main.bicep'
 
 param environmentName = 'production'
@@ -9,6 +10,9 @@ param githubRepository = 'eranfromchapter/chapter-capture'
 
 param adminGroupObjectId = readEnvironmentVariable('CAPTURE_ADMIN_GROUP_OBJECT_ID', '')
 param adminGroupName = readEnvironmentVariable('CAPTURE_ADMIN_GROUP_NAME', '')
+
+// Station app registration audience(s) for ENTRA_AUDIENCE (client ID and/or App ID URI).
+param entraAudience = readEnvironmentVariable('CAPTURE_ENTRA_AUDIENCE', '')
 
 // Production owns the shared registry acrchaptercapture.
 param createRegistry = true

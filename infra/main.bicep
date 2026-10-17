@@ -38,6 +38,10 @@ param adminGroupObjectId string
 @minLength(1)
 param adminGroupName string
 
+@description('Accepted Entra token audiences for the station API: the station app registration client ID and/or App ID URI, comma-separated (ENTRA_AUDIENCE).')
+@minLength(1)
+param entraAudience string
+
 @description('Create the shared container registry in this deployment. True for exactly one environment.')
 param createRegistry bool
 
@@ -55,7 +59,7 @@ param registrySku string = 'Basic'
 @description('First deployment of this environment: skip ACR and Key Vault references, which need role assignments that do not exist yet.')
 param bootstrap bool = false
 
-@description('API image. Empty uses the public placeholder image (listens on 8080) until the first app deploy.')
+@description('API image, also used by the migration job. Empty uses the public placeholder image (listens on 8080) until the first app deploy.')
 param apiImage string = ''
 
 @description('Worker image. Empty uses the public placeholder image until the first app deploy.')
@@ -140,14 +144,22 @@ param workerMinReplicas int = 1
 @minValue(1)
 param workerMaxReplicas int = 1
 
+// Key Vault and storage account names are limited to 24 characters, so they use a short
+// environment token (decided by Eran 2026-10-17, spec F12). Every other name uses the long one.
+var shortEnv = {
+  staging: 'stg'
+  production: 'prod'
+}
+
 // Fixed names shared with the GitHub workflows. Change them only together with .github/.
 var names = {
   resourceGroup: 'rg-chapter-capture-${environmentName}'
   apiApp: 'ca-capture-api-${environmentName}'
   workerApp: 'ca-capture-worker-${environmentName}'
+  migrateJob: 'caj-capture-migrate-${environmentName}'
   registry: 'acrchaptercapture'
-  storage: 'stchaptercapture${environmentName}'
-  keyVault: 'kv-chapter-capture-${environmentName}'
+  storage: 'stchaptercapture${shortEnv[environmentName]}'
+  keyVault: 'kv-chapter-capture-${shortEnv[environmentName]}'
   postgres: 'pg-chapter-capture-${environmentName}'
   // Not referenced by the workflows.
   logAnalytics: 'log-chapter-capture-${environmentName}'
@@ -250,16 +262,15 @@ module apps 'modules/containerapps.bicep' = {
     environmentName: names.containerAppsEnvironment
     apiAppName: names.apiApp
     workerAppName: names.workerApp
+    migrateJobName: names.migrateJob
     location: location
     tags: tags
-    stationEnv: environmentName
     logAnalyticsWorkspaceName: monitoring.outputs.workspaceName
     registryLoginServer: registryLoginServer
     keyVaultUri: keyVault.outputs.vaultUri
     blobEndpoint: storage.outputs.blobEndpoint
     originalsContainerName: storage.outputs.originalsContainerName
-    postgresHost: postgres.outputs.fqdn
-    postgresDatabase: postgres.outputs.databaseName
+    entraAudience: entraAudience
     bootstrap: bootstrap
     apiImage: empty(apiImage) ? placeholderImage : apiImage
     workerImage: empty(workerImage) ? placeholderImage : workerImage
@@ -294,8 +305,10 @@ module roles 'modules/roles.bicep' = {
     keyVaultName: keyVault.outputs.keyVaultName
     apiAppName: names.apiApp
     workerAppName: names.workerApp
+    migrateJobName: names.migrateJob
     apiPrincipalId: apps.outputs.apiPrincipalId
     workerPrincipalId: apps.outputs.workerPrincipalId
+    migratePrincipalId: apps.outputs.migratePrincipalId
     adminGroupObjectId: adminGroupObjectId
     deployIdentityName: names.deployIdentity
     deployPrincipalId: deployIdentity.outputs.principalId
@@ -309,9 +322,11 @@ module registryRoles 'modules/registry-roles.bicep' = {
     registryName: names.registry
     apiAppName: names.apiApp
     workerAppName: names.workerApp
+    migrateJobName: names.migrateJob
     deployIdentityName: names.deployIdentity
     apiPrincipalId: apps.outputs.apiPrincipalId
     workerPrincipalId: apps.outputs.workerPrincipalId
+    migratePrincipalId: apps.outputs.migratePrincipalId
     deployPrincipalId: deployIdentity.outputs.principalId
   }
   dependsOn: [
@@ -322,6 +337,7 @@ module registryRoles 'modules/registry-roles.bicep' = {
 output resourceGroupName string = rg.name
 output apiAppName string = names.apiApp
 output workerAppName string = names.workerApp
+output migrateJobName string = names.migrateJob
 output apiFqdn string = apps.outputs.apiFqdn
 output registryLoginServer string = registryLoginServer
 output storageAccountName string = storage.outputs.storageAccountName
@@ -332,3 +348,4 @@ output postgresDatabase string = databaseName
 output deployClientId string = deployIdentity.outputs.clientId
 output apiPrincipalId string = apps.outputs.apiPrincipalId
 output workerPrincipalId string = apps.outputs.workerPrincipalId
+output migratePrincipalId string = apps.outputs.migratePrincipalId

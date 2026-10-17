@@ -2,9 +2,12 @@
 //
 // api identity:     Storage Blob Data Contributor + Storage Blob Delegator (storage account),
 //                   Key Vault Secrets User (vault).
-// worker identity:  Storage Blob Data Reader (storage account) to read originals for checks.
+// worker identity:  Storage Blob Data Reader (storage account) to read originals for checks,
+//                   Key Vault Secrets User (vault) for `database-url` and the HUB credential.
+// migrate job:      Key Vault Secrets User (vault) for `database-url`.
 // admin group:      Key Vault Secrets Officer (vault) to set secret values.
-// deploy identity:  Contributor on the two container apps, Reader on the resource group.
+// deploy identity:  Contributor on the two container apps and the migration job (update image,
+//                   start the job), Reader on the resource group.
 
 @description('Storage account name.')
 param storageAccountName string
@@ -18,11 +21,17 @@ param apiAppName string
 @description('Worker container app name.')
 param workerAppName string
 
+@description('Migration job name.')
+param migrateJobName string
+
 @description('Principal ID of the API system-assigned identity.')
 param apiPrincipalId string
 
 @description('Principal ID of the worker system-assigned identity.')
 param workerPrincipalId string
+
+@description('Principal ID of the migration job system-assigned identity.')
+param migratePrincipalId string
 
 @description('Object ID of the admin Entra group.')
 param adminGroupObjectId string
@@ -58,6 +67,10 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' existing = {
 
 resource workerApp 'Microsoft.App/containerApps@2024-03-01' existing = {
   name: workerAppName
+}
+
+resource migrateJob 'Microsoft.App/jobs@2024-03-01' existing = {
+  name: migrateJobName
 }
 
 resource apiBlobContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
@@ -112,6 +125,32 @@ resource workerBlobReader 'Microsoft.Authorization/roleAssignments@2022-04-01' =
   }
 }
 
+resource workerSecretsUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(vault.id, workerAppName, roles.keyVaultSecretsUser)
+  scope: vault
+  properties: {
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      roles.keyVaultSecretsUser
+    )
+    principalId: workerPrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource migrateSecretsUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(vault.id, migrateJobName, roles.keyVaultSecretsUser)
+  scope: vault
+  properties: {
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      roles.keyVaultSecretsUser
+    )
+    principalId: migratePrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 resource adminSecretsOfficer 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(vault.id, adminGroupObjectId, roles.keyVaultSecretsOfficer)
   scope: vault
@@ -141,6 +180,19 @@ resource deployApiContributor 'Microsoft.Authorization/roleAssignments@2022-04-0
 resource deployWorkerContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(workerApp.id, deployIdentityName, roles.contributor)
   scope: workerApp
+  properties: {
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      roles.contributor
+    )
+    principalId: deployPrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource deployMigrateContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(migrateJob.id, deployIdentityName, roles.contributor)
+  scope: migrateJob
   properties: {
     roleDefinitionId: subscriptionResourceId(
       'Microsoft.Authorization/roleDefinitions',
