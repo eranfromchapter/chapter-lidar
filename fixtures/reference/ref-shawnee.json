@@ -1,0 +1,51 @@
+{
+  "referenceId": "ref-shawnee",
+  "layoutVersion": "1.0.0",
+  "realFilesInGit": false,
+  "source": "Structure taken from the intake guide table 'Files documented in our previous projects' (docs/waves/context/intake-guide-R01.md). Real project name and address are in Chapter's records only.",
+  "present": [
+    {
+      "role": "plan_dxf",
+      "status": "original",
+      "note": "Original DXF. Primary geometry that supported native Revit reconstruction."
+    },
+    {
+      "role": "mesh_glb",
+      "status": "original",
+      "note": "Original GLB."
+    },
+    {
+      "role": "rooms_csv",
+      "status": "listed",
+      "note": "Room CSV."
+    },
+    {
+      "role": "plan_pdf",
+      "status": "listed",
+      "note": "Plan PDF. Guide says 'plan PDFs'."
+    },
+    {
+      "role": "spatial_report_pdf",
+      "status": "listed",
+      "note": "Guide says 'reports'. Confirm the report type against Chapter's records."
+    },
+    {
+      "role": "point_cloud_las",
+      "status": "limited",
+      "note": "First-floor LAZ, not LAS. Header-checked only. Not linked."
+    }
+  ],
+  "derived": [],
+  "missing": [
+    {
+      "role": "photo",
+      "note": "Usable original room photographs were a gap."
+    },
+    {
+      "role": "field_controls",
+      "note": "Inter-floor controls were a gap."
+    }
+  ],
+  "notDocumented": ["plan_png", "plan_svg", "mesh_obj", "mesh_mtl", "texture"],
+  "outcome": "Primary geometry supported native Revit reconstruction. The first-floor LAZ was not linked."
+}
