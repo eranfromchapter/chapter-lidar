@@ -479,8 +479,8 @@ W4: pending
 W5: pending
 W6: pending
 P1a: done
-P1b: gated
-P1c: gated
+P1b: merged
+P1c: merged
 P11a: pending
 P11b: pending
 P12a: pending
