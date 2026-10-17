@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Chapter Capture design snapshot (FROZEN 2026-10-17)</title>
+<style>
+:root{--ink:#1F2429;--ground:#F5EFE6;--surface:#FAF5EE;--nude:#E8DDD0;--line:#D9CCBC;--muted:#6B6557;--ready:#2E5E2E;--limited:#9A6A1E;--limited-text:#7A5214;--blocked:#8B2E2E;--font-display:'Times New Roman',Times,serif;--font-body:-apple-system,'Helvetica Neue',Helvetica,sans-serif;--font-mono:ui-monospace,Menlo,monospace;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--radius-chip:8px;--radius-card:12px;--radius-sheet:16px;--target-min:52px}
+body{margin:0;background:#E3D9CC}
+a{color:#1F2429}a:hover{color:#6B6557}
+body>section{margin:0 0 48px}
+</style>
+</head>
+<body>
+<!-- Frozen copy of the approved Claude Design canvas "Chapter Capture design". Inline styles are the
+     approved values; the :root variables name them for implementation (SwiftUI and CSS tokens). -->
+<!-- source artboard: Main.dc.html -->
+<section id="tokens" style="width: 880px; height: 700px; box-sizing: border-box; padding: 48px; background: #F5EFE6; color: #1F2429; font-family: -apple-system, 'Helvetica Neue', Helvetica, sans-serif; display: flex; flex-direction: column; gap: 32px">
+<div style="display: flex; justify-content: space-between; align-items: flex-end">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<h1 style="margin: 0; font-family: 'Times New Roman', Times, serif; font-size: 40px; font-weight: 400">Tokens</h1>
+<p style="margin: 0; font-size: 15px; color: #6B6557">Chapter Capture · shared by the iPhone app and the review web app</p>
+</div>
+<div style="display: flex; flex-direction: column; align-items: center; line-height: 1">
+<span style="font-family: 'Times New Roman', Times, serif; font-size: 30px; letter-spacing: 1px">chapter</span>
+<span style="font-size: 9px; letter-spacing: 4px; margin-top: 4px">RENOVATION</span>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 12px">
+<h2 style="margin: 0; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; color: #6B6557">Colour</h2>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px">
+<div style="display: flex; flex-direction: column; gap: 6px"><div style="height: 64px; border-radius: 12px; background: #1F2429"></div><span style="font-size: 13px"><b>ink</b> #1F2429 · text, primary button</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><div style="height: 64px; border-radius: 12px; background: #F5EFE6; border: 1px solid #D9CCBC"></div><span style="font-size: 13px"><b>ground</b> #F5EFE6 · screen background</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><div style="height: 64px; border-radius: 12px; background: #FAF5EE; border: 1px solid #D9CCBC"></div><span style="font-size: 13px"><b>surface</b> #FAF5EE · cards, fields</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><div style="height: 64px; border-radius: 12px; background: #E8DDD0"></div><span style="font-size: 13px"><b>nude</b> #E8DDD0 · chips, selected</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><div style="height: 64px; border-radius: 12px; background: #6B6557"></div><span style="font-size: 13px"><b>muted</b> #6B6557 · secondary text</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><div style="height: 64px; border-radius: 12px; background: #2E5E2E"></div><span style="font-size: 13px"><b>ready</b> #2E5E2E · verdict Ready</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><div style="height: 64px; border-radius: 12px; background: #9A6A1E"></div><span style="font-size: 13px"><b>limited</b> #9A6A1E · verdict Limited</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><div style="height: 64px; border-radius: 12px; background: #8B2E2E"></div><span style="font-size: 13px"><b>blocked</b> #8B2E2E · verdict Blocked</span></div>
+</div>
+<p style="margin: 0; font-size: 13px; color: #6B6557">Verdicts always show a word and a shape (● Ready, ▲ Limited, ■ Blocked), never colour alone. Border line #D9CCBC.</p>
+</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px">
+<div style="display: flex; flex-direction: column; gap: 10px">
+<h2 style="margin: 0; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; color: #6B6557">Type</h2>
+<span style="font-family: 'Times New Roman', Times, serif; font-size: 34px">Display 34 serif</span>
+<span style="font-family: 'Times New Roman', Times, serif; font-size: 24px">Title 24 serif</span>
+<span style="font-size: 17px; font-weight: 600">Headline 17 sans semibold</span>
+<span style="font-size: 17px">Body 17 sans (iOS SF / web Helvetica)</span>
+<span style="font-size: 13px; color: #6B6557">Caption 13 sans muted</span>
+<span style="font-family: ui-monospace, Menlo, monospace; font-size: 13px">Mono 13 · sha256, ids</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<h2 style="margin: 0; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; color: #6B6557">Spacing, radius, controls</h2>
+<span style="font-size: 15px">Space 4 · 8 · 12 · 16 · 24 · 32 · 48</span>
+<span style="font-size: 15px">Radius 8 chip · 12 card · 16 sheet · 44 phone</span>
+<span style="font-size: 15px">Touch target ≥ 52 px tall on site (gloves, one hand)</span>
+<button type="button" style="height: 52px; border: 0; border-radius: 12px; background: #1F2429; color: #FAF5EE; font-size: 17px; font-weight: 600">Primary action</button>
+<button type="button" style="height: 52px; border: 1px solid #1F2429; border-radius: 12px; background: transparent; color: #1F2429; font-size: 17px">Secondary action</button>
+</div>
+</div>
+</section>
+
+<!-- source artboard: screen-capture.dc.html -->
+<section id="screen-capture" style="width: 1362px; height: 1010px; box-sizing: border-box; padding: 48px; background: #EDE5DA; font-family: -apple-system, 'Helvetica Neue', Helvetica, sans-serif; color: #1F2429; display: flex; flex-direction: column; gap: 24px">
+<p style="margin: 0; font-size: 15px; color: #6B6557">screen-capture · F2 · 1 Project and address → 2 Floor, mode, coverage → 3 Live scan</p>
+<div style="display: flex; gap: 48px">
+
+<div style="width: 390px; height: 844px; border-radius: 44px; background: #F5EFE6; border: 1px solid #D9CCBC; box-sizing: border-box; padding: 56px 20px 28px; display: flex; flex-direction: column; gap: 20px; overflow: hidden">
+<div style="display: flex; justify-content: space-between; align-items: center">
+<div style="display: flex; flex-direction: column; align-items: center; line-height: 1"><span style="font-family: 'Times New Roman', Times, serif; font-size: 20px">chapter</span><span style="font-size: 6px; letter-spacing: 3px; margin-top: 3px">RENOVATION</span></div>
+<span style="font-size: 13px; color: #6B6557">Step 1 of 3</span>
+</div>
+<h1 style="margin: 0; font-family: 'Times New Roman', Times, serif; font-size: 34px; font-weight: 400">New capture</h1>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<label for="proj" style="font-size: 13px; color: #6B6557">HUB project</label>
+<button id="proj" type="button" style="height: 56px; border-radius: 12px; border: 1px solid #D9CCBC; background: #FAF5EE; text-align: left; padding: 0 16px; font-size: 17px; color: #1F2429; display: flex; justify-content: space-between; align-items: center"><span>618 Valley Street</span><span style="color: #6B6557">Change</span></button>
+<span style="font-size: 13px; color: #6B6557">Deal [DEAL ID] · from the HUB, updated 2 min ago</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: 12px; background: #FAF5EE; border: 1px solid #D9CCBC">
+<span style="font-size: 13px; color: #6B6557">Address in the HUB</span>
+<span style="font-size: 17px; font-weight: 600">618 Valley Street, [CITY, STATE ZIP]</span>
+<label style="display: flex; gap: 12px; align-items: center; font-size: 17px; min-height: 44px"><input type="checkbox" checked style="width: 24px; height: 24px; accent-color: #1F2429"> I am at this address</label>
+<span style="font-size: 13px; color: #6B6557">If the address on site is different, stop and call the PM. The station blocks packages with a mismatched address.</span>
+</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+<div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 13px; color: #6B6557">Operator</span><span style="font-size: 15px">[SIGNED-IN NAME]</span></div>
+<div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 13px; color: #6B6557">Device</span><span style="font-size: 15px">iPhone Pro · LiDAR ✓</span></div>
+</div>
+<div style="flex-grow: 1"></div>
+<button type="button" style="height: 56px; border: 0; border-radius: 12px; background: #1F2429; color: #FAF5EE; font-size: 17px; font-weight: 600">Continue</button>
+</div>
+
+<div style="width: 390px; height: 844px; border-radius: 44px; background: #F5EFE6; border: 1px solid #D9CCBC; box-sizing: border-box; padding: 56px 20px 28px; display: flex; flex-direction: column; gap: 18px; overflow: hidden">
+<div style="display: flex; justify-content: space-between; align-items: center"><a href="#proj" style="font-size: 17px; text-decoration: none; min-height: 44px; display: flex; align-items: center">‹ Back</a><span style="font-size: 13px; color: #6B6557">Step 2 of 3</span></div>
+<h1 style="margin: 0; font-family: 'Times New Roman', Times, serif; font-size: 34px; font-weight: 400">What are you scanning?</h1>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<label for="floor" style="font-size: 13px; color: #6B6557">Floor or area</label>
+<input id="floor" value="Floor 1" style="height: 52px; border-radius: 12px; border: 1px solid #D9CCBC; background: #FAF5EE; padding: 0 16px; font-size: 17px">
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 13px; color: #6B6557">Mode</span>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 4px; border-radius: 12px; background: #E8DDD0">
+<button type="button" style="height: 48px; border: 0; border-radius: 9px; background: transparent; font-size: 15px">One room</button>
+<button type="button" style="height: 48px; border: 0; border-radius: 9px; background: #FAF5EE; font-size: 15px; font-weight: 600">Whole floor</button>
+<button type="button" style="height: 48px; border: 0; border-radius: 9px; background: transparent; font-size: 15px">Exterior</button>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 13px; color: #6B6557">Rooms you will not scan</span>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<span style="padding: 10px 14px; border-radius: 8px; background: #E8DDD0; font-size: 15px">Primary closet · locked ✕</span>
+<button type="button" style="min-height: 44px; padding: 0 14px; border-radius: 8px; border: 1px dashed #6B6557; background: transparent; font-size: 15px">+ Add room</button>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<label for="notes" style="font-size: 13px; color: #6B6557">Coverage notes</label>
+<textarea id="notes" style="height: 96px; border-radius: 12px; border: 1px solid #D9CCBC; background: #FAF5EE; padding: 12px 16px; font-size: 15px; font-family: inherit; resize: none">Furniture covers the south wall of the living room.</textarea>
+</div>
+<div style="flex-grow: 1"></div>
+<button type="button" style="height: 56px; border: 0; border-radius: 12px; background: #1F2429; color: #FAF5EE; font-size: 17px; font-weight: 600">Start scan</button>
+</div>
+
+<div style="width: 390px; height: 844px; border-radius: 44px; background: #1F2429; box-sizing: border-box; padding: 56px 20px 28px; display: flex; flex-direction: column; gap: 16px; overflow: hidden; color: #FAF5EE">
+<div style="display: flex; justify-content: space-between; align-items: center"><span style="font-size: 15px">Floor 1 · Whole floor</span><span style="font-size: 15px; font-family: ui-monospace, Menlo, monospace">06:42</span></div>
+<div style="flex-grow: 1; border-radius: 16px; background: #2B3137; border: 1px solid #3A424A; display: flex; flex-direction: column; justify-content: space-between; padding: 16px">
+<span style="align-self: flex-start; padding: 8px 12px; border-radius: 8px; background: #FAF5EE; color: #1F2429; font-size: 15px; font-weight: 600">Move slowly along the walls</span>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 8px; color: #B9AFA2"><span style="font-size: 15px">[LIVE CAMERA + ROOMPLAN OVERLAY]</span></div>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; text-align: center">
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 22px; font-weight: 600">11</span><span style="font-size: 12px; color: #D9CCBC">walls</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 22px; font-weight: 600">4</span><span style="font-size: 12px; color: #D9CCBC">doors</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 22px; font-weight: 600">6</span><span style="font-size: 12px; color: #D9CCBC">windows</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 22px; font-weight: 600">3</span><span style="font-size: 12px; color: #D9CCBC">rooms</span></div>
+</div>
+</div>
+<div style="display: flex; gap: 8px; align-items: center; font-size: 13px; color: #D9CCBC"><span style="width: 10px; height: 10px; border-radius: 5px; background: #FAF5EE"></span>LiDAR depth and mesh recording · originals saved on this phone</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+<button type="button" style="height: 56px; border: 1px solid #FAF5EE; border-radius: 12px; background: transparent; color: #FAF5EE; font-size: 17px">Pause</button>
+<button type="button" style="height: 56px; border: 0; border-radius: 12px; background: #FAF5EE; color: #1F2429; font-size: 17px; font-weight: 600">Finish floor</button>
+</div>
+</div>
+
+</div>
+</section>
+
+<!-- source artboard: screen-field.dc.html -->
+<section id="screen-field" style="width: 1362px; height: 1010px; box-sizing: border-box; padding: 48px; background: #EDE5DA; font-family: -apple-system, 'Helvetica Neue', Helvetica, sans-serif; color: #1F2429; display: flex; flex-direction: column; gap: 24px">
+<p style="margin: 0; font-size: 15px; color: #6B6557">screen-field · F5 · 1 Label a photo → 2 Field controls → 3 Before leaving the property</p>
+<div style="display: flex; gap: 48px">
+
+<div style="width: 390px; height: 844px; border-radius: 44px; background: #F5EFE6; border: 1px solid #D9CCBC; box-sizing: border-box; padding: 56px 20px 28px; display: flex; flex-direction: column; gap: 16px; overflow: hidden">
+<div style="display: flex; justify-content: space-between; align-items: center"><span style="font-size: 17px; font-weight: 600">Photo 14 of Floor 1</span><span style="font-size: 13px; color: #6B6557">Original kept</span></div>
+<div style="height: 260px; border-radius: 16px; background: #D9CCBC; display: flex; align-items: center; justify-content: center; color: #6B6557; font-size: 15px">[PHOTO JUST TAKEN]</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 13px; color: #6B6557">Room</span>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<button type="button" style="min-height: 44px; padding: 0 14px; border-radius: 8px; border: 0; background: #1F2429; color: #FAF5EE; font-size: 15px">Kitchen</button>
+<button type="button" style="min-height: 44px; padding: 0 14px; border-radius: 8px; border: 0; background: #E8DDD0; font-size: 15px">Living</button>
+<button type="button" style="min-height: 44px; padding: 0 14px; border-radius: 8px; border: 0; background: #E8DDD0; font-size: 15px">Bath 1</button>
+<button type="button" style="min-height: 44px; padding: 0 14px; border-radius: 8px; border: 0; background: #E8DDD0; font-size: 15px">More…</button>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 13px; color: #6B6557">Looking toward</span>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px">
+<button type="button" style="height: 44px; border-radius: 8px; border: 0; background: #E8DDD0; font-size: 15px">N</button>
+<button type="button" style="height: 44px; border-radius: 8px; border: 0; background: #1F2429; color: #FAF5EE; font-size: 15px">E</button>
+<button type="button" style="height: 44px; border-radius: 8px; border: 0; background: #E8DDD0; font-size: 15px">S</button>
+<button type="button" style="height: 44px; border-radius: 8px; border: 0; background: #E8DDD0; font-size: 15px">W</button>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 13px; color: #6B6557">Subject</span>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<button type="button" style="min-height: 44px; padding: 0 12px; border-radius: 8px; border: 0; background: #E8DDD0; font-size: 15px">Opening</button>
+<button type="button" style="min-height: 44px; padding: 0 12px; border-radius: 8px; border: 0; background: #1F2429; color: #FAF5EE; font-size: 15px">Cabinetry</button>
+<button type="button" style="min-height: 44px; padding: 0 12px; border-radius: 8px; border: 0; background: #E8DDD0; font-size: 15px">Ceiling</button>
+<button type="button" style="min-height: 44px; padding: 0 12px; border-radius: 8px; border: 0; background: #E8DDD0; font-size: 15px">Fixture</button>
+<button type="button" style="min-height: 44px; padding: 0 12px; border-radius: 8px; border: 0; background: #E8DDD0; font-size: 15px">Defect</button>
+<button type="button" style="min-height: 44px; padding: 0 12px; border-radius: 8px; border: 0; background: #E8DDD0; font-size: 15px">General</button>
+</div>
+</div>
+<span style="font-size: 13px; color: #6B6557">Keep personal items and people out of the frame.</span>
+<div style="flex-grow: 1"></div>
+<button type="button" style="height: 56px; border: 0; border-radius: 12px; background: #1F2429; color: #FAF5EE; font-size: 17px; font-weight: 600">Save and take next</button>
+</div>
+
+<div style="width: 390px; height: 844px; border-radius: 44px; background: #F5EFE6; border: 1px solid #D9CCBC; box-sizing: border-box; padding: 56px 20px 28px; display: flex; flex-direction: column; gap: 14px; overflow: hidden">
+<h1 style="margin: 0; font-family: 'Times New Roman', Times, serif; font-size: 30px; font-weight: 400">Field controls</h1>
+<p style="margin: 0; font-size: 15px; color: #6B6557">Tape or laser only. Never copy numbers from the scan.</p>
+<div style="display: flex; flex-direction: column; border-radius: 12px; background: #FAF5EE; border: 1px solid #D9CCBC">
+<div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-bottom: 1px solid #E8DDD0"><div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 600">Long distance A</span><span style="font-size: 13px; color: #6B6557">Kitchen east wall → Living west wall</span></div><span style="font-size: 15px; text-align: right">7 520 mm<br><span style="color: #6B6557">24′ 8″</span></span></div>
+<div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-bottom: 1px solid #E8DDD0"><div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 600">Long distance B ⟂</span><span style="font-size: 13px; color: #6B6557">Entry → rear wall</span></div><span style="font-size: 15px; text-align: right">11 240 mm<br><span style="color: #6B6557">36′ 10½″</span></span></div>
+<div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-bottom: 1px solid #E8DDD0"><div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 600">Ceiling heights</span><span style="font-size: 13px; color: #6B6557">3 rooms</span></div><span style="font-size: 15px">2 690 – 2 740 mm</span></div>
+<div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-bottom: 1px solid #E8DDD0"><div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 600">Openings</span><span style="font-size: 13px; color: #6B6557">Entry door, kitchen window</span></div><span style="font-size: 15px">2</span></div>
+<div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-bottom: 1px solid #E8DDD0"><div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 600">Floor to floor</span><span style="font-size: 13px; color: #6B6557">At stair</span></div><span style="font-size: 15px; color: #8B2E2E">■ Missing</span></div>
+<div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 16px"><div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 600">Shared landmarks</span><span style="font-size: 13px; color: #6B6557">Visible from two floors</span></div><span style="font-size: 15px">1 of 2</span></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: 12px; border: 1px solid #1F2429">
+<label for="val" style="font-size: 13px; color: #6B6557">New measurement · Floor to floor</label>
+<div style="display: flex; gap: 8px"><input id="val" value="3 05" style="flex-grow: 1; min-width: 0; height: 52px; border-radius: 12px; border: 1px solid #D9CCBC; background: #FAF5EE; padding: 0 16px; font-size: 20px"><button type="button" style="width: 88px; height: 52px; border-radius: 12px; border: 0; background: #E8DDD0; font-size: 15px">ft-in ▾</button></div>
+<span style="font-size: 13px; color: #6B6557">Stored in mm. Shown in both units.</span>
+</div>
+<div style="flex-grow: 1"></div>
+<button type="button" style="height: 56px; border: 0; border-radius: 12px; background: #1F2429; color: #FAF5EE; font-size: 17px; font-weight: 600">Save measurement</button>
+</div>
+
+<div style="width: 390px; height: 844px; border-radius: 44px; background: #F5EFE6; border: 1px solid #D9CCBC; box-sizing: border-box; padding: 56px 20px 28px; display: flex; flex-direction: column; gap: 14px; overflow: hidden">
+<h1 style="margin: 0; font-family: 'Times New Roman', Times, serif; font-size: 30px; font-weight: 400">Before you leave</h1>
+<p style="margin: 0; font-size: 15px; color: #6B6557">Photos and controls cannot be recovered later. Fix these now.</p>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: 12px; background: #FAF5EE; border: 1px solid #D9CCBC"><span style="color: #2E5E2E; font-size: 17px">●</span><div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 600">Every floor and area labeled</span><span style="font-size: 13px; color: #6B6557">Floor 1, Floor 2</span></div></div>
+<div style="display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: 12px; background: #FAF5EE; border: 1px solid #D9CCBC"><span style="color: #2E5E2E; font-size: 17px">●</span><div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 600">Skipped rooms recorded</span><span style="font-size: 13px; color: #6B6557">Primary closet · locked</span></div></div>
+<div style="display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: 12px; background: #FAF5EE; border: 2px solid #8B2E2E"><span style="color: #8B2E2E; font-size: 17px">■</span><div style="display: flex; flex-direction: column; gap: 6px; flex-grow: 1"><span style="font-size: 15px; font-weight: 600">A photo for every room</span><span style="font-size: 13px; color: #6B6557">Bath 2 has no photo</span><button type="button" style="align-self: flex-start; min-height: 44px; padding: 0 14px; border-radius: 8px; border: 1px solid #1F2429; background: transparent; font-size: 15px">Take photo</button></div></div>
+<div style="display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: 12px; background: #FAF5EE; border: 2px solid #8B2E2E"><span style="color: #8B2E2E; font-size: 17px">■</span><div style="display: flex; flex-direction: column; gap: 6px; flex-grow: 1"><span style="font-size: 15px; font-weight: 600">Minimum field controls</span><span style="font-size: 13px; color: #6B6557">Floor to floor missing · 1 of 2 landmarks</span><button type="button" style="align-self: flex-start; min-height: 44px; padding: 0 14px; border-radius: 8px; border: 1px solid #1F2429; background: transparent; font-size: 15px">Add controls</button></div></div>
+<div style="display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: 12px; background: #FAF5EE; border: 1px solid #D9CCBC"><span style="color: #2E5E2E; font-size: 17px">●</span><div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 600">Device, mode, date, operator</span><span style="font-size: 13px; color: #6B6557">Filled automatically</span></div></div>
+</div>
+<div style="flex-grow: 1"></div>
+<button type="button" disabled style="height: 56px; border: 0; border-radius: 12px; background: #D9CCBC; color: #4E493F; font-size: 17px; font-weight: 600">Fix 2 items to finish</button>
+</div>
+
+</div>
+</section>
+
+<!-- source artboard: screen-package.dc.html -->
+<section id="screen-package" style="width: 924px; height: 1010px; box-sizing: border-box; padding: 48px; background: #EDE5DA; font-family: -apple-system, 'Helvetica Neue', Helvetica, sans-serif; color: #1F2429; display: flex; flex-direction: column; gap: 24px">
+<p style="margin: 0; font-size: 15px; color: #6B6557">screen-package · F6 · 1 Review package → 2 Upload and station status</p>
+<div style="display: flex; gap: 48px">
+
+<div style="width: 390px; height: 844px; border-radius: 44px; background: #F5EFE6; border: 1px solid #D9CCBC; box-sizing: border-box; padding: 56px 20px 28px; display: flex; flex-direction: column; gap: 14px; overflow: hidden">
+<h1 style="margin: 0; font-family: 'Times New Roman', Times, serif; font-size: 30px; font-weight: 400">Package ready</h1>
+<p style="margin: 0; font-size: 15px; color: #6B6557">618 Valley Street · 2 floors · revision 1</p>
+<div style="display: flex; flex-direction: column; border-radius: 12px; background: #FAF5EE; border: 1px solid #D9CCBC">
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border-bottom: 1px solid #E8DDD0">
+<span style="font-size: 15px; font-weight: 600">Original Exports · Floor 1</span>
+<span style="font-size: 13px; color: #6B6557">Plan DXF · Rooms CSV · Plan PDF · Spatial Report PDF · Plan PNG and SVG · GLB · OBJ + MTL · LAS · raw RoomPlan + depth</span>
+<span style="font-size: 13px">14 files · 312 MB</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border-bottom: 1px solid #E8DDD0">
+<span style="font-size: 15px; font-weight: 600">Original Exports · Floor 2</span>
+<span style="font-size: 13px">14 files · 268 MB</span>
+</div>
+<div style="display: flex; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid #E8DDD0"><span style="font-size: 15px; font-weight: 600">Site Photos</span><span style="font-size: 15px">42 · 188 MB</span></div>
+<div style="display: flex; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid #E8DDD0"><span style="font-size: 15px; font-weight: 600">Field Measurements</span><span style="font-size: 15px">18 controls</span></div>
+<div style="display: flex; justify-content: space-between; padding: 14px 16px"><span style="font-size: 15px; font-weight: 600">Source Register</span><span style="font-size: 15px">manifest · 75 entries</span></div>
+</div>
+<div style="display: flex; gap: 10px; padding: 14px 16px; border-radius: 12px; background: #E8DDD0; font-size: 13px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#1F2429" stroke-width="1.5" aria-hidden="true" style="flex-shrink: 0; margin-top: 1px"><rect x="3" y="7" width="10" height="7" rx="1.5"></rect><path d="M5 7V5a3 3 0 0 1 6 0v2"></path></svg><span>Every file is fingerprinted (SHA-256). Sealing makes the package read-only; changes create revision 2.</span></div>
+<div style="flex-grow: 1"></div>
+<button type="button" style="height: 56px; border: 1px solid #1F2429; border-radius: 12px; background: transparent; font-size: 17px">Add more rooms</button>
+<button type="button" style="height: 56px; border: 0; border-radius: 12px; background: #1F2429; color: #FAF5EE; font-size: 17px; font-weight: 600">Seal and upload</button>
+</div>
+
+<div style="width: 390px; height: 844px; border-radius: 44px; background: #F5EFE6; border: 1px solid #D9CCBC; box-sizing: border-box; padding: 56px 20px 28px; display: flex; flex-direction: column; gap: 14px; overflow: hidden">
+<h1 style="margin: 0; font-family: 'Times New Roman', Times, serif; font-size: 30px; font-weight: 400">Uploading</h1>
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: 12px; background: #FAF5EE; border: 1px solid #D9CCBC">
+<div style="display: flex; justify-content: space-between; font-size: 15px"><span style="font-weight: 600">512 of 768 MB</span><span>67%</span></div>
+<div style="height: 10px; border-radius: 5px; background: #E8DDD0"><div style="width: 67%; height: 10px; border-radius: 5px; background: #1F2429"></div></div>
+<span style="font-size: 13px; color: #6B6557">Paused while offline. Resumes on its own. You can close the app.</span>
+</div>
+<div style="display: flex; flex-direction: column; border-radius: 12px; background: #FAF5EE; border: 1px solid #D9CCBC">
+<div style="display: flex; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid #E8DDD0"><span style="font-size: 15px">Plans and reports</span><span style="font-size: 15px; color: #2E5E2E">● Verified</span></div>
+<div style="display: flex; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid #E8DDD0"><span style="font-size: 15px">Site photos</span><span style="font-size: 15px; color: #2E5E2E">● Verified</span></div>
+<div style="display: flex; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid #E8DDD0"><span style="font-size: 15px">Meshes</span><span style="font-size: 15px">Uploading</span></div>
+<div style="display: flex; justify-content: space-between; padding: 14px 16px"><span style="font-size: 15px">Point clouds</span><span style="font-size: 15px; color: #6B6557">Waiting</span></div>
+</div>
+<span style="font-size: 13px; letter-spacing: 2px; text-transform: uppercase; color: #6B6557">Station</span>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; gap: 12px; align-items: center; font-size: 15px"><span style="color: #2E5E2E">●</span>Registered</div>
+<div style="display: flex; gap: 12px; align-items: center; font-size: 15px; color: #6B6557"><span>○</span>Checks queued</div>
+<div style="display: flex; gap: 12px; align-items: center; font-size: 15px; color: #6B6557"><span>○</span>Verdict</div>
+<div style="display: flex; gap: 12px; align-items: center; font-size: 15px; color: #6B6557"><span>○</span>Published to the HUB</div>
+</div>
+<div style="flex-grow: 1"></div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 16px; border-radius: 12px; border: 2px solid #9A6A1E; background: #FAF5EE">
+<span style="font-size: 15px; font-weight: 600; color: #7A5214">▲ Limited · example of a finished verdict</span>
+<span style="font-size: 13px">Floor alignment not established. Add a second shared landmark on the next visit.</span>
+</div>
+<span style="font-size: 13px; color: #6B6557; text-align: center">Files stay on this phone until the station confirms each one.</span>
+</div>
+
+</div>
+</section>
+
+<!-- source artboard: screen-review.dc.html -->
+<section id="screen-review" style="min-height: 1500px; box-sizing: border-box; background: #F5EFE6; font-family: 'Helvetica Neue', Helvetica, sans-serif; color: #1F2429; display: flex; flex-direction: column">
+<header style="display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; align-items: center; padding: 16px 32px; background: #1F2429; color: #FAF5EE">
+<div style="display: flex; gap: 20px; align-items: center">
+<div style="display: flex; flex-direction: column; align-items: center; line-height: 1"><span style="font-family: 'Times New Roman', Times, serif; font-size: 22px">chapter</span><span style="font-size: 7px; letter-spacing: 3px; margin-top: 3px">RENOVATION</span></div>
+<span style="font-size: 15px; color: #D9CCBC">Capture review · screen-review · F10</span>
+</div>
+<span style="font-size: 15px">[SIGNED-IN NAME] · BIM operator</span>
+</header>
+<div style="display: flex; flex-wrap: wrap; gap: 32px; padding: 32px; max-width: 1440px; box-sizing: border-box; width: 100%; margin: 0 auto">
+
+<nav aria-label="Projects" style="flex: 1 1 260px; display: flex; flex-direction: column; gap: 12px">
+<label for="search" style="font-size: 13px; color: #6B6557">Find a project</label>
+<input id="search" placeholder="Address or deal" style="height: 44px; border-radius: 12px; border: 1px solid #D9CCBC; background: #FAF5EE; padding: 0 14px; font-size: 15px">
+<div style="display: flex; flex-direction: column; border-radius: 12px; background: #FAF5EE; border: 1px solid #D9CCBC">
+<a href="#pkg" style="display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border-bottom: 1px solid #E8DDD0; text-decoration: none; background: #E8DDD0; border-radius: 12px 12px 0 0"><span style="font-size: 15px; font-weight: 600">618 Valley Street</span><span style="font-size: 13px; color: #7A5214">▲ Limited · r1 · 2 floors</span></a>
+<a href="#pkg" style="display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border-bottom: 1px solid #E8DDD0; text-decoration: none"><span style="font-size: 15px; font-weight: 600">24 Shawnee Road</span><span style="font-size: 13px; color: #2E5E2E">● Ready · r2 · 2 floors</span></a>
+<a href="#pkg" style="display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; text-decoration: none"><span style="font-size: 15px; font-weight: 600">[PROJECT ADDRESS]</span><span style="font-size: 13px; color: #8B2E2E">■ Blocked · r1 · 1 floor</span></a>
+</div>
+</nav>
+
+<main id="pkg" style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 24px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h1 style="margin: 0; font-family: 'Times New Roman', Times, serif; font-size: 34px; font-weight: 400">618 Valley Street · revision 1</h1>
+<span style="font-size: 15px; color: #6B6557">Captured [DATE] by [OPERATOR] · iPhone Pro · whole floor × 2 · capture id <span style="font-family: ui-monospace, Menlo, monospace">[CAPTURE ID]</span></span>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; align-items: center; padding: 20px 24px; border-radius: 12px; background: #FAF5EE; border: 2px solid #9A6A1E">
+<div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 20px; font-weight: 600; color: #7A5214">▲ Limited: usable with named limitations</span><span style="font-size: 15px">Ready for preliminary existing-condition plans. Not for issued drawings.</span></div>
+<span style="font-size: 15px">0 blockers · 2 limitations · 9 passed</span>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<h2 style="margin: 0; font-family: 'Times New Roman', Times, serif; font-size: 24px; font-weight: 400">Findings</h2>
+<div style="overflow-x: auto; border-radius: 12px; border: 1px solid #D9CCBC; background: #FAF5EE">
+<table style="width: 100%; min-width: 760px; border-collapse: collapse; font-size: 15px">
+<thead><tr style="text-align: left; color: #6B6557; font-size: 13px"><th style="padding: 12px 16px">Severity</th><th style="padding: 12px 16px">Rule</th><th style="padding: 12px 16px">Source</th><th style="padding: 12px 16px">Measured</th><th style="padding: 12px 16px">Next action</th></tr></thead>
+<tbody>
+<tr style="border-top: 1px solid #E8DDD0"><td style="padding: 12px 16px; color: #7A5214; font-weight: 600">▲ Limited</td><td style="padding: 12px 16px">Floor registration</td><td style="padding: 12px 16px">field-controls.json</td><td style="padding: 12px 16px">1 shared landmark (2 required)</td><td style="padding: 12px 16px">Record a second landmark at the stair</td></tr>
+<tr style="border-top: 1px solid #E8DDD0"><td style="padding: 12px 16px; color: #7A5214; font-weight: 600">▲ Limited</td><td style="padding: 12px 16px">Coverage</td><td style="padding: 12px 16px">capture-record.json</td><td style="padding: 12px 16px">Primary closet not scanned (locked)</td><td style="padding: 12px 16px">Scan or measure on the next visit</td></tr>
+<tr style="border-top: 1px solid #E8DDD0"><td style="padding: 12px 16px; color: #2E5E2E; font-weight: 600">● Passed</td><td style="padding: 12px 16px">Units and scale</td><td style="padding: 12px 16px">Floor 1 plan.dxf</td><td style="padding: 12px 16px">Distance A −0.4%, B +0.2% vs tape</td><td style="padding: 12px 16px">None</td></tr>
+<tr style="border-top: 1px solid #E8DDD0"><td style="padding: 12px 16px; color: #2E5E2E; font-weight: 600">● Passed</td><td style="padding: 12px 16px">Fingerprints</td><td style="padding: 12px 16px">manifest.json</td><td style="padding: 12px 16px">75 of 75 match</td><td style="padding: 12px 16px">None</td></tr>
+</tbody>
+</table>
+</div>
+<span style="font-size: 13px; color: #6B6557">Exports from the same capture agreeing with each other are not counted as independent measurements.</span>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<h2 style="margin: 0; font-family: 'Times New Roman', Times, serif; font-size: 24px; font-weight: 400">Files</h2>
+<div style="overflow-x: auto; border-radius: 12px; border: 1px solid #D9CCBC; background: #FAF5EE">
+<table style="width: 100%; min-width: 760px; border-collapse: collapse; font-size: 15px">
+<thead><tr style="text-align: left; color: #6B6557; font-size: 13px"><th style="padding: 12px 16px">File</th><th style="padding: 12px 16px">Role</th><th style="padding: 12px 16px">Size</th><th style="padding: 12px 16px">SHA-256</th><th style="padding: 12px 16px">In the HUB</th><th style="padding: 12px 16px"><span style="position: absolute; left: -9999px">Download</span></th></tr></thead>
+<tbody>
+<tr style="border-top: 1px solid #E8DDD0"><td style="padding: 12px 16px">Floor 1 / plan.dxf</td><td style="padding: 12px 16px">Plan DXF</td><td style="padding: 12px 16px">1.2 MB</td><td style="padding: 12px 16px; font-family: ui-monospace, Menlo, monospace; font-size: 13px">9f2c…a41e</td><td style="padding: 12px 16px">Uploaded</td><td style="padding: 12px 16px"><a href="#pkg">Download</a></td></tr>
+<tr style="border-top: 1px solid #E8DDD0"><td style="padding: 12px 16px">Floor 1 / mesh.glb</td><td style="padding: 12px 16px">Mesh GLB</td><td style="padding: 12px 16px">96 MB</td><td style="padding: 12px 16px; font-family: ui-monospace, Menlo, monospace; font-size: 13px">41bd…07c2</td><td style="padding: 12px 16px">Linked (over 45 MB)</td><td style="padding: 12px 16px"><a href="#pkg">Download</a></td></tr>
+<tr style="border-top: 1px solid #E8DDD0"><td style="padding: 12px 16px">Floor 1 / points.las</td><td style="padding: 12px 16px">Point cloud LAS</td><td style="padding: 12px 16px">180 MB</td><td style="padding: 12px 16px; font-family: ui-monospace, Menlo, monospace; font-size: 13px">c7e0…5b19</td><td style="padding: 12px 16px">Linked (over 45 MB)</td><td style="padding: 12px 16px"><a href="#pkg">Download</a></td></tr>
+</tbody>
+</table>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<h2 style="margin: 0; font-family: 'Times New Roman', Times, serif; font-size: 24px; font-weight: 400">Modeling decision log</h2>
+<form style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 20px; border-radius: 12px; background: #FAF5EE; border: 1px solid #D9CCBC">
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="el" style="font-size: 13px; color: #6B6557">Element or area</label><input id="el" value="Floor 1 · kitchen east wall" style="height: 44px; border-radius: 8px; border: 1px solid #D9CCBC; padding: 0 12px; font-size: 15px; background: #F5EFE6"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="src" style="font-size: 13px; color: #6B6557">Source used</label><select id="src" style="height: 44px; border-radius: 8px; border: 1px solid #D9CCBC; padding: 0 12px; font-size: 15px; background: #F5EFE6"><option>Floor 1 / plan.dxf + Distance A (tape)</option></select></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="dec" style="font-size: 13px; color: #6B6557">Decision</label><input id="dec" value="Modeled as native Revit wall, 4 520 mm" style="height: 44px; border-radius: 8px; border: 1px solid #D9CCBC; padding: 0 12px; font-size: 15px; background: #F5EFE6"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="unc" style="font-size: 13px; color: #6B6557">Remaining uncertainty and next check</label><input id="unc" value="Wall thickness unknown; verify at demo" style="height: 44px; border-radius: 8px; border: 1px solid #D9CCBC; padding: 0 12px; font-size: 15px; background: #F5EFE6"></div>
+<button type="submit" style="grid-column: span 2; justify-self: start; height: 44px; padding: 0 20px; border: 0; border-radius: 12px; background: #1F2429; color: #FAF5EE; font-size: 15px; font-weight: 600">Save decision</button>
+</form>
+<div style="display: flex; flex-direction: column; border-radius: 12px; border: 1px solid #D9CCBC; background: #FAF5EE">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 14px 16px"><span style="font-size: 15px"><b>Floor 1 · stair opening</b> — linked mesh as reference only; native stair not modeled</span><span style="font-size: 13px; color: #6B6557">[NAME] · [DATE TIME]</span></div>
+</div>
+</div>
+
+</main>
+</div>
+</section>
+</body>
+</html>
