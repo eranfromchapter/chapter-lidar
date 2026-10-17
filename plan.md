@@ -533,10 +533,10 @@ P3: done
 P4: done
 P5: done
 P8: done
-P6a: running
-P6b: running
-P9: running
-P10: running
-P13: running
+P6a: merged
+P6b: merged
+P9: merged
+P10: merged
+P13: merged
 P6c: pending
 ```
