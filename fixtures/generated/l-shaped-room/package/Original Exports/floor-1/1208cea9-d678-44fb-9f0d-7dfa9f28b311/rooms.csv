@@ -1,0 +1,3 @@
+floor,room_id,room_label,width_mm,length_mm,height_mm,floor_area_m2,perimeter_mm,door_count,window_count,width_ftin,length_ftin,height_ftin
+Floor 1,room-1,L Room,6000.0,4000.0,2700.0,18.000,20000.0,1,2,"19' 8.22""","13' 1.48""","8' 10.30"""
+# Reported floor area is not a verified construction quantity.

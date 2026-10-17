@@ -1,0 +1,9 @@
+{
+  "defectId": "z-up-mesh",
+  "title": "GLB mesh is Z-up",
+  "baseFixture": "box-room",
+  "affectedFile": "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/mesh.glb",
+  "role": "mesh_glb",
+  "mutation": "mesh.glb rewritten with the vertical axis as +Z: (x, y, z) -> (x, -z, y) for positions and normals.",
+  "details": { "vertical": "+Z", "expected": "+Y" }
+}

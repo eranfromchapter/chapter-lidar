@@ -1,0 +1,148 @@
+{
+  "fixture": "two-floor-house",
+  "description": "Two-floor house, one visit and two captures. Floor 1 Living Room 6.000 x 5.000 m, ceiling 2.700 m. Floor 2 Upper Hall with a 1.000 x 3.000 m stair void, ceiling 2.500 m. Floor-to-floor 2.950 m. Floor 2 is captured in a rotated and moved frame; two shared landmarks.",
+  "units": "m",
+  "hub": { "dealId": "fixture-deal-0001", "address": "100 Example Street, Testville, NY 00000" },
+  "visitId": "d205358c-0394-44af-b86c-69bc3fdd9d21",
+  "notes": [
+    "Walls are scanned surfaces with thickness 0; wall centrelines coincide with room outlines.",
+    "Lengths are exact; generated geometry equals these values to 0.1 mm or better.",
+    "Depth samples and the LAS file carry seeded uniform noise of up to 5 mm per axis."
+  ],
+  "captures": [
+    {
+      "captureId": "ba028a66-d76e-4616-b0d6-e3e04e5c9535",
+      "areaKey": "floor-1",
+      "label": "Floor 1",
+      "frame": { "rotYDeg": 0, "translateM": [0, 0, 0] },
+      "boundsM": { "min": [0, 0, 0], "max": [6, 2.7, 5] },
+      "rooms": [
+        {
+          "id": "room-1",
+          "label": "Living Room",
+          "widthM": 6,
+          "lengthM": 5,
+          "heightM": 2.7,
+          "areaM2": 30,
+          "perimeterM": 22
+        }
+      ],
+      "walls": [
+        { "id": "wall-1", "lengthM": 5, "heightM": 2.7 },
+        { "id": "wall-2", "lengthM": 6, "heightM": 2.7 },
+        { "id": "wall-3", "lengthM": 5, "heightM": 2.7 },
+        { "id": "wall-4", "lengthM": 6, "heightM": 2.7 }
+      ],
+      "openings": [
+        {
+          "id": "door-1",
+          "kind": "door",
+          "wallId": "wall-2",
+          "offsetM": 4.5,
+          "bottomM": 0,
+          "widthM": 0.9,
+          "heightM": 2.1
+        },
+        {
+          "id": "window-1",
+          "kind": "window",
+          "wallId": "wall-3",
+          "offsetM": 2.5,
+          "bottomM": 0.9,
+          "widthM": 1.2,
+          "heightM": 1.2
+        }
+      ],
+      "objects": [
+        {
+          "id": "object-1",
+          "category": "stairs",
+          "centerM": [0.5, 1.35, 1.5],
+          "sizeM": [1, 2.7, 3]
+        }
+      ],
+      "controlDistances": [
+        {
+          "axis": "A",
+          "from": "Living Room west wall",
+          "to": "Living Room east wall",
+          "lengthM": 6
+        },
+        {
+          "axis": "B",
+          "from": "Living Room north wall",
+          "to": "Living Room south wall",
+          "lengthM": 5
+        }
+      ]
+    },
+    {
+      "captureId": "e236b82f-337b-45f5-ab4b-6a8f3eb64ffc",
+      "areaKey": "floor-2",
+      "label": "Floor 2",
+      "frame": { "rotYDeg": 90, "translateM": [0.35, 0, 6.25] },
+      "boundsM": { "min": [0.35, 0, 0.25], "max": [5.35, 2.5, 6.25] },
+      "rooms": [
+        {
+          "id": "room-1",
+          "label": "Upper Hall",
+          "widthM": 5,
+          "lengthM": 6,
+          "heightM": 2.5,
+          "areaM2": 27,
+          "perimeterM": 22
+        }
+      ],
+      "walls": [
+        { "id": "wall-1", "lengthM": 5, "heightM": 2.5 },
+        { "id": "wall-2", "lengthM": 6, "heightM": 2.5 },
+        { "id": "wall-3", "lengthM": 5, "heightM": 2.5 },
+        { "id": "wall-4", "lengthM": 6, "heightM": 2.5 }
+      ],
+      "openings": [
+        {
+          "id": "window-1",
+          "kind": "window",
+          "wallId": "wall-3",
+          "offsetM": 2.5,
+          "bottomM": 0.9,
+          "widthM": 1.2,
+          "heightM": 1.2
+        },
+        {
+          "id": "window-2",
+          "kind": "window",
+          "wallId": "wall-2",
+          "offsetM": 3,
+          "bottomM": 0.9,
+          "widthM": 1.2,
+          "heightM": 1.2
+        }
+      ],
+      "objects": [],
+      "controlDistances": [
+        {
+          "axis": "A",
+          "from": "Upper Hall north wall",
+          "to": "Upper Hall south wall",
+          "lengthM": 6
+        },
+        { "axis": "B", "from": "Upper Hall west wall", "to": "Upper Hall east wall", "lengthM": 5 }
+      ]
+    }
+  ],
+  "landmarks": [
+    {
+      "id": "landmark-newel",
+      "label": "Stair newel post",
+      "positionM": { "floor-1": [1.05, 1.1, 3.05], "floor-2": [3.4, 1.1, 5.2] }
+    },
+    {
+      "id": "landmark-column",
+      "label": "North-east column",
+      "positionM": { "floor-1": [5.8, 1.2, 0.2], "floor-2": [0.55, 1.2, 0.45] }
+    }
+  ],
+  "floorToFloorM": 2.95,
+  "stairVoid": { "areaKey": "floor-2", "shortSideM": 1, "longSideM": 3, "areaM2": 3 }
+}

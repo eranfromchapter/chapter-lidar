@@ -1,0 +1,27 @@
+{
+  "defectId": "dimensions-3pct-off",
+  "title": "Field controls are 3% short of the true dimensions",
+  "baseFixture": "box-room",
+  "affectedFile": "Field Measurements/c1b6d1fb-17af-4f4a-877c-2565ef9bdb86/field-controls.json",
+  "role": "field_controls",
+  "mutation": "Every long distance in field-controls.json multiplied by 0.97 and entered in millimetres.",
+  "details": {
+    "factor": 0.97,
+    "distances": [
+      {
+        "id": "floor-1-distance-a",
+        "truthMm": 4000,
+        "controlMm": 3880,
+        "scanMinusControlPercentOfControl": 3.092784,
+        "scanMinusControlPercentOfScan": 3
+      },
+      {
+        "id": "floor-1-distance-b",
+        "truthMm": 3000,
+        "controlMm": 2910,
+        "scanMinusControlPercentOfControl": 3.092784,
+        "scanMinusControlPercentOfScan": 3
+      }
+    ]
+  }
+}

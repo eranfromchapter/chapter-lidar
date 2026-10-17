@@ -1,0 +1,58 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Length 1238 >>
+stream
+BT /F1 16 Tf 72.00 740.00 Td (Floor plan - Floor 2) Tj ET
+BT /F1 10 Tf 72.00 720.00 Td (Scale 1:50 \(Letter\). 20 mm on paper is 1.000 m.) Tj ET
+1.5 w 72.000 250.000 m 355.465 250.000 l S
+1.5 w 355.465 250.000 m 355.465 590.157 l S
+1.5 w 355.465 590.157 m 72.000 590.157 l S
+1.5 w 72.000 590.157 m 72.000 250.000 l S
+3 w 247.748 590.157 m 179.717 590.157 l S
+3 w 355.465 386.063 m 355.465 454.094 l S
+BT /F1 7 Tf 216.73 253.00 Td (5000 mm) Tj ET
+BT /F1 7 Tf 358.46 423.08 Td (6000 mm) Tj ET
+BT /F1 7 Tf 216.73 593.16 Td (5000 mm) Tj ET
+BT /F1 7 Tf 75.00 423.08 Td (6000 mm) Tj ET
+BT /F1 10 Tf 193.18 382.28 Td (Upper Hall) Tj ET
+2 w 72.000 215.000 m 185.386 215.000 l S
+BT /F1 8 Tf 72.00 203.00 Td (0        2 m) Tj ET
+BT /F1 8 Tf 72.00 190.00 Td (North: plan top is model -Z \(local capture frame, not true north\).) Tj ET
+BT /F1 9 Tf 72.00 150.00 Td (Address: 100 Example Street, Testville, NY 00000) Tj ET
+BT /F1 9 Tf 72.00 138.00 Td (Project: Fixture two-floor-house) Tj ET
+BT /F1 9 Tf 72.00 126.00 Td (Floor: Floor 2 \(floor-2\)) Tj ET
+BT /F1 9 Tf 72.00 114.00 Td (Capture ID: e236b82f-337b-45f5-ab4b-6a8f3eb64ffc) Tj ET
+BT /F1 9 Tf 72.00 102.00 Td (Date: 2026-10-17) Tj ET
+BT /F1 9 Tf 72.00 90.00 Td (Operator: Test Operator) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Title (Plan Floor 2) /Producer (chapter-fixtures 1.0.0) >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000247 00000 n 
+0000000344 00000 n 
+0000001633 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R /Info 6 0 R >>
+startxref
+1711
+%%EOF

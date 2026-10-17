@@ -1,0 +1,140 @@
+{
+  "schemaVersion": "1.0.0",
+  "visitId": "812cf67c-15bd-4303-94a3-1bb7ae86c937",
+  "captureId": "1208cea9-d678-44fb-9f0d-7dfa9f28b311",
+  "areaKey": "floor-1",
+  "label": "Floor 1",
+  "coordinateSystem": { "units": "m", "handedness": "right", "up": "+Y" },
+  "rooms": [
+    {
+      "id": "room-1",
+      "label": "L Room",
+      "polygon": [
+        [0, 0, 0],
+        [0, 0, 4],
+        [3, 0, 4],
+        [3, 0, 2],
+        [6, 0, 2],
+        [6, 0, 0]
+      ],
+      "heightM": 2.7
+    }
+  ],
+  "walls": [
+    {
+      "id": "wall-1",
+      "start": [0, 0, 0],
+      "end": [0, 0, 4],
+      "heightM": 2.7,
+      "thicknessM": 0,
+      "roomIds": ["room-1"],
+      "confidence": "high"
+    },
+    {
+      "id": "wall-2",
+      "start": [0, 0, 4],
+      "end": [3, 0, 4],
+      "heightM": 2.7,
+      "thicknessM": 0,
+      "roomIds": ["room-1"],
+      "confidence": "high"
+    },
+    {
+      "id": "wall-3",
+      "start": [3, 0, 4],
+      "end": [3, 0, 2],
+      "heightM": 2.7,
+      "thicknessM": 0,
+      "roomIds": ["room-1"],
+      "confidence": "high"
+    },
+    {
+      "id": "wall-4",
+      "start": [3, 0, 2],
+      "end": [6, 0, 2],
+      "heightM": 2.7,
+      "thicknessM": 0,
+      "roomIds": ["room-1"],
+      "confidence": "high"
+    },
+    {
+      "id": "wall-5",
+      "start": [6, 0, 2],
+      "end": [6, 0, 0],
+      "heightM": 2.7,
+      "thicknessM": 0,
+      "roomIds": ["room-1"],
+      "confidence": "high"
+    },
+    {
+      "id": "wall-6",
+      "start": [6, 0, 0],
+      "end": [0, 0, 0],
+      "heightM": 2.7,
+      "thicknessM": 0,
+      "roomIds": ["room-1"],
+      "confidence": "high"
+    }
+  ],
+  "doors": [
+    {
+      "id": "door-1",
+      "wallId": "wall-6",
+      "offsetM": 1,
+      "bottomM": 0,
+      "widthM": 0.9,
+      "heightM": 2.1
+    }
+  ],
+  "windows": [
+    {
+      "id": "window-1",
+      "wallId": "wall-1",
+      "offsetM": 2,
+      "bottomM": 0.9,
+      "widthM": 1.2,
+      "heightM": 1.2
+    },
+    {
+      "id": "window-2",
+      "wallId": "wall-4",
+      "offsetM": 1.5,
+      "bottomM": 0.9,
+      "widthM": 1.2,
+      "heightM": 1.2
+    }
+  ],
+  "openings": [
+    {
+      "id": "opening-1",
+      "wallId": "wall-5",
+      "offsetM": 1,
+      "bottomM": 0,
+      "widthM": 1,
+      "heightM": 2.1
+    }
+  ],
+  "objects": [],
+  "refs": [
+    {
+      "role": "raw_roomplan_json",
+      "path": "Original Exports/floor-1/1208cea9-d678-44fb-9f0d-7dfa9f28b311/roomplan.json"
+    },
+    {
+      "role": "raw_depth",
+      "path": "Original Exports/floor-1/1208cea9-d678-44fb-9f0d-7dfa9f28b311/depth-samples.bin"
+    },
+    {
+      "role": "mesh_glb",
+      "path": "Original Exports/floor-1/1208cea9-d678-44fb-9f0d-7dfa9f28b311/mesh.glb"
+    },
+    {
+      "role": "mesh_obj",
+      "path": "Original Exports/floor-1/1208cea9-d678-44fb-9f0d-7dfa9f28b311/mesh.obj"
+    },
+    {
+      "role": "point_cloud_las",
+      "path": "Original Exports/floor-1/1208cea9-d678-44fb-9f0d-7dfa9f28b311/points.las"
+    }
+  ]
+}

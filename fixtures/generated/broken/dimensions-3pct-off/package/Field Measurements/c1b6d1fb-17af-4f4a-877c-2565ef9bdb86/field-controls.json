@@ -1,0 +1,93 @@
+{
+  "schemaVersion": "1.0.0",
+  "visitId": "c1b6d1fb-17af-4f4a-877c-2565ef9bdb86",
+  "distances": [
+    {
+      "id": "floor-1-distance-a",
+      "capture": { "captureId": "22bfb513-226d-4eca-bde1-0b6cb0c84aad", "areaKey": "floor-1" },
+      "axis": "A",
+      "from": "Test Room west wall",
+      "to": "Test Room east wall",
+      "measurement": {
+        "valueMm": 3880,
+        "enteredUnit": "mm",
+        "enteredText": "3880",
+        "method": "laser",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-distance-b",
+      "capture": { "captureId": "22bfb513-226d-4eca-bde1-0b6cb0c84aad", "areaKey": "floor-1" },
+      "axis": "B",
+      "from": "Test Room north wall",
+      "to": "Test Room south wall",
+      "measurement": {
+        "valueMm": 2910,
+        "enteredUnit": "mm",
+        "enteredText": "2910",
+        "method": "laser",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    }
+  ],
+  "ceilingHeights": [
+    {
+      "id": "floor-1-ceiling-room-1",
+      "capture": { "captureId": "22bfb513-226d-4eca-bde1-0b6cb0c84aad", "areaKey": "floor-1" },
+      "room": "Test Room",
+      "location": "Centre of room",
+      "measurement": {
+        "valueMm": 2700,
+        "enteredUnit": "cm",
+        "enteredText": "270",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    }
+  ],
+  "openings": [
+    {
+      "id": "floor-1-opening-door-1",
+      "capture": { "captureId": "22bfb513-226d-4eca-bde1-0b6cb0c84aad", "areaKey": "floor-1" },
+      "room": "Test Room",
+      "label": "Entry door",
+      "width": {
+        "valueMm": 900,
+        "enteredUnit": "mm",
+        "enteredText": "900",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      },
+      "height": {
+        "valueMm": 2100,
+        "enteredUnit": "mm",
+        "enteredText": "2100",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-opening-window-1",
+      "capture": { "captureId": "22bfb513-226d-4eca-bde1-0b6cb0c84aad", "areaKey": "floor-1" },
+      "room": "Test Room",
+      "label": "South window",
+      "width": {
+        "valueMm": 1200,
+        "enteredUnit": "mm",
+        "enteredText": "1200",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      },
+      "height": {
+        "valueMm": 1200,
+        "enteredUnit": "mm",
+        "enteredText": "1200",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    }
+  ],
+  "floorToFloor": [],
+  "landmarks": []
+}

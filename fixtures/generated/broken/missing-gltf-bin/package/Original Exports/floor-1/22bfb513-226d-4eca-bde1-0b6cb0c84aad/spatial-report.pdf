@@ -1,0 +1,43 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Length 674 >>
+stream
+BT /F1 16 Tf 72.00 740.00 Td (Spatial Report - Floor 1) Tj ET
+BT /F1 9 Tf 72.00 722.00 Td (Address: 100 Example Street, Testville, NY 00000) Tj ET
+BT /F1 9 Tf 72.00 710.00 Td (Capture ID: 22bfb513-226d-4eca-bde1-0b6cb0c84aad) Tj ET
+BT /F1 9 Tf 72.00 698.00 Td (Project: Fixture box-room   Operator: Test Operator   Date: 2026-10-17) Tj ET
+BT /F1 10 Tf 72.00 680.00 Td (Room | Width mm | Length mm | Area m2 | Height mm | Doors | Windows | Objects) Tj ET
+BT /F1 10 Tf 72.00 664.00 Td (Test Room | 4000 | 3000 | 12.00 | 2700 | 1 | 1 | table) Tj ET
+BT /F1 9 Tf 72.00 630.00 Td (This report is not a photo survey. Reported areas are not verified construction quantities.) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Title (Spatial Report Floor 1) /Producer (chapter-fixtures 1.0.0) >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000247 00000 n 
+0000000344 00000 n 
+0000001068 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R /Info 6 0 R >>
+startxref
+1156
+%%EOF

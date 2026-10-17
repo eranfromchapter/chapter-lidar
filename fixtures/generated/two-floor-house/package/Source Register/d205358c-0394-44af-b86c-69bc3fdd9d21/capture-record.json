@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0.0",
+  "visitId": "d205358c-0394-44af-b86c-69bc3fdd9d21",
+  "hub": { "dealId": "fixture-deal-0001", "projectName": "Fixture two-floor-house" },
+  "address": {
+    "formatted": "100 Example Street, Testville, NY 00000",
+    "confirmedOnSite": true,
+    "confirmedAt": "2026-10-17T13:58:20Z"
+  },
+  "operator": { "name": "Test Operator", "userId": "00000000-0000-4000-8000-000000000001" },
+  "device": {
+    "model": "iPhone17,1",
+    "marketingName": "iPhone 16 Pro",
+    "osName": "iOS",
+    "osVersion": "26.0.1",
+    "hasLidar": true
+  },
+  "app": { "version": "1.0.0", "build": "fixture" },
+  "visitedAt": "2026-10-17T13:55:00Z",
+  "captures": [
+    {
+      "captureId": "ba028a66-d76e-4616-b0d6-e3e04e5c9535",
+      "areaKey": "floor-1",
+      "label": "Floor 1",
+      "mode": "floor",
+      "units": { "length": "m", "display": "metric" },
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:20:40Z",
+      "coverageNotes": "",
+      "omittedRooms": [],
+      "inaccessibleRooms": []
+    },
+    {
+      "captureId": "e236b82f-337b-45f5-ab4b-6a8f3eb64ffc",
+      "areaKey": "floor-2",
+      "label": "Floor 2",
+      "mode": "floor",
+      "units": { "length": "m", "display": "metric" },
+      "capturedAt": "2026-10-17T14:32:11Z",
+      "finishedAt": "2026-10-17T14:50:40Z",
+      "coverageNotes": "The stair void is open: no wall or rail was captured along its edge.",
+      "omittedRooms": [],
+      "inaccessibleRooms": []
+    }
+  ]
+}

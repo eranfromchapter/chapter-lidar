@@ -1,0 +1,26 @@
+{
+  "name": "@chapter/fixtures",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Chapter Capture fixtures: deterministic generator of synthetic intake packages with known dimensions, broken variants and the PII scan.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "generate": "tsx src/cli.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test \"test/**/*.test.ts\"",
+    "scan-pii": "node scripts/scan-pii.mjs .."
+  },
+  "dependencies": {
+    "@chapter/capture-contract": "*",
+    "prettier": "3.9.10"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "gltf-validator": "2.0.0-dev.3.10",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3"
+  }
+}

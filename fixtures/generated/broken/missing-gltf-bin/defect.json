@@ -1,0 +1,9 @@
+{
+  "defectId": "missing-gltf-bin",
+  "title": "glTF binary companion is missing",
+  "baseFixture": "box-room",
+  "affectedFile": "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/mesh.glb",
+  "role": "mesh_glb",
+  "mutation": "mesh.glb rewritten so its only buffer is the external file mesh.bin (no BIN chunk); mesh.bin is not in the package.",
+  "details": { "bufferUri": "mesh.bin", "missingCompanion": "mesh.bin next to mesh.glb" }
+}

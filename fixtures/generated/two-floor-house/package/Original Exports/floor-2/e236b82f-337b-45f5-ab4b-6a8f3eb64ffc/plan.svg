@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 6.000 7.000" width="600" height="700">
+  <title>Floor 2 plan (metres)</title>
+  <polygon points="3.500,0.500 5.500,0.500 5.500,6.500 0.500,6.500 0.500,1.500 3.500,1.500" fill="#f4f1ea" stroke="none"/>
+  <line x1="0.500" y1="0.500" x2="5.500" y2="0.500" stroke="#222222" stroke-width="0.08"/>
+  <line x1="5.500" y1="0.500" x2="5.500" y2="6.500" stroke="#222222" stroke-width="0.08"/>
+  <line x1="5.500" y1="6.500" x2="0.500" y2="6.500" stroke="#222222" stroke-width="0.08"/>
+  <line x1="0.500" y1="6.500" x2="0.500" y2="0.500" stroke="#222222" stroke-width="0.08"/>
+  <line class="window" x1="3.600" y1="6.500" x2="2.400" y2="6.500" stroke="#1e90ff" stroke-width="0.12"/>
+  <line class="window" x1="5.500" y1="2.900" x2="5.500" y2="4.100" stroke="#1e90ff" stroke-width="0.12"/>
+  <text x="3.167" y="2.833" font-family="Helvetica, Arial, sans-serif" font-size="0.3" text-anchor="middle">Upper Hall</text>
+</svg>

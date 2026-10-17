@@ -1,0 +1,69 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Length 1728 >>
+stream
+BT /F1 16 Tf 72.00 740.00 Td (Floor plan - Floor 1) Tj ET
+BT /F1 10 Tf 72.00 720.00 Td (Scale 1:50 \(Letter\). 20 mm on paper is 1.000 m.) Tj ET
+1.5 w 72.000 476.772 m 72.000 250.000 l S
+1.5 w 72.000 250.000 m 355.465 250.000 l S
+1.5 w 355.465 250.000 m 355.465 476.772 l S
+1.5 w 355.465 476.772 m 72.000 476.772 l S
+1.5 w 355.465 476.772 m 355.465 250.000 l S
+1.5 w 355.465 250.000 m 525.543 250.000 l S
+1.5 w 525.543 250.000 m 525.543 476.772 l S
+1.5 w 525.543 476.772 m 355.465 476.772 l S
+3 w 355.465 281.181 m 355.465 332.205 l S
+3 w 72.000 405.906 m 72.000 320.866 l S
+3 w 525.543 329.370 m 525.543 397.402 l S
+0.5 w 298.772 476.772 m 242.079 476.772 l S
+BT /F1 7 Tf 75.00 366.39 Td (4000 mm) Tj ET
+BT /F1 7 Tf 216.73 253.00 Td (5000 mm) Tj ET
+BT /F1 7 Tf 358.46 366.39 Td (4000 mm) Tj ET
+BT /F1 7 Tf 216.73 479.77 Td (5000 mm) Tj ET
+BT /F1 7 Tf 358.46 366.39 Td (4000 mm) Tj ET
+BT /F1 7 Tf 443.50 253.00 Td (3000 mm) Tj ET
+BT /F1 7 Tf 528.54 366.39 Td (4000 mm) Tj ET
+BT /F1 7 Tf 443.50 479.77 Td (3000 mm) Tj ET
+BT /F1 10 Tf 183.73 363.39 Td (Living Room) Tj ET
+BT /F1 10 Tf 410.50 363.39 Td (Bedroom) Tj ET
+2 w 72.000 215.000 m 185.386 215.000 l S
+BT /F1 8 Tf 72.00 203.00 Td (0        2 m) Tj ET
+BT /F1 8 Tf 72.00 190.00 Td (North: plan top is model -Z \(local capture frame, not true north\).) Tj ET
+BT /F1 9 Tf 72.00 150.00 Td (Address: 100 Example Street, Testville, NY 00000) Tj ET
+BT /F1 9 Tf 72.00 138.00 Td (Project: Fixture two-room-apartment) Tj ET
+BT /F1 9 Tf 72.00 126.00 Td (Floor: Floor 1 \(floor-1\)) Tj ET
+BT /F1 9 Tf 72.00 114.00 Td (Capture ID: 80d5ff80-5172-40f3-acc9-5cf59acdfd61) Tj ET
+BT /F1 9 Tf 72.00 102.00 Td (Date: 2026-10-17) Tj ET
+BT /F1 9 Tf 72.00 90.00 Td (Operator: Test Operator) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Title (Plan Floor 1) /Producer (chapter-fixtures 1.0.0) >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000247 00000 n 
+0000000344 00000 n 
+0000002123 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R /Info 6 0 R >>
+startxref
+2201
+%%EOF
