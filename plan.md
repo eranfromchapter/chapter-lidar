@@ -450,7 +450,7 @@ None of these is code. Each needs a named owner and a date before the wave it bl
 | # | Prerequisite | Needed by | Blocks | Owner | Date |
 |---|---|---|---|---|---|
 | 1 | GitHub repo `HelloChapter/chapter-capture`, Actions on, macOS runner minutes, a token the build agents can use for that repo | before W3 | F12.AC4 and every `wait-workflow.sh` gate (W3, W4, W6) | [ASSIGN] | [DATE] |
-| 2 | HUB service-to-service credential (read deals and addresses, use the document upload route), stored in Key Vault | before live use; CI uses the fake HUB | live F7 project lookup, live F9 publish | [ASSIGN] | [DATE] |
+| 2 | HUB service-to-service credential AND the HUB REST details the station uses (deals list path, response shape, field names incl. the confirmed-address flag, paging, auth header) — placeholders sit in station/api/src/hub/mapping.ts (read deals and addresses, use the document upload route), stored in Key Vault | before live use; CI uses the fake HUB | live F7 project lookup, live F9 publish | [ASSIGN] | [DATE] |
 | 3 | Azure "Chapter Main": rights to create `rg-chapter-capture-staging` and `-prod`, OIDC federated credential for the repo | before first deploy (after W4) | deploy-station.yml, staging smoke test | [ASSIGN] | [DATE] |
 | 4 | Entra app registrations (station API, web, iOS) with roles capture / bim / admin; iOS bundle id `com.hellochapter.capture` on Chapter's Apple team; App Store Connect API key in the GitHub `testflight` environment | before live sign-in and TestFlight (after W6) | live sign-in, testflight.yml | [ASSIGN] | [DATE] |
 
@@ -463,6 +463,9 @@ eranfromchapter/chapter-capture first, then transfer to HelloChapter), checks th
 run cannot be observed. They are reported INCOMPLETE, never PASS, and stay open:
 F12.AC4 (W3), F2.AC5 and F5.AC4 and the W4 `wait-workflow.sh` integration checks (W4),
 the W5 `wait-workflow.sh ci.yml` check, F6.AC5 and the W6 `wait-workflow.sh` checks (W6).
+Also deferred to the first Azure deploy: whether Azure accepts block uploads (Put Block / Put Block List)
+through create-only upload links; Azurite rejects them. If Azure also rejects them, switch to create+write links
+and rely on the container immutability policy (decision recorded by the orchestrator, W4).
 Risk accepted: Apple-only code (RoomPlan, camera, SwiftUI, App target) is not compiled until that push.
 Gate log: W3 validator INCOMPLETE only on F12.AC4 (deferred, accepted under this decision); all other W3 criteria PASS.
 On the first push, run every deferred check and fix failures before calling the build done.
