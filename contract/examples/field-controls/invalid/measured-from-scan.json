@@ -1,10 +1,13 @@
 {
   "schemaVersion": "1.0.0",
-  "captureId": "3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35",
+  "visitId": "7c4e1b9a-2d3f-4a68-9b5c-e0f1a2b3c4d5",
   "distances": [
     {
       "id": "f1-distance-a",
-      "areaKey": "floor-1",
+      "capture": {
+        "captureId": "3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35",
+        "areaKey": "floor-1"
+      },
       "axis": "A",
       "from": "Kitchen east wall",
       "to": "Living west wall",
@@ -18,7 +21,10 @@
     },
     {
       "id": "f1-distance-b",
-      "areaKey": "floor-1",
+      "capture": {
+        "captureId": "3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35",
+        "areaKey": "floor-1"
+      },
       "axis": "B",
       "from": "Entry",
       "to": "Rear wall",
@@ -34,7 +40,10 @@
   "ceilingHeights": [
     {
       "id": "f1-ceiling-kitchen",
-      "areaKey": "floor-1",
+      "capture": {
+        "captureId": "3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35",
+        "areaKey": "floor-1"
+      },
       "room": "Kitchen",
       "location": "Centre of room",
       "measurement": {
@@ -49,7 +58,10 @@
   "openings": [
     {
       "id": "f1-opening-entry",
-      "areaKey": "floor-1",
+      "capture": {
+        "captureId": "3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35",
+        "areaKey": "floor-1"
+      },
       "room": "Kitchen",
       "label": "Entry door",
       "width": {
@@ -71,8 +83,14 @@
   "floorToFloor": [
     {
       "id": "f1-f2-stair",
-      "lowerAreaKey": "floor-1",
-      "upperAreaKey": "floor-2",
+      "lower": {
+        "captureId": "3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35",
+        "areaKey": "floor-1"
+      },
+      "upper": {
+        "captureId": "a81d5f03-6c2e-4b97-8d14-2f9e7b3c5a60",
+        "areaKey": "floor-2"
+      },
       "location": "At stair",
       "measurement": {
         "valueMm": 2950,
@@ -88,7 +106,16 @@
       "id": "landmark-newel",
       "label": "Stair newel post",
       "description": "Top of the newel post at the bottom of the stair.",
-      "areaKeys": ["floor-1", "floor-2"],
+      "captures": [
+        {
+          "captureId": "3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35",
+          "areaKey": "floor-1"
+        },
+        {
+          "captureId": "a81d5f03-6c2e-4b97-8d14-2f9e7b3c5a60",
+          "areaKey": "floor-2"
+        }
+      ],
       "photoPaths": ["Site Photos/floor-1/3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35/photo-0014.jpg"]
     }
   ]

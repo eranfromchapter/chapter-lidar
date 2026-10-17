@@ -1,192 +1,122 @@
 {
   "schemaVersion": "1.0.0",
+  "visitId": "7c4e1b9a-2d3f-4a68-9b5c-e0f1a2b3c4d5",
   "captureId": "3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35",
+  "areaKey": "floor-1",
+  "label": "Floor 1",
   "coordinateSystem": {
     "units": "m",
     "handedness": "right",
     "up": "+Z"
   },
-  "floors": [
+  "rooms": [
     {
-      "id": "floor-1",
-      "areaKey": "floor-1",
-      "label": "Floor 1",
-      "rooms": [
-        {
-          "id": "f1-room-1",
-          "label": "Kitchen",
-          "polygon": [
-            [0, 0, 0],
-            [0, 0, 3],
-            [4, 0, 3],
-            [4, 0, 0]
-          ],
-          "heightM": 2.7
-        }
+      "id": "f1-room-1",
+      "label": "Kitchen",
+      "polygon": [
+        [0, 0, 0],
+        [0, 0, 3],
+        [4, 0, 3],
+        [4, 0, 0]
       ],
-      "walls": [
-        {
-          "id": "f1-wall-1",
-          "start": [0, 0, 0],
-          "end": [4, 0, 0],
-          "heightM": 2.7,
-          "thicknessM": 0.12,
-          "roomIds": ["f1-room-1"],
-          "confidence": "high"
-        },
-        {
-          "id": "f1-wall-2",
-          "start": [4, 0, 0],
-          "end": [4, 0, 3],
-          "heightM": 2.7,
-          "thicknessM": 0.12,
-          "roomIds": ["f1-room-1"],
-          "confidence": "high"
-        },
-        {
-          "id": "f1-wall-3",
-          "start": [4, 0, 3],
-          "end": [0, 0, 3],
-          "heightM": 2.7,
-          "thicknessM": 0.12,
-          "roomIds": ["f1-room-1"],
-          "confidence": "high"
-        },
-        {
-          "id": "f1-wall-4",
-          "start": [0, 0, 3],
-          "end": [0, 0, 0],
-          "heightM": 2.7,
-          "thicknessM": 0.12,
-          "roomIds": ["f1-room-1"],
-          "confidence": "high"
-        }
-      ],
-      "doors": [
-        {
-          "id": "f1-door-1",
-          "wallId": "f1-wall-4",
-          "offsetM": 1.5,
-          "bottomM": 0,
-          "widthM": 0.9,
-          "heightM": 2.03,
-          "confidence": "high"
-        }
-      ],
-      "windows": [
-        {
-          "id": "f1-window-1",
-          "wallId": "f1-wall-2",
-          "offsetM": 1.5,
-          "bottomM": 0.9,
-          "widthM": 1.2,
-          "heightM": 1.2,
-          "confidence": "medium"
-        }
-      ],
-      "openings": [
-        {
-          "id": "f1-opening-1",
-          "wallId": "f1-wall-3",
-          "offsetM": 1,
-          "bottomM": 0,
-          "widthM": 1,
-          "heightM": 2.1
-        }
-      ],
-      "objects": [
-        {
-          "id": "f1-object-1",
-          "category": "refrigerator",
-          "roomId": "f1-room-1",
-          "box": {
-            "center": [3.6, 0.9, 0.4],
-            "sizeM": [0.8, 1.8, 0.7],
-            "rotation": [0, 0, 0, 1]
-          },
-          "confidence": "high"
-        }
-      ],
-      "refs": [
-        {
-          "role": "raw_roomplan_json",
-          "path": "Original Exports/floor-1/3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35/roomplan.json"
-        },
-        {
-          "role": "raw_depth",
-          "path": "Original Exports/floor-1/3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35/depth-samples.bin"
-        },
-        {
-          "role": "mesh_glb",
-          "path": "Original Exports/floor-1/3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35/mesh.glb"
-        }
-      ]
+      "heightM": 2.7
+    }
+  ],
+  "walls": [
+    {
+      "id": "f1-wall-1",
+      "start": [0, 0, 0],
+      "end": [4, 0, 0],
+      "heightM": 2.7,
+      "thicknessM": 0.12,
+      "roomIds": ["f1-room-1"],
+      "confidence": "high"
     },
     {
-      "id": "floor-2",
-      "areaKey": "floor-2",
-      "label": "Floor 2",
-      "rooms": [
-        {
-          "id": "f2-room-1",
-          "label": "Bedroom 1",
-          "polygon": [
-            [0, 0, 0],
-            [0, 0, 3.5],
-            [3.2, 0, 3.5],
-            [3.2, 0, 0]
-          ],
-          "heightM": 2.5
-        }
-      ],
-      "walls": [
-        {
-          "id": "f2-wall-1",
-          "start": [0, 0, 0],
-          "end": [3.2, 0, 0],
-          "heightM": 2.5,
-          "thicknessM": 0.12,
-          "roomIds": ["f2-room-1"],
-          "confidence": "high"
-        },
-        {
-          "id": "f2-wall-2",
-          "start": [3.2, 0, 0],
-          "end": [3.2, 0, 3.5],
-          "heightM": 2.5,
-          "thicknessM": 0.12,
-          "roomIds": ["f2-room-1"],
-          "confidence": "high"
-        },
-        {
-          "id": "f2-wall-3",
-          "start": [3.2, 0, 3.5],
-          "end": [0, 0, 3.5],
-          "heightM": 2.5,
-          "thicknessM": 0.12,
-          "roomIds": ["f2-room-1"],
-          "confidence": "high"
-        },
-        {
-          "id": "f2-wall-4",
-          "start": [0, 0, 3.5],
-          "end": [0, 0, 0],
-          "heightM": 2.5,
-          "thicknessM": 0.12,
-          "roomIds": ["f2-room-1"],
-          "confidence": "high"
-        }
-      ],
-      "doors": [],
-      "windows": [],
-      "openings": [],
-      "objects": [],
-      "refs": [
-        {
-          "role": "raw_roomplan_json",
-          "path": "Original Exports/floor-2/3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35/roomplan.json"
-        }
-      ]
+      "id": "f1-wall-2",
+      "start": [4, 0, 0],
+      "end": [4, 0, 3],
+      "heightM": 2.7,
+      "thicknessM": 0.12,
+      "roomIds": ["f1-room-1"],
+      "confidence": "high"
+    },
+    {
+      "id": "f1-wall-3",
+      "start": [4, 0, 3],
+      "end": [0, 0, 3],
+      "heightM": 2.7,
+      "thicknessM": 0.12,
+      "roomIds": ["f1-room-1"],
+      "confidence": "high"
+    },
+    {
+      "id": "f1-wall-4",
+      "start": [0, 0, 3],
+      "end": [0, 0, 0],
+      "heightM": 2.7,
+      "thicknessM": 0.12,
+      "roomIds": ["f1-room-1"],
+      "confidence": "high"
+    }
+  ],
+  "doors": [
+    {
+      "id": "f1-door-1",
+      "wallId": "f1-wall-4",
+      "offsetM": 1.5,
+      "bottomM": 0,
+      "widthM": 0.9,
+      "heightM": 2.03,
+      "confidence": "high"
+    }
+  ],
+  "windows": [
+    {
+      "id": "f1-window-1",
+      "wallId": "f1-wall-2",
+      "offsetM": 1.5,
+      "bottomM": 0.9,
+      "widthM": 1.2,
+      "heightM": 1.2,
+      "confidence": "medium"
+    }
+  ],
+  "openings": [
+    {
+      "id": "f1-opening-1",
+      "wallId": "f1-wall-3",
+      "offsetM": 1,
+      "bottomM": 0,
+      "widthM": 1,
+      "heightM": 2.1
+    }
+  ],
+  "objects": [
+    {
+      "id": "f1-object-1",
+      "category": "refrigerator",
+      "roomId": "f1-room-1",
+      "box": {
+        "center": [3.6, 0.9, 0.4],
+        "sizeM": [0.8, 1.8, 0.7],
+        "rotation": [0, 0, 0, 1]
+      },
+      "confidence": "high"
+    }
+  ],
+  "refs": [
+    {
+      "role": "raw_roomplan_json",
+      "path": "Original Exports/floor-1/3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35/roomplan.json"
+    },
+    {
+      "role": "raw_depth",
+      "path": "Original Exports/floor-1/3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35/depth-samples.bin"
+    },
+    {
+      "role": "mesh_glb",
+      "path": "Original Exports/floor-1/3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35/mesh.glb"
     }
   ]
 }

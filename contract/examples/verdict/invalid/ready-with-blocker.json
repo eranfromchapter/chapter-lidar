@@ -2,7 +2,7 @@
   "schemaVersion": "1.0.0",
   "verdictId": "5d1a7c3e-2b4f-4e9a-8c6d-0f3b9a2e7d14",
   "packageId": "9b2e4d71-5a3c-4f08-b6e9-1c7d2a8f4e60",
-  "captureId": "3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35",
+  "visitId": "7c4e1b9a-2d3f-4a68-9b5c-e0f1a2b3c4d5",
   "revision": 1,
   "outcome": "ready",
   "task": "Preliminary existing-condition plans",
@@ -39,14 +39,14 @@
       "ruleId": "address.match",
       "severity": "blocker",
       "message": "Address in the capture record does not match the HUB project.",
-      "filePath": "Source Register/3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35/capture-record.json",
+      "filePath": "Source Register/7c4e1b9a-2d3f-4a68-9b5c-e0f1a2b3c4d5/capture-record.json",
       "nextAction": "Confirm the address with the PM and recapture."
     },
     {
       "ruleId": "floors.registration",
       "severity": "limitation",
       "message": "Floor alignment not established.",
-      "filePath": "Field Measurements/3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35/field-controls.json",
+      "filePath": "Field Measurements/7c4e1b9a-2d3f-4a68-9b5c-e0f1a2b3c4d5/field-controls.json",
       "measured": "1 shared landmark",
       "expected": "2 shared landmarks",
       "nextAction": "Record a second landmark at the stair."
@@ -55,7 +55,8 @@
       "ruleId": "coverage.rooms",
       "severity": "limitation",
       "message": "Primary closet not scanned (locked).",
-      "filePath": "Source Register/3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35/capture-record.json",
+      "filePath": "Source Register/7c4e1b9a-2d3f-4a68-9b5c-e0f1a2b3c4d5/capture-record.json",
+      "captureId": "3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35",
       "areaKey": "floor-1",
       "nextAction": "Scan or measure on the next visit."
     },
@@ -64,6 +65,7 @@
       "severity": "info",
       "message": "Plan distances agree with tape controls.",
       "filePath": "Original Exports/floor-1/3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35/plan.dxf",
+      "captureId": "3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35",
       "areaKey": "floor-1",
       "measured": "Distance A -0.4%, B +0.2% vs tape",
       "expected": "Within 1% or 25.4 mm, whichever is larger",
@@ -73,8 +75,8 @@
       "ruleId": "manifest.fingerprints",
       "severity": "info",
       "message": "Every file matches its fingerprint.",
-      "filePath": "Source Register/3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35/manifest.json",
-      "measured": "9 of 9 match",
+      "filePath": "Source Register/7c4e1b9a-2d3f-4a68-9b5c-e0f1a2b3c4d5/manifest.json",
+      "measured": "12 of 12 match",
       "nextAction": "None"
     }
   ],

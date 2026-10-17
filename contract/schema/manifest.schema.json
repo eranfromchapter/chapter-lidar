@@ -2,14 +2,14 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hellochapter.com/schemas/chapter-capture/v1/manifest.schema.json",
   "title": "PackageManifest",
-  "description": "Inventory of one sealed intake package: one entry per file with its role, SHA-256 fingerprint, size, type and provenance. Written at sealing as Source Register/{captureId}/manifest.json (see layout.json); the manifest does not list itself. Paths are unique within the manifest. A changed package is a new revision with a new packageId. Optional fields are omitted, never null.",
+  "description": "Inventory of one sealed intake package for one site visit: one entry per file with its role, SHA-256 fingerprint, size, type and provenance. Written at sealing as Source Register/{visitId}/manifest.json (see layout.json); the manifest does not list itself. Paths are unique within the manifest. Files that belong to one capture carry its captureId and areaKey; visit-wide files (capture_record, field_controls) carry neither. A changed package is a new revision with a new packageId. Optional fields are omitted, never null.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schemaVersion",
     "layoutVersion",
     "packageId",
-    "captureId",
+    "visitId",
     "revision",
     "sealedAt",
     "files"
@@ -25,11 +25,11 @@
     "packageId": {
       "$ref": "#/$defs/uuid"
     },
-    "captureId": {
+    "visitId": {
       "$ref": "#/$defs/uuid"
     },
     "revision": {
-      "description": "Package revision for this capture, starting at 1.",
+      "description": "Package revision for this visit, starting at 1.",
       "type": "integer",
       "minimum": 1
     },
@@ -100,11 +100,12 @@
       "pattern": "^(?!/)(?!.*//)(?!.*/$)(?!(.*/)?\\.{1,2}(/|$))[^\\\\\\x00-\\x1f]+$"
     },
     "role": {
-      "description": "Closed set of file roles from the intake guide. Each role belongs to exactly one folder in layout.json.",
+      "description": "Closed set of file roles from the intake guide, plus capture_model (the normalized CaptureModel JSON of one capture). Each role belongs to exactly one folder in layout.json.",
       "enum": [
         "capture_record",
         "raw_roomplan_json",
         "raw_depth",
+        "capture_model",
         "plan_dxf",
         "rooms_csv",
         "plan_pdf",
@@ -119,6 +120,10 @@
         "photo",
         "field_controls"
       ]
+    },
+    "visitRole": {
+      "description": "Roles of visit-wide files. Every other role belongs to one capture.",
+      "enum": ["capture_record", "field_controls"]
     },
     "photoDirection": {
       "description": "Direction the camera was looking.",
@@ -170,8 +175,12 @@
         "role": {
           "$ref": "#/$defs/role"
         },
+        "captureId": {
+          "description": "Capture the file belongs to. Required for every role except capture_record and field_controls, which must omit it.",
+          "$ref": "#/$defs/uuid"
+        },
         "areaKey": {
-          "description": "Floor or area the file belongs to. Required for photos; omitted for session-wide files.",
+          "description": "Floor or area key of that capture. Present exactly when captureId is.",
           "$ref": "#/$defs/areaKey"
         },
         "sha256": {
@@ -211,35 +220,79 @@
           "$ref": "#/$defs/photo"
         }
       },
-      "if": {
-        "required": ["role"],
-        "properties": {
-          "role": {
-            "const": "photo"
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "photo": {
-            "$ref": "#/$defs/photo"
-          },
-          "areaKey": {
-            "$ref": "#/$defs/areaKey"
-          }
-        },
-        "required": ["photo", "areaKey"]
-      },
-      "else": {
-        "not": {
-          "properties": {
-            "photo": {
-              "$ref": "#/$defs/photo"
+      "allOf": [
+        {
+          "if": {
+            "required": ["role"],
+            "properties": {
+              "role": {
+                "$ref": "#/$defs/visitRole"
+              }
             }
           },
-          "required": ["photo"]
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "properties": {
+                    "captureId": {
+                      "$ref": "#/$defs/uuid"
+                    }
+                  },
+                  "required": ["captureId"]
+                },
+                {
+                  "properties": {
+                    "areaKey": {
+                      "$ref": "#/$defs/areaKey"
+                    }
+                  },
+                  "required": ["areaKey"]
+                }
+              ]
+            }
+          },
+          "else": {
+            "properties": {
+              "captureId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "areaKey": {
+                "$ref": "#/$defs/areaKey"
+              }
+            },
+            "required": ["captureId", "areaKey"]
+          }
+        },
+        {
+          "if": {
+            "required": ["role"],
+            "properties": {
+              "role": {
+                "const": "photo"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "photo": {
+                "$ref": "#/$defs/photo"
+              }
+            },
+            "required": ["photo"]
+          },
+          "else": {
+            "not": {
+              "properties": {
+                "photo": {
+                  "$ref": "#/$defs/photo"
+                }
+              },
+              "required": ["photo"]
+            }
+          }
         }
-      }
+      ]
     }
   }
 }

@@ -2,30 +2,25 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hellochapter.com/schemas/chapter-capture/v1/capture-record.schema.json",
   "title": "CaptureRecord",
-  "description": "Who captured what, where, when and how, for one capture session at one property. One capture session covers one or more floors or areas, each scanned in one mode. Written by the app as Source Register/{captureId}/capture-record.json. Optional fields are omitted, never null.",
+  "description": "Who captured what, where, when and how, for one site visit at one property. A visit holds one or more captures; each capture is one floor or area scanned in one mode, registered separately with its own captureId. Written by the app as Source Register/{visitId}/capture-record.json. Optional fields are omitted, never null.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schemaVersion",
-    "captureId",
+    "visitId",
     "hub",
     "address",
     "operator",
     "device",
     "app",
-    "units",
-    "capturedAt",
-    "areas"
+    "visitedAt",
+    "captures"
   ],
   "properties": {
-    "schemaVersion": {
-      "const": "1.0.0"
-    },
-    "captureId": {
-      "$ref": "#/$defs/uuid"
-    },
+    "schemaVersion": { "const": "1.0.0" },
+    "visitId": { "$ref": "#/$defs/uuid" },
     "hub": {
-      "description": "The HUB project this capture belongs to.",
+      "description": "The HUB project this visit belongs to.",
       "type": "object",
       "additionalProperties": false,
       "required": ["dealId"],
@@ -36,11 +31,7 @@
           "minLength": 1,
           "maxLength": 64
         },
-        "projectName": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 200
-        }
+        "projectName": { "type": "string", "minLength": 1, "maxLength": 200 }
       }
     },
     "address": {
@@ -59,47 +50,27 @@
           "description": "True only when the operator confirmed on site that this is the address being captured.",
           "type": "boolean"
         },
-        "confirmedAt": {
-          "$ref": "#/$defs/dateTime"
-        }
+        "confirmedAt": { "$ref": "#/$defs/dateTime" }
       },
-      "if": {
-        "properties": {
-          "confirmedOnSite": {
-            "const": true
-          }
-        }
-      },
+      "if": { "properties": { "confirmedOnSite": { "const": true } } },
       "then": {
-        "properties": {
-          "confirmedAt": {
-            "$ref": "#/$defs/dateTime"
-          }
-        },
+        "properties": { "confirmedAt": { "$ref": "#/$defs/dateTime" } },
         "required": ["confirmedAt"]
       },
       "else": {
         "not": {
-          "properties": {
-            "confirmedAt": {
-              "$ref": "#/$defs/dateTime"
-            }
-          },
+          "properties": { "confirmedAt": { "$ref": "#/$defs/dateTime" } },
           "required": ["confirmedAt"]
         }
       }
     },
     "operator": {
-      "description": "The signed-in person who made the capture.",
+      "description": "The signed-in person who made the captures.",
       "type": "object",
       "additionalProperties": false,
       "required": ["name"],
       "properties": {
-        "name": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 200
-        },
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
         "userId": {
           "description": "Directory id of the signed-in user, when known.",
           "type": "string",
@@ -125,16 +96,12 @@
           "minLength": 1,
           "maxLength": 100
         },
-        "osName": {
-          "enum": ["iOS", "iPadOS"]
-        },
+        "osName": { "enum": ["iOS", "iPadOS"] },
         "osVersion": {
           "type": "string",
           "pattern": "^[0-9]+(\\.[0-9]+){0,2}$"
         },
-        "hasLidar": {
-          "type": "boolean"
-        }
+        "hasLidar": { "type": "boolean" }
       }
     },
     "app": {
@@ -147,38 +114,18 @@
           "type": "string",
           "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
         },
-        "build": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 32
-        }
+        "build": { "type": "string", "minLength": 1, "maxLength": 32 }
       }
     },
-    "units": {
-      "description": "Geometry is always metres. Display is the unit system shown to the operator.",
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["length", "display"],
-      "properties": {
-        "length": {
-          "const": "m"
-        },
-        "display": {
-          "enum": ["metric", "imperial"]
-        }
-      }
-    },
-    "capturedAt": {
-      "description": "Start of the capture session (the capture date).",
+    "visitedAt": {
+      "description": "Start of the site visit (the visit date).",
       "$ref": "#/$defs/dateTime"
     },
-    "areas": {
-      "description": "Every floor or area captured in this session. Keys are unique within the record.",
+    "captures": {
+      "description": "Every capture made during the visit, one per floor or area scan. captureId and areaKey are each unique within the record.",
       "type": "array",
       "minItems": 1,
-      "items": {
-        "$ref": "#/$defs/area"
-      }
+      "items": { "$ref": "#/$defs/capture" }
     }
   },
   "$defs": {
@@ -209,41 +156,50 @@
       "additionalProperties": false,
       "required": ["name"],
       "properties": {
-        "name": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 100
-        },
-        "reason": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 300
-        }
+        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 300 }
       }
     },
-    "area": {
+    "capture": {
+      "description": "One floor or area scan, registered separately.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["key", "label", "mode", "coverageNotes", "omittedRooms", "inaccessibleRooms"],
+      "required": [
+        "captureId",
+        "areaKey",
+        "label",
+        "mode",
+        "units",
+        "capturedAt",
+        "coverageNotes",
+        "omittedRooms",
+        "inaccessibleRooms"
+      ],
       "properties": {
-        "key": {
-          "$ref": "#/$defs/areaKey"
-        },
+        "captureId": { "$ref": "#/$defs/uuid" },
+        "areaKey": { "$ref": "#/$defs/areaKey" },
         "label": {
           "description": "Floor or area label shown to people, for example Floor 1.",
           "type": "string",
           "minLength": 1,
           "maxLength": 100
         },
-        "mode": {
-          "$ref": "#/$defs/captureMode"
+        "mode": { "$ref": "#/$defs/captureMode" },
+        "units": {
+          "description": "Geometry is always metres. Display is the unit system shown to the operator.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["length", "display"],
+          "properties": {
+            "length": { "const": "m" },
+            "display": { "enum": ["metric", "imperial"] }
+          }
         },
-        "startedAt": {
+        "capturedAt": {
+          "description": "Start of this capture (the capture date).",
           "$ref": "#/$defs/dateTime"
         },
-        "finishedAt": {
-          "$ref": "#/$defs/dateTime"
-        },
+        "finishedAt": { "$ref": "#/$defs/dateTime" },
         "coverageNotes": {
           "description": "Free-text notes on coverage, obscured surfaces and gaps. Empty string when there is nothing to note.",
           "type": "string",
@@ -252,16 +208,12 @@
         "omittedRooms": {
           "description": "Rooms the operator chose not to scan. Empty when none.",
           "type": "array",
-          "items": {
-            "$ref": "#/$defs/roomNote"
-          }
+          "items": { "$ref": "#/$defs/roomNote" }
         },
         "inaccessibleRooms": {
           "description": "Rooms or spaces that could not be entered. Empty when none.",
           "type": "array",
-          "items": {
-            "$ref": "#/$defs/roomNote"
-          }
+          "items": { "$ref": "#/$defs/roomNote" }
         }
       }
     }

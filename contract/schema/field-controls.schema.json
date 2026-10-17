@@ -2,12 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hellochapter.com/schemas/chapter-capture/v1/field-controls.schema.json",
   "title": "FieldControls",
-  "description": "Independent dimensions and levels measured on site with tape or laser, never copied from the scan. Every value is stored in millimetres together with the unit and text the operator entered. Written as Field Measurements/{captureId}/field-controls.json. Every list is present; an empty list means none were recorded. Optional fields are omitted, never null.",
+  "description": "Independent dimensions and levels measured on site with tape or laser during one visit, never copied from the scan. Every value is stored in millimetres together with the unit and text the operator entered. Each control names the capture (captureId and areaKey) it belongs to. Written as Field Measurements/{visitId}/field-controls.json. Every list is present; an empty list means none were recorded. Optional fields are omitted, never null.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schemaVersion",
-    "captureId",
+    "visitId",
     "distances",
     "ceilingHeights",
     "openings",
@@ -15,31 +15,45 @@
     "landmarks"
   ],
   "properties": {
-    "schemaVersion": { "const": "1.0.0" },
-    "captureId": { "$ref": "#/$defs/uuid" },
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "visitId": {
+      "$ref": "#/$defs/uuid"
+    },
     "distances": {
       "description": "Long distances per floor. Axis B is perpendicular to axis A on the same floor.",
       "type": "array",
-      "items": { "$ref": "#/$defs/distance" }
+      "items": {
+        "$ref": "#/$defs/distance"
+      }
     },
     "ceilingHeights": {
       "type": "array",
-      "items": { "$ref": "#/$defs/ceilingHeight" }
+      "items": {
+        "$ref": "#/$defs/ceilingHeight"
+      }
     },
     "openings": {
       "description": "Measured opening dimensions.",
       "type": "array",
-      "items": { "$ref": "#/$defs/openingControl" }
+      "items": {
+        "$ref": "#/$defs/openingControl"
+      }
     },
     "floorToFloor": {
-      "description": "Floor-to-floor levels between two captured floors.",
+      "description": "Floor-to-floor levels between the captures of two floors.",
       "type": "array",
-      "items": { "$ref": "#/$defs/floorToFloor" }
+      "items": {
+        "$ref": "#/$defs/floorToFloor"
+      }
     },
     "landmarks": {
-      "description": "Shared landmarks visible from two or more captured floors or areas.",
+      "description": "Shared landmarks visible from two or more captures.",
       "type": "array",
-      "items": { "$ref": "#/$defs/landmark" }
+      "items": {
+        "$ref": "#/$defs/landmark"
+      }
     }
   },
   "$defs": {
@@ -61,6 +75,20 @@
       "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
       "maxLength": 64
     },
+    "captureRef": {
+      "description": "The capture a control belongs to, as registered in the capture record.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["captureId", "areaKey"],
+      "properties": {
+        "captureId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "areaKey": {
+          "$ref": "#/$defs/areaKey"
+        }
+      }
+    },
     "id": {
       "description": "Control id, unique within this document.",
       "type": "string",
@@ -74,7 +102,11 @@
       "maxLength": 1024,
       "pattern": "^(?!/)(?!.*//)(?!.*/$)(?!(.*/)?\\.{1,2}(/|$))[^\\\\\\x00-\\x1f]+$"
     },
-    "text": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
     "enteredUnit": {
       "description": "Unit the operator entered the value in. ft_in is feet and inches, for example 24' 8\".",
       "enum": ["mm", "cm", "m", "in", "ft", "ft_in"]
@@ -90,7 +122,9 @@
           "exclusiveMinimum": 0,
           "maximum": 200000
         },
-        "enteredUnit": { "$ref": "#/$defs/enteredUnit" },
+        "enteredUnit": {
+          "$ref": "#/$defs/enteredUnit"
+        },
         "enteredText": {
           "description": "The value exactly as the operator entered it, in enteredUnit.",
           "type": "string",
@@ -101,18 +135,24 @@
           "description": "Independent instrument used. Values read from the scan are not field controls.",
           "enum": ["tape", "laser"]
         },
-        "recordedAt": { "$ref": "#/$defs/dateTime" }
+        "recordedAt": {
+          "$ref": "#/$defs/dateTime"
+        }
       }
     },
     "distance": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "areaKey", "axis", "from", "to", "measurement"],
+      "required": ["id", "capture", "axis", "from", "to", "measurement"],
       "properties": {
-        "id": { "$ref": "#/$defs/id" },
-        "areaKey": { "$ref": "#/$defs/areaKey" },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "capture": {
+          "$ref": "#/$defs/captureRef"
+        },
         "axis": {
-          "description": "A or B; B is perpendicular to A.",
+          "description": "A or B; B is perpendicular to A within the same capture.",
           "enum": ["A", "B"]
         },
         "from": {
@@ -123,16 +163,22 @@
           "description": "End point in words, for example Living west wall.",
           "$ref": "#/$defs/text"
         },
-        "measurement": { "$ref": "#/$defs/measurement" }
+        "measurement": {
+          "$ref": "#/$defs/measurement"
+        }
       }
     },
     "ceilingHeight": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "areaKey", "room", "measurement"],
+      "required": ["id", "capture", "room", "measurement"],
       "properties": {
-        "id": { "$ref": "#/$defs/id" },
-        "areaKey": { "$ref": "#/$defs/areaKey" },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "capture": {
+          "$ref": "#/$defs/captureRef"
+        },
         "room": {
           "description": "Room label, matching the capture model room label.",
           "$ref": "#/$defs/text"
@@ -141,33 +187,53 @@
           "description": "Where in the room it was measured, when it matters.",
           "$ref": "#/$defs/text"
         },
-        "measurement": { "$ref": "#/$defs/measurement" }
+        "measurement": {
+          "$ref": "#/$defs/measurement"
+        }
       }
     },
     "openingControl": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "areaKey", "room", "label", "width"],
+      "required": ["id", "capture", "room", "label", "width"],
       "properties": {
-        "id": { "$ref": "#/$defs/id" },
-        "areaKey": { "$ref": "#/$defs/areaKey" },
-        "room": { "$ref": "#/$defs/text" },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "capture": {
+          "$ref": "#/$defs/captureRef"
+        },
+        "room": {
+          "$ref": "#/$defs/text"
+        },
         "label": {
           "description": "Which opening, for example Entry door.",
           "$ref": "#/$defs/text"
         },
-        "width": { "$ref": "#/$defs/measurement" },
-        "height": { "$ref": "#/$defs/measurement" }
+        "width": {
+          "$ref": "#/$defs/measurement"
+        },
+        "height": {
+          "$ref": "#/$defs/measurement"
+        }
       }
     },
     "floorToFloor": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "lowerAreaKey", "upperAreaKey", "location", "measurement"],
+      "required": ["id", "lower", "upper", "location", "measurement"],
       "properties": {
-        "id": { "$ref": "#/$defs/id" },
-        "lowerAreaKey": { "$ref": "#/$defs/areaKey" },
-        "upperAreaKey": { "$ref": "#/$defs/areaKey" },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "lower": {
+          "description": "Capture of the lower floor.",
+          "$ref": "#/$defs/captureRef"
+        },
+        "upper": {
+          "description": "Capture of the upper floor.",
+          "$ref": "#/$defs/captureRef"
+        },
         "location": {
           "description": "Where it was measured, for example At stair.",
           "$ref": "#/$defs/text"
@@ -181,25 +247,35 @@
     "landmark": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "label", "areaKeys"],
+      "required": ["id", "label", "captures"],
       "properties": {
-        "id": { "$ref": "#/$defs/id" },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
         "label": {
           "description": "What the landmark is, for example Stair newel post.",
           "$ref": "#/$defs/text"
         },
-        "description": { "type": "string", "minLength": 1, "maxLength": 1000 },
-        "areaKeys": {
-          "description": "Floors or areas the landmark was captured from.",
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "captures": {
+          "description": "Captures the landmark is visible in; two or more different captures.",
           "type": "array",
           "minItems": 2,
           "uniqueItems": true,
-          "items": { "$ref": "#/$defs/areaKey" }
+          "items": {
+            "$ref": "#/$defs/captureRef"
+          }
         },
         "photoPaths": {
           "description": "Site photos showing the landmark.",
           "type": "array",
-          "items": { "$ref": "#/$defs/relativePath" }
+          "items": {
+            "$ref": "#/$defs/relativePath"
+          }
         }
       }
     }

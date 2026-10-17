@@ -1,9 +1,10 @@
 {
   "layoutVersion": "1.0.0",
-  "description": "Intake package folder layout from the Chapter intake guide. Every manifest path starts with one folder name below. pathTemplate is the folder for a file of that folder's roles; the file name (which may contain subfolders, for mesh companions) follows it. {areaKey} is the floor or area key from the capture record; {captureId} is the capture id. Each manifest role belongs to exactly one folder. Folders produced downstream are never written by the capture app.",
-  "manifestPath": "Source Register/{captureId}/manifest.json",
+  "description": "Intake package folder layout from the Chapter intake guide. One package is one site visit; each floor or area scan in it is a separate capture. Every manifest path starts with one folder name below. pathTemplate is the folder for a file of that folder's roles; the file name (which may contain subfolders, for mesh companions) follows it. {areaKey} and {captureId} identify one capture from the capture record; {visitId} is the visit. Per-capture folders group by areaKey then captureId; visit-wide folders group by visitId. Each manifest role belongs to exactly one folder. Folders produced downstream are never written by the capture app.",
+  "manifestPath": "Source Register/{visitId}/manifest.json",
   "fileNames": {
     "capture_record": "capture-record.json",
+    "capture_model": "capture-model.json",
     "field_controls": "field-controls.json",
     "manifest": "manifest.json"
   },
@@ -17,6 +18,7 @@
       "roles": [
         "raw_roomplan_json",
         "raw_depth",
+        "capture_model",
         "plan_dxf",
         "rooms_csv",
         "plan_pdf",
@@ -28,7 +30,8 @@
         "mesh_mtl",
         "texture",
         "point_cloud_las"
-      ]
+      ],
+      "scope": "capture"
     },
     {
       "id": "site_photos",
@@ -36,23 +39,26 @@
       "groupBy": ["areaKey", "captureId"],
       "pathTemplate": "Site Photos/{areaKey}/{captureId}/",
       "producedBy": "capture_app",
-      "roles": ["photo"]
+      "roles": ["photo"],
+      "scope": "capture"
     },
     {
       "id": "field_measurements",
       "name": "Field Measurements",
-      "groupBy": ["captureId"],
-      "pathTemplate": "Field Measurements/{captureId}/",
+      "groupBy": ["visitId"],
+      "pathTemplate": "Field Measurements/{visitId}/",
       "producedBy": "capture_app",
-      "roles": ["field_controls"]
+      "roles": ["field_controls"],
+      "scope": "visit"
     },
     {
       "id": "source_register",
       "name": "Source Register",
-      "groupBy": ["captureId"],
-      "pathTemplate": "Source Register/{captureId}/",
+      "groupBy": ["visitId"],
+      "pathTemplate": "Source Register/{visitId}/",
       "producedBy": "capture_app",
-      "roles": ["capture_record"]
+      "roles": ["capture_record"],
+      "scope": "visit"
     },
     {
       "id": "working_conversions",
@@ -60,7 +66,8 @@
       "groupBy": ["areaKey", "captureId"],
       "pathTemplate": "Working Conversions/{areaKey}/{captureId}/",
       "producedBy": "downstream",
-      "roles": []
+      "roles": [],
+      "scope": "capture"
     },
     {
       "id": "issued_outputs",
@@ -68,7 +75,8 @@
       "groupBy": ["areaKey", "captureId"],
       "pathTemplate": "Issued Outputs/{areaKey}/{captureId}/",
       "producedBy": "downstream",
-      "roles": []
+      "roles": [],
+      "scope": "capture"
     }
   ]
 }

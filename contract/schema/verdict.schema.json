@@ -2,14 +2,14 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hellochapter.com/schemas/chapter-capture/v1/verdict.schema.json",
   "title": "Verdict",
-  "description": "Station result for one package: one of three outcomes, the result of every check run, findings with evidence and next actions, named limitations and a fixed statement that this is not a certification of measurements. ready: ready for the stated preliminary task, no blockers, no limitations. limited: usable with named limitations, no blockers. blocked: missing information prevents the task; at least one blocker finding. Optional fields are omitted, never null.",
+  "description": "Station result for one package (one site visit): one of three outcomes, the result of every check run, findings with evidence and next actions, named limitations and a fixed statement that this is not a certification of measurements. ready: ready for the stated preliminary task, no blockers, no limitations. limited: usable with named limitations, no blockers. blocked: missing information prevents the task; at least one blocker finding. Optional fields are omitted, never null.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schemaVersion",
     "verdictId",
     "packageId",
-    "captureId",
+    "visitId",
     "revision",
     "outcome",
     "task",
@@ -32,7 +32,7 @@
     "packageId": {
       "$ref": "#/$defs/uuid"
     },
-    "captureId": {
+    "visitId": {
       "$ref": "#/$defs/uuid"
     },
     "revision": {
@@ -255,6 +255,10 @@
         "filePath": {
           "description": "Package file the finding is about.",
           "$ref": "#/$defs/relativePath"
+        },
+        "captureId": {
+          "description": "Capture the finding is about, when it concerns one capture.",
+          "$ref": "#/$defs/uuid"
         },
         "areaKey": {
           "$ref": "#/$defs/areaKey"
