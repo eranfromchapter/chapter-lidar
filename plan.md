@@ -456,6 +456,16 @@ None of these is code. Each needs a named owner and a date before the wave it bl
 
 Execution can start now: W1 and W2 need none of these. W3 cannot pass its gate until #1 exists.
 
+## Deferred GitHub-only checks (decided by Eran, 2026-10-17)
+
+This session has no GitHub credentials. Until the first push to GitHub (personal repo
+eranfromchapter/chapter-capture first, then transfer to HelloChapter), checks that need a GitHub Actions
+run cannot be observed. They are reported INCOMPLETE, never PASS, and stay open:
+F12.AC4 (W3), F2.AC5 and F5.AC4 and the W4 `wait-workflow.sh` integration checks (W4),
+the W5 `wait-workflow.sh ci.yml` check, F6.AC5 and the W6 `wait-workflow.sh` checks (W6).
+Risk accepted: Apple-only code (RoomPlan, camera, SwiftUI, App target) is not compiled until that push.
+On the first push, run every deferred check and fix failures before calling the build done.
+
 ## Human steps after the build (acceptance, not implementation)
 
 1. One recorded scan on an iPhone Pro with the debug build (adds `fixtures/recorded/`), after W4.
@@ -474,19 +484,19 @@ integration_branch: wave/integration
 integration_head: f6e4d23c2472deffb58b6f4c18d2674a05304ad8
 W1: done
 W2: done
-W3: pending
+W3: running
 W4: pending
 W5: pending
 W6: pending
 P1a: done
 P1b: done
 P1c: done
-P11a: pending
-P11b: pending
-P12a: pending
-P12b: pending
-P12c: pending
-P7a: pending
+P11a: running
+P11b: running
+P12a: running
+P12b: running
+P12c: running
+P7a: running
 P7b: pending
 P7c: pending
 P7d: pending
