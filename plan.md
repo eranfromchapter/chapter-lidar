@@ -468,6 +468,10 @@ through create-only upload links; Azurite rejects them. If Azure also rejects th
 and rely on the container immutability policy (decision recorded by the orchestrator, W4).
 Risk accepted: Apple-only code (RoomPlan, camera, SwiftUI, App target) is not compiled until that push.
 Gate log: W3 validator INCOMPLETE only on F12.AC4 (deferred, accepted under this decision); all other W3 criteria PASS.
+Gate log: W4 validator INCOMPLETE only on F2.AC5, F5.AC4 and the W4 `wait-workflow.sh` checks (deferred above) and on
+the SwiftUI design-fidelity checks F2.AC6 and F5.AC5 (source review only on Linux). Eran accepted on 2026-10-17 that
+F2.AC6 and F5.AC5 run with iOS simulator screenshots on the first push; the additions the data rules need (Equipment
+option, From/To and Tape/Laser fields, floor picker, Pause/Resume) are kept. All other W4 criteria PASS.
 On the first push, run every deferred check and fix failures before calling the build done.
 
 ## Human steps after the build (acceptance, not implementation)
@@ -485,11 +489,11 @@ Executed by `/wave-planning:wave-execute`. See that skill for the worktree, disp
 ```yaml status
 base_branch: main
 integration_branch: wave/integration
-integration_head: 5ff2ec4f9afabcd6ec4ee06efff42e83689272b2
+integration_head: b7356a6
 W1: done
 W2: done
 W3: done
-W4: running
+W4: done
 W5: pending
 W6: pending
 P1a: done
@@ -501,14 +505,14 @@ P12a: done
 P12b: done
 P12c: done
 P7a: done
-P7b: merged
-P7c: merged
-P7d: merged
-P2: merged
-P3: merged
-P4: merged
-P5: merged
-P8: merged
+P7b: done
+P7c: done
+P7d: done
+P2: done
+P3: done
+P4: done
+P5: done
+P8: done
 P6a: pending
 P6b: pending
 P9: pending
