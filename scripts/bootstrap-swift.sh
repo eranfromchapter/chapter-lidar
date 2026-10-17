@@ -122,7 +122,10 @@ trap cleanup EXIT
 log "downloading ${url}"
 curl --fail --location --silent --show-error --retry 3 -o "${work_dir}/toolchain.tar.gz" "${url}"
 curl --fail --location --silent --show-error --retry 3 -o "${work_dir}/toolchain.tar.gz.sig" "${url}.sig"
-curl --fail --location --silent --show-error --retry 3 -o "${work_dir}/all-keys.asc" "${SWIFT_KEYS_URL}"
+# The keys file can be served with "Content-Encoding: gzip" even when the client
+# did not ask for it; --compressed makes curl decode it so gpg gets plain ASCII armor.
+# Only this download uses --compressed: the tarball must be saved byte-for-byte.
+curl --fail --location --silent --show-error --retry 3 --compressed -o "${work_dir}/all-keys.asc" "${SWIFT_KEYS_URL}"
 
 export GNUPGHOME="${work_dir}/gnupg"
 mkdir -m 700 "${GNUPGHOME}"
