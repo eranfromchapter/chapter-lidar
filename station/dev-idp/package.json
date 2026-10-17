@@ -1,0 +1,21 @@
+{
+  "name": "@chapter/station-dev-idp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local test sign-in for the station stack: issues short-lived RS256 test tokens the local station API accepts. Local stack only; refuses to start in production.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test \"test/**/*.test.ts\"",
+    "test:local": "node --import tsx --test \"test-local/**/*.test.ts\""
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3"
+  }
+}
