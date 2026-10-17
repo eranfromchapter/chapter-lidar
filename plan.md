@@ -479,8 +479,8 @@ W4: pending
 W5: pending
 W6: pending
 P1a: done
-P1b: running
-P1c: running
+P1b: gated
+P1c: gated
 P11a: pending
 P11b: pending
 P12a: pending
