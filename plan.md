@@ -35,6 +35,7 @@ max_wave_width: 8
 | F10 Review screen (web) | docs/waves/specs/F10.md |
 | F11 Test fixtures | docs/waves/specs/F11.md |
 | F12 CI/CD and release | docs/waves/specs/F12.md |
+| F13 Local test sign-in | docs/waves/specs/F13.md |
 
 ## Phases
 
@@ -273,6 +274,17 @@ rationale: "Entra sign-in and role gating (security) force opus"
 ```
 
 ```yaml phase
+id: P13
+spec: F13
+steps: [F13.1]
+owns: [station/dev-idp/**]
+depends_on: [P7a]
+model: opus
+score: {scope: 1, ambiguity: 1, risk: 2, reasoning: 1}
+rationale: "Issues tokens the station accepts (security) so opus"
+```
+
+```yaml phase
 id: P6c
 spec: F6
 steps: [F6.4]
@@ -310,6 +322,7 @@ rationale: "Wires every iOS package and sign-in into one app (cross-module, secu
 | P6b | P1c, P7b |
 | P9 | P7a, P7c, P8 |
 | P10 | P7b, P7d, P8 |
+| P13 | P7a |
 | P6c | P2, P3, P4, P5, P6a, P6b |
 
 ### Ownership graph
@@ -337,6 +350,7 @@ rationale: "Wires every iOS package and sign-in into one app (cross-module, secu
 | P6b | ios/Packages/StationClient/** |
 | P9 | station/hub/**, station/worker/** |
 | P10 | web/** |
+| P13 | station/dev-idp/** |
 | P6c | ios/App/**, ios/project.yml |
 
 ### Context graph
@@ -364,6 +378,7 @@ rationale: "Wires every iOS package and sign-in into one app (cross-module, secu
 | P6b | contract/openapi/**, station/api/src/routes/projects/** |
 | P9 | contract/**, station/db/**, station/checks/src/**, architecture.md |
 | P10 | contract/**, station/api/src/routes/**, snapshot.html#screen-review, #tokens |
+| P13 | station/api/src/core/**, station/api compose and env, architecture.md |
 | P6c | all ios/Packages/**, snapshot.html#screen-package, #tokens |
 
 ### Validation graph
@@ -387,10 +402,11 @@ rationale: "Wires every iOS package and sign-in into one app (cross-module, secu
 | P4 | format, lint, typecheck, unit | W4: F2.AC1, F2.AC2, F2.AC3, F2.AC4, F2.AC5, F2.AC6, F3.AC1, F3.AC2, F3.AC3, F3.AC4, F3.AC5, F3.AC6, F4.AC1, F4.AC2, F4.AC3, F4.AC4, F4.AC5, F4.AC6, F5.AC1, F5.AC2, F5.AC3, F5.AC4, F5.AC5, F7.AC1, F7.AC2, F7.AC3, F7.AC4, F7.AC5, F7.AC6, F7.AC7, F8.AC1, F8.AC2, F8.AC3, F8.AC4 |
 | P5 | format, lint, typecheck, unit | W4: F2.AC1, F2.AC2, F2.AC3, F2.AC4, F2.AC5, F2.AC6, F3.AC1, F3.AC2, F3.AC3, F3.AC4, F3.AC5, F3.AC6, F4.AC1, F4.AC2, F4.AC3, F4.AC4, F4.AC5, F4.AC6, F5.AC1, F5.AC2, F5.AC3, F5.AC4, F5.AC5, F7.AC1, F7.AC2, F7.AC3, F7.AC4, F7.AC5, F7.AC6, F7.AC7, F8.AC1, F8.AC2, F8.AC3, F8.AC4 |
 | P8 | format, lint, typecheck, unit | W4: F2.AC1, F2.AC2, F2.AC3, F2.AC4, F2.AC5, F2.AC6, F3.AC1, F3.AC2, F3.AC3, F3.AC4, F3.AC5, F3.AC6, F4.AC1, F4.AC2, F4.AC3, F4.AC4, F4.AC5, F4.AC6, F5.AC1, F5.AC2, F5.AC3, F5.AC4, F5.AC5, F7.AC1, F7.AC2, F7.AC3, F7.AC4, F7.AC5, F7.AC6, F7.AC7, F8.AC1, F8.AC2, F8.AC3, F8.AC4 |
-| P6a | format, lint, typecheck, unit | W5: F9.AC1, F9.AC2, F9.AC3, F9.AC4, F9.AC6, F9.AC5, F10.AC1, F10.AC2, F10.AC3, F10.AC4, F10.AC5 |
-| P6b | format, lint, typecheck, unit | W5: F9.AC1, F9.AC2, F9.AC3, F9.AC4, F9.AC6, F9.AC5, F10.AC1, F10.AC2, F10.AC3, F10.AC4, F10.AC5 |
-| P9 | format, lint, typecheck, unit | W5: F9.AC1, F9.AC2, F9.AC3, F9.AC4, F9.AC6, F9.AC5, F10.AC1, F10.AC2, F10.AC3, F10.AC4, F10.AC5 |
-| P10 | format, lint, typecheck, unit | W5: F9.AC1, F9.AC2, F9.AC3, F9.AC4, F9.AC6, F9.AC5, F10.AC1, F10.AC2, F10.AC3, F10.AC4, F10.AC5 |
+| P6a | format, lint, typecheck, unit | W5: F9.AC1, F9.AC2, F9.AC3, F9.AC4, F9.AC6, F9.AC5, F10.AC1, F10.AC2, F10.AC3, F10.AC4, F10.AC5, F13.AC1, F13.AC2 |
+| P6b | format, lint, typecheck, unit | W5: F9.AC1, F9.AC2, F9.AC3, F9.AC4, F9.AC6, F9.AC5, F10.AC1, F10.AC2, F10.AC3, F10.AC4, F10.AC5, F13.AC1, F13.AC2 |
+| P9 | format, lint, typecheck, unit | W5: F9.AC1, F9.AC2, F9.AC3, F9.AC4, F9.AC6, F9.AC5, F10.AC1, F10.AC2, F10.AC3, F10.AC4, F10.AC5, F13.AC1, F13.AC2 |
+| P10 | format, lint, typecheck, unit | W5: F9.AC1, F9.AC2, F9.AC3, F9.AC4, F9.AC6, F9.AC5, F10.AC1, F10.AC2, F10.AC3, F10.AC4, F10.AC5, F13.AC1, F13.AC2 |
+| P13 | format, lint, typecheck, unit | W5: F9.AC1, F9.AC2, F9.AC3, F9.AC4, F9.AC6, F9.AC5, F10.AC1, F10.AC2, F10.AC3, F10.AC4, F10.AC5, F13.AC1, F13.AC2 |
 | P6c | format, lint, typecheck, unit | W6: F6.AC1, F6.AC2, F6.AC3, F6.AC4, F6.AC5, F6.AC6 |
 
 ## Waves
@@ -429,9 +445,9 @@ integration_checks: ["cmd:scripts/wait-workflow.sh ios.yml", "cmd:scripts/wait-w
 
 ```yaml wave
 wave: 5
-phases: [P6a, P6b, P9, P10]
-integration_owned: [package.json, package-lock.json]
-criteria: [F9.AC1, F9.AC2, F9.AC3, F9.AC4, F9.AC6, F9.AC5, F10.AC1, F10.AC2, F10.AC3, F10.AC4, F10.AC5]
+phases: [P6a, P6b, P9, P10, P13]
+integration_owned: [package.json, package-lock.json, station/api/docker-compose.yml, station/api/.env.example]
+criteria: [F9.AC1, F9.AC2, F9.AC3, F9.AC4, F9.AC6, F9.AC5, F10.AC1, F10.AC2, F10.AC3, F10.AC4, F10.AC5, F13.AC1, F13.AC2]
 integration_checks: ["http:GET http://localhost:8080/health returns 200", "cmd:scripts/wait-workflow.sh ci.yml"]
 ```
 
@@ -472,6 +488,10 @@ Gate log: W4 validator INCOMPLETE only on F2.AC5, F5.AC4 and the W4 `wait-workfl
 the SwiftUI design-fidelity checks F2.AC6 and F5.AC5 (source review only on Linux). Eran accepted on 2026-10-17 that
 F2.AC6 and F5.AC5 run with iOS simulator screenshots on the first push; the additions the data rules need (Equipment
 option, From/To and Tape/Laser fields, floor picker, Pause/Resume) are kept. All other W4 criteria PASS.
+Plan change (orchestrator, W5): spec F13 / phase P13 adds a local test sign-in service (dev-idp) because
+F6.AC4 (W6) must call the local station with a token and Entra cannot issue one locally. The compose
+and env wiring are W5 integration edits. Open item: the station API does not yet refuse a non-Entra
+issuer in production (Bicep sets the Entra issuer, so the risk is a misconfiguration only).
 On the first push, run every deferred check and fix failures before calling the build done.
 
 ## Human steps after the build (acceptance, not implementation)
@@ -489,12 +509,12 @@ Executed by `/wave-planning:wave-execute`. See that skill for the worktree, disp
 ```yaml status
 base_branch: main
 integration_branch: wave/integration
-integration_head: b7356a6
+integration_head: a0fa42e
 W1: done
 W2: done
 W3: done
 W4: done
-W5: pending
+W5: running
 W6: pending
 P1a: done
 P1b: done
@@ -513,9 +533,10 @@ P3: done
 P4: done
 P5: done
 P8: done
-P6a: pending
-P6b: pending
-P9: pending
-P10: pending
+P6a: running
+P6b: running
+P9: running
+P10: running
+P13: running
 P6c: pending
 ```
