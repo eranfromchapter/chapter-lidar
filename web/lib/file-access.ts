@@ -1,0 +1,71 @@
+// Shared checks of the file route handlers (download, plan preview). Both are bim/admin only,
+// need a signed-in session and a well-formed package id and path. The station enforces the
+// same roles; this refuses early so capture users never trigger a link.
+
+import "server-only";
+import { isPackageId, LIMITS } from "./decisions";
+import { StationError } from "./station";
+import { getViewerSession, type ViewerSession } from "./viewer";
+
+export const NO_STORE = { "cache-control": "no-store" } as const;
+
+export function textResponse(status: number, message: string): Response {
+  return new Response(message, {
+    status,
+    headers: { "content-type": "text/plain; charset=utf-8", ...NO_STORE },
+  });
+}
+
+export type FileAccess =
+  | { readonly ok: true; readonly session: ViewerSession; readonly path: string }
+  | { readonly ok: false; readonly response: Response };
+
+export async function authorizeFileRequest(
+  request: Request,
+  packageId: string,
+): Promise<FileAccess> {
+  const session = await getViewerSession();
+  if (session === null) {
+    return { ok: false, response: textResponse(401, "Sign in to download files.") };
+  }
+  if (!session.viewer.canReview) {
+    return {
+      ok: false,
+      response: textResponse(403, "Only BIM operators and admins can download package files."),
+    };
+  }
+  const path = new URL(request.url).searchParams.get("path") ?? "";
+  if (!isPackageId(packageId) || path.length === 0 || path.length > LIMITS.path) {
+    return { ok: false, response: textResponse(404, "No such package file.") };
+  }
+  return { ok: true, session, path };
+}
+
+/** Plain answer for a station error on a file route. Never includes the link or token. */
+export function fileErrorResponse(error: unknown): Response {
+  if (!(error instanceof StationError)) {
+    throw error;
+  }
+  switch (error.status) {
+    case 401:
+      return textResponse(401, "The station did not accept your sign-in. Sign in again.");
+    case 403:
+      return textResponse(403, "Your account cannot download package files.");
+    case 404:
+      return textResponse(404, "No such package file.");
+    case 409:
+      return textResponse(409, "This file has no verified upload yet, so it cannot be downloaded.");
+    default:
+      return textResponse(502, "The station could not issue a download link. Try again.");
+  }
+}
+
+/** Only http(s) links are followed (Azure Blob, or Azurite on the local stack). */
+export function isFollowableLink(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
