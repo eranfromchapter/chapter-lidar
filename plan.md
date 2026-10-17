@@ -464,6 +464,7 @@ run cannot be observed. They are reported INCOMPLETE, never PASS, and stay open:
 F12.AC4 (W3), F2.AC5 and F5.AC4 and the W4 `wait-workflow.sh` integration checks (W4),
 the W5 `wait-workflow.sh ci.yml` check, F6.AC5 and the W6 `wait-workflow.sh` checks (W6).
 Risk accepted: Apple-only code (RoomPlan, camera, SwiftUI, App target) is not compiled until that push.
+Gate log: W3 validator INCOMPLETE only on F12.AC4 (deferred, accepted under this decision); all other W3 criteria PASS.
 On the first push, run every deferred check and fix failures before calling the build done.
 
 ## Human steps after the build (acceptance, not implementation)
@@ -481,22 +482,22 @@ Executed by `/wave-planning:wave-execute`. See that skill for the worktree, disp
 ```yaml status
 base_branch: main
 integration_branch: wave/integration
-integration_head: f6e4d23c2472deffb58b6f4c18d2674a05304ad8
+integration_head: 5ff2ec4f9afabcd6ec4ee06efff42e83689272b2
 W1: done
 W2: done
-W3: running
+W3: done
 W4: pending
 W5: pending
 W6: pending
 P1a: done
 P1b: done
 P1c: done
-P11a: merged
-P11b: merged
-P12a: merged
-P12b: merged
-P12c: merged
-P7a: merged
+P11a: done
+P11b: done
+P12a: done
+P12b: done
+P12c: done
+P7a: done
 P7b: pending
 P7c: pending
 P7d: pending
