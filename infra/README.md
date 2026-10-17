@@ -5,9 +5,10 @@
 group and everything inside it.
 
 No secret value is stored in this folder. Azure access from GitHub Actions uses an OIDC
-federated credential. Postgres uses Entra ID sign-in only. Storage has shared keys turned off.
-Secrets (`database-url`, `hub-service-credential`) are set by an admin directly in Key Vault, and
-the apps reference them by name.
+federated credential. Postgres uses Entra ID sign-in only: the api, the worker and the migration
+job each sign in with their own managed identity and an Entra access token (`DB_AUTH=entra`), so
+there is no database password anywhere. Storage has shared keys turned off. The one app secret,
+`hub-service-credential`, is set by an admin directly in Key Vault and referenced by name.
 
 ## What gets deployed
 
@@ -41,15 +42,16 @@ Default region: `eastus2` (East US 2, the closest region to New York and Miami).
 | -------------------------------- | ------------------------------------------------------- | ------------------------------------------ |
 | API app (system-assigned)        | Storage Blob Data Contributor, Storage Blob Delegator   | storage account                            |
 | Worker app (system-assigned)     | Storage Blob Data Reader                                | storage account                            |
-| API app, worker app, migrate job | Key Vault Secrets User                                  | Key Vault                                  |
+| API app, worker app              | Key Vault Secrets User                                  | Key Vault                                  |
 | API app, worker app, migrate job | AcrPull                                                 | registry                                   |
+| API app, worker app, migrate job | own Postgres role (Entra principal, see admin step 7)   | database `chapter_capture`                 |
 | Admin Entra group                | Key Vault Secrets Officer; Postgres Entra administrator | Key Vault; Postgres server                 |
 | GitHub deploy identity (`<env>`) | Contributor (update image, start the job)               | the two container apps and the migrate job |
 | GitHub deploy identity           | Reader                                                  | environment resource group                 |
 | GitHub deploy identity           | AcrPush                                                 | registry                                   |
 
 A system-assigned identity belongs to one resource, so the migration job has its own identity
-(`caj-capture-migrate-<env>`) with the same Key Vault and registry access as the api.
+(`caj-capture-migrate-<env>`). It needs no Key Vault access: it reads only the database settings.
 
 The station signs upload and download links with **user-delegation SAS**: the API identity asks
 Blob storage for a user delegation key (Storage Blob Delegator) and signs SAS tokens with it. No
@@ -57,7 +59,8 @@ account key is used, which is why shared key access is disabled on the account.
 
 ### App settings
 
-Names match `station/api/src/core/config.ts`. Set on the api, the worker and the migration job:
+Names match `station/api/src/core/config.ts`. Set on the api, the worker and the migration job
+(the job reads only `NODE_ENV` and the database variables):
 
 | Variable                      | Value                                                                                |
 | ----------------------------- | ------------------------------------------------------------------------------------ |
@@ -67,11 +70,20 @@ Names match `station/api/src/core/config.ts`. Set on the api, the worker and the
 | `ENTRA_AUDIENCE`              | parameter `entraAudience` (`CAPTURE_ENTRA_AUDIENCE`)                                 |
 | `ENTRA_ISSUER`                | `https://login.microsoftonline.com/<tenant>/v2.0`                                    |
 | `ENTRA_JWKS_URL`              | `https://login.microsoftonline.com/<tenant>/discovery/v2.0/keys`                     |
+| `DB_AUTH`                     | `entra` (Entra access token for the resource's managed identity)                     |
+| `PGHOST`                      | Postgres server FQDN                                                                 |
+| `PGPORT`                      | `5432`                                                                               |
+| `PGDATABASE`                  | `chapter_capture`                                                                    |
+| `PGUSER`                      | the resource's own Postgres role: its name (`ca-capture-api-<env>` and so on)        |
+| `PGSSLMODE`                   | `require`                                                                            |
 | `HUB_MODE`                    | `live`                                                                               |
+| `HUB_BASE_URL`                | parameter `hubBaseUrl` (`CAPTURE_HUB_BASE_URL`, https)                               |
 | `AZURE_STORAGE_ACCOUNT_URL`   | blob endpoint of the storage account                                                 |
 | `STORAGE_ORIGINALS_CONTAINER` | `originals`                                                                          |
-| `DATABASE_URL`                | Key Vault reference `database-url` (not in bootstrap mode)                           |
 | `HUB_SERVICE_CREDENTIAL`      | Key Vault reference `hub-service-credential` (api and worker, not in bootstrap mode) |
+
+`DATABASE_URL`, `PGPASSWORD` and `AZURE_CLIENT_ID` are not set: the identities are
+system-assigned, and the station refuses a database password when `DB_AUTH` is `entra`.
 
 The api also gets `PORT=8080`. Outside bootstrap mode it has a startup probe (TCP 8080), a
 readiness probe (`GET /health`, which returns 503 while the database is down, so traffic stops)
@@ -109,6 +121,7 @@ secrets. A few values are read from environment variables when you deploy:
 | `CAPTURE_ADMIN_GROUP_OBJECT_ID` | yes      | Object ID of the Entra group that administers Chapter Capture.                          |
 | `CAPTURE_ADMIN_GROUP_NAME`      | yes      | That group's display name, exactly as in Entra ID.                                      |
 | `CAPTURE_ENTRA_AUDIENCE`        | yes      | Station app registration client ID and/or App ID URI, comma-separated (ENTRA_AUDIENCE). |
+| `CAPTURE_HUB_BASE_URL`          | yes      | HUB REST API base URL, https (HUB_BASE_URL).                                            |
 | `CAPTURE_BOOTSTRAP`             | no       | `true` only for the first deployment of an environment (see below). Default `false`.    |
 | `CAPTURE_API_IMAGE`             | no       | Image the api app and the migration job run. Empty means the placeholder image.         |
 | `CAPTURE_WORKER_IMAGE`          | no       | Image the worker app runs. Empty means the placeholder image.                           |
@@ -155,47 +168,52 @@ export CAPTURE_WORKER_IMAGE=$(az containerapp show -g rg-chapter-capture-staging
 
    Add a required reviewer to the `production` GitHub environment.
 
-6. **Key Vault secrets.** After the first (bootstrap) deployment, an admin group member sets both
-   secrets in each vault (`kv-chapter-capture-stg`, `kv-chapter-capture-prod`). Do not paste
-   values on the command line, in chat or in Slack. Use the portal, or a file that is deleted
+6. **HUB service credential.** After the first (bootstrap) deployment, an admin group member sets
+   the secret `hub-service-credential` in each vault (`kv-chapter-capture-stg`,
+   `kv-chapter-capture-prod`). It is the only app secret: the database needs none. Do not paste
+   the value on the command line, in chat or in Slack. Use the portal, or a file that is deleted
    afterwards:
 
    ```sh
    az keyvault secret set --vault-name kv-chapter-capture-stg \
      --name hub-service-credential --file <path-to-file-with-the-value>
-   az keyvault secret set --vault-name kv-chapter-capture-stg \
-     --name database-url --file <path-to-file-with-the-value>
    ```
 
-   `database-url` is the Postgres connection string the station reads as `DATABASE_URL`, for
-   example `postgresql://<role>@pg-chapter-capture-staging.postgres.database.azure.com:5432/chapter_capture?sslmode=require`.
-   **Open item:** the server accepts Entra tokens only (password auth is off). The station
-   currently connects with this static string and does not fetch an Entra access token, so the
-   connection will be refused until either the station adds token authentication for the managed
-   identity or the plan owner decides to enable password authentication.
+7. **Postgres roles (one per identity).** The api, the worker and the migration job each sign in
+   as their own Entra principal. The Postgres role name must equal the identity's name, which
+   is the app or job name and also its `PGUSER`. Sign in with `psql` as a member of the admin
+   group (user = the admin group's display name). When `psql` asks for a password, paste a
+   short-lived Entra access token from
+   `az account get-access-token --resource-type oss-rdbms --query accessToken -o tsv`. Do not
+   store the token anywhere.
 
-7. **Postgres roles.** Sign in as a member of the admin group and create one database role per
-   identity. The role name equals the app or job name:
-
-   ```sh
-   export PGPASSWORD=$(az account get-access-token --resource-type oss-rdbms --query accessToken -o tsv)
-   psql "host=pg-chapter-capture-staging.postgres.database.azure.com dbname=postgres user=<admin group name> sslmode=require" \
-     -c "select * from pgaadauth_create_principal('ca-capture-api-staging', false, false);" \
-     -c "select * from pgaadauth_create_principal('ca-capture-worker-staging', false, false);" \
-     -c "select * from pgaadauth_create_principal('caj-capture-migrate-staging', false, false);"
-   ```
-
-   Then, connected to `chapter_capture`, give the migration role ownership of the schema it
-   migrates. Give the api and worker roles only the data privileges they need:
+   In database `postgres`, create the three roles:
 
    ```sql
-   grant all on schema public to "caj-capture-migrate-staging";
+   select * from pgaadauth_create_principal('ca-capture-api-staging', false, false);
+   select * from pgaadauth_create_principal('ca-capture-worker-staging', false, false);
+   select * from pgaadauth_create_principal('caj-capture-migrate-staging', false, false);
+   ```
+
+   In database `chapter_capture`, make the migration role the owner of the database. On
+   Postgres 16 the database owner owns schema `public` (`pg_database_owner`), so the role owns
+   everything the migrations create. Then give the api and worker roles data access only:
+
+   ```sql
+   -- Let the admin act for the migration role while setting this up.
+   grant "caj-capture-migrate-staging" to "<admin group name>";
+   alter database chapter_capture owner to "caj-capture-migrate-staging";
+   grant connect on database chapter_capture to "ca-capture-api-staging", "ca-capture-worker-staging";
    grant usage on schema public to "ca-capture-api-staging", "ca-capture-worker-staging";
    alter default privileges for role "caj-capture-migrate-staging" in schema public
      grant select, insert, update, delete on tables to "ca-capture-api-staging", "ca-capture-worker-staging";
    alter default privileges for role "caj-capture-migrate-staging" in schema public
      grant usage, select on sequences to "ca-capture-api-staging", "ca-capture-worker-staging";
+   revoke "caj-capture-migrate-staging" from "<admin group name>";
    ```
+
+   Check it: `\l chapter_capture` shows owner `caj-capture-migrate-staging`, and `\ddp` lists
+   the two default privileges. Repeat with `production` names on the production server.
 
 ## Deploy
 
@@ -205,13 +223,14 @@ Run from the repository root with the Azure CLI signed in (`az login`, then
 **Order:** production first (it creates the shared registry), then staging. On the very first run
 of each environment, set `CAPTURE_BOOTSTRAP=true`. A system-assigned identity only exists after
 its app or job is created. So the ACR pull, the Key Vault references and the api probes are left
-out until the role assignments and secrets exist. Then do admin steps 5-7 and deploy again with
-bootstrap off.
+out until the role assignments and the HUB secret exist. Then do admin steps 5-7 and deploy
+again with bootstrap off.
 
 ```sh
 export CAPTURE_ADMIN_GROUP_OBJECT_ID=<object id>
 export CAPTURE_ADMIN_GROUP_NAME="<group name>"
 export CAPTURE_ENTRA_AUDIENCE="<client id or App ID URI>"
+export CAPTURE_HUB_BASE_URL="https://<hub host>"
 
 # First run of an environment only
 export CAPTURE_BOOTSTRAP=true
@@ -222,7 +241,7 @@ az deployment sub create --name chapter-capture-production --location eastus2 \
   --template-file infra/main.bicep --parameters infra/params/production.bicepparam
 
 # Repeat for staging with infra/params/staging.bicepparam.
-# Then: set the Key Vault secrets, create the Postgres roles, wait a few minutes for role
+# Then: set the HUB secret, create the Postgres roles, wait a few minutes for role
 # assignments to propagate, and deploy again with bootstrap off:
 unset CAPTURE_BOOTSTRAP
 az deployment sub what-if --name chapter-capture-staging --location eastus2 \
@@ -254,6 +273,7 @@ docker run --rm -v $PWD:/w -w /w \
   -e CAPTURE_ADMIN_GROUP_OBJECT_ID=00000000-0000-0000-0000-000000000000 \
   -e CAPTURE_ADMIN_GROUP_NAME=compile-check \
   -e CAPTURE_ENTRA_AUDIENCE=api://compile-check \
+  -e CAPTURE_HUB_BASE_URL=https://hub.compile-check.invalid \
   mcr.microsoft.com/azure-cli:2.67.0 sh -c \
   'az bicep build-params --file infra/params/staging.bicepparam --stdout >/dev/null &&
    az bicep build-params --file infra/params/production.bicepparam --stdout >/dev/null && echo ok'

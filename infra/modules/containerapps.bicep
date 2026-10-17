@@ -2,8 +2,10 @@
 // - api: external HTTPS ingress to port 8080, /health readiness probe.
 // - worker: no ingress; polls the Postgres job queue, runs checks and HUB publish.
 // - migrate job: manually triggered; applies the Postgres migrations with the api image.
-// Each has a system-assigned managed identity for ACR pulls, Key Vault references and Blob
-// access. No secret value is set here: secrets are Key Vault references by name.
+// Each has a system-assigned managed identity for ACR pulls, Key Vault references, Blob access
+// and Postgres sign-in (DB_AUTH=entra: an Entra access token, never a password; PGUSER is the
+// identity's own Postgres role, named after the app or job). No secret value is set here: the
+// HUB credential is a Key Vault reference by name.
 //
 // Environment variable names match station/api/src/core/config.ts.
 //
@@ -46,6 +48,15 @@ param blobEndpoint string
 @description('Name of the originals container.')
 param originalsContainerName string
 
+@description('Postgres server FQDN.')
+param postgresHost string
+
+@description('Postgres database name.')
+param postgresDatabase string
+
+@description('HUB REST API base URL (https).')
+param hubBaseUrl string
+
 @description('Accepted Entra token audiences for the station API (comma-separated).')
 param entraAudience string
 
@@ -82,9 +93,8 @@ param workerMinReplicas int
 @minValue(1)
 param workerMaxReplicas int
 
-// Key Vault secret names. Only names live here; an admin sets the values.
+// Key Vault secret name. Only the name lives here; an admin sets the value.
 var hubSecretName = 'hub-service-credential'
-var databaseSecretName = 'database-url'
 
 // The api image's migration entrypoint (see station/api/src/core/migrate-main.ts). The runtime
 // image has production dependencies and dist/ only, so `npm run migrate` (tsx on src/) cannot
@@ -106,29 +116,40 @@ var registries = bootstrap
       }
     ]
 
-var databaseSecret = {
-  name: databaseSecretName
-  keyVaultUrl: '${keyVaultUri}secrets/${databaseSecretName}'
-  identity: 'system'
-}
-
-var hubSecret = {
-  name: hubSecretName
-  keyVaultUrl: '${keyVaultUri}secrets/${hubSecretName}'
-  identity: 'system'
-}
-
-var appSecrets = bootstrap ? [] : [databaseSecret, hubSecret]
-var jobSecrets = bootstrap ? [] : [databaseSecret]
-
-var databaseEnv = bootstrap
+var appSecrets = bootstrap
   ? []
   : [
       {
-        name: 'DATABASE_URL'
-        secretRef: databaseSecretName
+        name: hubSecretName
+        keyVaultUrl: '${keyVaultUri}secrets/${hubSecretName}'
+        identity: 'system'
       }
     ]
+
+// Postgres sign-in with the resource's own managed identity. No DATABASE_URL, no PGPASSWORD.
+// Each resource adds PGUSER = its own Postgres role (the app or job name).
+var databaseEnv = [
+  {
+    name: 'DB_AUTH'
+    value: 'entra'
+  }
+  {
+    name: 'PGHOST'
+    value: postgresHost
+  }
+  {
+    name: 'PGPORT'
+    value: '5432'
+  }
+  {
+    name: 'PGDATABASE'
+    value: postgresDatabase
+  }
+  {
+    name: 'PGSSLMODE'
+    value: 'require'
+  }
+]
 
 var hubSecretEnv = bootstrap
   ? []
@@ -140,6 +161,7 @@ var hubSecretEnv = bootstrap
     ]
 
 // Settings shared by the api, the worker and the migration job (station/api/src/core/config.ts).
+// The migration job reads only NODE_ENV and the database variables; the rest is harmless there.
 var commonEnv = [
   {
     name: 'NODE_ENV'
@@ -168,6 +190,10 @@ var commonEnv = [
   {
     name: 'HUB_MODE'
     value: 'live'
+  }
+  {
+    name: 'HUB_BASE_URL'
+    value: hubBaseUrl
   }
   {
     name: 'AZURE_STORAGE_ACCOUNT_URL'
@@ -290,6 +316,12 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
               }
             ],
             databaseEnv,
+            [
+              {
+                name: 'PGUSER'
+                value: apiAppName
+              }
+            ],
             hubSecretEnv
           )
           probes: apiProbes
@@ -327,7 +359,17 @@ resource worker 'Microsoft.App/containerApps@2024-03-01' = {
             cpu: json(workerCpu)
             memory: workerMemory
           }
-          env: concat(commonEnv, databaseEnv, hubSecretEnv)
+          env: concat(
+            commonEnv,
+            databaseEnv,
+            [
+              {
+                name: 'PGUSER'
+                value: workerAppName
+              }
+            ],
+            hubSecretEnv
+          )
         }
       ]
       scale: {
@@ -357,7 +399,6 @@ resource migrate 'Microsoft.App/jobs@2024-03-01' = {
         replicaCompletionCount: 1
       }
       registries: registries
-      secrets: jobSecrets
     }
     template: {
       containers: [
@@ -369,7 +410,16 @@ resource migrate 'Microsoft.App/jobs@2024-03-01' = {
             cpu: json('0.5')
             memory: '1Gi'
           }
-          env: concat(commonEnv, databaseEnv)
+          env: concat(
+            commonEnv,
+            databaseEnv,
+            [
+              {
+                name: 'PGUSER'
+                value: migrateJobName
+              }
+            ]
+          )
         }
       ]
     }

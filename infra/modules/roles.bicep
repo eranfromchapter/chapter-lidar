@@ -3,8 +3,7 @@
 // api identity:     Storage Blob Data Contributor + Storage Blob Delegator (storage account),
 //                   Key Vault Secrets User (vault).
 // worker identity:  Storage Blob Data Reader (storage account) to read originals for checks,
-//                   Key Vault Secrets User (vault) for `database-url` and the HUB credential.
-// migrate job:      Key Vault Secrets User (vault) for `database-url`.
+//                   Key Vault Secrets User (vault) for the HUB credential.
 // admin group:      Key Vault Secrets Officer (vault) to set secret values.
 // deploy identity:  Contributor on the two container apps and the migration job (update image,
 //                   start the job), Reader on the resource group.
@@ -29,9 +28,6 @@ param apiPrincipalId string
 
 @description('Principal ID of the worker system-assigned identity.')
 param workerPrincipalId string
-
-@description('Principal ID of the migration job system-assigned identity.')
-param migratePrincipalId string
 
 @description('Object ID of the admin Entra group.')
 param adminGroupObjectId string
@@ -134,19 +130,6 @@ resource workerSecretsUser 'Microsoft.Authorization/roleAssignments@2022-04-01' 
       roles.keyVaultSecretsUser
     )
     principalId: workerPrincipalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-resource migrateSecretsUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(vault.id, migrateJobName, roles.keyVaultSecretsUser)
-  scope: vault
-  properties: {
-    roleDefinitionId: subscriptionResourceId(
-      'Microsoft.Authorization/roleDefinitions',
-      roles.keyVaultSecretsUser
-    )
-    principalId: migratePrincipalId
     principalType: 'ServicePrincipal'
   }
 }

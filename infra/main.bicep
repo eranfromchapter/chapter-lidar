@@ -7,7 +7,8 @@
 //
 // No secret value appears in this template or its parameter files:
 // - Azure access from GitHub Actions uses an OIDC federated credential (no client secret).
-// - Postgres uses Entra ID authentication only (password authentication disabled).
+// - Postgres uses Entra ID authentication only (password authentication disabled); the apps and
+//   the migration job sign in with their own managed identity (DB_AUTH=entra).
 // - Storage has shared key access disabled; the station issues user-delegation SAS.
 // - Secrets such as `hub-service-credential` live in Key Vault and are set by an admin.
 //
@@ -41,6 +42,10 @@ param adminGroupName string
 @description('Accepted Entra token audiences for the station API: the station app registration client ID and/or App ID URI, comma-separated (ENTRA_AUDIENCE).')
 @minLength(1)
 param entraAudience string
+
+@description('HUB REST API base URL for HUB_BASE_URL (https).')
+@minLength(9)
+param hubBaseUrl string
 
 @description('Create the shared container registry in this deployment. True for exactly one environment.')
 param createRegistry bool
@@ -270,6 +275,9 @@ module apps 'modules/containerapps.bicep' = {
     keyVaultUri: keyVault.outputs.vaultUri
     blobEndpoint: storage.outputs.blobEndpoint
     originalsContainerName: storage.outputs.originalsContainerName
+    postgresHost: postgres.outputs.fqdn
+    postgresDatabase: postgres.outputs.databaseName
+    hubBaseUrl: hubBaseUrl
     entraAudience: entraAudience
     bootstrap: bootstrap
     apiImage: empty(apiImage) ? placeholderImage : apiImage
@@ -308,7 +316,6 @@ module roles 'modules/roles.bicep' = {
     migrateJobName: names.migrateJob
     apiPrincipalId: apps.outputs.apiPrincipalId
     workerPrincipalId: apps.outputs.workerPrincipalId
-    migratePrincipalId: apps.outputs.migratePrincipalId
     adminGroupObjectId: adminGroupObjectId
     deployIdentityName: names.deployIdentity
     deployPrincipalId: deployIdentity.outputs.principalId

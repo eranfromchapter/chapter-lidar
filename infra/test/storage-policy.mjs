@@ -12,9 +12,9 @@
 //       Checks already-built ARM JSON instead. Parameter checks run only when both parameter
 //       JSON files are given.
 //
-// Compiling the parameter files reads CAPTURE_ADMIN_GROUP_OBJECT_ID, CAPTURE_ADMIN_GROUP_NAME and
-// CAPTURE_ENTRA_AUDIENCE. When they are not set, this script passes an all-zero object ID and
-// "compile-check" values for the compile only; nothing is deployed.
+// Compiling the parameter files reads CAPTURE_ADMIN_GROUP_OBJECT_ID, CAPTURE_ADMIN_GROUP_NAME,
+// CAPTURE_ENTRA_AUDIENCE and CAPTURE_HUB_BASE_URL. When they are not set, this script passes an
+// all-zero object ID and "compile-check" values for the compile only; nothing is deployed.
 //
 // Exits 0 when every check passes, 1 when a check fails, 2 when compiling fails.
 
@@ -30,6 +30,7 @@ const SPLIT = "@@@CAPTURE-SPLIT@@@";
 const COMPILE_ONLY_OBJECT_ID = "00000000-0000-0000-0000-000000000000";
 const COMPILE_ONLY_GROUP_NAME = "compile-check";
 const COMPILE_ONLY_AUDIENCE = "api://compile-check";
+const COMPILE_ONLY_HUB_BASE_URL = "https://hub.compile-check.invalid";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -44,6 +45,7 @@ function compileEnv() {
       process.env.CAPTURE_ADMIN_GROUP_OBJECT_ID || COMPILE_ONLY_OBJECT_ID,
     CAPTURE_ADMIN_GROUP_NAME: process.env.CAPTURE_ADMIN_GROUP_NAME || COMPILE_ONLY_GROUP_NAME,
     CAPTURE_ENTRA_AUDIENCE: process.env.CAPTURE_ENTRA_AUDIENCE || COMPILE_ONLY_AUDIENCE,
+    CAPTURE_HUB_BASE_URL: process.env.CAPTURE_HUB_BASE_URL || COMPILE_ONLY_HUB_BASE_URL,
   };
 }
 
