@@ -492,6 +492,10 @@ Plan change (orchestrator, W5): spec F13 / phase P13 adds a local test sign-in s
 F6.AC4 (W6) must call the local station with a token and Entra cannot issue one locally. The compose
 and env wiring are W5 integration edits. Open item: the station API does not yet refuse a non-Entra
 issuer in production (Bicep sets the Entra issuer, so the risk is a misconfiguration only).
+Gate log: W5 validator INCOMPLETE only on the deferred `wait-workflow.sh ci.yml` check; all 13 W5 criteria and the
+health check PASS (F9.AC6 and F13.AC2 on the real local stack; F10.AC5 rendered with Playwright). dev-idp runs in the
+api container's network (compose option B) because the station allows http keys only on loopback. Open items: infra must
+set REVIEW_BASE_URL for the worker; HUB upload/search mapping NOT CONFIRMED; decision log is its own page (link from detail).
 On the first push, run every deferred check and fix failures before calling the build done.
 
 ## Human steps after the build (acceptance, not implementation)
@@ -509,12 +513,12 @@ Executed by `/wave-planning:wave-execute`. See that skill for the worktree, disp
 ```yaml status
 base_branch: main
 integration_branch: wave/integration
-integration_head: a0fa42e
+integration_head: c32d56a
 W1: done
 W2: done
 W3: done
 W4: done
-W5: running
+W5: done
 W6: pending
 P1a: done
 P1b: done
@@ -533,10 +537,10 @@ P3: done
 P4: done
 P5: done
 P8: done
-P6a: merged
-P6b: merged
-P9: merged
-P10: merged
-P13: merged
+P6a: done
+P6b: done
+P9: done
+P10: done
+P13: done
 P6c: pending
 ```
