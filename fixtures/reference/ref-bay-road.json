@@ -1,0 +1,51 @@
+{
+  "referenceId": "ref-bay-road",
+  "layoutVersion": "1.0.0",
+  "realFilesInGit": false,
+  "source": "Structure taken from the intake guide table 'Files documented in our previous projects' (docs/waves/context/intake-guide-R01.md). Real project name and address are in Chapter's records only.",
+  "present": [
+    {
+      "role": "plan_dxf",
+      "status": "original",
+      "note": "Original plan DXF. Linked."
+    },
+    {
+      "role": "mesh_obj",
+      "status": "original",
+      "note": "Original OBJ. Source of the 3D DXF listed under derived."
+    },
+    {
+      "role": "point_cloud_las",
+      "status": "converted",
+      "note": "LAZ, not LAS. Route: LAZ, then ReCap RCP and RCS, then linked cloud."
+    },
+    {
+      "role": "rooms_csv",
+      "status": "listed",
+      "note": "CSV support."
+    },
+    {
+      "role": "plan_pdf",
+      "status": "listed",
+      "note": "PDF support. The role is not stated: it may be a plan PDF or a Spatial Report PDF."
+    }
+  ],
+  "derived": [
+    {
+      "role": "plan_dxf",
+      "note": "3D DXF derived from the OBJ. Linked together with the original plan DXF."
+    }
+  ],
+  "missing": [],
+  "notDocumented": [
+    "mesh_glb",
+    "mesh_mtl",
+    "texture",
+    "plan_png",
+    "plan_svg",
+    "spatial_report_pdf",
+    "photo",
+    "field_controls"
+  ],
+  "outcome": "Reference starter, not completed native architectural BIM."
+}

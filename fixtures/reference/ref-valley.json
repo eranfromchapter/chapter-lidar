@@ -1,0 +1,44 @@
+{
+  "referenceId": "ref-valley",
+  "layoutVersion": "1.0.0",
+  "realFilesInGit": false,
+  "source": "Structure taken from the intake guide table 'Files documented in our previous projects' (docs/waves/context/intake-guide-R01.md). Real project name and address are in Chapter's records only.",
+  "present": [
+    {
+      "role": "mesh_glb",
+      "status": "original",
+      "count": 3,
+      "note": "Three original GLB files. GLB geometry supported schematic walls, floors, openings and objects."
+    },
+    {
+      "role": "rooms_csv",
+      "status": "listed",
+      "note": "Room CSV."
+    },
+    {
+      "role": "spatial_report_pdf",
+      "status": "listed",
+      "note": "Guide says 'PDF reports'. The role is not stated: it may be a plan PDF or a Spatial Report PDF."
+    }
+  ],
+  "derived": [
+    {
+      "role": "mesh_glb",
+      "note": "Later mesh files were derived outputs. The guide does not say which files."
+    }
+  ],
+  "missing": [],
+  "notDocumented": [
+    "plan_dxf",
+    "plan_pdf",
+    "plan_png",
+    "plan_svg",
+    "mesh_obj",
+    "mesh_mtl",
+    "texture",
+    "point_cloud_las",
+    "photo",
+    "field_controls"
+  ],
+  "outcome": "GLB geometry supported schematic walls, floors, openings and objects. Later mesh files were derived outputs."
+}
