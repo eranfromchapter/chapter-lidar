@@ -1,0 +1,937 @@
+openapi: 3.1.0
+info:
+  title: Chapter Capture station API
+  version: 1.0.0
+  summary: Upload, registration and verdicts for Chapter Capture intake packages.
+  description: |
+    The station receives intake packages from the Chapter Capture app, registers them, runs the
+    acceptance checks and serves the verdict. One package is one site visit (`visitId`); each
+    floor or area scan in it is a separate capture with its own `captureId`.
+
+    Flow for the app:
+
+    1. Look up the HUB project (`GET /projects`) and confirm the address on site.
+    2. Seal the package on the phone (works offline), then open an upload session
+       (`POST /packages`) with the manifest's file list. The station answers with one upload
+       target (a write-only Azure Blob SAS URL) per file that still needs uploading.
+    3. Upload each file to its target, then report it with `POST /packages/{packageId}/files/complete`.
+       The station computes the SHA-256 and size of the stored blob and returns the result.
+    4. When every file is verified, send the manifest with `POST /packages/{packageId}/seal`. The
+       package moves to `checks_queued`.
+    5. Poll `GET /packages/{packageId}` until `verdict_ready`, then read
+       `GET /packages/{packageId}/verdict`.
+
+    Document bodies use the contract JSON Schemas in `contract/schema/` (manifest, capture
+    record, verdict). Conventions: optional fields are omitted, never null; timestamps are UTC
+    with whole seconds (`2026-10-17T14:02:11Z`); UUIDs and SHA-256 values are lowercase.
+
+    Every operation except `GET /health` needs a Microsoft Entra ID bearer token. Each operation
+    lists the app roles it accepts in `x-roles`; a valid token without one of them gets 403.
+  license:
+    name: Proprietary, Hello Chapter LLC
+    identifier: LicenseRef-HelloChapter-Proprietary
+servers:
+  - url: /v1
+    description: Station API base path, relative to the station host of each environment.
+security:
+  - entra: []
+tags:
+  - name: health
+    description: Liveness of the station service.
+  - name: projects
+    description: HUB project lookup for the capture app.
+  - name: packages
+    description: Upload sessions, file verification, sealing and package status.
+  - name: verdicts
+    description: Station verdict for a package.
+  - name: modeling-decisions
+    description: Log of the package source a BIM operator used for each modeling decision.
+paths:
+  /health:
+    get:
+      tags: [health]
+      operationId: getHealth
+      summary: Check that the station is up
+      description: Unauthenticated liveness check. Returns no package or project data.
+      security: []
+      x-roles: []
+      responses:
+        "200":
+          description: The station is up.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+        "503":
+          description: The station is running but cannot serve requests (for example the registry is unreachable).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /projects:
+    get:
+      tags: [projects]
+      operationId: listProjects
+      summary: List HUB projects available for capture
+      description: |
+        HUB deals that have a confirmed property address in the HUB, so the app can show the
+        address for on-site confirmation. Deals without a confirmed address are not returned.
+      x-roles: [capture, bim, admin]
+      parameters:
+        - name: q
+          in: query
+          description: Text to match against the project name or address. Omit to list recent projects.
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+      responses:
+        "200":
+          description: Matching projects, most recently updated first.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [projects]
+                properties:
+                  projects:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/HubProject"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "502":
+          $ref: "#/components/responses/HubUnavailable"
+
+  /projects/{dealId}:
+    parameters:
+      - $ref: "#/components/parameters/DealId"
+    get:
+      tags: [projects]
+      operationId: getProject
+      summary: Get one HUB project
+      x-roles: [capture, bim, admin]
+      responses:
+        "200":
+          description: The project.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HubProject"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "502":
+          $ref: "#/components/responses/HubUnavailable"
+
+  /packages:
+    post:
+      tags: [packages]
+      operationId: createUploadSession
+      summary: Open or resume the upload session of a package
+      description: |
+        Registers a package sealed on the phone and returns an upload target for every file that
+        is not yet verified. `packageId` is generated by the app and is the manifest's
+        `packageId`. The file list is the manifest's file list (the manifest itself is sent at
+        sealing, not uploaded here).
+
+        Idempotent: repeating the call with the same body returns the same session with fresh
+        upload targets (200), which is how the app resumes after going offline or after the
+        targets expire. A different body for an existing `packageId` is a conflict (409).
+      x-roles: [capture, admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadSessionRequest"
+      responses:
+        "200":
+          description: Existing session resumed; targets are reissued for files not yet verified.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadSession"
+        "201":
+          description: Session created.
+          headers:
+            Location:
+              description: URL of the package.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadSession"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableContent"
+    get:
+      tags: [packages]
+      operationId: listPackages
+      summary: List the packages of a HUB project
+      x-roles: [capture, bim, admin]
+      parameters:
+        - name: dealId
+          in: query
+          required: true
+          description: HUB deal id.
+          schema:
+            $ref: "#/components/schemas/DealId"
+        - name: visitId
+          in: query
+          required: false
+          description: Only packages (all revisions) of this site visit.
+          schema:
+            $ref: "#/components/schemas/Uuid"
+      responses:
+        "200":
+          description: Packages of the project, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [packages]
+                properties:
+                  packages:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PackageSummary"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /packages/{packageId}:
+    parameters:
+      - $ref: "#/components/parameters/PackageId"
+    get:
+      tags: [packages]
+      operationId: getPackage
+      summary: Get a package with its files and status
+      x-roles: [capture, bim, admin]
+      responses:
+        "200":
+          description: The package.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Package"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /packages/{packageId}/files/complete:
+    parameters:
+      - $ref: "#/components/parameters/PackageId"
+    post:
+      tags: [packages]
+      operationId: completeFile
+      summary: Report a file as uploaded and get its server-side check
+      description: |
+        The station reads the stored blob, computes its SHA-256 and size and compares them with
+        the declared values. The result is returned with 200 whether or not it matches; on a
+        mismatch the app uploads the file again to a fresh target from `POST /packages`.
+        A verified blob is immutable.
+      x-roles: [capture, admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [path]
+              properties:
+                path:
+                  $ref: "#/components/schemas/RelativePath"
+      responses:
+        "200":
+          description: Check result for the file.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileCheckResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /packages/{packageId}/seal:
+    parameters:
+      - $ref: "#/components/parameters/PackageId"
+    post:
+      tags: [packages]
+      operationId: sealPackage
+      summary: Register the manifest and queue the acceptance checks
+      description: |
+        Body is the package manifest exactly as written on the phone; the station stores it as
+        `Source Register/{visitId}/manifest.json`. Accepted only when every file of the session
+        is verified and the manifest lists exactly those files with the same role, capture,
+        SHA-256 and size. On success the package status becomes `checks_queued`.
+
+        Idempotent: sealing again with the same manifest returns the package unchanged (200).
+      x-roles: [capture, admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "../schema/manifest.schema.json"
+      responses:
+        "200":
+          description: Already sealed with this manifest.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Package"
+        "202":
+          description: Sealed; acceptance checks are queued.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Package"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableContent"
+
+  /packages/{packageId}/verdict:
+    parameters:
+      - $ref: "#/components/parameters/PackageId"
+    get:
+      tags: [verdicts]
+      operationId: getVerdict
+      summary: Get the verdict of a package
+      description: |
+        The station verdict (ready, limited or blocked). 404 with code `verdict_not_ready` while
+        the checks have not finished.
+      x-roles: [capture, bim, admin]
+      responses:
+        "200":
+          description: The verdict.
+          content:
+            application/json:
+              schema:
+                $ref: "../schema/verdict.schema.json"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /packages/{packageId}/modeling-decisions:
+    parameters:
+      - $ref: "#/components/parameters/PackageId"
+    get:
+      tags: [modeling-decisions]
+      operationId: listModelingDecisions
+      summary: List the modeling decisions logged against a package
+      x-roles: [bim, admin]
+      responses:
+        "200":
+          description: Decisions, oldest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [decisions]
+                properties:
+                  decisions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ModelingDecision"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [modeling-decisions]
+      operationId: createModelingDecision
+      summary: Log the source used for a modeling decision
+      description: |
+        Records which package files (and, where relevant, which field control or capture model
+        element) a BIM operator relied on for one modeling decision. Decisions are append-only;
+        the signed-in user and time are recorded by the station.
+      x-roles: [bim, admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ModelingDecisionInput"
+      responses:
+        "201":
+          description: Decision logged.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelingDecision"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableContent"
+
+components:
+  securitySchemes:
+    entra:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Microsoft Entra ID access token for the station API ("Chapter Main" tenant). The token's
+        `roles` claim carries the station app roles: `capture` (field operators using the app),
+        `bim` (BIM operators using the review screen) and `admin`.
+
+  parameters:
+    PackageId:
+      name: packageId
+      in: path
+      required: true
+      description: Package id (the manifest's `packageId`).
+      schema:
+        $ref: "#/components/schemas/Uuid"
+    DealId:
+      name: dealId
+      in: path
+      required: true
+      description: HUB deal id.
+      schema:
+        $ref: "#/components/schemas/DealId"
+
+  responses:
+    BadRequest:
+      description: The request is malformed (not JSON, wrong types, unknown parameters).
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Unauthorized:
+      description: Missing, expired or invalid Entra ID token.
+      headers:
+        WWW-Authenticate:
+          description: Bearer challenge.
+          schema:
+            type: string
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Forbidden:
+      description: The token is valid but has none of the roles listed in the operation's x-roles.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    NotFound:
+      description: The project, package, file or verdict does not exist (yet).
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Conflict:
+      description: |
+        The request conflicts with the package's state, for example a different body for an
+        existing packageId, a file reported after sealing, or sealing before every file is verified.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    UnprocessableContent:
+      description: The body is well-formed JSON but breaks a contract rule (schema or cross-field rule).
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    HubUnavailable:
+      description: The HUB did not answer or returned an error.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+
+  schemas:
+    Uuid:
+      $ref: "../schema/manifest.schema.json#/$defs/uuid"
+    DateTime:
+      $ref: "../schema/manifest.schema.json#/$defs/dateTime"
+    AreaKey:
+      $ref: "../schema/manifest.schema.json#/$defs/areaKey"
+    RelativePath:
+      $ref: "../schema/manifest.schema.json#/$defs/relativePath"
+    FileRole:
+      $ref: "../schema/manifest.schema.json#/$defs/role"
+    Sha256:
+      description: Lowercase hex SHA-256.
+      type: string
+      pattern: "^[0-9a-f]{64}$"
+    DealId:
+      description: HUB deal id, as returned by the HUB.
+      type: string
+      minLength: 1
+      maxLength: 64
+
+    Health:
+      type: object
+      additionalProperties: false
+      required: [status, version]
+      properties:
+        status:
+          const: ok
+        version:
+          description: Station build version.
+          type: string
+          minLength: 1
+          maxLength: 50
+
+    Problem:
+      description: RFC 9457 problem details.
+      type: object
+      required: [type, title, status, code]
+      properties:
+        type:
+          description: URI reference identifying the problem type.
+          type: string
+          format: uri-reference
+        title:
+          type: string
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        detail:
+          description: Plain-language explanation for this occurrence.
+          type: string
+        code:
+          description: Stable machine-readable code, for example verdict_not_ready or sha256_mismatch.
+          type: string
+          pattern: "^[a-z][a-z0-9_]*$"
+        errors:
+          description: Individual rule violations, for 400 and 422.
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [pointer, message]
+            properties:
+              pointer:
+                description: JSON Pointer to the offending value in the request body.
+                type: string
+              message:
+                type: string
+
+    HubProject:
+      description: A HUB deal with its confirmed property address.
+      type: object
+      additionalProperties: false
+      required: [dealId, address]
+      properties:
+        dealId:
+          $ref: "#/components/schemas/DealId"
+        projectName:
+          type: string
+          minLength: 1
+          maxLength: 200
+        address:
+          type: object
+          additionalProperties: false
+          required: [formatted]
+          properties:
+            formatted:
+              description: Single-line address exactly as shown by the HUB. The app copies it into capture-record address.formatted.
+              type: string
+              minLength: 1
+              maxLength: 300
+
+    UploadFileDeclaration:
+      description: One manifest file entry, as declared before upload.
+      type: object
+      additionalProperties: false
+      required: [path, role, sha256, bytes]
+      properties:
+        path:
+          $ref: "#/components/schemas/RelativePath"
+        role:
+          $ref: "#/components/schemas/FileRole"
+        captureId:
+          description: Required for every role except capture_record and field_controls, which must omit it.
+          $ref: "#/components/schemas/Uuid"
+        areaKey:
+          description: Present exactly when captureId is.
+          $ref: "#/components/schemas/AreaKey"
+        sha256:
+          $ref: "#/components/schemas/Sha256"
+        bytes:
+          type: integer
+          format: int64
+          minimum: 0
+
+    UploadSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [packageId, visitId, dealId, revision, files]
+      properties:
+        packageId:
+          $ref: "#/components/schemas/Uuid"
+        visitId:
+          $ref: "#/components/schemas/Uuid"
+        dealId:
+          $ref: "#/components/schemas/DealId"
+        revision:
+          type: integer
+          minimum: 1
+        supersedesPackageId:
+          description: packageId of the previous revision. Required when revision is greater than 1, omitted otherwise.
+          $ref: "#/components/schemas/Uuid"
+        files:
+          description: Every file of the manifest; paths are unique.
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/UploadFileDeclaration"
+
+    PackageStatus:
+      description: |
+        uploading: session open, not every file verified or not sealed yet.
+        checks_queued: sealed, acceptance checks waiting to run.
+        checking: acceptance checks running.
+        verdict_ready: the verdict is available.
+        check_error: the station could not complete the checks (not a verdict); the station retries or an admin intervenes.
+      enum: [uploading, checks_queued, checking, verdict_ready, check_error]
+
+    FileStatus:
+      description: |
+        pending: no verified upload yet.
+        verified: stored blob matches the declared SHA-256 and size.
+        sha256_mismatch / bytes_mismatch: stored blob differs; upload again.
+        not_uploaded: no blob found at the target.
+      enum: [pending, verified, sha256_mismatch, bytes_mismatch, not_uploaded]
+
+    UploadTarget:
+      description: |
+        Write-only Azure Blob SAS URL for one file. Upload with Put Blob for small files or
+        Put Block + Put Block List (resumable) for large ones, sending the listed headers.
+      type: object
+      additionalProperties: false
+      required: [url, method, headers, expiresAt]
+      properties:
+        url:
+          type: string
+          format: uri
+        method:
+          const: PUT
+        headers:
+          description: Headers to send with the upload, for example x-ms-blob-type BlockBlob.
+          type: object
+          additionalProperties:
+            type: string
+        expiresAt:
+          $ref: "#/components/schemas/DateTime"
+
+    UploadSessionFile:
+      type: object
+      additionalProperties: false
+      required: [path, status]
+      properties:
+        path:
+          $ref: "#/components/schemas/RelativePath"
+        status:
+          $ref: "#/components/schemas/FileStatus"
+        upload:
+          description: Present for every file that is not verified.
+          $ref: "#/components/schemas/UploadTarget"
+
+    UploadSession:
+      type: object
+      additionalProperties: false
+      required: [packageId, visitId, dealId, revision, status, files]
+      properties:
+        packageId:
+          $ref: "#/components/schemas/Uuid"
+        visitId:
+          $ref: "#/components/schemas/Uuid"
+        dealId:
+          $ref: "#/components/schemas/DealId"
+        revision:
+          type: integer
+          minimum: 1
+        status:
+          $ref: "#/components/schemas/PackageStatus"
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/UploadSessionFile"
+
+    FileCheckResult:
+      description: Server-side check of one uploaded file.
+      type: object
+      additionalProperties: false
+      required: [path, status, expectedSha256, expectedBytes, checkedAt]
+      properties:
+        path:
+          $ref: "#/components/schemas/RelativePath"
+        status:
+          $ref: "#/components/schemas/FileStatus"
+        expectedSha256:
+          $ref: "#/components/schemas/Sha256"
+        actualSha256:
+          description: SHA-256 of the stored blob. Omitted when status is not_uploaded.
+          $ref: "#/components/schemas/Sha256"
+        expectedBytes:
+          type: integer
+          format: int64
+          minimum: 0
+        actualBytes:
+          description: Size of the stored blob. Omitted when status is not_uploaded.
+          type: integer
+          format: int64
+          minimum: 0
+        checkedAt:
+          $ref: "#/components/schemas/DateTime"
+
+    PackageFile:
+      type: object
+      additionalProperties: false
+      required: [path, role, sha256, bytes, status]
+      properties:
+        path:
+          $ref: "#/components/schemas/RelativePath"
+        role:
+          $ref: "#/components/schemas/FileRole"
+        captureId:
+          $ref: "#/components/schemas/Uuid"
+        areaKey:
+          $ref: "#/components/schemas/AreaKey"
+        sha256:
+          $ref: "#/components/schemas/Sha256"
+        bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        status:
+          $ref: "#/components/schemas/FileStatus"
+        checkedAt:
+          description: Time of the last server-side check. Omitted while pending.
+          $ref: "#/components/schemas/DateTime"
+
+    VerdictSummary:
+      type: object
+      additionalProperties: false
+      required: [verdictId, outcome, evaluatedAt]
+      properties:
+        verdictId:
+          $ref: "#/components/schemas/Uuid"
+        outcome:
+          $ref: "../schema/verdict.schema.json#/$defs/outcome"
+        evaluatedAt:
+          $ref: "#/components/schemas/DateTime"
+
+    PackageSummary:
+      type: object
+      additionalProperties: false
+      required: [packageId, visitId, dealId, revision, status, createdAt]
+      properties:
+        packageId:
+          $ref: "#/components/schemas/Uuid"
+        visitId:
+          $ref: "#/components/schemas/Uuid"
+        dealId:
+          $ref: "#/components/schemas/DealId"
+        revision:
+          type: integer
+          minimum: 1
+        supersedesPackageId:
+          $ref: "#/components/schemas/Uuid"
+        status:
+          $ref: "#/components/schemas/PackageStatus"
+        createdAt:
+          description: When the upload session was opened.
+          $ref: "#/components/schemas/DateTime"
+        sealedAt:
+          description: The manifest's sealedAt. Present once the package is sealed at the station.
+          $ref: "#/components/schemas/DateTime"
+        verdict:
+          description: Present when status is verdict_ready.
+          $ref: "#/components/schemas/VerdictSummary"
+
+    Package:
+      description: A package with its files. Manifest and capture record are present once sealed.
+      type: object
+      additionalProperties: false
+      required: [packageId, visitId, dealId, revision, status, createdAt, files]
+      properties:
+        packageId:
+          $ref: "#/components/schemas/Uuid"
+        visitId:
+          $ref: "#/components/schemas/Uuid"
+        dealId:
+          $ref: "#/components/schemas/DealId"
+        revision:
+          type: integer
+          minimum: 1
+        supersedesPackageId:
+          $ref: "#/components/schemas/Uuid"
+        status:
+          $ref: "#/components/schemas/PackageStatus"
+        createdAt:
+          $ref: "#/components/schemas/DateTime"
+        sealedAt:
+          $ref: "#/components/schemas/DateTime"
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/PackageFile"
+        manifest:
+          description: The registered manifest. Present once sealed.
+          $ref: "../schema/manifest.schema.json"
+        captureRecord:
+          description: The package's capture record file. Present once sealed.
+          $ref: "../schema/capture-record.schema.json"
+        verdict:
+          description: Present when status is verdict_ready.
+          $ref: "#/components/schemas/VerdictSummary"
+
+    DecisionSource:
+      description: One package file a decision relied on, optionally narrowed to one control or element in it.
+      type: object
+      additionalProperties: false
+      required: [path]
+      properties:
+        path:
+          $ref: "#/components/schemas/RelativePath"
+        controlId:
+          description: Id of a field control, when path is the field-controls file.
+          type: string
+          minLength: 1
+          maxLength: 128
+        elementId:
+          description: Id of a room, wall, door, window, opening or object, when path is a capture model.
+          type: string
+          minLength: 1
+          maxLength: 128
+
+    ModelingDecisionInput:
+      type: object
+      additionalProperties: false
+      required: [element, decision, sources]
+      properties:
+        element:
+          description: What was modeled, for example Floor 1 kitchen north wall.
+          type: string
+          minLength: 1
+          maxLength: 300
+        decision:
+          description: What was decided, for example Wall length taken from tape distance A.
+          type: string
+          minLength: 1
+          maxLength: 2000
+        captureId:
+          description: Capture the decision concerns, when it concerns one capture.
+          $ref: "#/components/schemas/Uuid"
+        areaKey:
+          description: Present exactly when captureId is.
+          $ref: "#/components/schemas/AreaKey"
+        sources:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/DecisionSource"
+        note:
+          type: string
+          minLength: 1
+          maxLength: 2000
+
+    ModelingDecision:
+      description: A logged decision. The fields of ModelingDecisionInput plus what the station records.
+      type: object
+      additionalProperties: false
+      required: [decisionId, packageId, element, decision, sources, decidedBy, decidedAt]
+      properties:
+        decisionId:
+          $ref: "#/components/schemas/Uuid"
+        packageId:
+          $ref: "#/components/schemas/Uuid"
+        element:
+          $ref: "#/components/schemas/ModelingDecisionInput/properties/element"
+        decision:
+          $ref: "#/components/schemas/ModelingDecisionInput/properties/decision"
+        captureId:
+          $ref: "#/components/schemas/ModelingDecisionInput/properties/captureId"
+        areaKey:
+          $ref: "#/components/schemas/ModelingDecisionInput/properties/areaKey"
+        sources:
+          $ref: "#/components/schemas/ModelingDecisionInput/properties/sources"
+        note:
+          $ref: "#/components/schemas/ModelingDecisionInput/properties/note"
+        decidedBy:
+          description: The signed-in user who logged the decision.
+          type: object
+          additionalProperties: false
+          required: [name, userId]
+          properties:
+            name:
+              type: string
+              minLength: 1
+              maxLength: 200
+            userId:
+              description: Entra ID object id of the user.
+              type: string
+              minLength: 1
+              maxLength: 128
+        decidedAt:
+          $ref: "#/components/schemas/DateTime"
