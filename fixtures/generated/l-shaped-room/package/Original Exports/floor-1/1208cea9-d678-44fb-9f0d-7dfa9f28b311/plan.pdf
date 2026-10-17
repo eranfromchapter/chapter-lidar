@@ -1,0 +1,64 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Length 1494 >>
+stream
+BT /F1 16 Tf 72.00 740.00 Td (Floor plan - Floor 1) Tj ET
+BT /F1 10 Tf 72.00 720.00 Td (Scale 1:50 \(Letter\). 20 mm on paper is 1.000 m.) Tj ET
+1.5 w 72.000 476.772 m 72.000 250.000 l S
+1.5 w 72.000 250.000 m 242.079 250.000 l S
+1.5 w 242.079 250.000 m 242.079 363.386 l S
+1.5 w 242.079 363.386 m 412.157 363.386 l S
+1.5 w 412.157 363.386 m 412.157 476.772 l S
+1.5 w 412.157 476.772 m 72.000 476.772 l S
+3 w 380.976 476.772 m 329.953 476.772 l S
+3 w 72.000 397.402 m 72.000 329.370 l S
+3 w 293.102 363.386 m 361.134 363.386 l S
+0.5 w 412.157 391.732 m 412.157 448.425 l S
+BT /F1 7 Tf 75.00 366.39 Td (4000 mm) Tj ET
+BT /F1 7 Tf 160.04 253.00 Td (3000 mm) Tj ET
+BT /F1 7 Tf 245.08 309.69 Td (2000 mm) Tj ET
+BT /F1 7 Tf 330.12 366.39 Td (3000 mm) Tj ET
+BT /F1 7 Tf 415.16 423.08 Td (2000 mm) Tj ET
+BT /F1 7 Tf 245.08 479.77 Td (6000 mm) Tj ET
+BT /F1 10 Tf 212.08 363.39 Td (L Room) Tj ET
+2 w 72.000 215.000 m 185.386 215.000 l S
+BT /F1 8 Tf 72.00 203.00 Td (0        2 m) Tj ET
+BT /F1 8 Tf 72.00 190.00 Td (North: plan top is model -Z \(local capture frame, not true north\).) Tj ET
+BT /F1 9 Tf 72.00 150.00 Td (Address: 100 Example Street, Testville, NY 00000) Tj ET
+BT /F1 9 Tf 72.00 138.00 Td (Project: Fixture l-shaped-room) Tj ET
+BT /F1 9 Tf 72.00 126.00 Td (Floor: Floor 1 \(floor-1\)) Tj ET
+BT /F1 9 Tf 72.00 114.00 Td (Capture ID: 1208cea9-d678-44fb-9f0d-7dfa9f28b311) Tj ET
+BT /F1 9 Tf 72.00 102.00 Td (Date: 2026-10-17) Tj ET
+BT /F1 9 Tf 72.00 90.00 Td (Operator: Test Operator) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Title (Plan Floor 1) /Producer (chapter-fixtures 1.0.0) >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000247 00000 n 
+0000000344 00000 n 
+0000001889 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R /Info 6 0 R >>
+startxref
+1967
+%%EOF

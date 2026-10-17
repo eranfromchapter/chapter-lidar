@@ -1,0 +1,9 @@
+{
+  "defectId": "las-bad-header",
+  "title": "LAS header point count does not match the data",
+  "baseFixture": "box-room",
+  "affectedFile": "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/points.las",
+  "role": "point_cloud_las",
+  "mutation": "Number of point records (64-bit, offset 247) in points.las raised by 1000; the file holds fewer points than its header says.",
+  "details": { "headerPointCount": 1888, "actualPointCount": 888 }
+}

@@ -1,0 +1,215 @@
+{
+  "schemaVersion": "1.0.0",
+  "visitId": "d205358c-0394-44af-b86c-69bc3fdd9d21",
+  "distances": [
+    {
+      "id": "floor-1-distance-a",
+      "capture": { "captureId": "ba028a66-d76e-4616-b0d6-e3e04e5c9535", "areaKey": "floor-1" },
+      "axis": "A",
+      "from": "Living Room west wall",
+      "to": "Living Room east wall",
+      "measurement": {
+        "valueMm": 6000,
+        "enteredUnit": "m",
+        "enteredText": "6.000",
+        "method": "laser",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-distance-b",
+      "capture": { "captureId": "ba028a66-d76e-4616-b0d6-e3e04e5c9535", "areaKey": "floor-1" },
+      "axis": "B",
+      "from": "Living Room north wall",
+      "to": "Living Room south wall",
+      "measurement": {
+        "valueMm": 5000,
+        "enteredUnit": "mm",
+        "enteredText": "5000",
+        "method": "laser",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-2-distance-a",
+      "capture": { "captureId": "e236b82f-337b-45f5-ab4b-6a8f3eb64ffc", "areaKey": "floor-2" },
+      "axis": "A",
+      "from": "Upper Hall north wall",
+      "to": "Upper Hall south wall",
+      "measurement": {
+        "valueMm": 6000,
+        "enteredUnit": "m",
+        "enteredText": "6.000",
+        "method": "laser",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-2-distance-b",
+      "capture": { "captureId": "e236b82f-337b-45f5-ab4b-6a8f3eb64ffc", "areaKey": "floor-2" },
+      "axis": "B",
+      "from": "Upper Hall west wall",
+      "to": "Upper Hall east wall",
+      "measurement": {
+        "valueMm": 5000,
+        "enteredUnit": "mm",
+        "enteredText": "5000",
+        "method": "laser",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    }
+  ],
+  "ceilingHeights": [
+    {
+      "id": "floor-1-ceiling-room-1",
+      "capture": { "captureId": "ba028a66-d76e-4616-b0d6-e3e04e5c9535", "areaKey": "floor-1" },
+      "room": "Living Room",
+      "location": "Centre of room",
+      "measurement": {
+        "valueMm": 2700,
+        "enteredUnit": "cm",
+        "enteredText": "270",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-2-ceiling-room-1",
+      "capture": { "captureId": "e236b82f-337b-45f5-ab4b-6a8f3eb64ffc", "areaKey": "floor-2" },
+      "room": "Upper Hall",
+      "location": "Centre of room",
+      "measurement": {
+        "valueMm": 2500,
+        "enteredUnit": "cm",
+        "enteredText": "250",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    }
+  ],
+  "openings": [
+    {
+      "id": "floor-1-opening-door-1",
+      "capture": { "captureId": "ba028a66-d76e-4616-b0d6-e3e04e5c9535", "areaKey": "floor-1" },
+      "room": "Living Room",
+      "label": "Entry door",
+      "width": {
+        "valueMm": 900,
+        "enteredUnit": "mm",
+        "enteredText": "900",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      },
+      "height": {
+        "valueMm": 2100,
+        "enteredUnit": "mm",
+        "enteredText": "2100",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-opening-window-1",
+      "capture": { "captureId": "ba028a66-d76e-4616-b0d6-e3e04e5c9535", "areaKey": "floor-1" },
+      "room": "Living Room",
+      "label": "East window",
+      "width": {
+        "valueMm": 1200,
+        "enteredUnit": "mm",
+        "enteredText": "1200",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      },
+      "height": {
+        "valueMm": 1200,
+        "enteredUnit": "mm",
+        "enteredText": "1200",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-2-opening-window-1",
+      "capture": { "captureId": "e236b82f-337b-45f5-ab4b-6a8f3eb64ffc", "areaKey": "floor-2" },
+      "room": "Upper Hall",
+      "label": "East window",
+      "width": {
+        "valueMm": 1200,
+        "enteredUnit": "mm",
+        "enteredText": "1200",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      },
+      "height": {
+        "valueMm": 1200,
+        "enteredUnit": "mm",
+        "enteredText": "1200",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-2-opening-window-2",
+      "capture": { "captureId": "e236b82f-337b-45f5-ab4b-6a8f3eb64ffc", "areaKey": "floor-2" },
+      "room": "Upper Hall",
+      "label": "South window",
+      "width": {
+        "valueMm": 1200,
+        "enteredUnit": "mm",
+        "enteredText": "1200",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      },
+      "height": {
+        "valueMm": 1200,
+        "enteredUnit": "mm",
+        "enteredText": "1200",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    }
+  ],
+  "floorToFloor": [
+    {
+      "id": "floor-1-floor-2-stair",
+      "lower": { "captureId": "ba028a66-d76e-4616-b0d6-e3e04e5c9535", "areaKey": "floor-1" },
+      "upper": { "captureId": "e236b82f-337b-45f5-ab4b-6a8f3eb64ffc", "areaKey": "floor-2" },
+      "location": "At stair",
+      "measurement": {
+        "valueMm": 2950,
+        "enteredUnit": "cm",
+        "enteredText": "295",
+        "method": "laser",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    }
+  ],
+  "landmarks": [
+    {
+      "id": "landmark-newel",
+      "label": "Stair newel post",
+      "description": "Top of the newel post at the foot of the stair.",
+      "captures": [
+        { "captureId": "ba028a66-d76e-4616-b0d6-e3e04e5c9535", "areaKey": "floor-1" },
+        { "captureId": "e236b82f-337b-45f5-ab4b-6a8f3eb64ffc", "areaKey": "floor-2" }
+      ],
+      "photoPaths": [
+        "Site Photos/floor-1/ba028a66-d76e-4616-b0d6-e3e04e5c9535/photo-0001.jpg",
+        "Site Photos/floor-2/e236b82f-337b-45f5-ab4b-6a8f3eb64ffc/photo-0001.jpg"
+      ]
+    },
+    {
+      "id": "landmark-column",
+      "label": "North-east column",
+      "description": "Square structural column in the north-east corner.",
+      "captures": [
+        { "captureId": "ba028a66-d76e-4616-b0d6-e3e04e5c9535", "areaKey": "floor-1" },
+        { "captureId": "e236b82f-337b-45f5-ab4b-6a8f3eb64ffc", "areaKey": "floor-2" }
+      ],
+      "photoPaths": [
+        "Site Photos/floor-1/ba028a66-d76e-4616-b0d6-e3e04e5c9535/photo-0001.jpg",
+        "Site Photos/floor-2/e236b82f-337b-45f5-ab4b-6a8f3eb64ffc/photo-0001.jpg"
+      ]
+    }
+  ]
+}

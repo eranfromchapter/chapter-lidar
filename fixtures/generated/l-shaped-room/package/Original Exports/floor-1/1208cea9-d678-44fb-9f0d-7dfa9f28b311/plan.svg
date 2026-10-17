@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 7.000 5.000" width="700" height="500">
+  <title>Floor 1 plan (metres)</title>
+  <polygon points="0.500,4.500 0.500,0.500 3.500,0.500 3.500,2.500 6.500,2.500 6.500,4.500" fill="#f4f1ea" stroke="none"/>
+  <line x1="0.500" y1="4.500" x2="0.500" y2="0.500" stroke="#222222" stroke-width="0.08"/>
+  <line x1="0.500" y1="0.500" x2="3.500" y2="0.500" stroke="#222222" stroke-width="0.08"/>
+  <line x1="3.500" y1="0.500" x2="3.500" y2="2.500" stroke="#222222" stroke-width="0.08"/>
+  <line x1="3.500" y1="2.500" x2="6.500" y2="2.500" stroke="#222222" stroke-width="0.08"/>
+  <line x1="6.500" y1="2.500" x2="6.500" y2="4.500" stroke="#222222" stroke-width="0.08"/>
+  <line x1="6.500" y1="4.500" x2="0.500" y2="4.500" stroke="#222222" stroke-width="0.08"/>
+  <line class="door" x1="5.950" y1="4.500" x2="5.050" y2="4.500" stroke="#a0522d" stroke-width="0.12"/>
+  <line class="window" x1="0.500" y1="3.100" x2="0.500" y2="1.900" stroke="#1e90ff" stroke-width="0.12"/>
+  <line class="window" x1="4.400" y1="2.500" x2="5.600" y2="2.500" stroke="#1e90ff" stroke-width="0.12"/>
+  <line class="opening" x1="6.500" y1="3.000" x2="6.500" y2="4.000" stroke="#888888" stroke-width="0.12"/>
+  <text x="3.500" y="2.500" font-family="Helvetica, Arial, sans-serif" font-size="0.3" text-anchor="middle">L Room</text>
+</svg>

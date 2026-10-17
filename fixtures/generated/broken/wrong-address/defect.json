@@ -1,0 +1,12 @@
+{
+  "defectId": "wrong-address",
+  "title": "Capture record address differs from the HUB address",
+  "baseFixture": "box-room",
+  "affectedFile": "Source Register/c1b6d1fb-17af-4f4a-877c-2565ef9bdb86/capture-record.json",
+  "role": "capture_record",
+  "mutation": "address.formatted in capture-record.json changed to a different placeholder address.",
+  "details": {
+    "hubAddress": "100 Example Street, Testville, NY 00000",
+    "recordedAddress": "200 Sample Avenue, Testville, NY 00000"
+  }
+}

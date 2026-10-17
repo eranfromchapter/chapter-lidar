@@ -1,0 +1,95 @@
+{
+  "generatedFormatVersion": "1.0.0",
+  "fixtures": [
+    {
+      "name": "box-room",
+      "description": "Box room 4.000 x 3.000 m, ceiling 2.700 m, one door and one window.",
+      "truth": "box-room/truth.json",
+      "packageRoot": "box-room/package",
+      "manifest": "box-room/package/Source Register/c1b6d1fb-17af-4f4a-877c-2565ef9bdb86/manifest.json",
+      "visitId": "c1b6d1fb-17af-4f4a-877c-2565ef9bdb86"
+    },
+    {
+      "name": "l-shaped-room",
+      "description": "L-shaped room, 6.000 x 4.000 m outline with a 3.000 x 2.000 m corner removed, ceiling 2.700 m.",
+      "truth": "l-shaped-room/truth.json",
+      "packageRoot": "l-shaped-room/package",
+      "manifest": "l-shaped-room/package/Source Register/812cf67c-15bd-4303-94a3-1bb7ae86c937/manifest.json",
+      "visitId": "812cf67c-15bd-4303-94a3-1bb7ae86c937"
+    },
+    {
+      "name": "two-room-apartment",
+      "description": "Two-room apartment: Living Room 5.000 x 4.000 m and Bedroom 3.000 x 4.000 m, ceiling 2.700 m, one door between the rooms, two windows and one passage opening.",
+      "truth": "two-room-apartment/truth.json",
+      "packageRoot": "two-room-apartment/package",
+      "manifest": "two-room-apartment/package/Source Register/4b9c4ede-de5e-47e9-a9cc-fcdf050df74f/manifest.json",
+      "visitId": "4b9c4ede-de5e-47e9-a9cc-fcdf050df74f"
+    },
+    {
+      "name": "two-floor-house",
+      "description": "Two-floor house, one visit and two captures. Floor 1 Living Room 6.000 x 5.000 m, ceiling 2.700 m. Floor 2 Upper Hall with a 1.000 x 3.000 m stair void, ceiling 2.500 m. Floor-to-floor 2.950 m. Floor 2 is captured in a rotated and moved frame; two shared landmarks.",
+      "truth": "two-floor-house/truth.json",
+      "packageRoot": "two-floor-house/package",
+      "manifest": "two-floor-house/package/Source Register/d205358c-0394-44af-b86c-69bc3fdd9d21/manifest.json",
+      "visitId": "d205358c-0394-44af-b86c-69bc3fdd9d21"
+    }
+  ],
+  "broken": [
+    {
+      "defectId": "empty-file",
+      "title": "A package file is empty",
+      "baseFixture": "box-room",
+      "defect": "broken/empty-file/defect.json",
+      "packageRoot": "broken/empty-file/package",
+      "manifest": "broken/empty-file/package/Source Register/c1b6d1fb-17af-4f4a-877c-2565ef9bdb86/manifest.json"
+    },
+    {
+      "defectId": "wrong-address",
+      "title": "Capture record address differs from the HUB address",
+      "baseFixture": "box-room",
+      "defect": "broken/wrong-address/defect.json",
+      "packageRoot": "broken/wrong-address/package",
+      "manifest": "broken/wrong-address/package/Source Register/c1b6d1fb-17af-4f4a-877c-2565ef9bdb86/manifest.json"
+    },
+    {
+      "defectId": "inches-as-metres",
+      "title": "Inch values written into metre fields",
+      "baseFixture": "box-room",
+      "defect": "broken/inches-as-metres/defect.json",
+      "packageRoot": "broken/inches-as-metres/package",
+      "manifest": "broken/inches-as-metres/package/Source Register/c1b6d1fb-17af-4f4a-877c-2565ef9bdb86/manifest.json"
+    },
+    {
+      "defectId": "z-up-mesh",
+      "title": "GLB mesh is Z-up",
+      "baseFixture": "box-room",
+      "defect": "broken/z-up-mesh/defect.json",
+      "packageRoot": "broken/z-up-mesh/package",
+      "manifest": "broken/z-up-mesh/package/Source Register/c1b6d1fb-17af-4f4a-877c-2565ef9bdb86/manifest.json"
+    },
+    {
+      "defectId": "missing-gltf-bin",
+      "title": "glTF binary companion is missing",
+      "baseFixture": "box-room",
+      "defect": "broken/missing-gltf-bin/defect.json",
+      "packageRoot": "broken/missing-gltf-bin/package",
+      "manifest": "broken/missing-gltf-bin/package/Source Register/c1b6d1fb-17af-4f4a-877c-2565ef9bdb86/manifest.json"
+    },
+    {
+      "defectId": "las-bad-header",
+      "title": "LAS header point count does not match the data",
+      "baseFixture": "box-room",
+      "defect": "broken/las-bad-header/defect.json",
+      "packageRoot": "broken/las-bad-header/package",
+      "manifest": "broken/las-bad-header/package/Source Register/c1b6d1fb-17af-4f4a-877c-2565ef9bdb86/manifest.json"
+    },
+    {
+      "defectId": "dimensions-3pct-off",
+      "title": "Field controls are 3% short of the true dimensions",
+      "baseFixture": "box-room",
+      "defect": "broken/dimensions-3pct-off/defect.json",
+      "packageRoot": "broken/dimensions-3pct-off/package",
+      "manifest": "broken/dimensions-3pct-off/package/Source Register/c1b6d1fb-17af-4f4a-877c-2565ef9bdb86/manifest.json"
+    }
+  ]
+}

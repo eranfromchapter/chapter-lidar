@@ -1,0 +1,115 @@
+{
+  "schemaVersion": "1.0.0",
+  "visitId": "c1b6d1fb-17af-4f4a-877c-2565ef9bdb86",
+  "captureId": "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+  "areaKey": "floor-1",
+  "label": "Floor 1",
+  "coordinateSystem": { "units": "m", "handedness": "right", "up": "+Y" },
+  "rooms": [
+    {
+      "id": "room-1",
+      "label": "Test Room",
+      "polygon": [
+        [0, 0, 0],
+        [0, 0, 118.110236],
+        [157.480315, 0, 118.110236],
+        [157.480315, 0, 0]
+      ],
+      "heightM": 106.299213
+    }
+  ],
+  "walls": [
+    {
+      "id": "wall-1",
+      "start": [0, 0, 0],
+      "end": [0, 0, 118.110236],
+      "heightM": 106.299213,
+      "thicknessM": 0,
+      "roomIds": ["room-1"],
+      "confidence": "high"
+    },
+    {
+      "id": "wall-2",
+      "start": [0, 0, 118.110236],
+      "end": [157.480315, 0, 118.110236],
+      "heightM": 106.299213,
+      "thicknessM": 0,
+      "roomIds": ["room-1"],
+      "confidence": "high"
+    },
+    {
+      "id": "wall-3",
+      "start": [157.480315, 0, 118.110236],
+      "end": [157.480315, 0, 0],
+      "heightM": 106.299213,
+      "thicknessM": 0,
+      "roomIds": ["room-1"],
+      "confidence": "high"
+    },
+    {
+      "id": "wall-4",
+      "start": [157.480315, 0, 0],
+      "end": [0, 0, 0],
+      "heightM": 106.299213,
+      "thicknessM": 0,
+      "roomIds": ["room-1"],
+      "confidence": "high"
+    }
+  ],
+  "doors": [
+    {
+      "id": "door-1",
+      "wallId": "wall-4",
+      "offsetM": 118.110236,
+      "bottomM": 0,
+      "widthM": 35.433071,
+      "heightM": 82.677165
+    }
+  ],
+  "windows": [
+    {
+      "id": "window-1",
+      "wallId": "wall-2",
+      "offsetM": 78.740157,
+      "bottomM": 35.433071,
+      "widthM": 47.244094,
+      "heightM": 47.244094
+    }
+  ],
+  "openings": [],
+  "objects": [
+    {
+      "id": "object-1",
+      "category": "table",
+      "roomId": "room-1",
+      "box": {
+        "center": [78.740157, 14.76378, 59.055118],
+        "sizeM": [47.244094, 29.527559, 31.496063],
+        "rotation": [0, 0, 0, 1]
+      },
+      "confidence": "high"
+    }
+  ],
+  "refs": [
+    {
+      "role": "raw_roomplan_json",
+      "path": "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/roomplan.json"
+    },
+    {
+      "role": "raw_depth",
+      "path": "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/depth-samples.bin"
+    },
+    {
+      "role": "mesh_glb",
+      "path": "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/mesh.glb"
+    },
+    {
+      "role": "mesh_obj",
+      "path": "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/mesh.obj"
+    },
+    {
+      "role": "point_cloud_las",
+      "path": "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/points.las"
+    }
+  ]
+}

@@ -1,0 +1,108 @@
+{
+  "fixture": "two-room-apartment",
+  "description": "Two-room apartment: Living Room 5.000 x 4.000 m and Bedroom 3.000 x 4.000 m, ceiling 2.700 m, one door between the rooms, two windows and one passage opening.",
+  "units": "m",
+  "hub": { "dealId": "fixture-deal-0001", "address": "100 Example Street, Testville, NY 00000" },
+  "visitId": "4b9c4ede-de5e-47e9-a9cc-fcdf050df74f",
+  "notes": [
+    "Walls are scanned surfaces with thickness 0; wall centrelines coincide with room outlines.",
+    "Lengths are exact; generated geometry equals these values to 0.1 mm or better.",
+    "Depth samples and the LAS file carry seeded uniform noise of up to 5 mm per axis."
+  ],
+  "captures": [
+    {
+      "captureId": "80d5ff80-5172-40f3-acc9-5cf59acdfd61",
+      "areaKey": "floor-1",
+      "label": "Floor 1",
+      "frame": { "rotYDeg": 0, "translateM": [0, 0, 0] },
+      "boundsM": { "min": [0, 0, 0], "max": [8, 2.7, 4] },
+      "rooms": [
+        {
+          "id": "room-1",
+          "label": "Living Room",
+          "widthM": 5,
+          "lengthM": 4,
+          "heightM": 2.7,
+          "areaM2": 20,
+          "perimeterM": 18
+        },
+        {
+          "id": "room-2",
+          "label": "Bedroom",
+          "widthM": 3,
+          "lengthM": 4,
+          "heightM": 2.7,
+          "areaM2": 12,
+          "perimeterM": 14
+        }
+      ],
+      "walls": [
+        { "id": "wall-1", "lengthM": 4, "heightM": 2.7 },
+        { "id": "wall-2", "lengthM": 5, "heightM": 2.7 },
+        { "id": "wall-3", "lengthM": 4, "heightM": 2.7 },
+        { "id": "wall-4", "lengthM": 5, "heightM": 2.7 },
+        { "id": "wall-5", "lengthM": 4, "heightM": 2.7 },
+        { "id": "wall-6", "lengthM": 3, "heightM": 2.7 },
+        { "id": "wall-7", "lengthM": 4, "heightM": 2.7 },
+        { "id": "wall-8", "lengthM": 3, "heightM": 2.7 }
+      ],
+      "openings": [
+        {
+          "id": "door-1",
+          "kind": "door",
+          "wallId": "wall-3",
+          "offsetM": 1,
+          "bottomM": 0,
+          "widthM": 0.9,
+          "heightM": 2.1
+        },
+        {
+          "id": "window-1",
+          "kind": "window",
+          "wallId": "wall-1",
+          "offsetM": 2,
+          "bottomM": 0.9,
+          "widthM": 1.5,
+          "heightM": 1.2
+        },
+        {
+          "id": "window-2",
+          "kind": "window",
+          "wallId": "wall-7",
+          "offsetM": 2,
+          "bottomM": 0.9,
+          "widthM": 1.2,
+          "heightM": 1.2
+        },
+        {
+          "id": "opening-1",
+          "kind": "opening",
+          "wallId": "wall-4",
+          "offsetM": 1.5,
+          "bottomM": 0,
+          "widthM": 1,
+          "heightM": 2.1
+        }
+      ],
+      "objects": [
+        {
+          "id": "object-1",
+          "category": "sofa",
+          "centerM": [2.5, 0.4, 3.2],
+          "sizeM": [2, 0.8, 0.9]
+        },
+        { "id": "object-2", "category": "bed", "centerM": [6.8, 0.25, 2], "sizeM": [1.6, 0.5, 2] }
+      ],
+      "controlDistances": [
+        { "axis": "A", "from": "Living Room west wall", "to": "Bedroom east wall", "lengthM": 8 },
+        {
+          "axis": "B",
+          "from": "Living Room north wall",
+          "to": "Living Room south wall",
+          "lengthM": 4
+        }
+      ]
+    }
+  ],
+  "landmarks": []
+}

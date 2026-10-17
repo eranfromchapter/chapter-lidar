@@ -1,0 +1,71 @@
+{
+  "fixture": "box-room",
+  "description": "Box room 4.000 x 3.000 m, ceiling 2.700 m, one door and one window.",
+  "units": "m",
+  "hub": { "dealId": "fixture-deal-0001", "address": "100 Example Street, Testville, NY 00000" },
+  "visitId": "c1b6d1fb-17af-4f4a-877c-2565ef9bdb86",
+  "notes": [
+    "Walls are scanned surfaces with thickness 0; wall centrelines coincide with room outlines.",
+    "Lengths are exact; generated geometry equals these values to 0.1 mm or better.",
+    "Depth samples and the LAS file carry seeded uniform noise of up to 5 mm per axis."
+  ],
+  "captures": [
+    {
+      "captureId": "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+      "areaKey": "floor-1",
+      "label": "Floor 1",
+      "frame": { "rotYDeg": 0, "translateM": [0, 0, 0] },
+      "boundsM": { "min": [0, 0, 0], "max": [4, 2.7, 3] },
+      "rooms": [
+        {
+          "id": "room-1",
+          "label": "Test Room",
+          "widthM": 4,
+          "lengthM": 3,
+          "heightM": 2.7,
+          "areaM2": 12,
+          "perimeterM": 14
+        }
+      ],
+      "walls": [
+        { "id": "wall-1", "lengthM": 3, "heightM": 2.7 },
+        { "id": "wall-2", "lengthM": 4, "heightM": 2.7 },
+        { "id": "wall-3", "lengthM": 3, "heightM": 2.7 },
+        { "id": "wall-4", "lengthM": 4, "heightM": 2.7 }
+      ],
+      "openings": [
+        {
+          "id": "door-1",
+          "kind": "door",
+          "wallId": "wall-4",
+          "offsetM": 3,
+          "bottomM": 0,
+          "widthM": 0.9,
+          "heightM": 2.1
+        },
+        {
+          "id": "window-1",
+          "kind": "window",
+          "wallId": "wall-2",
+          "offsetM": 2,
+          "bottomM": 0.9,
+          "widthM": 1.2,
+          "heightM": 1.2
+        }
+      ],
+      "objects": [
+        {
+          "id": "object-1",
+          "category": "table",
+          "centerM": [2, 0.375, 1.5],
+          "sizeM": [1.2, 0.75, 0.8]
+        }
+      ],
+      "controlDistances": [
+        { "axis": "A", "from": "Test Room west wall", "to": "Test Room east wall", "lengthM": 4 },
+        { "axis": "B", "from": "Test Room north wall", "to": "Test Room south wall", "lengthM": 3 }
+      ]
+    }
+  ],
+  "landmarks": []
+}

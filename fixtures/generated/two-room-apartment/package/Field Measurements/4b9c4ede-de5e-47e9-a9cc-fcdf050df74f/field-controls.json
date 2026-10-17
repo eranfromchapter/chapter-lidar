@@ -1,0 +1,146 @@
+{
+  "schemaVersion": "1.0.0",
+  "visitId": "4b9c4ede-de5e-47e9-a9cc-fcdf050df74f",
+  "distances": [
+    {
+      "id": "floor-1-distance-a",
+      "capture": { "captureId": "80d5ff80-5172-40f3-acc9-5cf59acdfd61", "areaKey": "floor-1" },
+      "axis": "A",
+      "from": "Living Room west wall",
+      "to": "Bedroom east wall",
+      "measurement": {
+        "valueMm": 8000,
+        "enteredUnit": "m",
+        "enteredText": "8.000",
+        "method": "laser",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-distance-b",
+      "capture": { "captureId": "80d5ff80-5172-40f3-acc9-5cf59acdfd61", "areaKey": "floor-1" },
+      "axis": "B",
+      "from": "Living Room north wall",
+      "to": "Living Room south wall",
+      "measurement": {
+        "valueMm": 4000,
+        "enteredUnit": "mm",
+        "enteredText": "4000",
+        "method": "laser",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    }
+  ],
+  "ceilingHeights": [
+    {
+      "id": "floor-1-ceiling-room-1",
+      "capture": { "captureId": "80d5ff80-5172-40f3-acc9-5cf59acdfd61", "areaKey": "floor-1" },
+      "room": "Living Room",
+      "location": "Centre of room",
+      "measurement": {
+        "valueMm": 2700,
+        "enteredUnit": "cm",
+        "enteredText": "270",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-ceiling-room-2",
+      "capture": { "captureId": "80d5ff80-5172-40f3-acc9-5cf59acdfd61", "areaKey": "floor-1" },
+      "room": "Bedroom",
+      "location": "Centre of room",
+      "measurement": {
+        "valueMm": 2700,
+        "enteredUnit": "cm",
+        "enteredText": "270",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    }
+  ],
+  "openings": [
+    {
+      "id": "floor-1-opening-door-1",
+      "capture": { "captureId": "80d5ff80-5172-40f3-acc9-5cf59acdfd61", "areaKey": "floor-1" },
+      "room": "Living Room",
+      "label": "Bedroom door",
+      "width": {
+        "valueMm": 900,
+        "enteredUnit": "mm",
+        "enteredText": "900",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      },
+      "height": {
+        "valueMm": 2100,
+        "enteredUnit": "mm",
+        "enteredText": "2100",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-opening-window-1",
+      "capture": { "captureId": "80d5ff80-5172-40f3-acc9-5cf59acdfd61", "areaKey": "floor-1" },
+      "room": "Living Room",
+      "label": "Living window",
+      "width": {
+        "valueMm": 1500,
+        "enteredUnit": "mm",
+        "enteredText": "1500",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      },
+      "height": {
+        "valueMm": 1200,
+        "enteredUnit": "mm",
+        "enteredText": "1200",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-opening-window-2",
+      "capture": { "captureId": "80d5ff80-5172-40f3-acc9-5cf59acdfd61", "areaKey": "floor-1" },
+      "room": "Bedroom",
+      "label": "Bedroom window",
+      "width": {
+        "valueMm": 1200,
+        "enteredUnit": "mm",
+        "enteredText": "1200",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      },
+      "height": {
+        "valueMm": 1200,
+        "enteredUnit": "mm",
+        "enteredText": "1200",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-opening-opening-1",
+      "capture": { "captureId": "80d5ff80-5172-40f3-acc9-5cf59acdfd61", "areaKey": "floor-1" },
+      "room": "Living Room",
+      "label": "Hall passage",
+      "width": {
+        "valueMm": 1000,
+        "enteredUnit": "mm",
+        "enteredText": "1000",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      },
+      "height": {
+        "valueMm": 2100,
+        "enteredUnit": "mm",
+        "enteredText": "2100",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    }
+  ],
+  "floorToFloor": [],
+  "landmarks": []
+}

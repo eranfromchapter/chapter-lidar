@@ -1,0 +1,13 @@
+{
+  "defectId": "inches-as-metres",
+  "title": "Inch values written into metre fields",
+  "baseFixture": "box-room",
+  "affectedFile": "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/capture-model.json",
+  "role": "capture_model",
+  "mutation": "Every length in capture-model.json (polygons, wall ends, heights, thickness, openings, object boxes) multiplied by 39.37007874, as if inches were written into metre fields.",
+  "details": {
+    "factor": 39.370079,
+    "example": { "truthRoomWidthM": 4, "writtenRoomWidth": 157.480315 },
+    "note": "Only capture-model.json is changed; derived plan and mesh files keep the true geometry."
+  }
+}

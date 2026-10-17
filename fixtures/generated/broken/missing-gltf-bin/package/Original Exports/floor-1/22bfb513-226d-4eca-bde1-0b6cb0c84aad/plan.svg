@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 5.000 4.000" width="500" height="400">
+  <title>Floor 1 plan (metres)</title>
+  <polygon points="0.500,3.500 0.500,0.500 4.500,0.500 4.500,3.500" fill="#f4f1ea" stroke="none"/>
+  <line x1="0.500" y1="3.500" x2="0.500" y2="0.500" stroke="#222222" stroke-width="0.08"/>
+  <line x1="0.500" y1="0.500" x2="4.500" y2="0.500" stroke="#222222" stroke-width="0.08"/>
+  <line x1="4.500" y1="0.500" x2="4.500" y2="3.500" stroke="#222222" stroke-width="0.08"/>
+  <line x1="4.500" y1="3.500" x2="0.500" y2="3.500" stroke="#222222" stroke-width="0.08"/>
+  <line class="door" x1="1.950" y1="3.500" x2="1.050" y2="3.500" stroke="#a0522d" stroke-width="0.12"/>
+  <line class="window" x1="1.900" y1="0.500" x2="3.100" y2="0.500" stroke="#1e90ff" stroke-width="0.12"/>
+  <text x="2.500" y="2.000" font-family="Helvetica, Arial, sans-serif" font-size="0.3" text-anchor="middle">Test Room</text>
+</svg>

@@ -1,0 +1,9 @@
+{
+  "defectId": "empty-file",
+  "title": "A package file is empty",
+  "baseFixture": "box-room",
+  "affectedFile": "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/plan.dxf",
+  "role": "plan_dxf",
+  "mutation": "plan.dxf replaced by a zero-byte file; the manifest records 0 bytes and the SHA-256 of nothing.",
+  "details": {}
+}
