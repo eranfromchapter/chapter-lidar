@@ -75,8 +75,10 @@ Values are set in the environment, never in the repo.
 
 - Azure needs no secret: sign-in uses OIDC (section 4). The ids are not secret.
 - `APP_STORE_CONNECT_API_KEY_P8` is the full content of the `.p8` file, pasted as is.
-- The HUB credential is not in GitHub. It lives in Key Vault `kv-chapter-capture-<env>` and the
-  container apps read it with their managed identity.
+- The HUB credential is not in GitHub. It lives in Key Vault `kv-chapter-capture-stg` (staging)
+  or `kv-chapter-capture-prod` (production), and the container apps read it with their managed
+  identity. Key Vault and storage use the short suffixes `stg` and `prod` because of Azure name
+  length limits (storage: `stchaptercapturestg`, `stchaptercaptureprod`).
 
 To set them from a terminal (the value is read from a prompt or a file, never typed on the
 command line):
@@ -125,8 +127,9 @@ Fixed names, shared with `infra/` (see `docs/waves/specs/F12.md`). `<env>` is `s
 | Migration job (Container Apps) | `caj-capture-migrate-<env>`     |
 
 - The migration job is a manually triggered Container Apps job in the same environment as the
-  API, with the API's identity, database settings and Key Vault references. Its command is
-  `npm run migrate --workspace station/api`. The workflow only changes its image. If the job does
+  API, with the API's identity, database settings and Key Vault references. Its command,
+  defined in `infra/`, is `node dist/core/migrate-main.js` (built into the API runtime image).
+  The workflow only changes its image. If the job does
   not exist, the deploy stops before anything changes.
 - Each app and the job have one container and pull from `acrchaptercapture` with a managed
   identity.

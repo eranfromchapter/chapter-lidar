@@ -12,7 +12,8 @@
 # Resource names are fixed by docs/waves/specs/F12.md and shared with infra/ (Bicep):
 #   rg-chapter-capture-<env>, ca-capture-api-<env>, ca-capture-worker-<env>, acrchaptercapture.
 # The migration job caj-capture-migrate-<env> is a manually triggered Container Apps job that
-# runs `npm run migrate --workspace station/api` with the API's database settings.
+# runs `node dist/core/migrate-main.js` (built into the API runtime image) with the API's
+# database settings. The job and its command are defined in infra/.
 name: deploy-station
 
 on:
