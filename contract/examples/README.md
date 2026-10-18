@@ -17,8 +17,10 @@ with each other:
 | Floor 1 | `3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35` | `floor-1` |
 | Floor 2 | `a81d5f03-6c2e-4b97-8d14-2f9e7b3c5a60` | `floor-2` |
 
-The capture model example is the Floor 1 capture (one file per capture). The address, people
-and numbers are illustrative test data.
+The capture model examples are one file per capture: `floor-1.json` is schema 1.0.0 and
+`floor-2.json` is schema 1.1.0 with the fields 1.1.0 adds (room `type` and `typeSource`, door
+`isOpen`, object `attributes` and `parentId`). The address, people and numbers are illustrative
+test data.
 
 Each invalid example is its valid example with exactly one defect:
 
@@ -27,6 +29,8 @@ Each invalid example is its valid example with exactly one defect:
 | capture-record | `unknown-mode.json`                     | `captures[0].mode` is `whole_floor`, not `room`/`floor`/`exterior`     |
 | capture-record | `capture-without-capture-id.json`       | `captures[1]` has no `captureId`; every capture is registered by id    |
 | capture-model  | `z-up.json`                             | `coordinateSystem.up` is `+Z`; the contract is +Y up                   |
+| capture-model  | `room-type-in-1.0.0.json`               | Floor 1 (1.0.0) with a room `type` and `typeSource`, added in 1.1.0    |
+| capture-model  | `unknown-room-type.json`                | Floor 2 with `rooms[0].type` `garage`, outside the closed room types   |
 | field-controls | `measured-from-scan.json`               | a distance `method` is `scan`; only `tape` or `laser` count            |
 | field-controls | `landmark-in-one-capture.json`          | a shared landmark lists one capture; two or more are required          |
 | manifest       | `unknown-role.json`                     | a file `role` is `revit_model`, outside the closed role enum           |

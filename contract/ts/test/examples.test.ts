@@ -18,6 +18,10 @@ const DEFECT_AT: Record<string, string> = {
   "capture-record/capture-without-capture-id.json": "/captures/1",
   "capture-record/unknown-mode.json": "/captures/0/mode",
   "capture-model/z-up.json": "/coordinateSystem/up",
+  "capture-model/unknown-room-type.json": "/rooms/0/type",
+  // schemaVersion (root) decides which fields are allowed, so Ajv also reports at the root;
+  // capture-model-versions.test.ts checks the exact pointers.
+  "capture-model/room-type-in-1.0.0.json": "",
   "field-controls/landmark-in-one-capture.json": "/landmarks/0/captures",
   "field-controls/measured-from-scan.json": "/distances/0/measurement/method",
   "manifest/capture-model-without-capture-id.json": "/files/4",
