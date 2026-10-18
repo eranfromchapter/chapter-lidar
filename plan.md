@@ -546,4 +546,7 @@ P9: done
 P10: done
 P13: done
 P6c: merged
+P2-fix1: running
+P5-fix1: running
+P6c-fix1: pending
 ```
