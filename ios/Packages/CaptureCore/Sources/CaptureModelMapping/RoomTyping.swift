@@ -113,6 +113,9 @@ public enum RoomTyping {
   /// within the capture, compared ignoring case and repeated spaces as the station's photo
   /// coverage check compares them: a label already used gets ` 2`, ` 3` and so on, and a derived
   /// label gives way to an override.
+  ///
+  /// When a label and its number would be longer than `maximumLabelLength`, the label is
+  /// shortened so the number fits (see `label(_:number:)`).
   public static func labels(
     for results: [Result], captureLabel: String, overrides: [String] = []
   ) -> [String] {
@@ -130,7 +133,7 @@ public enum RoomTyping {
       guard let base else { return "Room \(index + 1)" }
       guard totals[base, default: 0] > 1 else { return base }
       numbered[base, default: 0] += 1
-      return "\(base) \(numbered[base, default: 0])"
+      return label(base, number: numbered[base, default: 0])
     }
 
     let overridden: [String?] = results.indices.map { index in
@@ -150,7 +153,7 @@ public enum RoomTyping {
         let base = label
         var suffix = 2
         repeat {
-          label = "\(base) \(suffix)"
+          label = Self.label(base, number: suffix)
           suffix += 1
         } while isUsed(label) || reserved.contains(key(label))
       }
@@ -158,6 +161,29 @@ public enum RoomTyping {
       labels.append(label)
     }
     return labels
+  }
+
+  /// The longest room label the capture-model schema allows (`room.label` maxLength 100),
+  /// counted in Unicode scalars as JSON Schema counts it. A label within it is also within the
+  /// 100 characters the app allows for a photo's room label.
+  public static let maximumLabelLength = 100
+
+  /// `base`, a space and `number`, for example `Bedroom 2`. When that would be longer than
+  /// `maximumLabelLength` Unicode scalars, whole characters are dropped from the end of `base`,
+  /// and then any white space left at its end, so the number fits. A capture label can be 100
+  /// characters, and two mixed rooms would otherwise make `<label> 1` and `<label> 2` too long
+  /// for the schema and for photo labels.
+  static func label(_ base: String, number: Int) -> String {
+    let suffix = " \(number)"
+    let available = maximumLabelLength - suffix.unicodeScalars.count
+    guard base.unicodeScalars.count > available else { return base + suffix }
+    var shortened = Substring(base)
+    var length = base.unicodeScalars.count
+    while length > available, let last = shortened.popLast() {
+      length -= last.unicodeScalars.count
+    }
+    while shortened.last?.isWhitespace == true { shortened.removeLast() }
+    return String(shortened) + suffix
   }
 
   /// A label as the uniqueness rule compares it: lower case, runs of white space as one space.

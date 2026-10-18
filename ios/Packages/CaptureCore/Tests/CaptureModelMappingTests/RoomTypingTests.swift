@@ -166,6 +166,41 @@ final class RoomTypingTests: XCTestCase {
       ["Bedroom 2", "Bedroom 1", "Bedroom 2 2"])
   }
 
+  func testNumberedLabelsStayWithinTheSchemaLimit() {
+    func a(_ count: Int) -> String { String(repeating: "a", count: count) }
+    // A capture label can be 100 characters: the number takes the end of it.
+    XCTAssertEqual(RoomTyping.labels(for: [.mixed, .mixed], captureLabel: a(100)), [a(98) + " 1", a(98) + " 2"])
+    XCTAssertEqual(RoomTyping.labels(for: [.mixed], captureLabel: a(100)), [a(100)], "no number, not shortened")
+    let ten = RoomTyping.labels(for: Array(repeating: .mixed, count: 10), captureLabel: a(100))
+    XCTAssertEqual(ten.first, a(98) + " 1")
+    XCTAssertEqual(ten.last, a(97) + " 10")
+    XCTAssertEqual(Set(ten).count, 10)
+    XCTAssertEqual(
+      RoomTyping.labels(for: [.mixed, .mixed], captureLabel: a(97) + " bc"), [a(97) + " 1", a(97) + " 2"],
+      "white space left at the end of the shortened label is dropped")
+    // Counted in Unicode scalars as the schema counts them, dropping whole characters: e and a
+    // combining accent are one character and two scalars.
+    let accented = "a" + String(repeating: "e\u{301}", count: 49) + "b"
+    XCTAssertEqual(
+      RoomTyping.labels(for: [.mixed, .mixed], captureLabel: accented),
+      ["a" + String(repeating: "e\u{301}", count: 48) + " 1", "a" + String(repeating: "e\u{301}", count: 48) + " 2"])
+    // A label made unique gets its number the same way.
+    XCTAssertEqual(
+      RoomTyping.labels(for: [.unknown, .unknown], captureLabel: "Floor 1", overrides: [a(99), a(99)]),
+      [a(99), a(98) + " 2"])
+    // `<label> 1` taken by an override would become `<label> 1 2`; shortened, it is `<label> 2`,
+    // so the next mixed room moves on to 3.
+    let clash = RoomTyping.labels(
+      for: [.mixed, .mixed, .unknown], captureLabel: a(100), overrides: ["", "", a(98) + " 1"])
+    XCTAssertEqual(clash, [a(98) + " 2", a(98) + " 3", a(98) + " 1"])
+
+    for labels in [ten, clash, RoomTyping.labels(for: [.mixed, .mixed], captureLabel: accented)] {
+      for label in labels {
+        XCTAssertLessThanOrEqual(label.unicodeScalars.count, RoomTyping.maximumLabelLength, label)
+      }
+    }
+  }
+
   // MARK: Through the mapper
 
   func testTwoRoomApartmentIsALivingRoomAndABedroomFromItsSections() throws {
@@ -215,6 +250,25 @@ final class RoomTypingTests: XCTestCase {
     XCTAssertEqual(model.rooms.map(\.label), [mapped.context.label, "Bedroom"])
     XCTAssertEqual(model.rooms.map(\.type), [nil, .bedroom])
     XCTAssertEqual(model.rooms.map(\.typeSource), [nil, .roomplanSection])
+  }
+
+  /// A 100-character floor label and two mixed rooms, as a paused and resumed walk-through can
+  /// give: the numbered labels stay within the schema's 100.
+  func testTwoMixedRoomsWithALongCaptureLabelValidateAgainstTheSchema() throws {
+    var mapped = try mapFixture("two-room-apartment")
+    mapped.context.roomLabels = []
+    mapped.context.label = String(repeating: "a", count: 100)
+    for index in mapped.document.rooms.indices {
+      let section = try XCTUnwrap(mapped.document.rooms[index].sections.first)
+      mapped.document.rooms[index].sections.append(
+        RoomPlanSection(label: "kitchen", story: section.story, center: section.center))
+    }
+    let model = try CaptureModelMapper.map(mapped.document, context: mapped.context)
+    let shortened = String(repeating: "a", count: 98)
+    XCTAssertEqual(model.rooms.map(\.label), [shortened + " 1", shortened + " 2"])
+    XCTAssertEqual(model.rooms.map(\.type), [nil, nil])
+    let validator = try SchemaValidator(schemaURL: Fixtures.schemaURL("capture-model.schema.json"))
+    XCTAssertEqual(validator.validate(try encodedJSON(model)), [])
   }
 
   func testUnidentifiedSectionFallsBackToTheObjects() throws {
