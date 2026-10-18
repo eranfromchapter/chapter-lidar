@@ -168,7 +168,7 @@ export function buildRoomPlanJson(capture: CaptureSpec, captureId: string): unkn
   }
   // A structure also lists every room's elements at the top level.
   const all = (key: string) =>
-    rooms.flatMap((room) => (room as Record<string, unknown[]>)[key] as unknown[]);
+    rooms.flatMap((room) => (room as unknown as Record<string, unknown[]>)[key] as unknown[]);
   return {
     version: 1,
     identifier: uuidFrom(`${captureId}:raw:structure`).toUpperCase(),
