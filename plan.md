@@ -516,13 +516,13 @@ Executed by `/wave-planning:wave-execute`. See that skill for the worktree, disp
 ```yaml status
 base_branch: main
 integration_branch: wave/integration
-integration_head: 14d9178
+integration_head: 95bd895
 W1: done
 W2: done
 W3: done
 W4: done
 W5: done
-W6: running
+W6: done
 P1a: done
 P1b: done
 P1c: done
@@ -545,8 +545,14 @@ P6b: done
 P9: done
 P10: done
 P13: done
-P6c: merged
-P2-fix1: merged
-P5-fix1: merged
-P6c-fix1: running
+P6c: done
+P2-fix1: done
+P5-fix1: done
+P6c-fix1: done
 ```
+
+Gate log W6: all runnable checks PASS (F6.AC1-AC4; AC4 on the real local stack, 32 files verified, checks_queued).
+F6.AC5 (simulator UI test) and F6.AC6 (visual) accepted by the user to verify on the first GitHub push.
+Fix round 1 (user-approved): camera feed on live scan (P2-fix1), "No rooms skipped" confirm (P5-fix1),
+app wiring + sign-out link on New capture before any scan (P6c-fix1). Gate, AppCore (36 tests), release build, E2E re-run: PASS.
+Open: a different account signing in resumes the previous operator's sealed uploads (decision needed).
