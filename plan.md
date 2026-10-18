@@ -454,7 +454,7 @@ integration_checks: ["http:GET http://localhost:8080/health returns 200", "cmd:s
 ```yaml wave
 wave: 6
 phases: [P6c]
-integration_owned: []
+integration_owned: [.gitignore]
 criteria: [F6.AC1, F6.AC2, F6.AC3, F6.AC4, F6.AC5, F6.AC6]
 integration_checks: ["cmd:scripts/wait-workflow.sh ios.yml", "cmd:scripts/wait-workflow.sh ci.yml"]
 ```
@@ -545,5 +545,5 @@ P6b: done
 P9: done
 P10: done
 P13: done
-P6c: running
+P6c: merged
 ```
