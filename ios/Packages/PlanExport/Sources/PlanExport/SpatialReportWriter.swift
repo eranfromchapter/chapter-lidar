@@ -140,7 +140,7 @@ public enum SpatialReportWriter {
           object.id,
           object.category.rawValue.replacingOccurrences(of: "_", with: " "),
           object.roomId.flatMap { roomLabels[$0] } ?? "-",
-          "\(dimension(object.sizeM.x)) x \(dimension(object.sizeM.z))",
+          footprint(widthM: object.sizeM.x, depthM: object.sizeM.z),
           dimension(object.sizeM.y),
           object.confidence?.rawValue ?? "-",
         ]
@@ -176,6 +176,13 @@ public enum SpatialReportWriter {
   /// Whole millimetres and feet-inches on two lines.
   private static func dimension(_ metres: Double) -> String {
     "\(Format.millimetres(metres)) mm\n\(Format.feetInches(millimetres: metres * 1000))"
+  }
+
+  /// Width x depth: whole millimetres on the first line, feet-inches on the second.
+  private static func footprint(widthM: Double, depthM: Double) -> String {
+    "\(Format.millimetres(widthM)) x \(Format.millimetres(depthM)) mm\n"
+      + "\(Format.feetInches(millimetres: widthM * 1000)) x "
+      + Format.feetInches(millimetres: depthM * 1000)
   }
 
   private static func noteList(_ notes: [CaptureRecord.RoomNote]) -> String {

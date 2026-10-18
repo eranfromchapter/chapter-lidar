@@ -5,15 +5,21 @@ import XCTest
 @testable import PlanExport
 
 final class ExportAllTests: XCTestCase {
-  func testExportAllWritesTheSixFilesForEveryFixtureCapture() throws {
+  /// The six files exportAll writes today, in today's order. New files may be added, but each of
+  /// these must still be written, under the same name and role and in this order.
+  private let todaysFiles: [(name: String, role: FileRole)] = [
+    ("plan.dxf", .planDXF), ("rooms.csv", .roomsCSV), ("plan.pdf", .planPDF),
+    ("spatial-report.pdf", .spatialReportPDF), ("plan.png", .planPNG), ("plan.svg", .planSVG),
+  ]
+
+  func testExportAllStillWritesTodaysSixFilesForEveryFixtureCapture() throws {
     for capture in try Fixtures.all() {
       let files = try PlanExporter.exportAll(model: capture.model, record: capture.record)
-      XCTAssertEqual(
-        files.map(\.fileName),
-        ["plan.dxf", "rooms.csv", "plan.pdf", "spatial-report.pdf", "plan.png", "plan.svg"])
-      XCTAssertEqual(
-        files.map(\.role),
-        [.planDXF, .roomsCSV, .planPDF, .spatialReportPDF, .planPNG, .planSVG])
+      // Superset check: other files may come before, between or after today's six.
+      let todays = files.filter { file in todaysFiles.contains { $0.name == file.fileName } }
+      XCTAssertEqual(todays.map(\.fileName), todaysFiles.map(\.name), capture.fixture)
+      XCTAssertEqual(todays.map(\.role), todaysFiles.map(\.role), capture.fixture)
+      XCTAssertEqual(Set(files.map(\.fileName)).count, files.count, "file names are unique")
       for file in files {
         XCTAssertFalse(file.data.isEmpty, file.fileName)
         XCTAssertEqual(file.generator, PlanExportInfo.generator)

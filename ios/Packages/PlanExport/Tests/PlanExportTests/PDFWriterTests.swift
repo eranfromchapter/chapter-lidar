@@ -95,6 +95,21 @@ final class PDFWriterTests: XCTestCase {
     }
   }
 
+  func testSpatialReportObjectFootprintHasOneLinePerUnit() throws {
+    let capture = try XCTUnwrap(Fixtures.load("two-room-apartment").first)
+    let (_, report) = try both(capture)
+    let shown = report.shownText()
+    // The sofa is 2000 mm wide and 900 mm deep, the bed 1600 mm by 2000 mm.
+    for (metric, imperial) in [
+      ("2000 x 900 mm", "6' 6.74\" x 2' 11.43\""), ("1600 x 2000 mm", "5' 2.99\" x 6' 6.74\""),
+    ] {
+      let line = try XCTUnwrap(shown.firstIndex(of: metric), "report lacks \(metric)\n\(shown)")
+      XCTAssertEqual(shown[line + 1], imperial)
+    }
+    // Not the two dimension cells joined, which mixed the units on one line.
+    XCTAssertFalse(shown.contains("6' 6.74\" x 900 mm"))
+  }
+
   func testPlanTitleBlockFields() throws {
     let capture = try XCTUnwrap(Fixtures.load("box-room").first)
     let (plan, _) = try both(capture)
