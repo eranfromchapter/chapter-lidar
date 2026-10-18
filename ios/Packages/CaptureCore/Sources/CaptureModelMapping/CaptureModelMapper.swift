@@ -87,6 +87,13 @@ public enum CaptureModelMapper {
       wallIndexByRoom.append(indexes)
     }
 
+    // Object ids up front, so that an object can name a parent listed after it.
+    var objectIdByIdentifier: [String: String] = [:]
+    for (index, object) in document.rooms.flatMap(\.objects).enumerated()
+    where objectIdByIdentifier[object.identifier] == nil {
+      objectIdByIdentifier[object.identifier] = "object-\(index + 1)"
+    }
+
     // Pass 2: rooms, openings, objects.
     var counters = ["door": 0, "window": 0, "opening": 0, "object": 0]
     func nextId(_ kind: String) -> String {
@@ -119,7 +126,7 @@ public enum CaptureModelMapper {
               0, surface.transform.translation.y - surface.dimension(1) / 2 - wall.baseY
             ).cleaned,
             widthM: surface.dimension(0).cleaned, heightM: surface.dimension(1).cleaned,
-            confidence: surface.confidence)
+            confidence: surface.confidence, isOpen: kind == "door" ? surface.category.isOpen : nil)
           switch kind {
           case "door": model.doors.append(opening)
           case "window": model.windows.append(opening)
@@ -129,9 +136,15 @@ public enum CaptureModelMapper {
       }
 
       for object in room.objects {
+        let id = nextId("object")
+        let parentId = object.parentIdentifier.flatMap { objectIdByIdentifier[$0] }
+        // The schema takes attribute values of 1 to 100 characters; others are left out.
+        let attributes = object.attributes.filter {
+          !$0.value.isEmpty && $0.value.unicodeScalars.count <= 100
+        }
         model.objects.append(
           CaptureModel.DetectedObject(
-            id: nextId("object"), category: object.category.objectCategory, roomId: roomId,
+            id: id, category: object.category.objectCategory, roomId: roomId,
             box: CaptureModel.OrientedBox(
               center: object.transform.translation.contractVec3,
               sizeM: Vector3(
@@ -140,7 +153,8 @@ public enum CaptureModelMapper {
                 object.dimensions.count > 2 ? object.dimensions[2] : 0
               ).contractVec3,
               rotation: object.transform.rotation),
-            confidence: object.confidence))
+            confidence: object.confidence, attributes: attributes.isEmpty ? nil : attributes,
+            parentId: parentId == id ? nil : parentId))
       }
     }
     return model

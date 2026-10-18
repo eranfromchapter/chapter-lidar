@@ -84,14 +84,19 @@ final class MappingTests: XCTestCase {
       let mapped = try mapFixture(name, capture: index)
       // The generator leaves the confidence of doors, windows and openings out; real RoomPlan
       // reports it and the mapper keeps it (the schema allows it). The generator writes schema
-      // 1.0.0 and the app the current version. Nothing else may differ.
+      // 1.0.0 and the app the current version, whose added fields (door isOpen, object
+      // attributes and parent) are checked by the tests below. Nothing else may differ.
       let json = try encodedJSON(mapped.model)
       let problems = differences(json, mapped.expected, tolerance: oneMillimetre)
         .filter { problem in
           let isOpeningConfidence =
             ["/doors/", "/windows/", "/openings/"].contains { problem.hasPrefix($0.dropLast()) }
             && problem.hasSuffix("/confidence: not expected")
-          return !isOpeningConfidence && !problem.hasPrefix("/schemaVersion:")
+          let isAddedIn1_1 =
+            problem.range(
+              of: #"^/(doors/\d+/isOpen|objects/\d+/(attributes|parentId)): not expected$"#,
+              options: .regularExpression) != nil
+          return !isOpeningConfidence && !isAddedIn1_1 && !problem.hasPrefix("/schemaVersion:")
         }
       XCTAssertEqual(problems, [], "\(name) capture \(index)")
       XCTAssertEqual(json["schemaVersion"]?.string, CaptureModelSchemaVersion.current.rawValue)
@@ -218,6 +223,47 @@ final class MappingTests: XCTestCase {
     mapped.context.roomLabels = ["Kitchen"]
     let model = try CaptureModelMapper.map(mapped.document, context: mapped.context)
     XCTAssertEqual(model.rooms.map(\.label), ["Kitchen", "Room 2"])
+  }
+
+  func testDoorsKeepIsOpenAndOnlyDoorsCarryIt() throws {
+    var mapped = try mapFixture("box-room")
+    XCTAssertEqual(try CaptureModelMapper.map(mapped.document, context: mapped.context).doors.map(\.isOpen), [false])
+    mapped.document.rooms[0].doors[0].category = RoomPlanCategory(name: "door", isOpen: true)
+    // RoomPlan writes isOpen on doors only; a window that carried it would still not get it.
+    mapped.document.rooms[0].windows[0].category = RoomPlanCategory(name: "window", isOpen: true)
+    var model = try CaptureModelMapper.map(mapped.document, context: mapped.context)
+    XCTAssertEqual(model.doors.map(\.isOpen), [true])
+    XCTAssertEqual(model.windows.map(\.isOpen), [nil])
+    mapped.document.rooms[0].doors[0].category = RoomPlanCategory(name: "door")
+    model = try CaptureModelMapper.map(mapped.document, context: mapped.context)
+    XCTAssertEqual(model.doors.map(\.isOpen), [nil], "not reported, not written")
+  }
+
+  func testObjectAttributesAndParentsAreMapped() throws {
+    var mapped = try mapFixture("box-room")
+    let table = mapped.document.rooms[0].objects[0]
+    var sink = table
+    sink.identifier = "SINK"
+    sink.category = RoomPlanCategory(name: "sink")
+    sink.parentIdentifier = "CABINET"  // listed after the sink
+    var cabinet = table
+    cabinet.identifier = "CABINET"
+    cabinet.category = RoomPlanCategory(name: "storage")
+    cabinet.attributes = ["StorageType": "cabinet", "Empty": ""]
+    var chair = table
+    chair.identifier = "CHAIR"
+    chair.category = RoomPlanCategory(name: "chair")
+    chair.parentIdentifier = "NOT-IN-THIS-CAPTURE"
+    chair.attributes = ["ChairType": ""]
+    var shelf = table
+    shelf.identifier = "SHELF"
+    shelf.category = RoomPlanCategory(name: "storage")
+    shelf.parentIdentifier = "SHELF"
+    mapped.document.rooms[0].objects = [table, sink, cabinet, chair, shelf]
+    let objects = try CaptureModelMapper.map(mapped.document, context: mapped.context).objects
+    XCTAssertEqual(objects.map(\.id), ["object-1", "object-2", "object-3", "object-4", "object-5"])
+    XCTAssertEqual(objects.map(\.parentId), [nil, "object-3", nil, nil, nil])
+    XCTAssertEqual(objects.map(\.attributes), [nil, nil, ["StorageType": "cabinet"], nil, nil])
   }
 
   func testObjectDetailsAreDecoded() throws {

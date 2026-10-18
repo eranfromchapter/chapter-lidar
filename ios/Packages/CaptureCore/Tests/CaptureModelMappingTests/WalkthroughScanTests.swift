@@ -41,6 +41,37 @@ final class WalkthroughScanTests: XCTestCase {
     }
   }
 
+  func testSyntheticWalkthroughKeepsDoorStatesAttributesAndParents() throws {
+    let fixture = try Fixtures.roomPlanOnly("apartment-walkthrough")
+    let document = try RoomPlanDocument.decode(from: fixture.roomPlanData())
+    let model = try CaptureModelMapper.map(document, context: try Self.context())
+
+    // Doors open or closed as RoomPlan saw them; windows and openings carry no isOpen.
+    let doors = fixture.expected.openings.filter { $0.kind == "door" }.sorted { $0.index < $1.index }
+    XCTAssertEqual(model.doors.map(\.isOpen), doors.map(\.isOpen))
+    XCTAssertEqual(model.doors.filter { $0.isOpen == true }.count, fixture.expected.totals.openDoors)
+    XCTAssertTrue((model.windows + model.openings).allSatisfy { $0.isOpen == nil })
+
+    // Attributes as RoomPlan wrote them, left out when there are none.
+    let raw = document.rooms[0].objects
+    XCTAssertEqual(model.objects.map(\.attributes), raw.map { $0.attributes.isEmpty ? nil : $0.attributes })
+    XCTAssertTrue(model.objects.contains { $0.category == .storage && $0.attributes?["StorageType"] == "cabinet" })
+    XCTAssertTrue(model.objects.contains { $0.category == .table && $0.attributes?["TableType"] == "coffee" })
+
+    // Parents: the model id of the object RoomPlan names (a sink in a cabinet, a chair at a table).
+    let idByIdentifier = Dictionary(
+      uniqueKeysWithValues: raw.enumerated().map { ($1.identifier, "object-\($0 + 1)") })
+    XCTAssertEqual(model.objects.map(\.parentId), raw.map { $0.parentIdentifier.flatMap { idByIdentifier[$0] } })
+    XCTAssertEqual(model.objects.compactMap(\.parentId).count, 4)
+    let byId = Dictionary(uniqueKeysWithValues: model.objects.map { ($0.id, $0) })
+    for object in model.objects where object.category == .sink {
+      XCTAssertEqual(object.parentId.flatMap { byId[$0] }?.category, .storage, object.id)
+    }
+
+    let validator = try SchemaValidator(schemaURL: Fixtures.schemaURL("capture-model.schema.json"))
+    XCTAssertEqual(validator.validate(try encodedJSON(model)), [])
+  }
+
   /// Real RoomPlan exports kept on this machine only (they are never committed). Set
   /// CHAPTER_REAL_ROOMPLAN_DIR to a folder; every `roomplan.json` below it must decode with
   /// `RoomPlanDocument`, map with `CaptureModelMapper` and validate against the schema:
@@ -76,6 +107,14 @@ final class WalkthroughScanTests: XCTestCase {
           "\(name): \(document.rooms.count) RoomPlan room(s) -> \(model.rooms.count) room(s), "
             + "\(model.walls.count) walls, \(model.doors.count) doors, \(model.windows.count) windows, "
             + "\(model.openings.count) openings, \(model.objects.count) objects")
+
+        XCTAssertTrue(model.doors.allSatisfy { $0.isOpen != nil }, "\(name): RoomPlan reports isOpen on every door")
+        let objectIds = Set(model.objects.map(\.id))
+        XCTAssertTrue(model.objects.allSatisfy { $0.parentId.map(objectIds.contains) ?? true }, name)
+        print(
+          "  \(model.doors.filter { $0.isOpen == true }.count) of \(model.doors.count) doors open, "
+            + "\(model.objects.filter { $0.attributes != nil }.count) objects with attributes, "
+            + "\(model.objects.filter { $0.parentId != nil }.count) with a parent")
       } catch {
         XCTFail("\(name): \(error)")
       }
