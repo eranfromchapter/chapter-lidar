@@ -45,6 +45,9 @@ final class AppModel {
   private(set) var screen: Screen
   private(set) var isSigningIn = false
   private(set) var signInMessage: String? = nil
+  /// Sealed packages whose upload the station has not confirmed yet (they stay on disk and
+  /// resume after sign-in; sign-out deletes nothing).
+  private(set) var pendingUploadCount = 0
 
   @ObservationIgnored private var services: AppServices? = nil
   @ObservationIgnored private var signedIn: SignedInOperator? = nil
@@ -144,7 +147,9 @@ final class AppModel {
     }
   }
 
-  /// Removes the account from MSAL's Keychain cache and the offline project list.
+  /// Removes the account from MSAL's Keychain cache and the offline project list, then shows the
+  /// sign-in screen. Deletes no file: sealed packages not yet confirmed by the station stay in
+  /// `visitsRoot` and their uploads resume after the next sign-in.
   func signOut() async {
     services?.signIn?.signOut()
     try? await services?.projects.clearCache()
@@ -210,10 +215,16 @@ final class AppModel {
       })
     uploads[key] = coordinator
     coordinator.start()
+    countPendingUploads()
     return coordinator
   }
 
+  private func countPendingUploads() {
+    pendingUploadCount = uploads.values.filter { !$0.snapshot.isConfirmedByStation }.count
+  }
+
   private func uploadChanged(_ snapshot: UploadSnapshot) {
+    countPendingUploads()
     if case .visit(let visit) = screen {
       visit.uploadChanged(snapshot)
     }

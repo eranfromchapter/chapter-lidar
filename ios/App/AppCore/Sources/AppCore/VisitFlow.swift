@@ -1,5 +1,6 @@
 import CaptureContract
 import CaptureCore
+import FieldRules
 import Foundation
 
 /// The screens of one site visit, in the order of the frozen design:
@@ -52,8 +53,24 @@ public struct VisitFlow: Equatable, Sendable {
   public private(set) var record: CaptureRecord?
   /// True once the package was sealed (assembled read-only). Nothing can be added after that.
   public private(set) var isSealed = false
+  /// The operator's "No rooms skipped" tap on the checklist. A new visit starts unconfirmed; the
+  /// tap covers only the captures that existed when it was made (FieldRules' rule).
+  public private(set) var noRoomsSkipped = NoRoomsSkippedConfirmation()
 
   public init() {}
+
+  /// The value for `ChecklistInput.noRoomsSkippedConfirmed`: true only while the visit has the
+  /// same captures as at the tap and none of them lists an omitted or inaccessible room.
+  public var noRoomsSkippedConfirmed: Bool {
+    guard let record else { return false }
+    return noRoomsSkipped.isConfirmed(for: record)
+  }
+
+  /// True only on the capture record of a visit with no capture yet, before sealing. Sign-out is
+  /// offered only then, so unsealed originals are never left behind by a sign-out.
+  public var allowsSignOut: Bool {
+    step == .captureRecord && captures.isEmpty && !isSealed
+  }
 
   /// Captures of the visit, in capture order.
   public var captures: [CaptureRecord.Capture] { record?.captures ?? [] }
@@ -122,6 +139,16 @@ public struct VisitFlow: Equatable, Sendable {
       throw VisitFlowError.unknownCapture(captureId)
     }
     step = .photos(captureId: captureId, initialRoom: room)
+  }
+
+  /// "No rooms skipped" on the checklist's skipped-rooms row: the operator confirms that no room
+  /// of the current captures was omitted or inaccessible.
+  public mutating func confirmNoRoomsSkipped() throws {
+    try require(.checklist, "confirm no rooms skipped")
+    guard let record else {
+      throw VisitFlowError.invalidTransition(from: step, event: "confirm no rooms skipped")
+    }
+    noRoomsSkipped.confirm(for: record)
   }
 
   /// "Add controls" on a checklist row.
