@@ -103,10 +103,11 @@ final class ScanViewerModel {
     }
   }
 
-  /// Exports Apple's 3D model of the scan once, then opens it in Quick Look.
+  /// Exports Apple's 3D model of the scan once, then opens it in Quick Look. The cached file is
+  /// named after the capture folder (the capture id), so it is found again after a relaunch.
   func open3D() async {
     let target = FileManager.default.temporaryDirectory
-      .appendingPathComponent("scan-\(abs(item.id.hashValue)).usdz")
+      .appendingPathComponent("scan-\(item.folder.lastPathComponent).usdz")
     if FileManager.default.fileExists(atPath: target.path) {
       modelURL = target
       return

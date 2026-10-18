@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Runs `swift test` for every Swift package under contract/swift and ios/Packages.
+# Runs `swift test` for every Swift package under contract/swift and ios/Packages, and for
+# ios/App/AppCore (the app's Foundation-only logic).
 #
 # - A Swift package is a directory that contains Package.swift.
 # - A package with an `.apple-only` marker file at its root is skipped (it needs
@@ -29,8 +30,13 @@ if [[ -d "${repo_root}/ios/Packages" ]]; then
   done < <(find "${repo_root}/ios/Packages" -mindepth 2 -maxdepth 2 -name Package.swift -type f | LC_ALL=C sort)
 fi
 
+# ios/App/AppCore is the app shell's pure-Swift logic; the rest of ios/App needs Apple frameworks.
+if [[ -f "${repo_root}/ios/App/AppCore/Package.swift" ]]; then
+  packages+=("ios/App/AppCore")
+fi
+
 if [[ ${#packages[@]} -eq 0 ]]; then
-  echo "swift-test: no Swift packages found under contract/swift or ios/Packages; nothing to test."
+  echo "swift-test: no Swift packages found under contract/swift, ios/Packages or ios/App/AppCore; nothing to test."
   exit 0
 fi
 
