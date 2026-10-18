@@ -1,0 +1,14 @@
+// Chapter Capture build configuration. NO SECRETS: these are identifiers, not credentials.
+// The committed values are placeholders; a build with a placeholder shows "App is not
+// configured" and sends nothing. Set real values in Config/Local.xcconfig (do not commit it)
+// or as xcodebuild build settings. In xcconfig files `//` starts a comment, so write URLs as
+// https:/$()/station.example.com
+CHAPTER_ENTRA_CLIENT_ID = __SET_ENTRA_CLIENT_ID__
+CHAPTER_ENTRA_TENANT_ID = __SET_ENTRA_TENANT_ID__
+CHAPTER_STATION_API_SCOPE = __SET_STATION_API_SCOPE__
+CHAPTER_STATION_URL = __SET_STATION_URL__
+
+MARKETING_VERSION = 1.0.0
+CURRENT_PROJECT_VERSION = 1
+
+#include? "Local.xcconfig"
