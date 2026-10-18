@@ -11,6 +11,8 @@ export type {
   CaptureModel,
   CaptureObject,
   Room,
+  RoomType,
+  RoomTypeSource,
   SourceRef,
   Wall,
   WallOpening,

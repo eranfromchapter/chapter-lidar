@@ -2,9 +2,10 @@ import Foundation
 
 /// A validator for the subset of JSON Schema (2020-12) that the contract schemas use, because
 /// Swift has no JSON Schema library in the standard toolchain. Supported keywords: `$ref` (local
-/// `#/...` pointers), `type`, `const`, `enum`, `required`, `properties`, `additionalProperties`
-/// (false), `items`, `minItems`, `maxItems`, `minLength`, `maxLength`, `pattern`, `minimum`,
-/// `maximum`, `exclusiveMinimum`, `if`/`then`/`else`, `not`. Any other keyword that would change
+/// `#/...` pointers), `type`, `const`, `enum`, `required`, `dependentRequired`, `properties`,
+/// `additionalProperties` (false or a schema), `items`, `minItems`, `maxItems`, `minLength`,
+/// `maxLength`, `pattern`, `minimum`, `maximum`, `exclusiveMinimum`, `if`/`then`/`else`, `not`,
+/// and the boolean schemas `true` and `false`. Any other keyword that would change
 /// validation fails loudly (`unsupported keyword`), so a schema change cannot pass silently.
 /// `format` and the annotation keywords (`description`, `title`, `$schema`, `$id`, `$defs`) are ignored.
 public struct SchemaValidator {
@@ -18,9 +19,9 @@ public struct SchemaValidator {
     "$schema", "$id", "$defs", "title", "description", "format",
   ]
   private static let supported: Set<String> = [
-    "$ref", "type", "const", "enum", "required", "properties", "additionalProperties", "items",
-    "minItems", "maxItems", "minLength", "maxLength", "pattern", "minimum", "maximum",
-    "exclusiveMinimum", "if", "then", "else", "not",
+    "$ref", "type", "const", "enum", "required", "dependentRequired", "properties",
+    "additionalProperties", "items", "minItems", "maxItems", "minLength", "maxLength", "pattern",
+    "minimum", "maximum", "exclusiveMinimum", "if", "then", "else", "not",
   ]
 
   /// Problems found in `instance`, as `<json pointer>: <problem>`. Empty when the instance is valid.
@@ -50,8 +51,12 @@ public struct SchemaValidator {
   }
 
   private func check(_ instance: JSON, against schema: JSON, at path: String, into errors: inout [String]) {
-    guard case .object(let keywords) = schema else { return }
     func fail(_ message: String) { errors.append("\(path.isEmpty ? "/" : path): \(message)") }
+    if case .bool(let allowed) = schema {
+      if !allowed { fail("no value is allowed here") }
+      return
+    }
+    guard case .object(let keywords) = schema else { return }
 
     for key in keywords.keys.sorted()
     where !Self.supported.contains(key) && !Self.annotations.contains(key) {
@@ -92,11 +97,22 @@ public struct SchemaValidator {
           fail("missing required \(name)")
         }
       }
+      if case .object(let dependencies)? = keywords["dependentRequired"] {
+        for (present, needed) in dependencies.sorted(by: { $0.key < $1.key }) where members[present] != nil {
+          for case .string(let name) in needed.array ?? [] where members[name] == nil {
+            fail("missing \(name), required with \(present)")
+          }
+        }
+      }
       let properties: [String: JSON]
       if case .object(let declared)? = keywords["properties"] { properties = declared } else { properties = [:] }
-      if case .bool(false)? = keywords["additionalProperties"] {
-        for name in members.keys.sorted() where properties[name] == nil {
-          fail("unexpected property \(name)")
+      if let additional = keywords["additionalProperties"] {
+        for (name, value) in members.sorted(by: { $0.key < $1.key }) where properties[name] == nil {
+          if case .bool(false) = additional {
+            fail("unexpected property \(name)")
+          } else {
+            check(value, against: additional, at: "\(path)/\(name)", into: &errors)
+          }
         }
       }
       for name in members.keys.sorted() {

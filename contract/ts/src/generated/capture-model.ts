@@ -23,6 +23,25 @@ export type Id = string;
  */
 export type Vec3 = [number, number, number];
 /**
+ * What a room is used for.
+ */
+export type RoomType =
+  | "living_room"
+  | "dining_room"
+  | "kitchen"
+  | "bedroom"
+  | "bathroom"
+  | "closet"
+  | "hallway"
+  | "laundry"
+  | "office"
+  | "utility"
+  | "other";
+/**
+ * Where a room type came from: roomplan_section, the RoomPlan section label inside the room; inferred, from the room's objects (a toilet makes a bathroom); operator, chosen by the operator.
+ */
+export type RoomTypeSource = "roomplan_section" | "inferred" | "operator";
+/**
  * Detection confidence reported by the capture framework.
  */
 export type Confidence = "low" | "medium" | "high";
@@ -54,7 +73,10 @@ export type RelativePath = string;
  * Normalized geometry of one capture (one floor or area scan), the single input of every plan and mesh exporter. One file per capture, written as Original Exports/{areaKey}/{captureId}/capture-model.json with role capture_model. Lengths in metres; right-handed coordinates with +Y up, so plan coordinates are X and Z. Coordinates are in this capture's own local frame: captures are not aligned to each other by this model (floor-to-floor levels and shared landmarks are field controls). Ids are unique within the file. Optional fields are omitted, never null.
  */
 export interface CaptureModel {
-  schemaVersion: "1.0.0";
+  /**
+   * 1.1.0 adds the optional room type and typeSource, door isOpen, and object attributes and parentId; a 1.0.0 document does not carry them. Readers accept both versions; writers write 1.1.0.
+   */
+  schemaVersion: "1.0.0" | "1.1.0";
   visitId: Uuid;
   captureId: Uuid;
   areaKey: AreaKey;
@@ -94,6 +116,8 @@ export interface Room {
    * Floor-to-ceiling height in metres.
    */
   heightM: number;
+  type?: RoomType;
+  typeSource?: RoomTypeSource;
 }
 export interface Wall {
   id: Id;
@@ -124,6 +148,10 @@ export interface WallOpening {
   widthM: number;
   heightM: number;
   confidence?: Confidence;
+  /**
+   * Doors only (1.1.0): whether the door stood open during the scan, as the capture framework reports it.
+   */
+  isOpen?: boolean;
 }
 /**
  * Recognized object with an oriented bounding box. Reference geometry only.
@@ -155,6 +183,13 @@ export interface CaptureObject {
     rotation: Quaternion;
   };
   confidence?: Confidence;
+  /**
+   * Attributes the capture framework reports for the object (1.1.0), name to value, for example {"StorageType": "cabinet"} or {"TableType": "coffee", "TableShapeType": "rectangular"}. Names and values are kept as reported. Omitted when there are none.
+   */
+  attributes?: {
+    [k: string]: string;
+  };
+  parentId?: Id;
 }
 export interface SourceRef {
   role: SourceRole;

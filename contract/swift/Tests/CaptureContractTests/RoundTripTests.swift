@@ -4,7 +4,9 @@ import XCTest
 
 /// AC2: every valid example decodes and re-encodes to JSON equal to the original.
 /// "Equal" is semantic: same keys, same values, numbers compared numerically, key order and
-/// whitespace ignored. A dropped field, an added field or a `null` fails the test.
+/// whitespace ignored. A dropped field, an added field or a `null` fails the test. The one
+/// expected change: a capture model is always written as the current version, so a 1.0.0
+/// example comes back as 1.1.0.
 final class RoundTripTests: XCTestCase {
   /// One entry per schema in contract/schema, keyed by the schema name (file name without
   /// `.schema.json`, which is also the example folder name).
@@ -19,6 +21,14 @@ final class RoundTripTests: XCTestCase {
   static func roundTrip<T: Codable>(_ type: T.Type, _ data: Data) throws -> Data {
     let value = try CaptureContractJSON.makeDecoder().decode(T.self, from: data)
     return try CaptureContractJSON.makeEncoder().encode(value)
+  }
+
+  /// The JSON a valid example re-encodes to: the example itself, with a capture model's
+  /// `schemaVersion` set to the version `CaptureModel` writes.
+  static func expectedAfterRoundTrip(schema: String, _ original: JSONValue) -> JSONValue {
+    guard schema == "capture-model", case .object(var members) = original else { return original }
+    members["schemaVersion"] = .string(CaptureModelSchemaVersion.current.rawValue)
+    return .object(members)
   }
 
   func testEverySchemaHasASwiftModel() throws {
@@ -52,8 +62,8 @@ final class RoundTripTests: XCTestCase {
           XCTFail("\(name): does not decode: \(error)")
           continue
         }
-        let differences = try JSONValue.parse(original).differences(
-          from: JSONValue.parse(reencoded))
+        let differences = Self.expectedAfterRoundTrip(schema: schema, try JSONValue.parse(original))
+          .differences(from: try JSONValue.parse(reencoded))
         XCTAssertEqual(
           differences, [],
           "\(name): re-encoded JSON differs:\n" + differences.joined(separator: "\n"))
@@ -92,6 +102,57 @@ final class RoundTripTests: XCTestCase {
     XCTAssertThrowsError(
       try CaptureContractJSON.makeDecoder().decode(
         CaptureRecord.self, from: Data(contentsOf: unknownMode)))
+
+    let unknownRoomType = ContractFiles.examplesDirectory
+      .appendingPathComponent("capture-model/invalid/unknown-room-type.json")
+    XCTAssertThrowsError(
+      try CaptureContractJSON.makeDecoder().decode(
+        CaptureModel.self, from: Data(contentsOf: unknownRoomType)))
+  }
+
+  // MARK: Capture model versions
+
+  private func captureModelExample(_ fileName: String) throws -> Data {
+    try Data(
+      contentsOf: ContractFiles.examplesDirectory.appendingPathComponent(
+        "capture-model/valid/\(fileName)"))
+  }
+
+  func testCaptureModelReadsBothVersionsAndWritesTheCurrentOne() throws {
+    let decoder = CaptureContractJSON.makeDecoder()
+    let old = try decoder.decode(CaptureModel.self, from: captureModelExample("floor-1.json"))
+    XCTAssertEqual(old.schemaVersion, .v1)
+    XCTAssertNil(old.rooms[0].type)
+    let new = try decoder.decode(CaptureModel.self, from: captureModelExample("floor-2.json"))
+    XCTAssertEqual(new.schemaVersion, .v1_1)
+
+    for model in [old, new] {
+      let written = try JSONValue.parse(CaptureContractJSON.makeEncoder().encode(model))
+      guard case .object(let members) = written else { return XCTFail("not an object") }
+      XCTAssertEqual(members["schemaVersion"], .string("1.1.0"))
+    }
+    let created = CaptureModel(
+      visitId: old.visitId, captureId: old.captureId, areaKey: "floor-1", label: "Floor 1")
+    XCTAssertEqual(created.schemaVersion, .current)
+  }
+
+  func testCaptureModelFieldsAddedIn1_1Decode() throws {
+    let model = try CaptureContractJSON.makeDecoder().decode(
+      CaptureModel.self, from: captureModelExample("floor-2.json"))
+    XCTAssertEqual(model.rooms.map(\.type), [.bedroom, .bathroom])
+    XCTAssertEqual(model.rooms.map(\.typeSource), [.roomplanSection, .inferred])
+    XCTAssertEqual(model.doors.map(\.isOpen), [true, false])
+    XCTAssertEqual(model.windows.map(\.isOpen), [nil])
+    XCTAssertEqual(model.objects[2].attributes, ["StorageType": "cabinet"])
+    XCTAssertEqual(model.objects[3].parentId, model.objects[2].id)
+    XCTAssertNil(model.objects[0].attributes)
+  }
+
+  func testCaptureModelRejectsAnUnknownVersion() throws {
+    let text = String(decoding: try captureModelExample("floor-1.json"), as: UTF8.self)
+      .replacingOccurrences(of: "\"1.0.0\"", with: "\"1.2.0\"")
+    XCTAssertThrowsError(
+      try CaptureContractJSON.makeDecoder().decode(CaptureModel.self, from: Data(text.utf8)))
   }
 
   func testEncoderDoesNotEscapeSlashesInPaths() throws {

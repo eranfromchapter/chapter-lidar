@@ -83,15 +83,18 @@ final class MappingTests: XCTestCase {
     for (name, index) in allGeneratedCaptures {
       let mapped = try mapFixture(name, capture: index)
       // The generator leaves the confidence of doors, windows and openings out; real RoomPlan
-      // reports it and the mapper keeps it (the schema allows it). Nothing else may differ.
-      let problems = differences(try encodedJSON(mapped.model), mapped.expected, tolerance: oneMillimetre)
+      // reports it and the mapper keeps it (the schema allows it). The generator writes schema
+      // 1.0.0 and the app the current version. Nothing else may differ.
+      let json = try encodedJSON(mapped.model)
+      let problems = differences(json, mapped.expected, tolerance: oneMillimetre)
         .filter { problem in
           let isOpeningConfidence =
             ["/doors/", "/windows/", "/openings/"].contains { problem.hasPrefix($0.dropLast()) }
             && problem.hasSuffix("/confidence: not expected")
-          return !isOpeningConfidence
+          return !isOpeningConfidence && !problem.hasPrefix("/schemaVersion:")
         }
       XCTAssertEqual(problems, [], "\(name) capture \(index)")
+      XCTAssertEqual(json["schemaVersion"]?.string, CaptureModelSchemaVersion.current.rawValue)
     }
   }
 

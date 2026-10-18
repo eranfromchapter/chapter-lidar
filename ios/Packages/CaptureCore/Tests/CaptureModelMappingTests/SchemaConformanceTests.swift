@@ -103,6 +103,22 @@ final class SchemaConformanceTests: XCTestCase {
     }
   }
 
+  /// The schema 1.1.0 rules on the 1.1.0 contract example: each change breaks exactly one rule.
+  func testValidatorChecksTheCaptureModel1_1Rules() throws {
+    let validator = try validator()
+    let url = Fixtures.repositoryRoot.appendingPathComponent("contract/examples/capture-model/valid/floor-2.json")
+    let text = try String(contentsOf: url, encoding: .utf8)
+    XCTAssertEqual(try validator.validate(jsonData: Data(text.utf8)), [])
+    func problems(replacing target: String, with replacement: String) throws -> [String] {
+      XCTAssertTrue(text.contains(target), "floor-2.json has no \(target)")
+      return try validator.validate(jsonData: Data(text.replacingOccurrences(of: target, with: replacement).utf8))
+    }
+    XCTAssertFalse(try problems(replacing: "\"1.1.0\"", with: "\"1.0.0\"").isEmpty, "1.1.0 fields in a 1.0.0 document")
+    XCTAssertFalse(try problems(replacing: ",\n      \"typeSource\": \"inferred\"", with: "").isEmpty, "type without typeSource")
+    XCTAssertFalse(try problems(replacing: "\"id\": \"f2-window-1\",", with: "\"id\": \"f2-window-1\", \"isOpen\": true,").isEmpty, "isOpen on a window")
+    XCTAssertFalse(try problems(replacing: "\"StorageType\": \"cabinet\"", with: "\"StorageType\": 3").isEmpty, "attribute that is not a string")
+  }
+
   func testValidatorCatchesDefectsInAMappedModel() throws {
     let validator = try validator()
     var model = try mapFixture("box-room").model

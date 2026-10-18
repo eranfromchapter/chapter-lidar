@@ -1,0 +1,212 @@
+{
+  "schemaVersion": "1.1.0",
+  "visitId": "7c4e1b9a-2d3f-4a68-9b5c-e0f1a2b3c4d5",
+  "captureId": "a81d5f03-6c2e-4b97-8d14-2f9e7b3c5a60",
+  "areaKey": "floor-2",
+  "label": "Floor 2",
+  "coordinateSystem": {
+    "units": "m",
+    "handedness": "right",
+    "up": "+Y"
+  },
+  "rooms": [
+    {
+      "id": "f2-room-1",
+      "label": "Bedroom",
+      "polygon": [
+        [0, 0, 0],
+        [0, 0, 3.5],
+        [4, 0, 3.5],
+        [4, 0, 0]
+      ],
+      "heightM": 2.4,
+      "type": "garage",
+      "typeSource": "roomplan_section"
+    },
+    {
+      "id": "f2-room-2",
+      "label": "Bathroom",
+      "polygon": [
+        [4, 0, 0],
+        [4, 0, 3.5],
+        [6, 0, 3.5],
+        [6, 0, 0]
+      ],
+      "heightM": 2.4,
+      "type": "bathroom",
+      "typeSource": "inferred"
+    }
+  ],
+  "walls": [
+    {
+      "id": "f2-wall-1",
+      "start": [0, 0, 0],
+      "end": [4, 0, 0],
+      "heightM": 2.4,
+      "thicknessM": 0,
+      "roomIds": ["f2-room-1"],
+      "confidence": "high"
+    },
+    {
+      "id": "f2-wall-2",
+      "start": [4, 0, 0],
+      "end": [6, 0, 0],
+      "heightM": 2.4,
+      "thicknessM": 0,
+      "roomIds": ["f2-room-2"],
+      "confidence": "high"
+    },
+    {
+      "id": "f2-wall-3",
+      "start": [6, 0, 0],
+      "end": [6, 0, 3.5],
+      "heightM": 2.4,
+      "thicknessM": 0,
+      "roomIds": ["f2-room-2"],
+      "confidence": "high"
+    },
+    {
+      "id": "f2-wall-4",
+      "start": [6, 0, 3.5],
+      "end": [4, 0, 3.5],
+      "heightM": 2.4,
+      "thicknessM": 0,
+      "roomIds": ["f2-room-2"],
+      "confidence": "high"
+    },
+    {
+      "id": "f2-wall-5",
+      "start": [4, 0, 3.5],
+      "end": [0, 0, 3.5],
+      "heightM": 2.4,
+      "thicknessM": 0,
+      "roomIds": ["f2-room-1"],
+      "confidence": "high"
+    },
+    {
+      "id": "f2-wall-6",
+      "start": [0, 0, 3.5],
+      "end": [0, 0, 0],
+      "heightM": 2.4,
+      "thicknessM": 0,
+      "roomIds": ["f2-room-1"],
+      "confidence": "medium"
+    },
+    {
+      "id": "f2-wall-7",
+      "start": [4, 0, 0],
+      "end": [4, 0, 3.5],
+      "heightM": 2.4,
+      "thicknessM": 0,
+      "roomIds": ["f2-room-1", "f2-room-2"],
+      "confidence": "high"
+    }
+  ],
+  "doors": [
+    {
+      "id": "f2-door-1",
+      "wallId": "f2-wall-6",
+      "offsetM": 1.75,
+      "bottomM": 0,
+      "widthM": 0.9,
+      "heightM": 2.03,
+      "confidence": "high",
+      "isOpen": true
+    },
+    {
+      "id": "f2-door-2",
+      "wallId": "f2-wall-7",
+      "offsetM": 2.8,
+      "bottomM": 0,
+      "widthM": 0.8,
+      "heightM": 2.03,
+      "confidence": "medium",
+      "isOpen": false
+    }
+  ],
+  "windows": [
+    {
+      "id": "f2-window-1",
+      "wallId": "f2-wall-1",
+      "offsetM": 2,
+      "bottomM": 0.9,
+      "widthM": 1.2,
+      "heightM": 1.2,
+      "confidence": "high"
+    }
+  ],
+  "openings": [],
+  "objects": [
+    {
+      "id": "f2-object-1",
+      "category": "bed",
+      "roomId": "f2-room-1",
+      "box": {
+        "center": [2, 0.3, 1.2],
+        "sizeM": [1.6, 0.6, 2],
+        "rotation": [0, 0, 0, 1]
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "f2-object-2",
+      "category": "chair",
+      "roomId": "f2-room-1",
+      "box": {
+        "center": [3.4, 0.5, 3],
+        "sizeM": [0.6, 1, 0.6],
+        "rotation": [0, 0.3826834, 0, 0.9238795]
+      },
+      "confidence": "medium",
+      "attributes": {
+        "ChairArmType": "existing",
+        "ChairBackType": "existing",
+        "ChairLegType": "star",
+        "ChairType": "swivel"
+      }
+    },
+    {
+      "id": "f2-object-3",
+      "category": "storage",
+      "roomId": "f2-room-2",
+      "box": {
+        "center": [5.7, 0.43, 2.5],
+        "sizeM": [0.6, 0.86, 1],
+        "rotation": [0, 0, 0, 1]
+      },
+      "confidence": "medium",
+      "attributes": {
+        "StorageType": "cabinet"
+      }
+    },
+    {
+      "id": "f2-object-4",
+      "category": "sink",
+      "roomId": "f2-room-2",
+      "box": {
+        "center": [5.7, 0.8, 2.5],
+        "sizeM": [0.45, 0.15, 0.6],
+        "rotation": [0, 0, 0, 1]
+      },
+      "confidence": "low",
+      "parentId": "f2-object-3"
+    },
+    {
+      "id": "f2-object-5",
+      "category": "toilet",
+      "roomId": "f2-room-2",
+      "box": {
+        "center": [5.6, 0.38, 0.6],
+        "sizeM": [0.4, 0.76, 0.7],
+        "rotation": [0, 0.7071068, 0, 0.7071068]
+      },
+      "confidence": "medium"
+    }
+  ],
+  "refs": [
+    {
+      "role": "raw_roomplan_json",
+      "path": "Original Exports/floor-2/a81d5f03-6c2e-4b97-8d14-2f9e7b3c5a60/roomplan.json"
+    }
+  ]
+}

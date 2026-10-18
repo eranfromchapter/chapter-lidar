@@ -1,11 +1,22 @@
 // Closed value sets from contract/schema. SchemaParityTests reads the schema files and fails
 // when a case here is missing from, or extra to, the schema.
 
-/// `schemaVersion` of every contract document.
+/// `schemaVersion` of the capture record, field controls, manifest and verdict. The capture model
+/// has its own version, `CaptureModelSchemaVersion`.
 public enum SchemaVersion: String, CaseIterable, Codable, Sendable {
   case v1 = "1.0.0"
 
   public static let current: SchemaVersion = .v1
+}
+
+/// `schemaVersion` of the capture model. 1.1.0 adds optional fields (room type and its source,
+/// door `isOpen`, object attributes and parent), so every 1.0.0 document is also a valid 1.1.0
+/// document. Both are read; `CaptureModel` always writes `current`.
+public enum CaptureModelSchemaVersion: String, CaseIterable, Codable, Sendable {
+  case v1 = "1.0.0"
+  case v1_1 = "1.1.0"
+
+  public static let current: CaptureModelSchemaVersion = .v1_1
 }
 
 /// Version of contract/schema/layout.json that manifest paths follow (`layoutVersion`).
@@ -48,6 +59,31 @@ public enum Handedness: String, CaseIterable, Codable, Sendable {
 
 public enum UpAxis: String, CaseIterable, Codable, Sendable {
   case positiveY = "+Y"
+}
+
+/// What a room is used for (capture model 1.1.0).
+public enum RoomType: String, CaseIterable, Codable, Sendable {
+  case livingRoom = "living_room"
+  case diningRoom = "dining_room"
+  case kitchen
+  case bedroom
+  case bathroom
+  case closet
+  case hallway
+  case laundry
+  case office
+  case utility
+  case other
+}
+
+/// Where a room type came from (capture model 1.1.0).
+public enum RoomTypeSource: String, CaseIterable, Codable, Sendable {
+  /// The RoomPlan section label inside the room.
+  case roomplanSection = "roomplan_section"
+  /// The room's objects, for example a toilet makes a bathroom.
+  case inferred
+  /// Chosen by the operator.
+  case `operator`
 }
 
 /// Detection confidence reported by the capture framework.

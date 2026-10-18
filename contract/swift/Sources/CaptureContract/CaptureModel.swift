@@ -3,8 +3,13 @@
 /// `Original Exports/{areaKey}/{captureId}/capture-model.json` with role `capture_model`.
 /// Lengths in metres; right-handed with +Y up, so plan coordinates are X and Z. Coordinates are
 /// in this capture's own local frame.
+///
+/// Reads schema 1.0.0 and 1.1.0 and always writes `CaptureModelSchemaVersion.current`: 1.1.0
+/// only adds optional fields, so every model is a valid 1.1.0 document, while a 1.0.0 document
+/// may not carry the 1.1.0 fields.
 public struct CaptureModel: Hashable, Sendable, Codable {
-  public var schemaVersion: SchemaVersion
+  /// The version this model was read as; `.current` for a new model. Not written: see the type.
+  public var schemaVersion: CaptureModelSchemaVersion
   public var visitId: LowercaseUUID
   public var captureId: LowercaseUUID
   public var areaKey: String
@@ -21,7 +26,7 @@ public struct CaptureModel: Hashable, Sendable, Codable {
   public var refs: [SourceRef]
 
   public init(
-    schemaVersion: SchemaVersion = .current,
+    schemaVersion: CaptureModelSchemaVersion = .current,
     visitId: LowercaseUUID,
     captureId: LowercaseUUID,
     areaKey: String,
@@ -50,6 +55,30 @@ public struct CaptureModel: Hashable, Sendable, Codable {
     self.refs = refs
   }
 
+  private enum CodingKeys: String, CodingKey {
+    case schemaVersion, visitId, captureId, areaKey, label, coordinateSystem, rooms, walls, doors
+    case windows, openings, objects, refs
+  }
+
+  // Decoding is synthesized: `schemaVersion` accepts every `CaptureModelSchemaVersion`.
+
+  public func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(CaptureModelSchemaVersion.current, forKey: .schemaVersion)
+    try container.encode(visitId, forKey: .visitId)
+    try container.encode(captureId, forKey: .captureId)
+    try container.encode(areaKey, forKey: .areaKey)
+    try container.encode(label, forKey: .label)
+    try container.encode(coordinateSystem, forKey: .coordinateSystem)
+    try container.encode(rooms, forKey: .rooms)
+    try container.encode(walls, forKey: .walls)
+    try container.encode(doors, forKey: .doors)
+    try container.encode(windows, forKey: .windows)
+    try container.encode(openings, forKey: .openings)
+    try container.encode(objects, forKey: .objects)
+    try container.encode(refs, forKey: .refs)
+  }
+
   /// Always metres, right-handed, +Y up.
   public struct CoordinateSystem: Hashable, Sendable, Codable {
     public var units: LengthUnit
@@ -74,12 +103,21 @@ public struct CaptureModel: Hashable, Sendable, Codable {
     public var polygon: [Vec3]
     /// Floor-to-ceiling height in metres.
     public var heightM: Double
+    /// What the room is used for (1.1.0). Nil when unknown; set together with `typeSource`.
+    public var type: RoomType?
+    /// Where `type` came from (1.1.0). Set exactly when `type` is.
+    public var typeSource: RoomTypeSource?
 
-    public init(id: String, label: String, polygon: [Vec3], heightM: Double) {
+    public init(
+      id: String, label: String, polygon: [Vec3], heightM: Double, type: RoomType? = nil,
+      typeSource: RoomTypeSource? = nil
+    ) {
       self.id = id
       self.label = label
       self.polygon = polygon
       self.heightM = heightM
+      self.type = type
+      self.typeSource = typeSource
     }
   }
 
@@ -121,10 +159,12 @@ public struct CaptureModel: Hashable, Sendable, Codable {
     public var widthM: Double
     public var heightM: Double
     public var confidence: DetectionConfidence?
+    /// Doors only (1.1.0): whether the door stood open during the scan.
+    public var isOpen: Bool?
 
     public init(
       id: String, wallId: String, offsetM: Double, bottomM: Double, widthM: Double,
-      heightM: Double, confidence: DetectionConfidence? = nil
+      heightM: Double, confidence: DetectionConfidence? = nil, isOpen: Bool? = nil
     ) {
       self.id = id
       self.wallId = wallId
@@ -133,6 +173,7 @@ public struct CaptureModel: Hashable, Sendable, Codable {
       self.widthM = widthM
       self.heightM = heightM
       self.confidence = confidence
+      self.isOpen = isOpen
     }
   }
 
@@ -143,16 +184,24 @@ public struct CaptureModel: Hashable, Sendable, Codable {
     public var roomId: String?
     public var box: OrientedBox
     public var confidence: DetectionConfidence?
+    /// Attributes the capture framework reports (1.1.0), name to value, for example
+    /// `["StorageType": "cabinet"]`. Nil when there are none.
+    public var attributes: [String: String]?
+    /// Id of the object in the same file that this object sits on or in (1.1.0).
+    public var parentId: String?
 
     public init(
       id: String, category: ObjectCategory, roomId: String? = nil, box: OrientedBox,
-      confidence: DetectionConfidence? = nil
+      confidence: DetectionConfidence? = nil, attributes: [String: String]? = nil,
+      parentId: String? = nil
     ) {
       self.id = id
       self.category = category
       self.roomId = roomId
       self.box = box
       self.confidence = confidence
+      self.attributes = attributes
+      self.parentId = parentId
     }
   }
 

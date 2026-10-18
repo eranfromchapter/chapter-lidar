@@ -249,7 +249,11 @@ export const captureModelSchema: Record<string, unknown> = {
     "refs",
   ],
   properties: {
-    schemaVersion: { const: "1.0.0" },
+    schemaVersion: {
+      description:
+        "1.1.0 adds the optional room type and typeSource, door isOpen, and object attributes and parentId; a 1.0.0 document does not carry them. Readers accept both versions; writers write 1.1.0.",
+      enum: ["1.0.0", "1.1.0"],
+    },
     visitId: { $ref: "#/$defs/uuid" },
     captureId: { $ref: "#/$defs/uuid" },
     areaKey: { $ref: "#/$defs/areaKey" },
@@ -263,11 +267,20 @@ export const captureModelSchema: Record<string, unknown> = {
     rooms: { type: "array", items: { $ref: "#/$defs/room" } },
     walls: { type: "array", items: { $ref: "#/$defs/wall" } },
     doors: { type: "array", items: { $ref: "#/$defs/wallOpening" } },
-    windows: { type: "array", items: { $ref: "#/$defs/wallOpening" } },
+    windows: {
+      type: "array",
+      items: {
+        $ref: "#/$defs/wallOpening",
+        not: { type: "object", properties: { isOpen: { type: "boolean" } }, required: ["isOpen"] },
+      },
+    },
     openings: {
       description: "Openings without a door or window (passages, arches).",
       type: "array",
-      items: { $ref: "#/$defs/wallOpening" },
+      items: {
+        $ref: "#/$defs/wallOpening",
+        not: { type: "object", properties: { isOpen: { type: "boolean" } }, required: ["isOpen"] },
+      },
     },
     objects: { type: "array", items: { $ref: "#/$defs/object" } },
     refs: {
@@ -275,6 +288,21 @@ export const captureModelSchema: Record<string, unknown> = {
         "Package files of the same capture that this geometry was derived from or is accompanied by.",
       type: "array",
       items: { $ref: "#/$defs/sourceRef" },
+    },
+  },
+  if: { properties: { schemaVersion: { const: "1.0.0" } } },
+  then: {
+    description: "A 1.0.0 document carries none of the fields added in 1.1.0.",
+    properties: {
+      rooms: {
+        type: "array",
+        items: { type: "object", properties: { type: false, typeSource: false } },
+      },
+      doors: { type: "array", items: { type: "object", properties: { isOpen: false } } },
+      objects: {
+        type: "array",
+        items: { type: "object", properties: { attributes: false, parentId: false } },
+      },
     },
   },
   $defs: {
@@ -333,10 +361,32 @@ export const captureModelSchema: Record<string, unknown> = {
       description: "Subset of the manifest file roles that a floor's geometry can come from.",
       enum: ["raw_roomplan_json", "raw_depth", "mesh_glb", "mesh_obj", "point_cloud_las"],
     },
+    roomType: {
+      description: "What a room is used for.",
+      enum: [
+        "living_room",
+        "dining_room",
+        "kitchen",
+        "bedroom",
+        "bathroom",
+        "closet",
+        "hallway",
+        "laundry",
+        "office",
+        "utility",
+        "other",
+      ],
+    },
+    roomTypeSource: {
+      description:
+        "Where a room type came from: roomplan_section, the RoomPlan section label inside the room; inferred, from the room's objects (a toilet makes a bathroom); operator, chosen by the operator.",
+      enum: ["roomplan_section", "inferred", "operator"],
+    },
     room: {
       type: "object",
       additionalProperties: false,
       required: ["id", "label", "polygon", "heightM"],
+      dependentRequired: { type: ["typeSource"], typeSource: ["type"] },
       properties: {
         id: { $ref: "#/$defs/id" },
         label: {
@@ -356,6 +406,15 @@ export const captureModelSchema: Record<string, unknown> = {
           description: "Floor-to-ceiling height in metres.",
           type: "number",
           exclusiveMinimum: 0,
+        },
+        type: {
+          description:
+            "What the room is used for (1.1.0). Omitted when unknown; present exactly when typeSource is.",
+          $ref: "#/$defs/roomType",
+        },
+        typeSource: {
+          description: "Where type came from (1.1.0). Present exactly when type is.",
+          $ref: "#/$defs/roomTypeSource",
         },
       },
     },
@@ -398,6 +457,11 @@ export const captureModelSchema: Record<string, unknown> = {
         widthM: { type: "number", exclusiveMinimum: 0 },
         heightM: { type: "number", exclusiveMinimum: 0 },
         confidence: { $ref: "#/$defs/confidence" },
+        isOpen: {
+          description:
+            "Doors only (1.1.0): whether the door stood open during the scan, as the capture framework reports it.",
+          type: "boolean",
+        },
       },
     },
     object: {
@@ -440,6 +504,17 @@ export const captureModelSchema: Record<string, unknown> = {
           },
         },
         confidence: { $ref: "#/$defs/confidence" },
+        attributes: {
+          description:
+            'Attributes the capture framework reports for the object (1.1.0), name to value, for example {"StorageType": "cabinet"} or {"TableType": "coffee", "TableShapeType": "rectangular"}. Names and values are kept as reported. Omitted when there are none.',
+          type: "object",
+          additionalProperties: { type: "string", minLength: 1, maxLength: 100 },
+        },
+        parentId: {
+          description:
+            "Id of the object in the same file that this object sits on or in (1.1.0), for example the cabinet under a sink.",
+          $ref: "#/$defs/id",
+        },
       },
     },
     sourceRef: {

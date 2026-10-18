@@ -124,6 +124,48 @@ final class SchemaParityTests: XCTestCase {
     }
   }
 
+  // MARK: Schema versions
+
+  /// Each document's Swift version type against its own schema's `schemaVersion`: a `const` for
+  /// one version, an `enum` for several.
+  func testEachDocumentsSchemaVersionsMatchItsSchema() throws {
+    let versions: [String: [String]] = [
+      "capture-record": SchemaVersion.allCases.map(\.rawValue),
+      "capture-model": CaptureModelSchemaVersion.allCases.map(\.rawValue),
+      "field-controls": SchemaVersion.allCases.map(\.rawValue),
+      "manifest": SchemaVersion.allCases.map(\.rawValue),
+      "verdict": SchemaVersion.allCases.map(\.rawValue),
+    ]
+    XCTAssertEqual(
+      Set(versions.keys), Set(try ContractFiles.schemaNames()), "a version type for every schema")
+    for (name, swift) in versions.sorted(by: { $0.key < $1.key }) {
+      let schema = try SchemaReader(fileName: "\(name).schema.json")
+      let property = try XCTUnwrap(
+        try schema.value(at: ["properties", "schemaVersion"]) as? [String: Any],
+        "\(name) schemaVersion")
+      let values: [String]
+      if let single = property["const"] as? String {
+        values = [single]
+      } else {
+        values = try XCTUnwrap(
+          property["enum"] as? [String], "\(name) schemaVersion has no const or string enum")
+      }
+      try assertSameValues(swift, values, "\(name) schemaVersion")
+    }
+  }
+
+  func testCaptureModelWritesTheNewestVersionAndLimitsTheOldest() throws {
+    let schema = try SchemaReader(fileName: "capture-model.schema.json")
+    XCTAssertEqual(
+      CaptureModelSchemaVersion.current.rawValue,
+      try schema.strings(at: ["properties", "schemaVersion", "enum"]).last,
+      "CaptureModelSchemaVersion.current vs the newest capture-model.schema.json schemaVersion")
+    XCTAssertEqual(
+      CaptureModelSchemaVersion.v1.rawValue,
+      try schema.string(at: ["if", "properties", "schemaVersion", "const"]),
+      "the version capture-model.schema.json refuses the 1.1.0 fields in")
+  }
+
   // MARK: Other closed enums and constants
 
   func testCaptureRecordEnumsMatchSchema() throws {
@@ -137,7 +179,6 @@ final class SchemaParityTests: XCTestCase {
     try assertConst(
       LengthUnit.self, schema,
       ["$defs", "capture", "properties", "units", "properties", "length", "const"])
-    try assertConst(SchemaVersion.self, schema, ["properties", "schemaVersion", "const"])
   }
 
   func testCaptureModelEnumsMatchSchema() throws {
@@ -145,11 +186,12 @@ final class SchemaParityTests: XCTestCase {
     try assertEnum(DetectionConfidence.self, schema, ["$defs", "confidence", "enum"])
     try assertEnum(
       ObjectCategory.self, schema, ["$defs", "object", "properties", "category", "enum"])
+    try assertEnum(RoomType.self, schema, ["$defs", "roomType", "enum"])
+    try assertEnum(RoomTypeSource.self, schema, ["$defs", "roomTypeSource", "enum"])
     let coordinateSystem = ["properties", "coordinateSystem", "properties"]
     try assertConst(LengthUnit.self, schema, coordinateSystem + ["units", "const"])
     try assertConst(Handedness.self, schema, coordinateSystem + ["handedness", "const"])
     try assertConst(UpAxis.self, schema, coordinateSystem + ["up", "const"])
-    try assertConst(SchemaVersion.self, schema, ["properties", "schemaVersion", "const"])
   }
 
   func testFieldControlsEnumsMatchSchema() throws {
@@ -158,14 +200,12 @@ final class SchemaParityTests: XCTestCase {
     try assertEnum(
       MeasurementMethod.self, schema, ["$defs", "measurement", "properties", "method", "enum"])
     try assertEnum(DistanceAxis.self, schema, ["$defs", "distance", "properties", "axis", "enum"])
-    try assertConst(SchemaVersion.self, schema, ["properties", "schemaVersion", "const"])
   }
 
   func testManifestEnumsMatchSchema() throws {
     let schema = try SchemaReader(fileName: "manifest.schema.json")
     try assertEnum(PhotoDirection.self, schema, ["$defs", "photoDirection", "enum"])
     try assertEnum(PhotoSubject.self, schema, ["$defs", "photoSubject", "enum"])
-    try assertConst(SchemaVersion.self, schema, ["properties", "schemaVersion", "const"])
   }
 
   func testVerdictEnumsMatchSchema() throws {
@@ -174,7 +214,6 @@ final class SchemaParityTests: XCTestCase {
     try assertEnum(FindingSeverity.self, schema, ["$defs", "severity", "enum"])
     try assertEnum(
       CheckStatus.self, schema, ["$defs", "checkResult", "properties", "status", "enum"])
-    try assertConst(SchemaVersion.self, schema, ["properties", "schemaVersion", "const"])
     XCTAssertEqual(
       Verdict.fixedStatement, try schema.string(at: ["properties", "statement", "const"]),
       "Verdict.fixedStatement vs verdict.schema.json statement const")
