@@ -76,6 +76,21 @@ final class VisitModel {
     }
   }
 
+  /// Where every visit on this phone is kept ("My scans").
+  var visitsRoot: URL? { app?.visitsRoot }
+
+  /// This visit's scans, in capture order, for review before upload.
+  var scanItems: [ScanItem] {
+    (flow.record?.captures ?? []).compactMap { capture in
+      ScanLibrary.item(
+        folder: workspace.originalsRoot
+          .appendingPathComponent("Original Exports", isDirectory: true)
+          .appendingPathComponent(capture.areaKey, isDirectory: true)
+          .appendingPathComponent(capture.captureId.rawValue, isDirectory: true),
+        title: capture.label)
+    }
+  }
+
   private func floorFinished(_ result: CaptureFlowResult) {
     do {
       if flow.step == .captureRecord { try flow.scanStarted() }

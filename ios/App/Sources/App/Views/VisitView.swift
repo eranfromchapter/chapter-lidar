@@ -86,9 +86,22 @@ struct VisitView: View {
 /// their uploads resume after the next sign-in.
 private struct AccountFooter: View {
   let visit: VisitModel
+  @State private var showScans = false
 
   var body: some View {
     VStack(spacing: 0) {
+      if let root = visit.visitsRoot {
+        Button { showScans = true } label: {
+          Label("My scans", systemImage: "square.stack.3d.up")
+            .font(Typo.sans(15, weight: .semibold)).foregroundStyle(Palette.ink)
+            .frame(maxWidth: .infinity, minHeight: Control.minTouch)
+            .overlay(RoundedRectangle(cornerRadius: Radius.card).stroke(Palette.line, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("account.myScans")
+        .padding(.bottom, Space.s2)
+        .sheet(isPresented: $showScans) { MyScansView(visitsRoot: root) }
+      }
       HStack(spacing: Space.s1) {
         Text(signedInText)
           .font(Typo.caption).foregroundStyle(Palette.muted)
