@@ -59,6 +59,9 @@ function wallSurface(captureId: string, wall: LocalWall): Record<string, unknown
     transform: transformOf([dx, 0, dz], [0, 1, 0], [-dz, 0, dx], centre),
     completedEdges: [],
     story: 0,
+    curve: null,
+    parentIdentifier: null,
+    polygonCorners: [],
   };
 }
 
@@ -89,6 +92,8 @@ function openingSurface(
     transform: transformOf([dx, 0, dz], [0, 1, 0], [-dz, 0, dx], centre),
     completedEdges: [],
     story: 0,
+    curve: null,
+    polygonCorners: [],
   };
 }
 
@@ -125,6 +130,8 @@ export function buildRoomPlanJson(capture: CaptureSpec, captureId: string): unkn
       polygonCorners: polygon.map((p) => [f32(p[0] - cx), f32(-(p[2] - cz)), 0]),
       completedEdges: [],
       story: 0,
+      curve: null,
+      parentIdentifier: null,
     };
     const objects = localObjects(capture)
       .filter((object) => object.spec.roomId === room.id)
@@ -140,6 +147,7 @@ export function buildRoomPlanJson(capture: CaptureSpec, captureId: string): unkn
           transform: transformOf([c, 0, -s], [0, 1, 0], [s, 0, c], object.center),
           attributes: {},
           story: 0,
+          parentIdentifier: null,
         };
       });
     return {
@@ -158,5 +166,19 @@ export function buildRoomPlanJson(capture: CaptureSpec, captureId: string): unkn
   if (rooms.length === 1) {
     return rooms[0];
   }
-  return { version: 1, rooms };
+  // A structure also lists every room's elements at the top level.
+  const all = (key: string) =>
+    rooms.flatMap((room) => (room as Record<string, unknown[]>)[key] as unknown[]);
+  return {
+    version: 1,
+    identifier: uuidFrom(`${captureId}:raw:structure`).toUpperCase(),
+    rooms,
+    walls: all("walls"),
+    doors: all("doors"),
+    windows: all("windows"),
+    openings: all("openings"),
+    floors: all("floors"),
+    objects: all("objects"),
+    sections: [],
+  };
 }

@@ -10,7 +10,10 @@
       "dimensions": [5, 2.5, 0],
       "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 2.85, 1.25, 6.25, 1],
       "completedEdges": [],
-      "story": 0
+      "story": 0,
+      "curve": null,
+      "parentIdentifier": null,
+      "polygonCorners": []
     },
     {
       "identifier": "32DE740A-3443-4D6B-A16C-0809C00F7F7D",
@@ -19,7 +22,10 @@
       "dimensions": [6, 2.5, 0],
       "transform": [0, 0, -1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 5.35, 1.25, 3.25, 1],
       "completedEdges": [],
-      "story": 0
+      "story": 0,
+      "curve": null,
+      "parentIdentifier": null,
+      "polygonCorners": []
     },
     {
       "identifier": "ADD09302-29A5-44E8-85D0-A39A82757352",
@@ -28,7 +34,10 @@
       "dimensions": [5, 2.5, 0],
       "transform": [-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1, 0, 2.85, 1.25, 0.25, 1],
       "completedEdges": [],
-      "story": 0
+      "story": 0,
+      "curve": null,
+      "parentIdentifier": null,
+      "polygonCorners": []
     },
     {
       "identifier": "8C6ADFAE-476A-4901-BF9B-0E5A7D906B30",
@@ -37,7 +46,10 @@
       "dimensions": [6, 2.5, 0],
       "transform": [0, 0, 1, 0, 0, 1, 0, 0, -1, 0, 0, 0, 0.35, 1.25, 3.25, 1],
       "completedEdges": [],
-      "story": 0
+      "story": 0,
+      "curve": null,
+      "parentIdentifier": null,
+      "polygonCorners": []
     }
   ],
   "doors": [],
@@ -50,7 +62,9 @@
       "dimensions": [1.2, 1.2, 0],
       "transform": [-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1, 0, 2.85, 1.5, 0.25, 1],
       "completedEdges": [],
-      "story": 0
+      "story": 0,
+      "curve": null,
+      "polygonCorners": []
     },
     {
       "identifier": "66EC05FB-C49B-4998-9A50-EF200A33761B",
@@ -60,7 +74,9 @@
       "dimensions": [1.2, 1.2, 0],
       "transform": [0, 0, -1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 5.35, 1.5, 3.25, 1],
       "completedEdges": [],
-      "story": 0
+      "story": 0,
+      "curve": null,
+      "polygonCorners": []
     }
   ],
   "openings": [],
@@ -80,7 +96,9 @@
         [0.5, -2, 0]
       ],
       "completedEdges": [],
-      "story": 0
+      "story": 0,
+      "curve": null,
+      "parentIdentifier": null
     }
   ],
   "objects": [],

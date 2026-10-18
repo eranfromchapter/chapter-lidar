@@ -8,6 +8,10 @@ CHAPTER_ENTRA_TENANT_ID = __SET_ENTRA_TENANT_ID__
 CHAPTER_STATION_API_SCOPE = __SET_STATION_API_SCOPE__
 CHAPTER_STATION_URL = __SET_STATION_URL__
 
+// Debug builds only: YES runs the field-test mode (real scan and camera, stub sign-in and
+// stub station, nothing leaves the phone). Set it in Local.xcconfig. Release ignores it.
+CHAPTER_FIELD_TEST = NO
+
 MARKETING_VERSION = 1.0.0
 CURRENT_PROJECT_VERSION = 1
 

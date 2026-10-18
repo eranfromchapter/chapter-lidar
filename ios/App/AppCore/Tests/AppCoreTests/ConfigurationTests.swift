@@ -96,4 +96,26 @@ final class LaunchModeTests: XCTestCase {
         arguments: ["App", LaunchModeResolver.replayArgument, "../../etc"], isDebugBuild: true),
       .live)
   }
+
+  func testFieldTestOnlyInDebugWithTheFlagSet() {
+    XCTAssertEqual(
+      LaunchModeResolver.resolve(arguments: ["App"], isDebugBuild: true, fieldTestFlag: "YES"),
+      .fieldTest)
+    XCTAssertEqual(
+      LaunchModeResolver.resolve(arguments: ["App"], isDebugBuild: false, fieldTestFlag: "YES"),
+      .live)
+    XCTAssertEqual(
+      LaunchModeResolver.resolve(arguments: ["App"], isDebugBuild: true, fieldTestFlag: "NO"), .live)
+    XCTAssertEqual(
+      LaunchModeResolver.resolve(arguments: ["App"], isDebugBuild: true, fieldTestFlag: "$(CHAPTER_FIELD_TEST)"),
+      .live)
+  }
+
+  func testReplayWinsOverFieldTest() {
+    XCTAssertEqual(
+      LaunchModeResolver.resolve(
+        arguments: ["App", LaunchModeResolver.replayArgument, "box-room"], isDebugBuild: true,
+        fieldTestFlag: "YES"),
+      .uiTestReplay(fixture: "box-room"))
+  }
 }

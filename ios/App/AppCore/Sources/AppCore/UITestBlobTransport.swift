@@ -1,5 +1,5 @@
 // UI-test blob transport. DEBUG ONLY (see UITestStation.swift): compiled only with the DEBUG
-// condition and selected only in `LaunchMode.uiTestReplay`.
+// condition and selected only in `LaunchMode.uiTestReplay` and `.fieldTest`.
 #if DEBUG
   import Foundation
   import PackageCore

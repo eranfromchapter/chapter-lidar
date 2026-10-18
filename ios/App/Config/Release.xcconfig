@@ -1,1 +1,4 @@
 #include "Base.xcconfig"
+
+// The field-test mode is never part of a Release build.
+CHAPTER_FIELD_TEST = NO

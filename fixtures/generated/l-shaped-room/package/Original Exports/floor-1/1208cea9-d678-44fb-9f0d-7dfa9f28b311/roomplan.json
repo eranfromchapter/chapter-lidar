@@ -10,7 +10,10 @@
       "dimensions": [4, 2.7, 0],
       "transform": [0, 0, 1, 0, 0, 1, 0, 0, -1, 0, 0, 0, 0, 1.35, 2, 1],
       "completedEdges": [],
-      "story": 0
+      "story": 0,
+      "curve": null,
+      "parentIdentifier": null,
+      "polygonCorners": []
     },
     {
       "identifier": "84B3C281-0057-412E-8529-889B4010F8DB",
@@ -19,7 +22,10 @@
       "dimensions": [3, 2.7, 0],
       "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.5, 1.35, 4, 1],
       "completedEdges": [],
-      "story": 0
+      "story": 0,
+      "curve": null,
+      "parentIdentifier": null,
+      "polygonCorners": []
     },
     {
       "identifier": "3D761AE8-1F35-45B3-87BD-5CC3038DAC3C",
@@ -28,7 +34,10 @@
       "dimensions": [2, 2.7, 0],
       "transform": [0, 0, -1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 3, 1.35, 3, 1],
       "completedEdges": [],
-      "story": 0
+      "story": 0,
+      "curve": null,
+      "parentIdentifier": null,
+      "polygonCorners": []
     },
     {
       "identifier": "07492F6C-1700-41CD-A5DA-45FA83627DB5",
@@ -37,7 +46,10 @@
       "dimensions": [3, 2.7, 0],
       "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 4.5, 1.35, 2, 1],
       "completedEdges": [],
-      "story": 0
+      "story": 0,
+      "curve": null,
+      "parentIdentifier": null,
+      "polygonCorners": []
     },
     {
       "identifier": "C01B963C-C8F3-4D58-8B66-A57429649A11",
@@ -46,7 +58,10 @@
       "dimensions": [2, 2.7, 0],
       "transform": [0, 0, -1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 6, 1.35, 1, 1],
       "completedEdges": [],
-      "story": 0
+      "story": 0,
+      "curve": null,
+      "parentIdentifier": null,
+      "polygonCorners": []
     },
     {
       "identifier": "9969BBA9-DBE2-4D8E-A62E-6B9B0986AA38",
@@ -55,7 +70,10 @@
       "dimensions": [6, 2.7, 0],
       "transform": [-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1, 0, 3, 1.35, 0, 1],
       "completedEdges": [],
-      "story": 0
+      "story": 0,
+      "curve": null,
+      "parentIdentifier": null,
+      "polygonCorners": []
     }
   ],
   "doors": [
@@ -67,7 +85,9 @@
       "dimensions": [0.9, 2.1, 0],
       "transform": [-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1, 0, 5, 1.05, 0, 1],
       "completedEdges": [],
-      "story": 0
+      "story": 0,
+      "curve": null,
+      "polygonCorners": []
     }
   ],
   "windows": [
@@ -79,7 +99,9 @@
       "dimensions": [1.2, 1.2, 0],
       "transform": [0, 0, 1, 0, 0, 1, 0, 0, -1, 0, 0, 0, 0, 1.5, 2, 1],
       "completedEdges": [],
-      "story": 0
+      "story": 0,
+      "curve": null,
+      "polygonCorners": []
     },
     {
       "identifier": "3D819E96-EFDF-4F7F-B38D-BA7B8CDEE472",
@@ -89,7 +111,9 @@
       "dimensions": [1.2, 1.2, 0],
       "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 4.5, 1.5, 2, 1],
       "completedEdges": [],
-      "story": 0
+      "story": 0,
+      "curve": null,
+      "polygonCorners": []
     }
   ],
   "openings": [
@@ -101,7 +125,9 @@
       "dimensions": [1, 2.1, 0],
       "transform": [0, 0, -1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 6, 1.05, 1, 1],
       "completedEdges": [],
-      "story": 0
+      "story": 0,
+      "curve": null,
+      "polygonCorners": []
     }
   ],
   "floors": [
@@ -120,7 +146,9 @@
         [3, 2, 0]
       ],
       "completedEdges": [],
-      "story": 0
+      "story": 0,
+      "curve": null,
+      "parentIdentifier": null
     }
   ],
   "objects": [],
