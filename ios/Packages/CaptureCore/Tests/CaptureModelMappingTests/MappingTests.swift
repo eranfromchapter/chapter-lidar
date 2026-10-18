@@ -293,6 +293,37 @@ final class MappingTests: XCTestCase {
     XCTAssertEqual(objects.map(\.attributes), [nil, nil, ["StorageType": "cabinet"], nil, nil])
   }
 
+  func testAttributeValuesOutsideTheSchemaLengthAreLeftOut() throws {
+    var mapped = try mapFixture("box-room")
+    var table = mapped.document.rooms[0].objects[0]
+    let longest = String(repeating: "a", count: 100)
+    table.attributes = ["TableType": longest, "TableShapeType": longest + "a"]
+    mapped.document.rooms[0].objects = [table]
+    let objects = try CaptureModelMapper.map(mapped.document, context: mapped.context).objects
+    XCTAssertEqual(objects.map(\.attributes), [["TableType": longest]])
+  }
+
+  func testParentsResolveAcrossTheRoomsOfAStructure() throws {
+    var mapped = try mapFixture("two-room-apartment")
+    XCTAssertGreaterThanOrEqual(mapped.document.rooms.count, 2)
+    let template = try XCTUnwrap(mapped.document.rooms.flatMap(\.objects).first)
+    var cabinet = template
+    cabinet.identifier = "CABINET"
+    cabinet.category = RoomPlanCategory(name: "storage")
+    var sink = template
+    sink.identifier = "SINK"
+    sink.category = RoomPlanCategory(name: "sink")
+    sink.parentIdentifier = "CABINET"  // in the first room; the sink is in the second
+    mapped.document.rooms[0].objects.append(cabinet)
+    mapped.document.rooms[1].objects.append(sink)
+    let model = try CaptureModelMapper.map(mapped.document, context: mapped.context)
+    let cabinetIndex = mapped.document.rooms[0].objects.count - 1
+    let sinkIndex = mapped.document.rooms[0].objects.count + mapped.document.rooms[1].objects.count - 1
+    XCTAssertEqual(model.objects[sinkIndex].parentId, model.objects[cabinetIndex].id)
+    XCTAssertEqual(model.objects[cabinetIndex].category, .storage)
+    XCTAssertEqual(model.objects[sinkIndex].category, .sink)
+  }
+
   func testObjectDetailsAreDecoded() throws {
     let json = #"""
       {"identifier": "A", "parentIdentifier": "B", "category": {"storage": {}},

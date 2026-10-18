@@ -42,23 +42,42 @@ public enum RoomTyping {
 
   /// The type of the room with floor outline `polygon`. Only sections and objects inside the
   /// polygon count, and `unidentified` sections are ignored:
-  /// - sections of exactly one type: that type, from `roomplan_section`;
-  /// - sections of two or more types: `mixed`;
-  /// - no usable section: the type the objects point to (`inferredType(from:)`), `inferred`.
+  /// - exactly one section: its type, from `roomplan_section`;
+  /// - two or more sections, even of one type (two bedrooms): `mixed`, because RoomPlan reports
+  ///   one section per room it recognises;
+  /// - no usable section: the type the objects point to (`inferredType(from:)`), `inferred`; but
+  ///   `mixed` when the objects belong to two or more kinds of room (`isMixed(_:)`), for example
+  ///   a toilet, a bed and a stove in one walk-through scan.
   public static func type(polygon: [Vector3], sections: [RoomPlanSection], objects: [Object])
     -> Result
   {
-    var sectionTypes: Set<RoomType> = []
+    var sectionTypes: [RoomType] = []
     for section in sections {
       guard let type = section.roomType, let center = section.center,
         PolygonMath.contains(polygon, center)
       else { continue }
-      sectionTypes.insert(type)
+      sectionTypes.append(type)
     }
     if sectionTypes.count > 1 { return .mixed }
     if let type = sectionTypes.first { return .typed(type, .roomplanSection) }
     let inside = objects.filter { PolygonMath.contains(polygon, $0.center) }.map(\.category)
+    if isMixed(inside) { return .mixed }
     return inferredType(from: inside).map { .typed($0, .inferred) } ?? .unknown
+  }
+
+  /// Objects that only one kind of room has: a toilet or bathtub, a stove, oven, refrigerator or
+  /// dishwasher, a bed. Sofas, televisions, tables and chairs are left out because they also
+  /// stand in bedrooms, kitchens and living rooms.
+  static let defining: [(categories: Set<ObjectCategory>, type: RoomType)] = [
+    ([.toilet, .bathtub], .bathroom),
+    ([.stove, .oven, .refrigerator, .dishwasher], .kitchen),
+    ([.bed], .bedroom),
+  ]
+
+  /// True when the objects belong to two or more kinds of room (`defining`).
+  static func isMixed(_ categories: [ObjectCategory]) -> Bool {
+    let present = Set(categories)
+    return defining.filter { !$0.categories.isDisjoint(with: present) }.count > 1
   }
 
   /// The type a room's objects point to. The first rule that matches wins:

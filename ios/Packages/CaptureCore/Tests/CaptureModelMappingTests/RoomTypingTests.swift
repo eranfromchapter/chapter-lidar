@@ -42,10 +42,6 @@ final class RoomTypingTests: XCTestCase {
     XCTAssertEqual(RoomTyping.type(polygon: square, sections: [section("bedroom", at: inside)], objects: []), bedroom)
     XCTAssertEqual(
       RoomTyping.type(
-        polygon: square, sections: [section("bedroom", at: inside), section("bedroom", at: Vector3(1, 0, 1))],
-        objects: []), bedroom, "two sections of one type")
-    XCTAssertEqual(
-      RoomTyping.type(
         polygon: square, sections: [section("unidentified", at: inside), section("bedroom", at: inside)],
         objects: []), bedroom, "unidentified is ignored")
     XCTAssertEqual(
@@ -63,6 +59,37 @@ final class RoomTypingTests: XCTestCase {
       RoomTyping.type(
         polygon: square, sections: [section("bedroom", at: inside), section("kitchen", at: Vector3(1, 0, 1))],
         objects: objects([.bed], at: inside)), .mixed)
+  }
+
+  func testTwoSectionsOfOneTypeInOneRoomAreMixed() {
+    // RoomPlan reports one section per room it recognises, so two bedroom sections inside one
+    // outline are two bedrooms that a walk-through scan joined.
+    XCTAssertEqual(
+      RoomTyping.type(
+        polygon: square, sections: [section("bedroom", at: inside), section("bedroom", at: Vector3(1, 0, 1))],
+        objects: []), .mixed)
+  }
+
+  func testObjectsOfTwoKindsOfRoomAreMixed() {
+    let none: [RoomPlanSection] = []
+    XCTAssertEqual(
+      RoomTyping.type(polygon: square, sections: none, objects: objects([.toilet, .bed, .stove], at: inside)),
+      .mixed, "a walk-through scan with no usable section")
+    XCTAssertEqual(
+      RoomTyping.type(polygon: square, sections: none, objects: objects([.bathtub, .refrigerator], at: inside)),
+      .mixed)
+    XCTAssertEqual(
+      RoomTyping.type(polygon: square, sections: none, objects: objects([.bed, .sofa, .television], at: inside)),
+      .typed(.bedroom, .inferred), "a sofa or a television also stands in a bedroom")
+    XCTAssertEqual(
+      RoomTyping.type(
+        polygon: square, sections: none, objects: objects([.stove, .table, .chair, .chair], at: inside)),
+      .typed(.kitchen, .inferred), "a table and chairs also stand in a kitchen")
+    XCTAssertEqual(
+      RoomTyping.type(
+        polygon: square, sections: [section("bathroom", at: inside)],
+        objects: objects([.toilet, .bed, .stove], at: inside)),
+      .typed(.bathroom, .roomplanSection), "a section wins over mixed objects")
   }
 
   func testWithoutAUsableSectionTheObjectsInsideTellTheType() {
