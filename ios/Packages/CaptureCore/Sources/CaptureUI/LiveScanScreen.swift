@@ -29,14 +29,7 @@
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipShape(RoundedRectangle(cornerRadius: Radius.sheet))
           VStack {
-            HStack {
-              Text(model.instruction.message)
-                .font(Typo.sans(15, weight: .semibold))
-                .foregroundStyle(Palette.ink)
-                .padding(.horizontal, Space.s3).padding(.vertical, Space.s2)
-                .background(Palette.surface, in: RoundedRectangle(cornerRadius: Radius.chip))
-              Spacer()
-            }
+            guidanceCard(model.guidance)
             Spacer()
             HStack(spacing: Space.s2) {
               count(model.progress.counts.walls, "walls")
@@ -87,6 +80,54 @@
       .padding(.horizontal, 20)
       .padding(.top, Space.s2)
       .padding(.bottom, Space.s4)
+      // Haptics, so the operator feels the scan working without watching the screen: a soft pulse
+      // while scanning normally, a tap for each new wall, door, window or object, a warning when
+      // RoomPlan needs something, and a click on Pause / Resume.
+      .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.35), trigger: pulse)
+      .sensoryFeedback(.impact(weight: .medium, intensity: 0.8), trigger: foundCount) { old, new in
+        new > old
+      }
+      .sensoryFeedback(.warning, trigger: model.instruction) { _, new in new != .normal }
+      .sensoryFeedback(.selection, trigger: model.isPaused)
+      .task(id: model.isPaused) {
+        while !Task.isCancelled {
+          try? await Task.sleep(for: .seconds(1.2))
+          if model.sessionState == .running, !model.isPaused, model.instruction == .normal {
+            pulse &+= 1
+          }
+        }
+      }
+    }
+
+    /// Heartbeat counter for the soft scanning pulse.
+    @State private var pulse = 0
+
+    /// Everything RoomPlan has found so far; a rise gives a tap.
+    private var foundCount: Int {
+      let counts = model.progress.counts
+      return counts.walls + counts.doors + counts.windows + counts.openings + counts.objects
+    }
+
+    /// Direction for the operator: the step of the scan, what to do, and RoomPlan's warnings.
+    private func guidanceCard(_ guidance: ScanGuidance) -> some View {
+      VStack(alignment: .leading, spacing: 4) {
+        if let step = guidance.step {
+          Text("Step \(step) of \(ScanGuidance.stepCount)")
+            .font(Typo.sans(12, weight: .semibold)).foregroundStyle(Palette.muted)
+        }
+        Text(guidance.title)
+          .font(Typo.sans(17, weight: .semibold))
+          .foregroundStyle(guidance.isWarning ? Palette.blocked : Palette.ink)
+        Text(guidance.detail)
+          .font(Typo.sans(14)).foregroundStyle(Palette.ink)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(.horizontal, Space.s3).padding(.vertical, Space.s2)
+      .background(Palette.surface.opacity(0.94), in: RoundedRectangle(cornerRadius: Radius.card))
+      .accessibilityElement(children: .combine)
+      .accessibilityIdentifier("scan.guidance")
+      .animation(.easeInOut(duration: 0.2), value: guidance)
     }
 
     private func count(_ value: Int, _ label: String) -> some View {

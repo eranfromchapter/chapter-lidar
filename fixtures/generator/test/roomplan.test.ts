@@ -15,7 +15,7 @@ interface Surface {
   category: Record<string, unknown>;
   confidence: Record<string, unknown>;
   dimensions: [number, number, number];
-  transform: [Column, Column, Column, Column];
+  transform: number[];
   polygonCorners?: Array<[number, number, number]>;
 }
 interface RawRoom {
@@ -28,6 +28,11 @@ interface RawRoom {
 }
 
 const TOLERANCE = 1e-5;
+
+// Column `index` of a flat simd_float4x4 (16 numbers, column after column).
+function column(transform: readonly number[], index: number): Column {
+  return transform.slice(index * 4, index * 4 + 4) as Column;
+}
 
 function near(actual: number, expected: number, label: string): void {
   assert.ok(Math.abs(actual - expected) < TOLERANCE, `${label}: ${actual} vs ${expected}`);
@@ -61,7 +66,11 @@ describe("raw RoomPlan JSON", () => {
         walls.forEach((surface, index) => {
           const expected = model.walls[index];
           assert.ok(expected !== undefined);
-          const [x, y, , t] = surface.transform;
+          const [x, y, t] = [0, 1, 3].map((i) => column(surface.transform, i)) as [
+            Column,
+            Column,
+            Column,
+          ];
           const length = surface.dimensions[0];
           const height = surface.dimensions[1];
           const base = [t[0] - (x[0] * length) / 2, t[1] - height / 2, t[2] - (x[2] * length) / 2];
@@ -86,8 +95,8 @@ describe("raw RoomPlan JSON", () => {
             const parent = wallSurfaceById.get(surface.parentIdentifier ?? "");
             assert.ok(parent !== undefined, `${want.id} has a parent wall`);
             const start = wallStarts.get(parent.identifier) as [number, number, number];
-            const dir = parent.transform[0];
-            const t = surface.transform[3];
+            const dir = column(parent.transform, 0);
+            const t = column(surface.transform, 3);
             const along = (t[0] - start[0]) * dir[0] + (t[2] - start[2]) * dir[2];
             near(along, want.offsetM, `${want.id} offset`);
             near(t[1] - surface.dimensions[1] / 2, want.bottomM, `${want.id} bottom`);
@@ -114,7 +123,7 @@ describe("raw RoomPlan JSON", () => {
         floors.forEach((floor, index) => {
           const want = model.rooms[index];
           assert.ok(want !== undefined);
-          const t = floor.transform[3];
+          const t = column(floor.transform, 3);
           const corners = (floor.polygonCorners ?? []).map(
             ([lx, ly]) => [t[0] + lx, 0, t[2] - ly] as [number, number, number],
           );
@@ -130,11 +139,15 @@ describe("raw RoomPlan JSON", () => {
           assert.ok(want !== undefined);
           nearVec(surface.dimensions, want.box.sizeM, `${want.id} size`);
           nearVec(
-            [surface.transform[3][0], surface.transform[3][1], surface.transform[3][2]],
+            [
+              column(surface.transform, 3)[0],
+              column(surface.transform, 3)[1],
+              column(surface.transform, 3)[2],
+            ],
             want.box.center,
             `${want.id} centre`,
           );
-          const x = surface.transform[0];
+          const x = column(surface.transform, 0);
           const yaw = Math.atan2(-x[2], x[0]);
           nearVec(
             [0, Math.sin(yaw / 2), 0, Math.cos(yaw / 2)],

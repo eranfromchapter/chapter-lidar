@@ -6,7 +6,8 @@ import Foundation
 // this type, so the mapping code is the same on Linux (fixtures) and on the phone.
 //
 // Shape (see fixtures/generator/README.md):
-//   - simd values are arrays: `dimensions` [x, y, z], `transform` four column arrays.
+//   - simd values are arrays: `dimensions` [x, y, z], `transform` 16 numbers, column after
+//     column (Apple's `simd_float4x4` Codable shape; see `RoomPlanMatrix`).
 //   - enum cases encode as `{ "<case>": { ...associated values } }`, for example
 //     `{ "door": { "isOpen": false } }`, and confidence as `{ "high": {} }`.
 //   - a wall surface has local X along the wall, local Y up; `dimensions` is [length, height, 0].
@@ -131,7 +132,7 @@ public struct RoomPlanSurface: Sendable, Equatable, Decodable {
     confidence = try container.decodeIfPresent(RoomPlanCaseName.self, forKey: .confidence)
       .flatMap { DetectionConfidence(rawValue: $0.name) }
     dimensions = try container.decode([Double].self, forKey: .dimensions)
-    transform = try container.decode(Matrix4.self, forKey: .transform)
+    transform = try container.decode(RoomPlanMatrix.self, forKey: .transform).matrix
     polygonCorners = try container.decodeIfPresent([[Double]].self, forKey: .polygonCorners)
   }
 
@@ -172,7 +173,26 @@ public struct RoomPlanObject: Sendable, Equatable, Decodable {
     confidence = try container.decodeIfPresent(RoomPlanCaseName.self, forKey: .confidence)
       .flatMap { DetectionConfidence(rawValue: $0.name) }
     dimensions = try container.decode([Double].self, forKey: .dimensions)
-    transform = try container.decode(Matrix4.self, forKey: .transform)
+    transform = try container.decode(RoomPlanMatrix.self, forKey: .transform).matrix
+  }
+}
+
+/// `simd_float4x4` as Apple's Codable writes it inside `CapturedRoom`: one flat array of 16
+/// numbers, column after column, so numbers 12, 13, 14 are the translation. This differs from
+/// `Matrix4`'s own Codable shape (four column arrays), which the package files keep.
+struct RoomPlanMatrix: Sendable, Equatable, Decodable {
+  let matrix: Matrix4
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.singleValueContainer()
+    let numbers = try container.decode([Double].self)
+    guard numbers.count == 16,
+      let matrix = Matrix4(columns: stride(from: 0, to: 16, by: 4).map { Array(numbers[$0..<$0 + 4]) })
+    else {
+      throw DecodingError.dataCorruptedError(
+        in: container, debugDescription: "Expected a simd_float4x4 as 16 numbers")
+    }
+    self.matrix = matrix
   }
 }
 

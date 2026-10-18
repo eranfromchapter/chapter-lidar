@@ -63,5 +63,9 @@
 	<string>$(CHAPTER_STATION_API_SCOPE)</string>
 	<key>ChapterStationURL</key>
 	<string>$(CHAPTER_STATION_URL)</string>
+	<key>ChapterFieldTest</key>
+	<string>$(CHAPTER_FIELD_TEST)</string>
+	<key>UIUserInterfaceStyle</key>
+	<string>Light</string>
 </dict>
 </plist>

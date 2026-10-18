@@ -1,8 +1,8 @@
 // UI-test stubs: an in-process station (HTTPTransport for the real StationClient) and a token
 // provider. DEBUG ONLY: this whole file is compiled only with the DEBUG condition, so a Release
 // build of AppCore (and of the app) contains no stub station and no stub token. The app selects
-// them only in `LaunchMode.uiTestReplay`, which `LaunchModeResolver` never returns for a
-// Release build.
+// them only in `LaunchMode.uiTestReplay` and `.fieldTest`, which `LaunchModeResolver` never
+// returns for a Release build.
 #if DEBUG
   import CaptureContract
   import Foundation

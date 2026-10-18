@@ -132,6 +132,10 @@ jobs:
             -derivedDataPath "${RUNNER_TEMP}/DerivedData" \
             CODE_SIGNING_ALLOWED=NO
 
+      - name: Wait for the iOS simulator
+        if: steps.present.outputs.present == 'true' && steps.present.outputs.has_tests == 'true'
+        run: scripts/ensure-simulator.sh "iPhone 17 Pro"
+
       - name: Test on iOS simulator
         if: steps.present.outputs.present == 'true' && steps.present.outputs.has_tests == 'true'
         working-directory: ${{ matrix.path }}
@@ -222,6 +226,10 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath "${RUNNER_TEMP}/DerivedData" \
             CODE_SIGNING_ALLOWED=NO
+
+      - name: Wait for the iOS simulator
+        if: steps.present.outputs.present == 'true'
+        run: scripts/ensure-simulator.sh "iPhone 17 Pro"
 
       - name: UI tests on iOS simulator
         if: steps.present.outputs.present == 'true'

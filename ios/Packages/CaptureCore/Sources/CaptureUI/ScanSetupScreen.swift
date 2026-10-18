@@ -17,7 +17,47 @@
     @State private var newRoomName = ""
     @State private var newRoomReason = ""
 
+    // The fields scroll and "Start scan" is pinned above the keyboard: with the keyboard up
+    // after typing the floor label, a plain VStack pushed the button off screen.
     var body: some View {
+      ScrollView {
+        fields
+          .padding(.horizontal, 20)
+          .padding(.top, Space.s2)
+          .padding(.bottom, Space.s4)
+      }
+      .scrollDismissesKeyboard(.interactively)
+      .safeAreaInset(edge: .bottom, spacing: 0) {
+        VStack(alignment: .leading, spacing: Space.s2) {
+          if let message = model.errorMessage {
+            Text("■ \(message)").font(Typo.caption).foregroundStyle(Palette.blocked)
+          }
+          PrimaryButton(title: "Start scan", isEnabled: model.canStartScan) {
+            Task { await model.startScan() }
+          }
+          .accessibilityHint(
+            model.canStartScan ? "" : model.draft.validate().map(\.description).joined(separator: " "))
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, Space.s2)
+        .padding(.bottom, Space.s4)
+        .background(Palette.ground)
+      }
+      .alert("Add room", isPresented: $showAddRoom) {
+        TextField("Room name", text: $newRoomName)
+        TextField("Reason (optional)", text: $newRoomReason)
+        Button("Add") {
+          if !newRoomName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            model.addOmittedRoom(name: newRoomName, reason: newRoomReason)
+          }
+        }
+        Button("Cancel", role: .cancel) {}
+      } message: {
+        Text("A room you will not scan, for example a locked closet.")
+      }
+    }
+
+    private var fields: some View {
       VStack(alignment: .leading, spacing: 18) {
         HStack {
           Button {
@@ -108,32 +148,6 @@
             .frame(height: 96)
             .fieldBackground()
         }
-
-        if let message = model.errorMessage {
-          Text("■ \(message)").font(Typo.caption).foregroundStyle(Palette.blocked)
-        }
-
-        Spacer(minLength: 0)
-        PrimaryButton(title: "Start scan", isEnabled: model.canStartScan) {
-          Task { await model.startScan() }
-        }
-        .accessibilityHint(
-          model.canStartScan ? "" : model.draft.validate().map(\.description).joined(separator: " "))
-      }
-      .padding(.horizontal, 20)
-      .padding(.top, Space.s2)
-      .padding(.bottom, Space.s4)
-      .alert("Add room", isPresented: $showAddRoom) {
-        TextField("Room name", text: $newRoomName)
-        TextField("Reason (optional)", text: $newRoomReason)
-        Button("Add") {
-          if !newRoomName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            model.addOmittedRoom(name: newRoomName, reason: newRoomReason)
-          }
-        }
-        Button("Cancel", role: .cancel) {}
-      } message: {
-        Text("A room you will not scan, for example a locked closet.")
       }
     }
 

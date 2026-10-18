@@ -47,7 +47,7 @@ final class ChecklistRulesTests: XCTestCase {
   }
 
   func testCompleteChecklistAllowsFinishing() throws {
-    let report = ChecklistRules.evaluate(try completeInput())
+    let report = ChecklistRules.evaluate(try completeInput(), policy: .manualControls)
     XCTAssertTrue(report.canFinish)
     XCTAssertEqual(report.gaps, [])
     XCTAssertEqual(report.finishButtonTitle, "Finish capture")
@@ -68,7 +68,7 @@ final class ChecklistRulesTests: XCTestCase {
     XCTAssertTrue(editor.remove(id: "landmark-chimney-chase"))
     input.controls = editor.controls
 
-    let report = ChecklistRules.evaluate(input)
+    let report = ChecklistRules.evaluate(input, policy: .manualControls)
     XCTAssertFalse(report.canFinish)
     XCTAssertEqual(
       report.gaps,
@@ -94,21 +94,21 @@ final class ChecklistRulesTests: XCTestCase {
   func testEveryFloorMustBeLabeled() throws {
     var input = try completeInput()
     input.record.captures[1].label = "  "
-    let report = ChecklistRules.evaluate(input)
+    let report = ChecklistRules.evaluate(input, policy: .manualControls)
     XCTAssertEqual(report.gaps, [.unlabeledCapture(areaKey: "floor-2")])
     XCTAssertEqual(report.failedItems.map(\.id), [.floorsLabeled])
 
     input.record.captures = []
-    XCTAssertTrue(ChecklistRules.evaluate(input).gaps.contains(.noCaptures))
+    XCTAssertTrue(ChecklistRules.evaluate(input, policy: .manualControls).gaps.contains(.noCaptures))
   }
 
   func testSkippedRoomsMustBeRecordedOrConfirmedNone() throws {
     var input = try completeInput()
     input.record.captures[0].inaccessibleRooms = []
-    XCTAssertEqual(ChecklistRules.evaluate(input).gaps, [.skippedRoomsNotRecorded])
+    XCTAssertEqual(ChecklistRules.evaluate(input, policy: .manualControls).gaps, [.skippedRoomsNotRecorded])
 
     input.noRoomsSkippedConfirmed = true
-    let confirmed = ChecklistRules.evaluate(input)
+    let confirmed = ChecklistRules.evaluate(input, policy: .manualControls)
     XCTAssertTrue(confirmed.canFinish)
     XCTAssertEqual(confirmed.item(.skippedRoomsRecorded).detail, "No rooms skipped")
 
@@ -118,7 +118,7 @@ final class ChecklistRulesTests: XCTestCase {
       CaptureRecord.RoomNote(name: " ", reason: "locked")
     ]
     XCTAssertEqual(
-      ChecklistRules.evaluate(input).gaps,
+      ChecklistRules.evaluate(input, policy: .manualControls).gaps,
       [.skippedRoomWithoutReason(room: "Attic"), .skippedRoomWithoutName(.inaccessible)])
   }
 
@@ -128,14 +128,14 @@ final class ChecklistRulesTests: XCTestCase {
 
     // No notes, confirmed: the row passes.
     input.noRoomsSkippedConfirmed = true
-    let confirmed = ChecklistRules.evaluate(input).item(.skippedRoomsRecorded)
+    let confirmed = ChecklistRules.evaluate(input, policy: .manualControls).item(.skippedRoomsRecorded)
     XCTAssertTrue(confirmed.passed)
     XCTAssertEqual(confirmed.gaps, [])
     XCTAssertEqual(confirmed.detail, "No rooms skipped")
 
     // No notes, not confirmed: the row fails with exactly that gap.
     input.noRoomsSkippedConfirmed = false
-    let unconfirmed = ChecklistRules.evaluate(input).item(.skippedRoomsRecorded)
+    let unconfirmed = ChecklistRules.evaluate(input, policy: .manualControls).item(.skippedRoomsRecorded)
     XCTAssertFalse(unconfirmed.passed)
     XCTAssertEqual(unconfirmed.gaps, [.skippedRoomsNotRecorded])
     XCTAssertEqual(unconfirmed.detail, "Record skipped rooms, or confirm none were skipped")
@@ -143,7 +143,7 @@ final class ChecklistRulesTests: XCTestCase {
     // A note without a reason still fails, even when confirmed.
     input.noRoomsSkippedConfirmed = true
     input.record.captures[1].omittedRooms = [CaptureRecord.RoomNote(name: "Attic")]
-    let incompleteNote = ChecklistRules.evaluate(input)
+    let incompleteNote = ChecklistRules.evaluate(input, policy: .manualControls)
     XCTAssertFalse(incompleteNote.canFinish)
     XCTAssertEqual(
       incompleteNote.item(.skippedRoomsRecorded).gaps, [.skippedRoomWithoutReason(room: "Attic")])
@@ -167,7 +167,7 @@ final class ChecklistRulesTests: XCTestCase {
     var input = try completeInput()
     input.record = withoutNotes
     input.noRoomsSkippedConfirmed = tapped.isConfirmed(for: withoutNotes)
-    XCTAssertTrue(ChecklistRules.evaluate(input).canFinish)
+    XCTAssertTrue(ChecklistRules.evaluate(input, policy: .manualControls).canFinish)
 
     tapped.clear()
     XCTAssertFalse(tapped.isConfirmed(for: withoutNotes))
@@ -212,7 +212,7 @@ final class ChecklistRulesTests: XCTestCase {
     var input = try completeInput()
     input.photos = []
     XCTAssertEqual(
-      ChecklistRules.evaluate(input).gaps,
+      ChecklistRules.evaluate(input, policy: .manualControls).gaps,
       [
         .roomWithoutPhoto(capture: "Floor 1", room: "Kitchen"),
         .roomWithoutPhoto(capture: "Floor 1", room: "Living"),
@@ -225,14 +225,14 @@ final class ChecklistRulesTests: XCTestCase {
       Fixtures.photo(capture: f2, room: "Bath 2"),
     ]
     XCTAssertEqual(
-      ChecklistRules.evaluate(input).gaps,
+      ChecklistRules.evaluate(input, policy: .manualControls).gaps,
       [.roomWithoutPhoto(capture: "Floor 1", room: "Kitchen")])
 
     // No room list for a capture: at least one photo of that capture is needed.
     input.capturedRooms = [:]
     input.photos = [Fixtures.photo(capture: f1, room: "Anything")]
     XCTAssertEqual(
-      ChecklistRules.evaluate(input).gaps, [.captureWithoutPhoto(capture: "Floor 2")])
+      ChecklistRules.evaluate(input, policy: .manualControls).gaps, [.captureWithoutPhoto(capture: "Floor 2")])
   }
 
   func testEachMinimumControlIsCheckedPerFloor() throws {
@@ -242,7 +242,7 @@ final class ChecklistRulesTests: XCTestCase {
       var editor = FieldControlsEditor(controls: input.controls)
       for id in ids { XCTAssertTrue(editor.remove(id: id), id) }
       input.controls = editor.controls
-      return ChecklistRules.evaluate(input).gaps
+      return ChecklistRules.evaluate(input, policy: .manualControls).gaps
     }
     XCTAssertEqual(
       gaps(removing: ["floor-2-distance-a"]), [.missingDistance(capture: "Floor 2", axis: .a)])
@@ -265,7 +265,7 @@ final class ChecklistRulesTests: XCTestCase {
     try editor.setFloorToFloor(
       lower: f2, upper: f1, location: "At stair", measurement: Fixtures.measurement("3.05", .m))
     input.controls = editor.controls
-    XCTAssertTrue(ChecklistRules.evaluate(input).canFinish)
+    XCTAssertTrue(ChecklistRules.evaluate(input, policy: .manualControls).canFinish)
 
     let exteriorId = LowercaseUUID()
     input.record.captures.append(
@@ -275,7 +275,7 @@ final class ChecklistRulesTests: XCTestCase {
       Fixtures.photo(
         capture: FieldControls.CaptureRef(captureId: exteriorId, areaKey: "exterior"),
         room: "Front"))
-    XCTAssertTrue(ChecklistRules.evaluate(input).canFinish)
+    XCTAssertTrue(ChecklistRules.evaluate(input, policy: .manualControls).canFinish)
   }
 
   func testDeviceOperatorAndDatesMustBePresent() throws {
@@ -286,7 +286,7 @@ final class ChecklistRulesTests: XCTestCase {
     input.record.visitedAt = UTCTimestamp(secondsSince1970: 0)
     input.record.captures[1].capturedAt = UTCTimestamp(secondsSince1970: 0)
     XCTAssertEqual(
-      ChecklistRules.evaluate(input).gaps,
+      ChecklistRules.evaluate(input, policy: .manualControls).gaps,
       [
         .missingDetail(.device), .missingDetail(.operatingSystem),
         .missingDetail(.operatorName), .missingDetail(.visitDate),
@@ -299,7 +299,7 @@ final class ChecklistRulesTests: XCTestCase {
     input.photos = []
     input.controls = FieldControls(visitId: Fixtures.visitId)
     input.record.captures[0].inaccessibleRooms = []
-    let report = ChecklistRules.evaluate(input)
+    let report = ChecklistRules.evaluate(input, policy: .manualControls)
     XCTAssertEqual(
       report.failedItems.map(\.id), [.skippedRoomsRecorded, .photoPerRoom, .minimumControls])
     XCTAssertEqual(
@@ -320,7 +320,7 @@ final class ChecklistRulesTests: XCTestCase {
       CaptureRecord.RoomNote(name: "Closet", reason: "locked")
     ]
     input.photos = try completeInput().photos
-    XCTAssertEqual(ChecklistRules.evaluate(input).finishButtonTitle, "Fix 1 item to finish")
+    XCTAssertEqual(ChecklistRules.evaluate(input, policy: .manualControls).finishButtonTitle, "Fix 1 item to finish")
   }
 
   func testPolicyCanChangeTheLandmarkMinimum() throws {
@@ -328,9 +328,9 @@ final class ChecklistRulesTests: XCTestCase {
     var editor = FieldControlsEditor(controls: input.controls)
     editor.remove(id: "landmark-chimney-chase")
     input.controls = editor.controls
-    XCTAssertFalse(ChecklistRules.evaluate(input).canFinish)
+    XCTAssertFalse(ChecklistRules.evaluate(input, policy: .manualControls).canFinish)
     XCTAssertTrue(
-      ChecklistRules.evaluate(input, policy: ChecklistPolicy(minimumLandmarksPerFloorPair: 1))
+      ChecklistRules.evaluate(input, policy: ChecklistPolicy(minimumLandmarksPerFloorPair: 1, manualControlsRequired: true))
         .canFinish)
   }
 
@@ -354,5 +354,24 @@ final class ChecklistRulesTests: XCTestCase {
     XCTAssertEqual(PhotoSubject.primaryChoices.count, 6)
     XCTAssertEqual(
       Set(PhotoSubject.primaryChoices + PhotoSubject.moreChoices), Set(PhotoSubject.allCases))
+  }
+
+  // MARK: LiDAR-filled controls (standard policy)
+
+  func testStandardPolicyPassesControlsFromTheScanWithoutTapeOrLaser() throws {
+    var input = try completeInput()
+    input.controls = FieldControls(visitId: Fixtures.visitId)
+    let item = ChecklistRules.evaluate(input).item(.minimumControls)
+    XCTAssertTrue(item.passed)
+    XCTAssertEqual(item.gaps, [])
+    XCTAssertEqual(item.detail, "Measured by the LiDAR scan")
+  }
+
+  func testStandardPolicyCountsOptionalTapeOrLaserChecks() throws {
+    let input = try completeInput()
+    let item = ChecklistRules.evaluate(input).item(.minimumControls)
+    XCTAssertTrue(item.passed)
+    XCTAssertTrue(item.detail.hasPrefix("Measured by the LiDAR scan \u{00B7} "))
+    XCTAssertTrue(item.detail.hasSuffix("tape or laser checks"))
   }
 }

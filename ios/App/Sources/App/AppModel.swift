@@ -67,8 +67,21 @@ final class AppModel {
   static func make() -> AppModel {
     let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
     let mode = LaunchModeResolver.resolve(
-      arguments: ProcessInfo.processInfo.arguments, isDebugBuild: AppBuild.isDebug)
+      arguments: ProcessInfo.processInfo.arguments, isDebugBuild: AppBuild.isDebug,
+      fieldTestFlag: Bundle.main.object(forInfoDictionaryKey: LaunchModeResolver.fieldTestKey)
+        as? String)
     switch mode {
+    case .fieldTest:
+      #if DEBUG
+        let root = support.appendingPathComponent("FieldTestVisits", isDirectory: true)
+        let services = FieldTestEnvironment.services(cacheRoot: root)
+        let model = AppModel(screen: .signIn, services: services, visitsRoot: root)
+        model.signedIn = services.fixedOperator
+        model.startNewVisit()
+        return model
+      #else
+        break
+      #endif
     case .uiTestReplay(let fixture):
       #if DEBUG
         let root = support.appendingPathComponent("UITestVisits-\(UUID().uuidString)", isDirectory: true)
@@ -127,6 +140,12 @@ final class AppModel {
   // MARK: Sign-in
 
   func signIn() async {
+    if services?.signIn == nil, let fixed = services?.fixedOperator {
+      // UI-test and field-test modes: the stub operator signs straight back in.
+      signedIn = fixed
+      startNewVisit()
+      return
+    }
     guard let signIn = services?.signIn, !isSigningIn else { return }
     isSigningIn = true
     signInMessage = nil

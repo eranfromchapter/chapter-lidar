@@ -11,6 +11,7 @@ private typealias Radius = ChapterTokens.Radius
 /// screen-package, 1: "Package ready" — folder layout, sizes, seal.
 struct PackageReadyView: View {
   let visit: VisitModel
+  @State private var reviewing: ScanItem?
 
   var body: some View {
     VStack(alignment: .leading, spacing: 14) {
@@ -30,6 +31,12 @@ struct PackageReadyView: View {
         ProgressView("Writing plans and 3D files…").frame(maxWidth: .infinity)
       }
       Spacer(minLength: 0)
+      // Look at the scan here first; uploading to the HUB is a separate choice below.
+      let scans = visit.scanItems
+      if !scans.isEmpty {
+        Text("Review before you upload").font(Typo.caption).foregroundStyle(Palette.muted)
+        ScanList(items: scans) { reviewing = $0 }
+      }
       Button { visit.addMoreRooms() } label: {
         Text("Add more rooms").font(Typo.body).foregroundStyle(Palette.ink)
           .frame(maxWidth: .infinity, minHeight: Control.primaryHeight)
@@ -51,6 +58,7 @@ struct PackageReadyView: View {
     .padding(.horizontal, 20)
     .padding(.top, Space.s2)
     .padding(.bottom, 28)
+    .sheet(item: $reviewing) { ScanViewer(item: $0) }
   }
 
   private func folders(_ review: PackageReview) -> some View {

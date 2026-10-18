@@ -28,8 +28,15 @@
     public nonisolated let events: AsyncStream<CaptureSessionEvent>
     private let continuation: AsyncStream<CaptureSessionEvent>.Continuation
 
-    /// The ARSession shared by all segments. `LiveCameraPreview` shows its camera feed.
+    /// The ARSession shared by all segments.
     public let arSession = ARSession()
+
+    /// Apple's RoomPlan view on the shared ARSession: the camera feed with the live outline of
+    /// walls, doors, windows and objects, and RoomPlan's own coaching ("Move closer", "Slow
+    /// down", relocalization). `CaptureSessionPreview` shows it. Every segment runs this view's
+    /// `captureSession`, so the outline follows the scan.
+    public private(set) lazy var captureView: RoomCaptureView = RoomCaptureView(
+      frame: .zero, arSession: arSession)
 
     /// Most depth points kept per capture (16 bytes each in `depth-samples.bin`).
     static let maxDepthSamples = 3_000_000
@@ -167,7 +174,7 @@
     // MARK: Segments
 
     private func startSegment() {
-      let session = RoomCaptureSession(arSession: arSession)
+      let session: RoomCaptureSession = captureView.captureSession
       session.delegate = self
       var roomConfiguration = RoomCaptureSession.Configuration()
       roomConfiguration.isCoachingEnabled = true

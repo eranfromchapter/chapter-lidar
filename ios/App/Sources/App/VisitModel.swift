@@ -32,6 +32,7 @@ final class VisitModel {
   @ObservationIgnored private let appInfo: CaptureRecord.AppInfo
   @ObservationIgnored private var controls: FieldControls? = nil
   @ObservationIgnored private var rooms: [LowercaseUUID: [String]] = [:]
+  @ObservationIgnored private var scans: [LowercaseUUID: ScanMeasurements?] = [:]
   @ObservationIgnored private var uploadPackageId: LowercaseUUID? = nil
 
   init(
@@ -75,6 +76,21 @@ final class VisitModel {
     }
   }
 
+  /// Where every visit on this phone is kept ("My scans").
+  var visitsRoot: URL? { app?.visitsRoot }
+
+  /// This visit's scans, in capture order, for review before upload.
+  var scanItems: [ScanItem] {
+    (flow.record?.captures ?? []).compactMap { capture in
+      ScanLibrary.item(
+        folder: workspace.originalsRoot
+          .appendingPathComponent("Original Exports", isDirectory: true)
+          .appendingPathComponent(capture.areaKey, isDirectory: true)
+          .appendingPathComponent(capture.captureId.rawValue, isDirectory: true),
+        title: capture.label)
+    }
+  }
+
   private func floorFinished(_ result: CaptureFlowResult) {
     do {
       if flow.step == .captureRecord { try flow.scanStarted() }
@@ -85,6 +101,7 @@ final class VisitModel {
       }
       let model = try? builder.captureModel(of: capture, visitId: record.visitId)
       rooms[capture.captureId] = model?.rooms.map(\.label) ?? []
+      scans[capture.captureId] = model.map(ScanMeasurements.init(model:))
       openPhotos(captureId: capture.captureId, room: nil)
       message = nil
     } catch {
@@ -98,7 +115,7 @@ final class VisitModel {
     FieldCaptureOption(
       ref: FieldControls.CaptureRef(captureId: capture.captureId, areaKey: capture.areaKey),
       label: capture.label, mode: capture.mode, capturedAt: capture.capturedAt,
-      rooms: rooms[capture.captureId] ?? [])
+      rooms: rooms[capture.captureId] ?? [], scan: scans[capture.captureId] ?? nil)
   }
 
   private func openPhotos(captureId: LowercaseUUID, room: String?) {

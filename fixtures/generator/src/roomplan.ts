@@ -2,7 +2,8 @@
 // CapturedStructure (several rooms: { version, rooms: [CapturedRoom] }).
 //
 // Shape notes (what a device export looks like and what this fixture mirrors):
-// - simd values encode as arrays: dimensions [x, y, z], transform as four column arrays.
+// - simd values encode as arrays: dimensions [x, y, z], transform as one flat array of
+//   16 numbers, column after column (Apple's simd_float4x4 Codable shape).
 // - enums with associated values encode as { "<case>": { ... } }, for example
 //   { "door": { "isOpen": false } } and { "high": {} } for confidence.
 // - a surface sits in its own local frame: local X along the wall, local Y up, local Z the
@@ -17,7 +18,8 @@ import type { CaptureSpec, OpeningSpec } from "./spec.js";
 import { float32Short, uuidFrom, type V3 } from "./util.js";
 
 type Column = [number, number, number, number];
-export type Transform = [Column, Column, Column, Column];
+// simd_float4x4 Codable: 16 numbers, column after column (columns[3] is the translation).
+export type Transform = number[];
 
 export function f32(value: number): number {
   return float32Short(value);
@@ -25,7 +27,7 @@ export function f32(value: number): number {
 
 function transformOf(x: V3, y: V3, z: V3, t: V3): Transform {
   const col = (v: V3, w: number): Column => [f32(v[0]), f32(v[1]), f32(v[2]), w];
-  return [col(x, 0), col(y, 0), col(z, 0), col(t, 1)];
+  return [...col(x, 0), ...col(y, 0), ...col(z, 0), ...col(t, 1)];
 }
 
 const CATEGORY_KEY: Record<string, string> = {
@@ -34,6 +36,17 @@ const CATEGORY_KEY: Record<string, string> = {
   stairs: "stairs",
   table: "table",
 };
+
+/** RoomPlan section label (CapturedRoom.Section.Label) for a room name. */
+function sectionLabel(name: string): string {
+  const lower = name.toLowerCase();
+  if (lower.includes("kitchen")) return "kitchen";
+  if (lower.includes("bath")) return "bathroom";
+  if (lower.includes("bed")) return "bedroom";
+  if (lower.includes("dining")) return "diningRoom";
+  if (lower.includes("living")) return "livingRoom";
+  return "unidentified";
+}
 
 function wallDirection(wall: LocalWall): { dx: number; dz: number } {
   return {
@@ -57,6 +70,9 @@ function wallSurface(captureId: string, wall: LocalWall): Record<string, unknown
     transform: transformOf([dx, 0, dz], [0, 1, 0], [-dz, 0, dx], centre),
     completedEdges: [],
     story: 0,
+    curve: null,
+    parentIdentifier: null,
+    polygonCorners: [],
   };
 }
 
@@ -87,6 +103,8 @@ function openingSurface(
     transform: transformOf([dx, 0, dz], [0, 1, 0], [-dz, 0, dx], centre),
     completedEdges: [],
     story: 0,
+    curve: null,
+    polygonCorners: [],
   };
 }
 
@@ -123,6 +141,8 @@ export function buildRoomPlanJson(capture: CaptureSpec, captureId: string): unkn
       polygonCorners: polygon.map((p) => [f32(p[0] - cx), f32(-(p[2] - cz)), 0]),
       completedEdges: [],
       story: 0,
+      curve: null,
+      parentIdentifier: null,
     };
     const objects = localObjects(capture)
       .filter((object) => object.spec.roomId === room.id)
@@ -138,23 +158,40 @@ export function buildRoomPlanJson(capture: CaptureSpec, captureId: string): unkn
           transform: transformOf([c, 0, -s], [0, 1, 0], [s, 0, c], object.center),
           attributes: {},
           story: 0,
+          parentIdentifier: null,
         };
       });
     return {
+      // A device export has no top-level identifier on a CapturedRoom; it carries
+      // referenceOriginTransform, sections and an opaque coreModel (not generated).
       version: 2,
-      identifier: uuidFrom(`${captureId}:raw:${room.id}`).toUpperCase(),
       story: 0,
+      referenceOriginTransform: transformOf([1, 0, 0], [0, 1, 0], [0, 0, 1], [0, 0, 0]),
       walls: roomWalls.map((wall) => wallSurface(captureId, wall)),
       doors: surfaces("door"),
       windows: surfaces("window"),
       openings: surfaces("opening"),
       floors: [floor],
       objects,
-      sections: [],
+      sections: [{ story: 0, label: sectionLabel(room.label), center: [f32(cx), 0, f32(cz)] }],
     };
   });
   if (rooms.length === 1) {
     return rooms[0];
   }
-  return { version: 1, rooms };
+  // A structure also lists every room's elements at the top level.
+  const all = (key: string) =>
+    rooms.flatMap((room) => (room as unknown as Record<string, unknown[]>)[key] as unknown[]);
+  return {
+    version: 1,
+    identifier: uuidFrom(`${captureId}:raw:structure`).toUpperCase(),
+    rooms,
+    walls: all("walls"),
+    doors: all("doors"),
+    windows: all("windows"),
+    openings: all("openings"),
+    floors: all("floors"),
+    objects: all("objects"),
+    sections: all("sections"),
+  };
 }

@@ -1,63 +1,55 @@
 {
   "version": 2,
-  "identifier": "573C6CE9-D8FC-4319-A5CA-BDF4A0806121",
   "story": 0,
+  "referenceOriginTransform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
   "walls": [
     {
       "identifier": "1E2CD273-2A7E-4C11-8D8F-7698FB960E27",
       "category": { "wall": {} },
       "confidence": { "high": {} },
       "dimensions": [3, 2.7, 0],
-      "transform": [
-        [0, 0, 1, 0],
-        [0, 1, 0, 0],
-        [-1, 0, 0, 0],
-        [0, 1.35, 1.5, 1]
-      ],
+      "transform": [0, 0, 1, 0, 0, 1, 0, 0, -1, 0, 0, 0, 0, 1.35, 1.5, 1],
       "completedEdges": [],
-      "story": 0
+      "story": 0,
+      "curve": null,
+      "parentIdentifier": null,
+      "polygonCorners": []
     },
     {
       "identifier": "37C1AA95-7738-4AC0-A391-E35C167659CB",
       "category": { "wall": {} },
       "confidence": { "high": {} },
       "dimensions": [4, 2.7, 0],
-      "transform": [
-        [1, 0, 0, 0],
-        [0, 1, 0, 0],
-        [0, 0, 1, 0],
-        [2, 1.35, 3, 1]
-      ],
+      "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 2, 1.35, 3, 1],
       "completedEdges": [],
-      "story": 0
+      "story": 0,
+      "curve": null,
+      "parentIdentifier": null,
+      "polygonCorners": []
     },
     {
       "identifier": "D8B447F3-E1EA-4226-9D35-29D99EF412EA",
       "category": { "wall": {} },
       "confidence": { "high": {} },
       "dimensions": [3, 2.7, 0],
-      "transform": [
-        [0, 0, -1, 0],
-        [0, 1, 0, 0],
-        [1, 0, 0, 0],
-        [4, 1.35, 1.5, 1]
-      ],
+      "transform": [0, 0, -1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 4, 1.35, 1.5, 1],
       "completedEdges": [],
-      "story": 0
+      "story": 0,
+      "curve": null,
+      "parentIdentifier": null,
+      "polygonCorners": []
     },
     {
       "identifier": "39246A61-39A7-4D48-85A9-ED6583CC7051",
       "category": { "wall": {} },
       "confidence": { "high": {} },
       "dimensions": [4, 2.7, 0],
-      "transform": [
-        [-1, 0, 0, 0],
-        [0, 1, 0, 0],
-        [0, 0, -1, 0],
-        [2, 1.35, 0, 1]
-      ],
+      "transform": [-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1, 0, 2, 1.35, 0, 1],
       "completedEdges": [],
-      "story": 0
+      "story": 0,
+      "curve": null,
+      "parentIdentifier": null,
+      "polygonCorners": []
     }
   ],
   "doors": [
@@ -67,14 +59,11 @@
       "category": { "door": { "isOpen": false } },
       "confidence": { "high": {} },
       "dimensions": [0.9, 2.1, 0],
-      "transform": [
-        [-1, 0, 0, 0],
-        [0, 1, 0, 0],
-        [0, 0, -1, 0],
-        [1, 1.05, 0, 1]
-      ],
+      "transform": [-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1, 0, 1, 1.05, 0, 1],
       "completedEdges": [],
-      "story": 0
+      "story": 0,
+      "curve": null,
+      "polygonCorners": []
     }
   ],
   "windows": [
@@ -84,14 +73,11 @@
       "category": { "window": {} },
       "confidence": { "high": {} },
       "dimensions": [1.2, 1.2, 0],
-      "transform": [
-        [1, 0, 0, 0],
-        [0, 1, 0, 0],
-        [0, 0, 1, 0],
-        [2, 1.5, 3, 1]
-      ],
+      "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 2, 1.5, 3, 1],
       "completedEdges": [],
-      "story": 0
+      "story": 0,
+      "curve": null,
+      "polygonCorners": []
     }
   ],
   "openings": [],
@@ -101,12 +87,7 @@
       "category": { "floor": {} },
       "confidence": { "high": {} },
       "dimensions": [4, 3, 0],
-      "transform": [
-        [1, 0, 0, 0],
-        [0, 0, -1, 0],
-        [0, 1, 0, 0],
-        [2, 0, 1.5, 1]
-      ],
+      "transform": [1, 0, 0, 0, 0, 0, -1, 0, 0, 1, 0, 0, 2, 0, 1.5, 1],
       "polygonCorners": [
         [-2, 1.5, 0],
         [-2, -1.5, 0],
@@ -114,7 +95,9 @@
         [2, 1.5, 0]
       ],
       "completedEdges": [],
-      "story": 0
+      "story": 0,
+      "curve": null,
+      "parentIdentifier": null
     }
   ],
   "objects": [
@@ -123,15 +106,11 @@
       "category": { "table": {} },
       "confidence": { "high": {} },
       "dimensions": [1.2, 0.75, 0.8],
-      "transform": [
-        [1, 0, 0, 0],
-        [0, 1, 0, 0],
-        [0, 0, 1, 0],
-        [2, 0.375, 1.5, 1]
-      ],
+      "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 2, 0.375, 1.5, 1],
       "attributes": {},
-      "story": 0
+      "story": 0,
+      "parentIdentifier": null
     }
   ],
-  "sections": []
+  "sections": [{ "story": 0, "label": "unidentified", "center": [2, 0, 1.5] }]
 }

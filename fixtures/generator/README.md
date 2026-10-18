@@ -67,7 +67,7 @@ id, the affected file and role, the mutation and its details.
 
 - `roomplan.json`: Apple `CapturedRoom` Codable JSON for a one-room capture; `CapturedStructure`
   (`{ "version", "rooms": [CapturedRoom] }`) for the apartment. simd values are arrays:
-  `dimensions` `[x, y, z]`, `transform` four column arrays. Enum cases with values encode as
+  `dimensions` `[x, y, z]`, `transform` one flat array of 16 numbers, column after column (`simd_float4x4`). Enum cases with values encode as
   `{ "door": { "isOpen": false } }`, confidence as `{ "high": {} }`. A wall surface has local X
   along the wall, local Y up; `dimensions` is `[length, height, 0]`; doors, windows and openings
   carry `parentIdentifier` (the wall). Floors carry `polygonCorners` in the floor's local frame.

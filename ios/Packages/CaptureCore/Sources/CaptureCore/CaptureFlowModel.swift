@@ -244,6 +244,12 @@
     // MARK: Live screen text
 
     /// "Floor 1 · Whole floor".
+    /// What the operator should do next on the live scan screen.
+    public var guidance: ScanGuidance {
+      ScanGuidance.next(
+        counts: progress.counts, mode: draft.mode, isPaused: isPaused, instruction: instruction)
+    }
+
     public var scanTitle: String {
       let label = draft.floorLabel.trimmingCharacters(in: .whitespacesAndNewlines)
       return "\(label) · \(draft.mode.map(CaptureFlowModel.modeTitle) ?? "")"

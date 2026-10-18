@@ -66,9 +66,9 @@ targets:
         ENABLE_PREVIEWS: NO
       configs:
         Release:
-          # The UI-test stubs and fixture never ship: `UITest*` sources (also #if DEBUG) and the
-          # fixture folder are not built into Release.
-          EXCLUDED_SOURCE_FILE_NAMES: "UITest* package"
+          # The UI-test and field-test stubs and the fixture never ship: `UITest*` and `FieldTest*`
+          # sources (also #if DEBUG) and the fixture folder are not built into Release.
+          EXCLUDED_SOURCE_FILE_NAMES: "UITest* FieldTest* package"
     dependencies:
       - package: AppCore
         product: AppCore
