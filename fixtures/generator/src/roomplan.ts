@@ -37,6 +37,17 @@ const CATEGORY_KEY: Record<string, string> = {
   table: "table",
 };
 
+/** RoomPlan section label (CapturedRoom.Section.Label) for a room name. */
+function sectionLabel(name: string): string {
+  const lower = name.toLowerCase();
+  if (lower.includes("kitchen")) return "kitchen";
+  if (lower.includes("bath")) return "bathroom";
+  if (lower.includes("bed")) return "bedroom";
+  if (lower.includes("dining")) return "diningRoom";
+  if (lower.includes("living")) return "livingRoom";
+  return "unidentified";
+}
+
 function wallDirection(wall: LocalWall): { dx: number; dz: number } {
   return {
     dx: (wall.end[0] - wall.start[0]) / wall.lengthM,
@@ -151,16 +162,18 @@ export function buildRoomPlanJson(capture: CaptureSpec, captureId: string): unkn
         };
       });
     return {
+      // A device export has no top-level identifier on a CapturedRoom; it carries
+      // referenceOriginTransform, sections and an opaque coreModel (not generated).
       version: 2,
-      identifier: uuidFrom(`${captureId}:raw:${room.id}`).toUpperCase(),
       story: 0,
+      referenceOriginTransform: transformOf([1, 0, 0], [0, 1, 0], [0, 0, 1], [0, 0, 0]),
       walls: roomWalls.map((wall) => wallSurface(captureId, wall)),
       doors: surfaces("door"),
       windows: surfaces("window"),
       openings: surfaces("opening"),
       floors: [floor],
       objects,
-      sections: [],
+      sections: [{ story: 0, label: sectionLabel(room.label), center: [f32(cx), 0, f32(cz)] }],
     };
   });
   if (rooms.length === 1) {
@@ -179,6 +192,6 @@ export function buildRoomPlanJson(capture: CaptureSpec, captureId: string): unkn
     openings: all("openings"),
     floors: all("floors"),
     objects: all("objects"),
-    sections: [],
+    sections: all("sections"),
   };
 }

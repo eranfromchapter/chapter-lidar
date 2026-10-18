@@ -1,7 +1,7 @@
 {
   "version": 2,
-  "identifier": "573C6CE9-D8FC-4319-A5CA-BDF4A0806121",
   "story": 0,
+  "referenceOriginTransform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
   "walls": [
     {
       "identifier": "1E2CD273-2A7E-4C11-8D8F-7698FB960E27",
@@ -112,5 +112,5 @@
       "parentIdentifier": null
     }
   ],
-  "sections": []
+  "sections": [{ "story": 0, "label": "unidentified", "center": [2, 0, 1.5] }]
 }

@@ -80,6 +80,32 @@
       .padding(.horizontal, 20)
       .padding(.top, Space.s2)
       .padding(.bottom, Space.s4)
+      // Haptics, so the operator feels the scan working without watching the screen: a soft pulse
+      // while scanning normally, a tap for each new wall, door, window or object, a warning when
+      // RoomPlan needs something, and a click on Pause / Resume.
+      .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.35), trigger: pulse)
+      .sensoryFeedback(.impact(weight: .medium, intensity: 0.8), trigger: foundCount) { old, new in
+        new > old
+      }
+      .sensoryFeedback(.warning, trigger: model.instruction) { _, new in new != .normal }
+      .sensoryFeedback(.selection, trigger: model.isPaused)
+      .task(id: model.isPaused) {
+        while !Task.isCancelled {
+          try? await Task.sleep(for: .seconds(1.2))
+          if model.sessionState == .running, !model.isPaused, model.instruction == .normal {
+            pulse &+= 1
+          }
+        }
+      }
+    }
+
+    /// Heartbeat counter for the soft scanning pulse.
+    @State private var pulse = 0
+
+    /// Everything RoomPlan has found so far; a rise gives a tap.
+    private var foundCount: Int {
+      let counts = model.progress.counts
+      return counts.walls + counts.doors + counts.windows + counts.openings + counts.objects
     }
 
     /// Direction for the operator: the step of the scan, what to do, and RoomPlan's warnings.

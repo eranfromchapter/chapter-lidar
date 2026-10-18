@@ -4,8 +4,8 @@
   "rooms": [
     {
       "version": 2,
-      "identifier": "3CFD74E2-6395-4D30-96C1-C63EFD78673C",
       "story": 0,
+      "referenceOriginTransform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
       "walls": [
         {
           "identifier": "69595484-EE89-410C-A3B8-D42283859868",
@@ -129,12 +129,12 @@
           "parentIdentifier": null
         }
       ],
-      "sections": []
+      "sections": [{ "story": 0, "label": "livingRoom", "center": [2.5, 0, 2] }]
     },
     {
       "version": 2,
-      "identifier": "D60693ED-A9D3-4975-ACBD-3B204E8EAF98",
       "story": 0,
+      "referenceOriginTransform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
       "walls": [
         {
           "identifier": "612EEF1E-1D34-442F-B634-27FCF0204D86",
@@ -232,7 +232,7 @@
           "parentIdentifier": null
         }
       ],
-      "sections": []
+      "sections": [{ "story": 0, "label": "bedroom", "center": [6.5, 0, 2] }]
     }
   ],
   "walls": [
@@ -445,5 +445,8 @@
       "parentIdentifier": null
     }
   ],
-  "sections": []
+  "sections": [
+    { "story": 0, "label": "livingRoom", "center": [2.5, 0, 2] },
+    { "story": 0, "label": "bedroom", "center": [6.5, 0, 2] }
+  ]
 }

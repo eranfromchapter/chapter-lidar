@@ -1,7 +1,7 @@
 {
   "version": 2,
-  "identifier": "8534A12F-E1A3-47EF-8598-C667CC7BD46F",
   "story": 0,
+  "referenceOriginTransform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
   "walls": [
     {
       "identifier": "645FDF0C-9DCA-4D8E-85D9-3F68FEA22AFF",
@@ -102,5 +102,5 @@
     }
   ],
   "objects": [],
-  "sections": []
+  "sections": [{ "story": 0, "label": "unidentified", "center": [2.85, 0, 3.25] }]
 }

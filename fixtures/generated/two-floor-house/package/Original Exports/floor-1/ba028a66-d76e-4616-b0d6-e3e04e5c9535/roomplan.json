@@ -1,7 +1,7 @@
 {
   "version": 2,
-  "identifier": "D9F00916-0A0A-41E9-91E5-E1A03E929F54",
   "story": 0,
+  "referenceOriginTransform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
   "walls": [
     {
       "identifier": "E6CABFB1-0636-4C34-9BC0-C1BA5F082D39",
@@ -112,5 +112,5 @@
       "parentIdentifier": null
     }
   ],
-  "sections": []
+  "sections": [{ "story": 0, "label": "livingRoom", "center": [3, 0, 2.5] }]
 }
