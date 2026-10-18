@@ -15,7 +15,7 @@ swift test --package-path ios/Packages/CaptureCore --filter MappingTests
 | --------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `CaptureModelMapping` | Linux, macOS, iOS     | Codable mirror of RoomPlan's JSON, transforms, room polygons, opening-to-wall assignment, `CaptureModelMapper`                                   |
 | `CaptureCore`         | Linux, macOS, iOS     | `CaptureSession` protocol, `ReplaySession`, `DeviceGate`, raw-originals writer and debug export, capture-record form logic, `CaptureFlowModel`   |
-| `CaptureRoomPlan`     | iOS only (RoomPlan)   | `LiveCaptureSession` (RoomPlan + ARKit), `RoomPlanAdapter`, `DeviceCapabilities.current()`, `LiveCameraPreview`                                  |
+| `CaptureRoomPlan`     | iOS only (RoomPlan)   | `LiveCaptureSession` (RoomPlan + ARKit), `RoomPlanAdapter`, `DeviceCapabilities.current()`, `LiveCameraPreview`, `CaptureSessionPreview`         |
 | `CaptureUI`           | iOS only (SwiftUI)    | The three capture screens of the frozen design (`CaptureFlowView`) and the design tokens                                                         |
 | `CaptureTestSupport`  | everywhere, test only | Fixture paths and a JSON Schema subset validator; not a product                                                                                  |
 
@@ -33,6 +33,22 @@ that has one, and the mapping, schema and capture-record tests must run on Linux
   `CaptureCore-Package`, and runs every test on the simulator, including `CaptureRoomPlanTests`.
 - `CaptureRoomPlan` and `CaptureUI` use Swift language mode 5: RoomPlan and ARKit delegates are
   Objective-C protocols with non-Sendable arguments.
+
+## Showing the camera feed
+
+`CaptureFlowModel.currentSession` is the session of the scan in progress (nil before Start scan and
+after Finish floor or Cancel; observed, so views follow it). The host passes
+`CaptureSessionPreview` from `CaptureRoomPlan` as the `preview` of `CaptureFlowView`: it shows
+`LiveCameraPreview` of the `LiveCaptureSession`'s `ARSession`, and nothing for a `ReplaySession` or
+no session, so the panel keeps the design's dark placeholder. It only displays the feed; the session
+runs it.
+
+```swift
+import CaptureRoomPlan
+import CaptureUI
+
+CaptureFlowView(model: model, preview: { CaptureSessionPreview(model: model) })
+```
 
 ## From RoomPlan to the CaptureModel
 
