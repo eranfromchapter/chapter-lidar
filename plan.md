@@ -496,6 +496,9 @@ Gate log: W5 validator INCOMPLETE only on the deferred `wait-workflow.sh ci.yml`
 health check PASS (F9.AC6 and F13.AC2 on the real local stack; F10.AC5 rendered with Playwright). dev-idp runs in the
 api container's network (compose option B) because the station allows http keys only on loopback. Open items: infra must
 set REVIEW_BASE_URL for the worker; HUB upload/search mapping NOT CONFIRMED; decision log is its own page (link from detail).
+Post-gate fix P10-fix1: the web "In the HUB" column now follows the worker's publish rule (only plan files <= 45 MiB are
+uploaded; everything else is "Linked"), with a drift test against station/hub. Meshes and LAS now read "Linked", not the
+design's "Linked (over 45 MB)", because the worker never uploads them. F10.AC2/AC4 and the shallow gate re-run: PASS.
 On the first push, run every deferred check and fix failures before calling the build done.
 
 ## Human steps after the build (acceptance, not implementation)
@@ -513,7 +516,7 @@ Executed by `/wave-planning:wave-execute`. See that skill for the worktree, disp
 ```yaml status
 base_branch: main
 integration_branch: wave/integration
-integration_head: c32d56a
+integration_head: 14d9178
 W1: done
 W2: done
 W3: done
