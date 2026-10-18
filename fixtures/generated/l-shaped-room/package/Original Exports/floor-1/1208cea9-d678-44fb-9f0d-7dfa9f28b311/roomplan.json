@@ -8,12 +8,7 @@
       "category": { "wall": {} },
       "confidence": { "high": {} },
       "dimensions": [4, 2.7, 0],
-      "transform": [
-        [0, 0, 1, 0],
-        [0, 1, 0, 0],
-        [-1, 0, 0, 0],
-        [0, 1.35, 2, 1]
-      ],
+      "transform": [0, 0, 1, 0, 0, 1, 0, 0, -1, 0, 0, 0, 0, 1.35, 2, 1],
       "completedEdges": [],
       "story": 0
     },
@@ -22,12 +17,7 @@
       "category": { "wall": {} },
       "confidence": { "high": {} },
       "dimensions": [3, 2.7, 0],
-      "transform": [
-        [1, 0, 0, 0],
-        [0, 1, 0, 0],
-        [0, 0, 1, 0],
-        [1.5, 1.35, 4, 1]
-      ],
+      "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.5, 1.35, 4, 1],
       "completedEdges": [],
       "story": 0
     },
@@ -36,12 +26,7 @@
       "category": { "wall": {} },
       "confidence": { "high": {} },
       "dimensions": [2, 2.7, 0],
-      "transform": [
-        [0, 0, -1, 0],
-        [0, 1, 0, 0],
-        [1, 0, 0, 0],
-        [3, 1.35, 3, 1]
-      ],
+      "transform": [0, 0, -1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 3, 1.35, 3, 1],
       "completedEdges": [],
       "story": 0
     },
@@ -50,12 +35,7 @@
       "category": { "wall": {} },
       "confidence": { "high": {} },
       "dimensions": [3, 2.7, 0],
-      "transform": [
-        [1, 0, 0, 0],
-        [0, 1, 0, 0],
-        [0, 0, 1, 0],
-        [4.5, 1.35, 2, 1]
-      ],
+      "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 4.5, 1.35, 2, 1],
       "completedEdges": [],
       "story": 0
     },
@@ -64,12 +44,7 @@
       "category": { "wall": {} },
       "confidence": { "high": {} },
       "dimensions": [2, 2.7, 0],
-      "transform": [
-        [0, 0, -1, 0],
-        [0, 1, 0, 0],
-        [1, 0, 0, 0],
-        [6, 1.35, 1, 1]
-      ],
+      "transform": [0, 0, -1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 6, 1.35, 1, 1],
       "completedEdges": [],
       "story": 0
     },
@@ -78,12 +53,7 @@
       "category": { "wall": {} },
       "confidence": { "high": {} },
       "dimensions": [6, 2.7, 0],
-      "transform": [
-        [-1, 0, 0, 0],
-        [0, 1, 0, 0],
-        [0, 0, -1, 0],
-        [3, 1.35, 0, 1]
-      ],
+      "transform": [-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1, 0, 3, 1.35, 0, 1],
       "completedEdges": [],
       "story": 0
     }
@@ -95,12 +65,7 @@
       "category": { "door": { "isOpen": false } },
       "confidence": { "high": {} },
       "dimensions": [0.9, 2.1, 0],
-      "transform": [
-        [-1, 0, 0, 0],
-        [0, 1, 0, 0],
-        [0, 0, -1, 0],
-        [5, 1.05, 0, 1]
-      ],
+      "transform": [-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1, 0, 5, 1.05, 0, 1],
       "completedEdges": [],
       "story": 0
     }
@@ -112,12 +77,7 @@
       "category": { "window": {} },
       "confidence": { "high": {} },
       "dimensions": [1.2, 1.2, 0],
-      "transform": [
-        [0, 0, 1, 0],
-        [0, 1, 0, 0],
-        [-1, 0, 0, 0],
-        [0, 1.5, 2, 1]
-      ],
+      "transform": [0, 0, 1, 0, 0, 1, 0, 0, -1, 0, 0, 0, 0, 1.5, 2, 1],
       "completedEdges": [],
       "story": 0
     },
@@ -127,12 +87,7 @@
       "category": { "window": {} },
       "confidence": { "high": {} },
       "dimensions": [1.2, 1.2, 0],
-      "transform": [
-        [1, 0, 0, 0],
-        [0, 1, 0, 0],
-        [0, 0, 1, 0],
-        [4.5, 1.5, 2, 1]
-      ],
+      "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 4.5, 1.5, 2, 1],
       "completedEdges": [],
       "story": 0
     }
@@ -144,12 +99,7 @@
       "category": { "opening": {} },
       "confidence": { "high": {} },
       "dimensions": [1, 2.1, 0],
-      "transform": [
-        [0, 0, -1, 0],
-        [0, 1, 0, 0],
-        [1, 0, 0, 0],
-        [6, 1.05, 1, 1]
-      ],
+      "transform": [0, 0, -1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 6, 1.05, 1, 1],
       "completedEdges": [],
       "story": 0
     }
@@ -160,12 +110,7 @@
       "category": { "floor": {} },
       "confidence": { "high": {} },
       "dimensions": [6, 4, 0],
-      "transform": [
-        [1, 0, 0, 0],
-        [0, 0, -1, 0],
-        [0, 1, 0, 0],
-        [3, 0, 2, 1]
-      ],
+      "transform": [1, 0, 0, 0, 0, 0, -1, 0, 0, 1, 0, 0, 3, 0, 2, 1],
       "polygonCorners": [
         [-3, 2, 0],
         [-3, -2, 0],

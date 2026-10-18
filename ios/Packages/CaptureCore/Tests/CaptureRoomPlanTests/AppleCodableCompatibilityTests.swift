@@ -21,6 +21,15 @@
       XCTAssertEqual(room.doors.count, 1)
       XCTAssertEqual(room.windows.count, 1)
       XCTAssertEqual(room.objects.count, 1)
+      // Apple and the mirror must read the 16 numbers in the same order: same translations.
+      let document = try RoomPlanDocument.decode(from: data)
+      for (apple, mirror) in zip(room.walls + room.doors, document.rooms[0].walls + document.rooms[0].doors) {
+        let t = apple.transform.columns.3
+        let expected = mirror.transform.translation
+        XCTAssertEqual(Double(t.x), expected.x, accuracy: 1e-5)
+        XCTAssertEqual(Double(t.y), expected.y, accuracy: 1e-5)
+        XCTAssertEqual(Double(t.z), expected.z, accuracy: 1e-5)
+      }
     }
 
     func testApartmentFixtureDecodesAsCapturedStructure() throws {

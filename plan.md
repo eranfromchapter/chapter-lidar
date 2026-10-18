@@ -555,4 +555,4 @@ Gate log W6: all runnable checks PASS (F6.AC1-AC4; AC4 on the real local stack, 
 F6.AC5 (simulator UI test) and F6.AC6 (visual) accepted by the user to verify on the first GitHub push.
 Fix round 1 (user-approved): camera feed on live scan (P2-fix1), "No rooms skipped" confirm (P5-fix1),
 app wiring + sign-out link on New capture before any scan (P6c-fix1). Gate, AppCore (36 tests), release build, E2E re-run: PASS.
-Open: a different account signing in resumes the previous operator's sealed uploads (decision needed).
+Decided by Eran, 2026-10-18: each phone has one operator with their own account, so resuming sealed uploads after sign-in stays as built (closed).

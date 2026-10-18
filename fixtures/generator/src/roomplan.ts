@@ -2,7 +2,8 @@
 // CapturedStructure (several rooms: { version, rooms: [CapturedRoom] }).
 //
 // Shape notes (what a device export looks like and what this fixture mirrors):
-// - simd values encode as arrays: dimensions [x, y, z], transform as four column arrays.
+// - simd values encode as arrays: dimensions [x, y, z], transform as one flat array of
+//   16 numbers, column after column (Apple's simd_float4x4 Codable shape).
 // - enums with associated values encode as { "<case>": { ... } }, for example
 //   { "door": { "isOpen": false } } and { "high": {} } for confidence.
 // - a surface sits in its own local frame: local X along the wall, local Y up, local Z the
@@ -17,7 +18,8 @@ import type { CaptureSpec, OpeningSpec } from "./spec.js";
 import { float32Short, uuidFrom, type V3 } from "./util.js";
 
 type Column = [number, number, number, number];
-export type Transform = [Column, Column, Column, Column];
+// simd_float4x4 Codable: 16 numbers, column after column (columns[3] is the translation).
+export type Transform = number[];
 
 export function f32(value: number): number {
   return float32Short(value);
@@ -25,7 +27,7 @@ export function f32(value: number): number {
 
 function transformOf(x: V3, y: V3, z: V3, t: V3): Transform {
   const col = (v: V3, w: number): Column => [f32(v[0]), f32(v[1]), f32(v[2]), w];
-  return [col(x, 0), col(y, 0), col(z, 0), col(t, 1)];
+  return [...col(x, 0), ...col(y, 0), ...col(z, 0), ...col(t, 1)];
 }
 
 const CATEGORY_KEY: Record<string, string> = {
