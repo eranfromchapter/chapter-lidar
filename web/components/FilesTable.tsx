@@ -88,7 +88,7 @@ export function FilesTable({
                   <td className="mono">
                     <span title={file.sha256}>{shortSha(file.sha256)}</span>
                   </td>
-                  <td>{hubState(file.bytes)}</td>
+                  <td>{hubState(file.role, file.bytes)}</td>
                   {canDownload ? (
                     <td>
                       {file.status === "verified" ? (

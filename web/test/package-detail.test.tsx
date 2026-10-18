@@ -2,12 +2,13 @@
 // AC2: package detail shows the outcome and every finding from the station, for the contract's
 // verdict example and for the verdict the station checks produce on every generated fixture.
 
-import type { Finding, Verdict } from "@chapter/capture-contract";
+import type { Finding, Role, Verdict } from "@chapter/capture-contract";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   formatBytes,
   HUB_LINK_THRESHOLD_BYTES,
+  HUB_UPLOAD_ROLES,
   hubState,
   outcomeHeadline,
   pathDisplayName,
@@ -63,6 +64,23 @@ function findingRows(): HTMLElement[] {
   return within(findings)
     .getAllByRole("row")
     .filter((row) => row.hasAttribute("data-severity"));
+}
+
+/** Text of a files-table row's "In the HUB" cell (File, Role, Size, SHA-256, In the HUB, ...). */
+function hubCell(row: HTMLElement): string | null | undefined {
+  return within(row).getAllByRole("cell")[4]?.textContent;
+}
+
+/**
+ * The station/hub publication rule, written out independently of the code under test: only
+ * plan DXF, rooms CSV, plan PDF, Spatial Report PDF and plan PNG files up to 45 MiB are uploaded.
+ */
+function expectedHubState(role: Role, bytes: number): string {
+  const uploadRole = ["plan_dxf", "rooms_csv", "plan_pdf", "spatial_report_pdf", "plan_png"];
+  if (!uploadRole.includes(role)) {
+    return "Linked";
+  }
+  return bytes > 47_185_920 ? "Linked (over 45 MB)" : "Uploaded";
 }
 
 /** Findings in the order the screen lists them: grouped by severity, station order inside. */
@@ -164,31 +182,52 @@ describe.each(cases.map((fixture) => [fixture.name, fixture] as const))(
         const row = rows[index] as HTMLElement;
         expect(row.textContent).toContain(formatBytes(file.bytes));
         expect(within(row).getByTitle(file.sha256)).toBeTruthy();
-        expect(row.textContent).toContain(
-          file.bytes > 47_185_920 ? "Linked (over 45 MB)" : "Uploaded",
-        );
+        expect(hubCell(row)).toBe(expectedHubState(file.role, file.bytes));
         expect(within(row).getByRole("link", { name: /^Download / })).toBeTruthy();
       });
     });
   },
 );
 
-describe("HUB link rule (must match station/hub: 45 MiB)", () => {
-  it("uploads files up to 47,185,920 bytes and links anything larger", () => {
+describe("HUB publication rule (must match station/hub/src/plan.ts)", () => {
+  it("matches station/hub's upload roles and size cap (drift guard)", async () => {
+    // Test-only import of the authoritative publisher; fails if the web rule drifts from it.
+    const plan = await import("../../station/hub/src/plan");
+    expect([...HUB_UPLOAD_ROLES]).toEqual([...plan.HUB_UPLOAD_ROLES]);
+    expect(HUB_LINK_THRESHOLD_BYTES).toBe(plan.MAX_HUB_UPLOAD_BYTES);
     expect(HUB_LINK_THRESHOLD_BYTES).toBe(47_185_920);
-    expect(hubState(47_185_920)).toBe("Uploaded");
-    expect(hubState(47_185_921)).toBe("Linked (over 45 MB)");
   });
 
-  it("shows the boundary on the files table", async () => {
+  it("uploads upload-role files up to 47,185,920 bytes and links larger ones", () => {
+    expect(hubState("plan_dxf", 47_185_920)).toBe("Uploaded");
+    expect(hubState("plan_dxf", 47_185_921)).toBe("Linked (over 45 MB)");
+    for (const role of ["rooms_csv", "plan_pdf", "spatial_report_pdf", "plan_png"] as const) {
+      expect(hubState(role, 1_000)).toBe("Uploaded");
+      expect(hubState(role, 47_185_921)).toBe("Linked (over 45 MB)");
+    }
+  });
+
+  it("links every other role, whatever its size", () => {
+    expect(hubState("photo", 3_145_728)).toBe("Linked");
+    expect(hubState("capture_record", 2_140)).toBe("Linked");
+    expect(hubState("raw_roomplan_json", 412_883)).toBe("Linked");
+    expect(hubState("field_controls", 2_650)).toBe("Linked");
+    expect(hubState("capture_model", 18_342)).toBe("Linked");
+    expect(hubState("mesh_glb", 100_663_296)).toBe("Linked");
+    expect(hubState("point_cloud_las", 188_743_680)).toBe("Linked");
+  });
+
+  it.each([
+    [47_185_920, "Uploaded"],
+    [47_185_921, "Linked (over 45 MB)"],
+  ])("shows a %d-byte plan DXF as %s on the files table", async (bytes, expected) => {
     const fixture = contractExampleCase();
     const pkg = structuredClone(fixture.pkg);
-    const [first, second] = pkg.files;
-    if (first === undefined || second === undefined) {
-      throw new Error("contract example needs two files");
+    const plan = pkg.files.find((file) => file.role === "plan_dxf");
+    if (plan === undefined) {
+      throw new Error("contract example needs a plan DXF");
     }
-    first.bytes = 47_185_920;
-    second.bytes = 47_185_921;
+    plan.bytes = bytes;
     const station = createFakeStation({
       projects: [fixture.project],
       packages: [pkg],
@@ -200,9 +239,41 @@ describe("HUB link rule (must match station/hub: 45 MiB)", () => {
       [...document.querySelectorAll<HTMLElement>("tr[data-path]")].find(
         (row) => row.getAttribute("data-path") === path,
       ) as HTMLElement;
-    expect(rowOf(first.path).textContent).toContain("Uploaded");
-    expect(rowOf(first.path).textContent).not.toContain("Linked");
-    expect(rowOf(second.path).textContent).toContain("Linked (over 45 MB)");
+    expect(hubCell(rowOf(plan.path))).toBe(expected);
+  });
+
+  it("shows small non-upload files and a mesh over 45 MiB as Linked on the files table", async () => {
+    const fixture = contractExampleCase();
+    const station = stationFor(fixture);
+    await renderPackage(fixture, station);
+    const rowsByRole = (role: Role) =>
+      fixture.pkg.files
+        .filter((file) => file.role === role)
+        .map(
+          (file) =>
+            [...document.querySelectorAll<HTMLElement>("tr[data-path]")].find(
+              (row) => row.getAttribute("data-path") === file.path,
+            ) as HTMLElement,
+        );
+    const small: Role[] = ["photo", "capture_record", "raw_roomplan_json"];
+    for (const role of small) {
+      const files = fixture.pkg.files.filter((file) => file.role === role);
+      expect(files.length).toBeGreaterThan(0);
+      for (const file of files) {
+        expect(file.bytes).toBeLessThanOrEqual(47_185_920);
+      }
+      for (const row of rowsByRole(role)) {
+        expect(hubCell(row)).toBe("Linked");
+      }
+    }
+    const meshes = fixture.pkg.files.filter((file) => file.role === "mesh_glb");
+    expect(meshes.length).toBeGreaterThan(0);
+    for (const mesh of meshes) {
+      expect(mesh.bytes).toBeGreaterThan(47_185_920);
+    }
+    for (const row of rowsByRole("mesh_glb")) {
+      expect(hubCell(row)).toBe("Linked");
+    }
   });
 });
 
@@ -238,7 +309,8 @@ describe("package detail states", () => {
     await renderPackage(fixture, station, { file: target?.path ?? "" });
     const highlighted = document.querySelector('tr[aria-current="true"]');
     expect(highlighted?.getAttribute("data-path")).toBe(target?.path);
-    expect(highlighted?.textContent).toContain("Linked (over 45 MB)");
+    // A mesh is never uploaded to the HUB, whatever its size: it is reachable only here.
+    expect(hubCell(highlighted as HTMLElement)).toBe("Linked");
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
   });
 

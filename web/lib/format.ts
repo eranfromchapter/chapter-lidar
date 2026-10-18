@@ -109,13 +109,35 @@ export const MODE_LABEL: Record<CaptureMode, string> = {
 };
 
 /**
- * HUB upload cap rule shown on screen-review: a file is linked, not uploaded, when its size is
- * over this many bytes (45 MiB = 47,185,920). MUST match the limit used by station/hub, the
- * authoritative publisher; the label keeps the design's wording "Linked (over 45 MB)".
+ * HUB upload cap shown on screen-review: an upload-role file is linked, not uploaded, when its
+ * size is over this many bytes (45 MiB = 47,185,920). MUST match MAX_HUB_UPLOAD_BYTES in
+ * station/hub/src/plan.ts, the authoritative publisher (a test guards against drift).
  */
 export const HUB_LINK_THRESHOLD_BYTES = 45 * 1024 * 1024;
 
-export function hubState(bytes: number): string {
+/**
+ * Package file roles the station uploads to the HUB (when not over the size cap). MUST match
+ * HUB_UPLOAD_ROLES in station/hub/src/plan.ts (a test guards against drift). Every other
+ * package file is only listed in the verdict report with a link to this screen.
+ */
+export const HUB_UPLOAD_ROLES: readonly Role[] = Object.freeze([
+  "plan_dxf",
+  "rooms_csv",
+  "plan_pdf",
+  "spatial_report_pdf",
+  "plan_png",
+]);
+
+/**
+ * "In the HUB" cell: the station's publication rule for this file, not live HUB state (the
+ * station API exposes no per-file publish state). Upload roles up to the cap are "Uploaded",
+ * larger ones "Linked (over 45 MB)" (the design's wording); every other role is "Linked",
+ * reachable only through this screen.
+ */
+export function hubState(role: Role, bytes: number): string {
+  if (!HUB_UPLOAD_ROLES.includes(role)) {
+    return "Linked";
+  }
   return bytes > HUB_LINK_THRESHOLD_BYTES ? "Linked (over 45 MB)" : "Uploaded";
 }
 
