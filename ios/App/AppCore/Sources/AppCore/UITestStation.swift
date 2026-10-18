@@ -57,6 +57,9 @@
 
   /// A fixed token. Never a real credential.
   public struct UITestTokenProvider: AccessTokenProvider {
+    /// The signed-in name of the UI-test mode (operator, "Signed in as" on New capture).
+    public static let operatorName = "UI Test Operator"
+
     public init() {}
     public func accessToken(forceRefresh: Bool) async throws -> String { "uitest-local-token" }
   }

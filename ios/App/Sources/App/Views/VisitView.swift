@@ -6,6 +6,7 @@ import FieldKitUI
 import SwiftUI
 
 private typealias Palette = ChapterTokens.Palette
+private typealias Space = ChapterTokens.Space
 private typealias Typo = ChapterTokens.Typography
 private typealias Control = ChapterTokens.Control
 private typealias Radius = ChapterTokens.Radius
@@ -39,8 +40,13 @@ struct VisitView: View {
       switch visit.flow.step {
       case .captureRecord, .scan:
         if let model = visit.captureModel {
-          CaptureFlowView(model: model, preview: { ScanPreview(services: visit.services) })
+          CaptureFlowView(model: model, preview: { CaptureSessionPreview(model: model) })
             .onChange(of: model.step) { _, step in visit.captureStepChanged(step) }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+              if visit.canSignOut {
+                AccountFooter(visit: visit)
+              }
+            }
         }
       case .photos:
         if let model = visit.photoModel {
@@ -62,6 +68,7 @@ struct VisitView: View {
           BeforeYouLeaveView(
             report: report, onTakePhoto: { visit.checklistTakePhoto($0) },
             onAddControls: { _ in visit.checklistAddControls() },
+            onConfirmNoRoomsSkipped: { visit.checklistConfirmNoRoomsSkipped() },
             onFinish: { visit.checklistFinished() })
         }
       case .packageReady:
@@ -73,15 +80,43 @@ struct VisitView: View {
   }
 }
 
-/// The camera panel of the live scan: the RoomPlan/ARKit camera feed, or nothing in replay.
-private struct ScanPreview: View {
-  let services: AppServices
+/// "Signed in as <name> · Sign out" under New capture (caption 13, muted; the link in ink with a
+/// 44 pt touch target). Shown only before the visit's first capture (`VisitModel.canSignOut`).
+/// Sign-out deletes no file: sealed packages the station has not confirmed stay on the phone and
+/// their uploads resume after the next sign-in.
+private struct AccountFooter: View {
+  let visit: VisitModel
 
   var body: some View {
-    // The live session object is created by the capture model; the panel shows the design's
-    // dark placeholder while RoomPlan draws its own coaching. (LiveCameraPreview needs the
-    // session's ARSession, which CaptureFlowModel does not expose.)
-    Color.clear
+    VStack(spacing: 0) {
+      HStack(spacing: Space.s1) {
+        Text(signedInText)
+          .font(Typo.caption).foregroundStyle(Palette.muted)
+          .lineLimit(1).truncationMode(.middle)
+        Button {
+          visit.signOut()
+        } label: {
+          Text("Sign out").font(Typo.caption).foregroundStyle(Palette.ink)
+            .frame(minWidth: Control.minTouch, minHeight: Control.minTouch)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("account.signOut")
+      }
+      if visit.hasPendingUploads {
+        Text("Uploads resume after you sign in again.")
+          .font(Typo.caption).foregroundStyle(Palette.muted)
+      }
+    }
+    .frame(maxWidth: .infinity)
+    .padding(.horizontal, 20)
+    .padding(.bottom, Space.s2)
+    .background(Palette.ground)
+  }
+
+  private var signedInText: String {
+    let name = visit.signedInName
+    return name.isEmpty ? "Signed in \u{00B7}" : "Signed in as \(name) \u{00B7}"
   }
 }
 

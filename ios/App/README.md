@@ -4,6 +4,15 @@ One site visit, in the order of the frozen design: capture record → scan (per 
 replay in UI tests) → photos → field controls → before you leave (checklist gate) → package
 ready (seal) → uploading and station status.
 
+- **Live scan camera feed.** The scan panel is `CaptureSessionPreview(model:)` from
+  `CaptureRoomPlan`: the camera feed of `CaptureFlowModel.currentSession` when it is a
+  `LiveCaptureSession`, the design's dark placeholder otherwise (`ReplaySession` in UI tests).
+- **"No rooms skipped".** On "Before you leave", the skipped-rooms row fails until a room note
+  exists or the operator taps **No rooms skipped**. The tap is kept in `VisitFlow`
+  (`confirmNoRoomsSkipped()`, FieldRules' `NoRoomsSkippedConfirmation`) and fed to
+  `ChecklistInput.noRoomsSkippedConfirmed`. It covers only the captures that existed at the tap:
+  a new floor from "Add more rooms" opens the row again. A new visit starts unconfirmed.
+
 | Path                   | What                                                                                              |
 | ---------------------- | ------------------------------------------------------------------------------------------------- |
 | `../project.yml`       | XcodeGen spec: target `App`, UI-test target `AppUITests`, scheme `App`                            |
@@ -54,6 +63,17 @@ Tokens stay in MSAL's Keychain cache (`$(AppIdentifierPrefix)com.microsoft.adalc
 never writes or logs a token. Sign-out (`AppModel.signOut()`) removes the MSAL accounts and calls
 `ProjectStore.clearCache()`.
 
+**Sign out** is a caption link at the bottom of New capture: "Signed in as <name> · Sign out"
+(`accessibilityIdentifier` `account.signOut`). The name is the MSAL account's `name` claim, else its
+username. Rules:
+
+- Shown only on New capture of a visit with no capture yet (`VisitFlow.allowsSignOut`), so a
+  sign-out never abandons unsealed originals. From the first floor on, it is hidden.
+- Sign-out deletes no file. Sealed packages the station has not confirmed stay on the phone and
+  resume after the next sign-in; while there are any, the link shows "Uploads resume after you
+  sign in again."
+- After sign-out the sign-in screen is shown.
+
 ## Debug-only UI-test mode
 
 Launching with `-ChapterUITestReplay box-room` selects `LaunchMode.uiTestReplay`: the scan replays
@@ -61,6 +81,9 @@ the bundled `fixtures/generated/box-room/package` capture (`ReplaySession`), "Ta
 the fixture's photo, and the station, blob storage and token are in-process stubs from AppCore
 (`UITestStationTransport`, `UITestBlobTransport`, `UITestTokenProvider`). Nothing leaves the
 simulator. The real StationClient, bridge, PackageAssembler and PackageUploader still run.
+The signed-in name is `UITestTokenProvider.operatorName` ("UI Test Operator"). The replay test
+checks that the sign-out link is on New capture but does not tap it (there is no MSAL to sign in
+again), and it taps "No rooms skipped" instead of entering a skipped room.
 
 Why a Release build cannot select it:
 
@@ -92,3 +115,8 @@ has not been compiled or run and is first checked by the `App` job of `ios.yml`.
 test targets use Swift language mode 5 with `SWIFT_STRICT_CONCURRENCY = complete`, like the
 `CaptureUI` and `CaptureRoomPlan` targets, so a concurrency annotation the SDK disagrees with is a
 warning rather than a failed build.
+
+APIs used by the phase P6c-fix1 changes that were not compiled here: `CaptureSessionPreview` and
+`CaptureFlowModel.currentSession` (CaptureCore), the `onConfirmNoRoomsSkipped:` argument of
+`BeforeYouLeaveView` (FieldKitUI), and SwiftUI's `safeAreaInset(edge:spacing:content:)`, `truncationMode(_:)` and
+`accessibilityIdentifier(_:)` in `VisitView`.

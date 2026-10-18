@@ -1,4 +1,5 @@
 import CaptureContract
+import FieldRules
 import Foundation
 import XCTest
 
@@ -131,5 +132,104 @@ final class VisitFlowTests: XCTestCase {
     try flow.scanStarted()
     try flow.scanCancelled()
     XCTAssertEqual(flow.step, .captureRecord)
+  }
+
+  // MARK: "No rooms skipped"
+
+  /// The checklist's skipped-rooms row for the flow's record, as VisitModel evaluates it.
+  private func skippedRoomsRow(_ flow: VisitFlow) throws -> ChecklistItem {
+    let record = try XCTUnwrap(flow.record)
+    let report = ChecklistRules.evaluate(
+      ChecklistInput(
+        record: record, controls: FieldControlsEditor(visitId: record.visitId).controls,
+        noRoomsSkippedConfirmed: flow.noRoomsSkippedConfirmed))
+    return report.item(.skippedRoomsRecorded)
+  }
+
+  func testNoRoomsSkippedCoversOnlyTheCapturesAtTheTap() throws {
+    let full = try record()
+    XCTAssertTrue(
+      full.captures.allSatisfy { $0.omittedRooms.isEmpty && $0.inaccessibleRooms.isEmpty },
+      "the fixture records no skipped room")
+    var flow = VisitFlow()
+    try flow.scanStarted()
+    try flow.floorFinished(floorRecord(full, 0))
+    try flow.photosDone()
+    try flow.controlsDone()
+
+    // Unconfirmed: the row fails and asks for the tap.
+    XCTAssertFalse(flow.noRoomsSkippedConfirmed)
+    var row = try skippedRoomsRow(flow)
+    XCTAssertFalse(row.passed)
+    XCTAssertEqual(row.gaps, [.skippedRoomsNotRecorded])
+
+    // After "No rooms skipped": passes.
+    try flow.confirmNoRoomsSkipped()
+    XCTAssertTrue(flow.noRoomsSkippedConfirmed)
+    row = try skippedRoomsRow(flow)
+    XCTAssertTrue(row.passed)
+    XCTAssertEqual(row.gaps, [])
+
+    // A new floor joins the visit: the tap no longer covers it, so the row fails again.
+    try flow.checklistFinished(canFinish: true)
+    try flow.addMoreRooms()
+    try flow.scanStarted()
+    try flow.floorFinished(floorRecord(full, 1))
+    try flow.photosDone()
+    try flow.controlsDone()
+    XCTAssertFalse(flow.noRoomsSkippedConfirmed)
+    row = try skippedRoomsRow(flow)
+    XCTAssertFalse(row.passed)
+    XCTAssertEqual(row.gaps, [.skippedRoomsNotRecorded])
+
+    try flow.confirmNoRoomsSkipped()
+    XCTAssertTrue(try skippedRoomsRow(flow).passed)
+  }
+
+  func testNoRoomsSkippedOnlyFromTheChecklist() throws {
+    var flow = VisitFlow()
+    XCTAssertThrowsError(try flow.confirmNoRoomsSkipped()) {
+      XCTAssertEqual(
+        $0 as? VisitFlowError,
+        .invalidTransition(from: .captureRecord, event: "confirm no rooms skipped"))
+    }
+    XCTAssertFalse(flow.noRoomsSkippedConfirmed)
+    try flow.scanStarted()
+    try flow.floorFinished(floorRecord(try record(), 0))
+    XCTAssertThrowsError(try flow.confirmNoRoomsSkipped())
+    XCTAssertFalse(flow.noRoomsSkippedConfirmed)
+  }
+
+  func testNewVisitStartsUnconfirmed() {
+    XCTAssertFalse(VisitFlow().noRoomsSkippedConfirmed)
+    XCTAssertEqual(VisitFlow().noRoomsSkipped, NoRoomsSkippedConfirmation())
+  }
+
+  // MARK: Sign-out
+
+  func testSignOutOnlyBeforeTheFirstCapture() throws {
+    let full = try record()
+    var flow = VisitFlow()
+    XCTAssertTrue(flow.allowsSignOut)
+    try flow.scanStarted()
+    XCTAssertFalse(flow.allowsSignOut, "not during a scan")
+    try flow.scanCancelled()
+    XCTAssertTrue(flow.allowsSignOut, "a cancelled scan leaves no capture")
+    try flow.scanStarted()
+    try flow.floorFinished(floorRecord(full, 0))
+    XCTAssertFalse(flow.allowsSignOut)
+    try flow.photosDone()
+    try flow.controlsDone()
+    try flow.checklistFinished(canFinish: true)
+    try flow.addMoreRooms()
+    XCTAssertTrue(flow.isAddingFloor)
+    XCTAssertFalse(flow.allowsSignOut, "unsealed originals must not be abandoned")
+    try flow.scanStarted()
+    try flow.floorFinished(floorRecord(full, 1))
+    try flow.photosDone()
+    try flow.controlsDone()
+    try flow.checklistFinished(canFinish: true)
+    try flow.sealed()
+    XCTAssertFalse(flow.allowsSignOut)
   }
 }

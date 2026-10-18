@@ -46,7 +46,7 @@
           guard let photo else { throw CocoaError(.fileNoSuchFile) }
           return try Data(contentsOf: photo)
         }),
-        fixedOperator: SignedInOperator(name: "UI Test Operator", userId: nil))
+        fixedOperator: SignedInOperator(name: UITestTokenProvider.operatorName, userId: nil))
     }
 
     private static func firstDirectory(containing name: String, under root: URL) -> URL? {

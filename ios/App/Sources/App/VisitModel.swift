@@ -142,7 +142,14 @@ final class VisitModel {
     guard let record = flow.record, let controls else { return nil }
     return ChecklistRules.evaluate(
       ChecklistInput(
-        record: record, capturedRooms: rooms, photos: photoStore.records, controls: controls))
+        record: record, capturedRooms: rooms, photos: photoStore.records, controls: controls,
+        noRoomsSkippedConfirmed: flow.noRoomsSkippedConfirmed))
+  }
+
+  /// "No rooms skipped" on the checklist. The tap is kept in `flow` (observed), so the checklist
+  /// is evaluated again; it stops counting when a new floor or a skipped room is added.
+  func checklistConfirmNoRoomsSkipped() {
+    do { try flow.confirmNoRoomsSkipped() } catch { message = String(describing: error) }
   }
 
   func checklistTakePhoto(_ item: ChecklistItem) {
@@ -259,5 +266,26 @@ final class VisitModel {
 
   func startNewCapture() {
     app?.startNewVisit(showPendingUpload: false)
+  }
+
+  // MARK: Account
+
+  /// Display name of the signed-in account (MSAL `name` claim, else the username). Never a token.
+  var signedInName: String { operatorInfo.name }
+
+  /// "Sign out" is offered only on New capture of a visit with no capture yet.
+  var canSignOut: Bool {
+    upload == nil && flow.allowsSignOut && captureModel?.step == .newCapture
+  }
+
+  /// Sealed packages on the phone the station has not confirmed yet. They stay on disk and
+  /// resume after the next sign-in.
+  var hasPendingUploads: Bool { (app?.pendingUploadCount ?? 0) > 0 }
+
+  /// Removes the MSAL accounts and the offline project list, then shows the sign-in screen.
+  /// Deletes no file.
+  func signOut() {
+    guard canSignOut, let app else { return }
+    Task { await app.signOut() }
   }
 }

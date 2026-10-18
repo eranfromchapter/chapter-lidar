@@ -30,19 +30,23 @@ final class ReplayFlowUITests: XCTestCase {
   func testReplayCaptureReachesChecksQueued() {
     // 1 New capture: HUB project and address.
     XCTAssertTrue(app.staticTexts["New capture"].waitForExistence(timeout: 20))
+    // Who is signed in, with the sign-out link (not tapped: the replay mode has no MSAL).
+    XCTAssertTrue(app.buttons["account.signOut"].waitForExistence(timeout: 10))
+    XCTAssertTrue(
+      app.staticTexts.matching(
+        NSPredicate(format: "label BEGINSWITH %@", "Signed in as UI Test Operator")
+      ).firstMatch.exists)
     tap(app.buttons["HUB project"])
     tap(button("UI test visit"))
     tap(button("I am at this address"))
     tap(app.buttons["Continue"])
 
-    // 2 What are you scanning?
+    // 2 What are you scanning? No skipped room is entered: the box room has none, and the
+    // checklist's "No rooms skipped" confirms that below. The sign-out link is gone from here on.
     XCTAssertTrue(app.staticTexts["What are you scanning?"].waitForExistence(timeout: 10))
+    XCTAssertFalse(app.buttons["account.signOut"].exists)
     type("Floor 1", into: app.textFields["Floor 1"])
     tap(app.buttons["Whole floor"])
-    tap(button("+ Add room"))
-    type("Closet", into: app.textFields["Room name"])
-    type("locked", into: app.textFields["Reason (optional)"])
-    tap(app.alerts.buttons["Add"])
     tap(app.buttons["Start scan"])
 
     // 3 Live scan (replay).
@@ -74,8 +78,9 @@ final class ReplayFlowUITests: XCTestCase {
     tap(button("Save measurement"))
     tap(app.buttons["controls.continue"])
 
-    // Before you leave: every row passes.
+    // Before you leave: only "Skipped rooms recorded" is open until "No rooms skipped".
     XCTAssertTrue(app.staticTexts["Before you leave"].waitForExistence(timeout: 10))
+    tap(button("No rooms skipped"))
     tap(button("Finish capture"))
 
     // Package ready, then seal and upload.
