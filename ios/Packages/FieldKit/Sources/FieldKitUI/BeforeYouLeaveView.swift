@@ -4,21 +4,28 @@
 
   /// Before you leave (design screen-field, 3): the five checklist rows and the finish button,
   /// which stays disabled ("Fix 2 items to finish") until every row passes.
+  ///
+  /// "No rooms skipped" appears on the skipped-rooms row only when no room note exists and the
+  /// operator has not confirmed yet, and only when `onConfirmNoRoomsSkipped` is given. The caller
+  /// records the tap (`NoRoomsSkippedConfirmation.confirm(for:)`) and rebuilds the report.
   public struct BeforeYouLeaveView: View {
     let report: ChecklistReport
     let onTakePhoto: (ChecklistItem) -> Void
     let onAddControls: (ChecklistItem) -> Void
+    let onConfirmNoRoomsSkipped: (() -> Void)?
     let onFinish: () -> Void
 
     public init(
       report: ChecklistReport,
       onTakePhoto: @escaping (ChecklistItem) -> Void,
       onAddControls: @escaping (ChecklistItem) -> Void,
+      onConfirmNoRoomsSkipped: (() -> Void)? = nil,
       onFinish: @escaping () -> Void
     ) {
       self.report = report
       self.onTakePhoto = onTakePhoto
       self.onAddControls = onAddControls
+      self.onConfirmNoRoomsSkipped = onConfirmNoRoomsSkipped
       self.onFinish = onFinish
     }
 
@@ -62,7 +69,11 @@
               OutlineButton(title: "Take photo") { onTakePhoto(item) }
             case .minimumControls:
               OutlineButton(title: "Add controls") { onAddControls(item) }
-            case .floorsLabeled, .skippedRoomsRecorded, .visitDetails:
+            case .skippedRoomsRecorded:
+              if let onConfirmNoRoomsSkipped, item.gaps.contains(.skippedRoomsNotRecorded) {
+                OutlineButton(title: "No rooms skipped") { onConfirmNoRoomsSkipped() }
+              }
+            case .floorsLabeled, .visitDetails:
               EmptyView()
             }
           }

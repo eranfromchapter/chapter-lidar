@@ -26,5 +26,13 @@ swift test --package-path ios/Packages/FieldKit --filter PhotoRecordTests
 - Minimum controls per floor (every capture except exterior): long distance A, long distance B, one
   ceiling height. Per pair of consecutive floors: one floor-to-floor level and two shared landmarks
   (`ChecklistPolicy`).
+- Skipped rooms: the row passes when every omitted or inaccessible room has a name and a reason, or
+  when there are no such notes and the operator tapped "No rooms skipped". The tap is never a default.
+  Keep it in `NoRoomsSkippedConfirmation` and pass `isConfirmed(for: record)` as
+  `ChecklistInput.noRoomsSkippedConfirmed`. It counts only while the visit has the same capture ids as
+  at the tap and no capture lists a skipped room; a new floor or area, a re-scan or a new note means
+  tap again (or record the rooms). A note without a name or reason fails even after a tap.
+- `BeforeYouLeaveView(onConfirmNoRoomsSkipped:)` shows the "No rooms skipped" button on that row only
+  when the callback is given. The app must wire it: call `confirm(for:)` and rebuild the report.
 - App shell (F6) must provide `NSCameraUsageDescription` and call `FieldControlsFile.write` from the
   `persist` closure of `FieldControlsModel`.

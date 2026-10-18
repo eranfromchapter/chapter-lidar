@@ -122,6 +122,92 @@ final class ChecklistRulesTests: XCTestCase {
       [.skippedRoomWithoutReason(room: "Attic"), .skippedRoomWithoutName(.inaccessible)])
   }
 
+  func testNoRoomsSkippedConfirmationDecidesTheRowOnlyWhenNoNoteExists() throws {
+    var input = try completeInput()
+    input.record.captures[0].inaccessibleRooms = []
+
+    // No notes, confirmed: the row passes.
+    input.noRoomsSkippedConfirmed = true
+    let confirmed = ChecklistRules.evaluate(input).item(.skippedRoomsRecorded)
+    XCTAssertTrue(confirmed.passed)
+    XCTAssertEqual(confirmed.gaps, [])
+    XCTAssertEqual(confirmed.detail, "No rooms skipped")
+
+    // No notes, not confirmed: the row fails with exactly that gap.
+    input.noRoomsSkippedConfirmed = false
+    let unconfirmed = ChecklistRules.evaluate(input).item(.skippedRoomsRecorded)
+    XCTAssertFalse(unconfirmed.passed)
+    XCTAssertEqual(unconfirmed.gaps, [.skippedRoomsNotRecorded])
+    XCTAssertEqual(unconfirmed.detail, "Record skipped rooms, or confirm none were skipped")
+
+    // A note without a reason still fails, even when confirmed.
+    input.noRoomsSkippedConfirmed = true
+    input.record.captures[1].omittedRooms = [CaptureRecord.RoomNote(name: "Attic")]
+    let incompleteNote = ChecklistRules.evaluate(input)
+    XCTAssertFalse(incompleteNote.canFinish)
+    XCTAssertEqual(
+      incompleteNote.item(.skippedRoomsRecorded).gaps, [.skippedRoomWithoutReason(room: "Attic")])
+  }
+
+  func testNoRoomsSkippedConfirmationStartsUnconfirmedAndNeedsAnExplicitTap() throws {
+    let record = try completeInput().record
+    var withoutNotes = record
+    withoutNotes.captures[0].inaccessibleRooms = []
+
+    let confirmation = NoRoomsSkippedConfirmation()
+    XCTAssertFalse(confirmation.isConfirmed(for: withoutNotes))
+    XCTAssertNil(confirmation.confirmedCaptureIds)
+
+    var tapped = confirmation
+    tapped.confirm(for: withoutNotes)
+    XCTAssertTrue(tapped.isConfirmed(for: withoutNotes))
+    XCTAssertEqual(tapped.confirmedCaptureIds, [f1.captureId, f2.captureId])
+
+    // Feeding the model into the rules turns the row green.
+    var input = try completeInput()
+    input.record = withoutNotes
+    input.noRoomsSkippedConfirmed = tapped.isConfirmed(for: withoutNotes)
+    XCTAssertTrue(ChecklistRules.evaluate(input).canFinish)
+
+    tapped.clear()
+    XCTAssertFalse(tapped.isConfirmed(for: withoutNotes))
+  }
+
+  func testNoRoomsSkippedConfirmationIsInvalidatedByANoteOrAChangedCaptureSet() throws {
+    var record = try completeInput().record
+    record.captures[0].inaccessibleRooms = []
+    var confirmation = NoRoomsSkippedConfirmation()
+    confirmation.confirm(for: record)
+    XCTAssertTrue(confirmation.isConfirmed(for: record))
+
+    // A skipped-room note added later: the confirmation no longer counts.
+    var withNote = record
+    withNote.captures[1].omittedRooms = [CaptureRecord.RoomNote(name: "Attic", reason: "owner")]
+    XCTAssertFalse(confirmation.isConfirmed(for: withNote))
+
+    // A new capture ("Add more rooms"): the new scan was never confirmed.
+    var withNewCapture = record
+    withNewCapture.captures.append(
+      Fixtures.capture(LowercaseUUID(), areaKey: "basement", label: "Basement", at: Fixtures.t1))
+    XCTAssertFalse(confirmation.isConfirmed(for: withNewCapture))
+
+    // A capture replaced by a re-scan (new capture id) also needs a new tap.
+    var rescanned = record
+    rescanned.captures[1].captureId = LowercaseUUID()
+    XCTAssertFalse(confirmation.isConfirmed(for: rescanned))
+
+    // Label or order changes do not touch skipped rooms: still confirmed.
+    var relabeled = record
+    relabeled.captures[1].label = "Upstairs"
+    relabeled.captures.reverse()
+    XCTAssertTrue(confirmation.isConfirmed(for: relabeled))
+
+    // Confirming while a note exists records nothing that can pass.
+    var early = NoRoomsSkippedConfirmation()
+    early.confirm(for: withNote)
+    XCTAssertFalse(early.isConfirmed(for: withNote))
+  }
+
   func testEveryCapturedRoomNeedsAtLeastOnePhoto() throws {
     var input = try completeInput()
     input.photos = []
