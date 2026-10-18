@@ -13,7 +13,12 @@ import Foundation
 //   - a wall surface has local X along the wall, local Y up; `dimensions` is [length, height, 0].
 //   - doors, windows and openings carry `parentIdentifier` (the wall they sit in).
 //   - floors carry `polygonCorners` in the floor's local frame.
-//   - a structure is `{ "version", "rooms": [CapturedRoom] }`.
+//   - a room carries `story` and `sections`: `{ "story", "label", "center": [x, y, z] }`, a
+//     labelled point with no shape. Labels are `livingRoom`, `bedroom`, `bathroom`, `kitchen`,
+//     `diningRoom` and `unidentified`.
+//   - objects carry `attributes` (name to string, for example `{ "StorageType": "cabinet" }`) and
+//     `parentIdentifier` (the object they sit on or in).
+//   - a structure is `{ "version", "rooms": [CapturedRoom], "sections" }`.
 // Unknown keys are ignored, so newer RoomPlan versions still decode.
 
 /// A decoded RoomPlan capture: one room, or the rooms of a structure.
@@ -21,10 +26,14 @@ public struct RoomPlanDocument: Sendable, Equatable {
   public var rooms: [RoomPlanRoom]
   /// True when the JSON was a `CapturedStructure` (a `rooms` list), false for one `CapturedRoom`.
   public var isStructure: Bool
+  /// The structure's own sections (a `CapturedStructure` lists them besides each room's). Empty
+  /// for one `CapturedRoom`, whose sections are in `rooms[0].sections`.
+  public var sections: [RoomPlanSection]
 
-  public init(rooms: [RoomPlanRoom], isStructure: Bool) {
+  public init(rooms: [RoomPlanRoom], isStructure: Bool, sections: [RoomPlanSection] = []) {
     self.rooms = rooms
     self.isStructure = isStructure
+    self.sections = sections
   }
 
   /// Decodes `CapturedRoom` or `CapturedStructure` JSON.
@@ -33,7 +42,8 @@ public struct RoomPlanDocument: Sendable, Equatable {
     let probe = try decoder.decode(Probe.self, from: data)
     if probe.hasRooms {
       let structure = try decoder.decode(Structure.self, from: data)
-      return RoomPlanDocument(rooms: structure.rooms, isStructure: true)
+      return RoomPlanDocument(
+        rooms: structure.rooms, isStructure: true, sections: structure.sections)
     }
     let room = try decoder.decode(RoomPlanRoom.self, from: data)
     return RoomPlanDocument(rooms: [room], isStructure: false)
@@ -50,35 +60,54 @@ public struct RoomPlanDocument: Sendable, Equatable {
 
   private struct Structure: Decodable {
     let rooms: [RoomPlanRoom]
+    let sections: [RoomPlanSection]
+
+    private enum CodingKeys: String, CodingKey {
+      case rooms, sections
+    }
+
+    init(from decoder: Decoder) throws {
+      let container = try decoder.container(keyedBy: CodingKeys.self)
+      rooms = try container.decode([RoomPlanRoom].self, forKey: .rooms)
+      sections = (try? container.decodeIfPresent([RoomPlanSection].self, forKey: .sections)) ?? []
+    }
   }
 }
 
 /// One `CapturedRoom`.
 public struct RoomPlanRoom: Sendable, Equatable, Decodable {
   public var identifier: String?
+  /// Floor of a multi-floor structure, 0 for the first; nil when RoomPlan wrote none.
+  public var story: Int?
   public var walls: [RoomPlanSurface]
   public var doors: [RoomPlanSurface]
   public var windows: [RoomPlanSurface]
   public var openings: [RoomPlanSurface]
   public var floors: [RoomPlanSurface]
   public var objects: [RoomPlanObject]
+  /// Labelled points RoomPlan placed in the room. A walk-through scan has one per room it
+  /// recognized, all in this one `CapturedRoom`.
+  public var sections: [RoomPlanSection]
 
   public init(
-    identifier: String? = nil, walls: [RoomPlanSurface] = [], doors: [RoomPlanSurface] = [],
-    windows: [RoomPlanSurface] = [], openings: [RoomPlanSurface] = [],
-    floors: [RoomPlanSurface] = [], objects: [RoomPlanObject] = []
+    identifier: String? = nil, story: Int? = nil, walls: [RoomPlanSurface] = [],
+    doors: [RoomPlanSurface] = [], windows: [RoomPlanSurface] = [],
+    openings: [RoomPlanSurface] = [], floors: [RoomPlanSurface] = [],
+    objects: [RoomPlanObject] = [], sections: [RoomPlanSection] = []
   ) {
     self.identifier = identifier
+    self.story = story
     self.walls = walls
     self.doors = doors
     self.windows = windows
     self.openings = openings
     self.floors = floors
     self.objects = objects
+    self.sections = sections
   }
 
   private enum CodingKeys: String, CodingKey {
-    case identifier, walls, doors, windows, openings, floors, objects
+    case identifier, story, walls, doors, windows, openings, floors, objects, sections
   }
 
   public init(from decoder: Decoder) throws {
@@ -90,6 +119,52 @@ public struct RoomPlanRoom: Sendable, Equatable, Decodable {
     openings = try container.decodeIfPresent([RoomPlanSurface].self, forKey: .openings) ?? []
     floors = try container.decodeIfPresent([RoomPlanSurface].self, forKey: .floors) ?? []
     objects = try container.decodeIfPresent([RoomPlanObject].self, forKey: .objects) ?? []
+    // Story and sections only name rooms: a shape this code does not expect leaves them out
+    // instead of failing the capture.
+    story = try? container.decodeIfPresent(Int.self, forKey: .story)
+    sections = (try? container.decodeIfPresent([RoomPlanSection].self, forKey: .sections)) ?? []
+  }
+}
+
+/// A `CapturedRoom.Section`: a labelled point in the part of the scan RoomPlan recognized as one
+/// kind of room. It has a centre but no shape.
+public struct RoomPlanSection: Sendable, Equatable, Decodable {
+  /// The label as RoomPlan wrote it: `livingRoom`, `bedroom`, `bathroom`, `kitchen`,
+  /// `diningRoom`, `unidentified`, or a label from a newer RoomPlan.
+  public var label: String
+  public var story: Int?
+  /// Centre in the same frame as the walls and floors; nil when RoomPlan wrote no point.
+  public var center: Vector3?
+
+  public init(label: String, story: Int? = nil, center: Vector3?) {
+    self.label = label
+    self.story = story
+    self.center = center
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case label, story, center
+  }
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    label = (try? container.decodeIfPresent(String.self, forKey: .label)) ?? "unidentified"
+    story = try? container.decodeIfPresent(Int.self, forKey: .story)
+    let numbers = (try? container.decodeIfPresent([Double].self, forKey: .center)) ?? []
+    center = numbers.count >= 3 ? Vector3(numbers[0], numbers[1], numbers[2]) : nil
+  }
+
+  /// The contract room type of the label; nil for `unidentified` and for labels this code does
+  /// not know.
+  public var roomType: RoomType? {
+    switch label {
+    case "livingRoom": return .livingRoom
+    case "diningRoom": return .diningRoom
+    case "kitchen": return .kitchen
+    case "bedroom": return .bedroom
+    case "bathroom": return .bathroom
+    default: return nil
+    }
   }
 }
 
@@ -145,35 +220,57 @@ public struct RoomPlanSurface: Sendable, Equatable, Decodable {
 /// A recognized object (`CapturedRoom.Object`).
 public struct RoomPlanObject: Sendable, Equatable, Decodable {
   public var identifier: String
+  /// Identifier of the object this one sits on or in (a sink in a cabinet), when RoomPlan
+  /// reports it.
+  public var parentIdentifier: String?
   public var category: RoomPlanCategory
   public var confidence: DetectionConfidence?
   /// Box size along the object's local axes.
   public var dimensions: [Double]
   public var transform: Matrix4
+  /// Attributes as RoomPlan wrote them, name to value, for example `["StorageType": "cabinet"]`.
+  /// Empty when there are none.
+  public var attributes: [String: String]
 
   public init(
-    identifier: String, category: RoomPlanCategory, confidence: DetectionConfidence? = nil,
-    dimensions: [Double], transform: Matrix4
+    identifier: String, parentIdentifier: String? = nil, category: RoomPlanCategory,
+    confidence: DetectionConfidence? = nil, dimensions: [Double], transform: Matrix4,
+    attributes: [String: String] = [:]
   ) {
     self.identifier = identifier
+    self.parentIdentifier = parentIdentifier
     self.category = category
     self.confidence = confidence
     self.dimensions = dimensions
     self.transform = transform
+    self.attributes = attributes
   }
 
   private enum CodingKeys: String, CodingKey {
-    case identifier, category, confidence, dimensions, transform
+    case identifier, parentIdentifier, category, confidence, dimensions, transform, attributes
   }
 
   public init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     identifier = try container.decode(String.self, forKey: .identifier)
+    parentIdentifier = try container.decodeIfPresent(String.self, forKey: .parentIdentifier)
     category = try container.decode(RoomPlanCategory.self, forKey: .category)
     confidence = try container.decodeIfPresent(RoomPlanCaseName.self, forKey: .confidence)
       .flatMap { DetectionConfidence(rawValue: $0.name) }
     dimensions = try container.decode([Double].self, forKey: .dimensions)
     transform = try container.decode(RoomPlanMatrix.self, forKey: .transform).matrix
+    attributes = [:]
+    // Only string values are kept, so an attribute of another shape in a newer RoomPlan does not
+    // stop the whole capture from decoding.
+    if container.contains(.attributes),
+      let values = try? container.nestedContainer(keyedBy: AnyKey.self, forKey: .attributes)
+    {
+      for key in values.allKeys {
+        if let value = try? values.decode(String.self, forKey: key) {
+          attributes[key.stringValue] = value
+        }
+      }
+    }
   }
 }
 

@@ -86,6 +86,28 @@
       XCTAssertEqual(appleDocument.rooms[0].walls.count, expected.totals.walls)
       XCTAssertEqual(appleDocument.rooms[0].objects.count, expected.totals.objects)
       XCTAssertEqual(appleDocument.rooms[0].floors.first?.polygonCorners?.count, expected.totals.outlineCorners)
+
+      // Apple and the mirror read the same story, sections, object attributes and parents, and
+      // Apple's own encoding reads back the same.
+      let mirrorRoom = document.rooms[0]
+      XCTAssertEqual(mirrorRoom.story, room.story)
+      XCTAssertEqual(mirrorRoom.sections.map(\.label), room.sections.map(\.label.rawValue))
+      XCTAssertEqual(mirrorRoom.sections.map(\.story), room.sections.map(\.story))
+      for (apple, mirror) in zip(room.sections, mirrorRoom.sections) {
+        let center = try XCTUnwrap(mirror.center)
+        XCTAssertEqual(Double(apple.center.x), center.x, accuracy: 1e-5)
+        XCTAssertEqual(Double(apple.center.y), center.y, accuracy: 1e-5)
+        XCTAssertEqual(Double(apple.center.z), center.z, accuracy: 1e-5)
+      }
+      XCTAssertEqual(mirrorRoom.objects.map(\.parentIdentifier), room.objects.map { $0.parentIdentifier?.uuidString })
+      XCTAssertEqual(
+        mirrorRoom.objects.filter { $0.category.name == "storage" }.map { $0.attributes["StorageType"] },
+        storage.map { $0.attribute(of: StorageType.self)?.rawValue })
+      let appleRoom = appleDocument.rooms[0]
+      XCTAssertEqual(appleRoom.story, mirrorRoom.story)
+      XCTAssertEqual(appleRoom.sections.map(\.label), mirrorRoom.sections.map(\.label))
+      XCTAssertEqual(appleRoom.objects.map(\.attributes), mirrorRoom.objects.map(\.attributes))
+      XCTAssertEqual(appleRoom.objects.map(\.parentIdentifier), mirrorRoom.objects.map(\.parentIdentifier))
     }
 
     func testAppleEncodingOfTheFixtureMapsToTheSameModelAsTheFixtureJSON() throws {

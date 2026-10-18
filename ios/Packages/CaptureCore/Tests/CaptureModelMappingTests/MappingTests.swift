@@ -166,6 +166,51 @@ final class MappingTests: XCTestCase {
     XCTAssertEqual(structure.rooms.count, 2)
     XCTAssertEqual(structure.rooms[0].doors.first?.category, RoomPlanCategory(name: "door", isOpen: false))
     XCTAssertEqual(structure.rooms[0].walls.first?.confidence, .high)
+
+    // Sections sit in each room and, for a structure, at the top level too.
+    XCTAssertEqual(single.rooms[0].sections.map(\.label), ["unidentified"])
+    XCTAssertEqual(single.sections, [], "one CapturedRoom keeps its sections in the room")
+    XCTAssertEqual(structure.rooms.map { $0.sections.map(\.label) }, [["livingRoom"], ["bedroom"]])
+    XCTAssertEqual(structure.sections.map(\.label), ["livingRoom", "bedroom"])
+    XCTAssertEqual(structure.rooms[1].sections.first?.center, Vector3(6.5, 0, 2))
+    XCTAssertEqual(structure.rooms.map(\.story), [0, 0])
+  }
+
+  func testSectionsDecodeWithUnknownLabelsAndMissingCentres() throws {
+    let json = #"""
+      [{"story": 0, "label": "livingRoom", "center": [1, 2, 3]},
+       {"story": 0, "label": "diningRoom", "center": [1, 2, 3]},
+       {"story": 0, "label": "kitchen", "center": [1, 2, 3]},
+       {"story": 0, "label": "bedroom", "center": [1, 2, 3]},
+       {"story": 0, "label": "bathroom", "center": [1, 2, 3]},
+       {"story": 0, "label": "unidentified", "center": [1, 2, 3]},
+       {"label": "garage", "center": [4, 5, 6]},
+       {"story": 1, "label": "bedroom"},
+       {"story": "upstairs", "center": [7, 8]}]
+      """#
+    let sections = try JSONDecoder().decode([RoomPlanSection].self, from: Data(json.utf8))
+    XCTAssertEqual(
+      sections.map(\.label),
+      ["livingRoom", "diningRoom", "kitchen", "bedroom", "bathroom", "unidentified", "garage", "bedroom", "unidentified"])
+    XCTAssertEqual(
+      sections.map(\.roomType), [.livingRoom, .diningRoom, .kitchen, .bedroom, .bathroom, nil, nil, .bedroom, nil])
+    XCTAssertEqual(sections.map(\.story), [0, 0, 0, 0, 0, 0, nil, 1, nil])
+    XCTAssertEqual(sections[6].center, Vector3(4, 5, 6))
+    XCTAssertNil(sections[7].center)
+    XCTAssertNil(sections[8].center)
+  }
+
+  func testRoomWithSectionsOfAnUnexpectedShapeStillDecodes() throws {
+    let data = try Fixtures.load("box-room").roomPlanData()
+    guard var room = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+      return XCTFail("box-room is not a JSON object")
+    }
+    room["sections"] = "living room"
+    room["story"] = "ground"
+    let document = try RoomPlanDocument.decode(from: try JSONSerialization.data(withJSONObject: room))
+    XCTAssertEqual(document.rooms[0].sections, [])
+    XCTAssertNil(document.rooms[0].story)
+    XCTAssertEqual(document.rooms[0].walls.count, 4)
   }
 
   func testRoomLabelsDefaultWhenNoneAreGiven() throws {
@@ -173,6 +218,22 @@ final class MappingTests: XCTestCase {
     mapped.context.roomLabels = ["Kitchen"]
     let model = try CaptureModelMapper.map(mapped.document, context: mapped.context)
     XCTAssertEqual(model.rooms.map(\.label), ["Kitchen", "Room 2"])
+  }
+
+  func testObjectDetailsAreDecoded() throws {
+    let json = #"""
+      {"identifier": "A", "parentIdentifier": "B", "category": {"storage": {}},
+       "dimensions": [1, 1, 1], "transform": [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1],
+       "attributes": {"StorageType": "cabinet", "Future": {"kind": 1}}}
+      """#
+    let object = try JSONDecoder().decode(RoomPlanObject.self, from: Data(json.utf8))
+    XCTAssertEqual(object.parentIdentifier, "B")
+    XCTAssertEqual(object.attributes, ["StorageType": "cabinet"], "values that are not strings are left out")
+    let bare = try JSONDecoder().decode(
+      RoomPlanObject.self,
+      from: Data(#"{"identifier": "A", "category": {"bed": {}}, "dimensions": [1, 1, 1], "transform": [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]}"#.utf8))
+    XCTAssertEqual(bare.attributes, [:])
+    XCTAssertNil(bare.parentIdentifier)
   }
 
   func testCaptureWithoutRoomsFails() throws {
