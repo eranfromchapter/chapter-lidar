@@ -44,6 +44,16 @@
     public private(set) var errorMessage: String?
     public private(set) var result: CaptureFlowResult?
 
+    /// The session of the scan in progress: set when Start scan made it (scanning or paused), nil
+    /// before that and again after Finish floor or Cancel. Observed, so a view that reads it is
+    /// redrawn when a scan starts or ends. The host uses it to show the camera feed in
+    /// `CaptureFlowView`'s `preview` (`CaptureSessionPreview` in `CaptureRoomPlan`); it must not
+    /// keep the session after it goes nil.
+    public var currentSession: (any CaptureSession)? { session }
+
+    /// Observed (not `@ObservationIgnored`) so `currentSession` updates its readers.
+    private var session: (any CaptureSession)?
+
     public let gate: DeviceGateResult
     public let hasLidar: Bool
 
@@ -52,7 +62,6 @@
     @ObservationIgnored private let makeSession: @MainActor (CaptureSessionConfiguration) throws -> any CaptureSession
     @ObservationIgnored private let clock: @Sendable () -> Date
     @ObservationIgnored private let onFinished: @MainActor (CaptureFlowResult) -> Void
-    @ObservationIgnored private var session: (any CaptureSession)?
     @ObservationIgnored private var eventTask: Task<Void, Never>?
     @ObservationIgnored private var builtRecord: CaptureRecord?
     @ObservationIgnored private var visitedAt: UTCTimestamp?
@@ -208,6 +217,7 @@
         result = finished
         step = .finished
         eventTask?.cancel()
+        eventTask = nil
         self.session = nil
         onFinished(finished)
       } catch {
@@ -219,6 +229,7 @@
     public func cancelScan() async {
       await session?.cancel()
       eventTask?.cancel()
+      eventTask = nil
       session = nil
       step = .scanSetup
     }

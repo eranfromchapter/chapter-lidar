@@ -5,8 +5,8 @@
   /// The three capture screens of docs/waves/design/snapshot.html#screen-capture, driven by a
   /// `CaptureFlowModel`: 1 New capture, 2 What are you scanning?, 3 Live scan.
   ///
-  /// `preview` is shown inside the live scan panel (use `LiveCameraPreview` from `CaptureRoomPlan`
-  /// for the camera feed). `finished` is shown after Finish floor; the design ends at the live
+  /// `preview` is shown inside the live scan panel (use `CaptureSessionPreview(model:)` from
+  /// `CaptureRoomPlan` for the camera feed of the current session). `finished` is shown after Finish floor; the design ends at the live
   /// scan screen, so the host app (F5, F6) supplies what comes next.
   public struct CaptureFlowView<Preview: View, Finished: View>: View {
     @Bindable var model: CaptureFlowModel

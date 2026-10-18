@@ -5,6 +5,8 @@ import Foundation
 import XCTest
 
 #if canImport(Observation)
+  import Observation
+
   @MainActor
   final class CaptureFlowModelTests: XCTestCase {
     private let project = HubProjectSummary(
@@ -17,8 +19,15 @@ import XCTest
       return url
     }
 
+    /// Holds the session the factory made without keeping it alive.
+    private final class MadeSessions {
+      weak var last: ReplaySession?
+      var count = 0
+    }
+
     private func makeModel(
-      lidar: Bool = true, fixture: String = "box-room", onFinished: @escaping @MainActor (CaptureFlowResult) -> Void = { _ in }
+      lidar: Bool = true, fixture: String = "box-room", made: MadeSessions? = nil,
+      onFinished: @escaping @MainActor (CaptureFlowResult) -> Void = { _ in }
     ) throws -> CaptureFlowModel {
       let fixtureData = try Fixtures.load(fixture)
       let source = ReplaySource(
@@ -35,7 +44,12 @@ import XCTest
           model: "iPhone17,1", osName: .iOS, osVersion: "26.0.1", supportsSceneReconstructionMesh: lidar,
           roomPlanSupported: true),
         projectProvider: StaticHubProjectProvider([project]), originalsRoot: temporaryDirectory(),
-        makeSession: { _ in try ReplaySession(source: source) },
+        makeSession: { _ in
+          let session = try ReplaySession(source: source)
+          made?.last = session
+          made?.count += 1
+          return session
+        },
         clock: { Date(timeIntervalSince1970: 1_792_245_500) }, onFinished: onFinished)
     }
 
@@ -134,6 +148,105 @@ import XCTest
       let modelSchema = try SchemaValidator(schemaURL: Fixtures.schemaURL("capture-model.schema.json"))
       XCTAssertEqual(
         modelSchema.validate(try JSON.parse(CaptureContractJSON.makeEncoder().encode(capturedModel))), [])
+    }
+
+    // MARK: Current session (the host shows its camera feed)
+
+    private func modelReadyToScan(made: MadeSessions) throws -> CaptureFlowModel {
+      let model = try makeModel(made: made)
+      model.choose(project)
+      model.setAddressConfirmed(true)
+      model.continueToSetup()
+      model.draft.floorLabel = "Floor 1"
+      model.draft.mode = .floor
+      return model
+    }
+
+    /// The flow drops the session when it ends; the event task lets go of it a moment later.
+    private func waitUntilReleased(_ made: MadeSessions, file: StaticString = #filePath, line: UInt = #line) async {
+      for _ in 0..<200 where made.last != nil {
+        try? await Task.sleep(nanoseconds: 10_000_000)
+      }
+      XCTAssertNil(made.last, "the session (and a live session's ARSession) is still retained", file: file, line: line)
+    }
+
+    func testCurrentSessionIsNilBeforeStart() throws {
+      let made = MadeSessions()
+      let model = try modelReadyToScan(made: made)
+      XCTAssertNil(model.currentSession)
+      XCTAssertEqual(made.count, 0)
+    }
+
+    func testCurrentSessionIsTheFactorySessionWhileScanningAndPaused() async throws {
+      let made = MadeSessions()
+      let model = try modelReadyToScan(made: made)
+      await model.startScan()
+      XCTAssertEqual(model.step, .scanning)
+      let made1 = try XCTUnwrap(made.last)
+      XCTAssertTrue(try XCTUnwrap(model.currentSession) === made1)
+
+      await model.togglePause()
+      XCTAssertTrue(model.isPaused)
+      XCTAssertTrue(try XCTUnwrap(model.currentSession) === made1)
+
+      await model.togglePause()
+      XCTAssertFalse(model.isPaused)
+      XCTAssertTrue(try XCTUnwrap(model.currentSession) === made1)
+      XCTAssertEqual(made.count, 1)
+    }
+
+    func testCurrentSessionIsNilAfterFinish() async throws {
+      let made = MadeSessions()
+      let model = try modelReadyToScan(made: made)
+      await model.startScan()
+      XCTAssertNotNil(model.currentSession)
+      await model.finishFloor()
+      XCTAssertNil(model.errorMessage)
+      XCTAssertEqual(model.step, .finished)
+      XCTAssertNil(model.currentSession)
+      await waitUntilReleased(made)
+    }
+
+    func testCurrentSessionIsNilAfterCancel() async throws {
+      let made = MadeSessions()
+      let model = try modelReadyToScan(made: made)
+      await model.startScan()
+      XCTAssertNotNil(model.currentSession)
+      await model.cancelScan()
+      XCTAssertEqual(model.step, .scanSetup)
+      XCTAssertNil(model.currentSession)
+      await waitUntilReleased(made)
+
+      // A new scan gets a new session.
+      await model.startScan()
+      XCTAssertEqual(made.count, 2)
+      XCTAssertTrue(try XCTUnwrap(model.currentSession) === made.last)
+    }
+
+    /// A view that reads `currentSession` is told when scanning starts and when it ends.
+    func testCurrentSessionChangesAreObservable() async throws {
+      let made = MadeSessions()
+      let model = try modelReadyToScan(made: made)
+
+      final class Flag: @unchecked Sendable { var changed = false }
+      func track() -> Flag {
+        let flag = Flag()
+        withObservationTracking({ _ = model.currentSession }, onChange: { flag.changed = true })
+        return flag
+      }
+
+      let onStart = track()
+      await model.startScan()
+      XCTAssertTrue(onStart.changed, "starting the scan is not observable")
+
+      let onCancel = track()
+      await model.cancelScan()
+      XCTAssertTrue(onCancel.changed, "cancelling the scan is not observable")
+
+      await model.startScan()
+      let onFinish = track()
+      await model.finishFloor()
+      XCTAssertTrue(onFinish.changed, "finishing the floor is not observable")
     }
 
     func testElapsedTextAndModeTitles() throws {
