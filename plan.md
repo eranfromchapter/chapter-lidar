@@ -522,7 +522,7 @@ W2: done
 W3: done
 W4: done
 W5: done
-W6: pending
+W6: running
 P1a: done
 P1b: done
 P1c: done
@@ -545,5 +545,5 @@ P6b: done
 P9: done
 P10: done
 P13: done
-P6c: pending
+P6c: running
 ```
