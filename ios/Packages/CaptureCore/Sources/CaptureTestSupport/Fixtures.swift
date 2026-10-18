@@ -23,6 +23,16 @@ public enum Fixtures {
   public static func load(_ name: String) throws -> GeneratedFixture {
     try GeneratedFixture(name: name)
   }
+
+  /// `fixtures/generated/roomplan-only`: raw RoomPlan exports with no intake package around them.
+  public static var roomPlanOnlyDirectory: URL {
+    generatedDirectory.appendingPathComponent("roomplan-only", isDirectory: true)
+  }
+
+  /// A RoomPlan-only fixture, for example `apartment-walkthrough`.
+  public static func roomPlanOnly(_ name: String) throws -> RoomPlanOnlyFixture {
+    try RoomPlanOnlyFixture(name: name)
+  }
 }
 
 /// One generated fixture (`fixtures/generated/<name>`): the truth and the folder of its first capture.

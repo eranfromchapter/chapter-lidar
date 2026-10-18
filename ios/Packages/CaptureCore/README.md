@@ -7,6 +7,8 @@ screens.
 ```sh
 swift test --package-path ios/Packages/CaptureCore                          # Linux or macOS
 swift test --package-path ios/Packages/CaptureCore --filter MappingTests
+# Real RoomPlan exports kept on this machine (never committed): decode, map, validate each one
+CHAPTER_REAL_ROOMPLAN_DIR="/path/to/exports" swift test --package-path ios/Packages/CaptureCore --filter WalkthroughScanTests
 ```
 
 ## Targets

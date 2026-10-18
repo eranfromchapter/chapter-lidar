@@ -25,7 +25,8 @@ export function f32(value: number): number {
   return float32Short(value);
 }
 
-function transformOf(x: V3, y: V3, z: V3, t: V3): Transform {
+/** simd_float4x4 Codable from three axis columns and a translation, as float32 values. */
+export function transformOf(x: V3, y: V3, z: V3, t: V3): Transform {
   const col = (v: V3, w: number): Column => [f32(v[0]), f32(v[1]), f32(v[2]), w];
   return [...col(x, 0), ...col(y, 0), ...col(z, 0), ...col(t, 1)];
 }

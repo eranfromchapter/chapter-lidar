@@ -347,6 +347,7 @@ describe("fixture folder", () => {
       "broken",
       "index.json",
       "l-shaped-room",
+      "roomplan-only",
       "two-floor-house",
       "two-room-apartment",
     ]);

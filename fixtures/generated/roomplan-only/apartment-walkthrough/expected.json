@@ -1,0 +1,498 @@
+{
+  "fixture": "apartment-walkthrough",
+  "description": "Synthetic whole-apartment walk-through scan as one CapturedRoom: a living room with an open kitchen, two bedrooms, a bathroom, a closet and a short hall.",
+  "roomPlan": "roomplan.json",
+  "frame": {
+    "note": "Plan points are [x, z] in metres in the capture frame of roomplan.json, at floor level y = floorY. The layout frame turned by yawDeg about +Y, with layoutOrigin under the capture origin, gives the capture frame.",
+    "floorY": -1.31,
+    "yawDeg": -14.2,
+    "layoutOrigin": [2.6, 6.2]
+  },
+  "totals": {
+    "floorAreaM2": 78.1275,
+    "outlineCorners": 26,
+    "outlinePerimeterM": 39.751388,
+    "outlineWithoutWallM": 5.85,
+    "outlineWithoutWallFraction": 0.147165,
+    "walls": 31,
+    "outlineWalls": 21,
+    "interiorWalls": 10,
+    "shortInteriorWallEnds": 7,
+    "doors": 5,
+    "openDoors": 2,
+    "windows": 4,
+    "openings": 1,
+    "objects": 24,
+    "sections": 6
+  },
+  "rooms": [
+    {
+      "id": "living-room",
+      "label": "Living Room",
+      "type": "living_room",
+      "areaM2": 28.5375,
+      "polygon": [
+        [-1.882759, -3.158357],
+        [-2.275251, -1.607245],
+        [-3.160017, -1.779549],
+        [-3.44212, -0.664687],
+        [-2.569619, -0.44391],
+        [-2.962111, 1.107202],
+        [-1.023221, 1.597817],
+        [-1.133609, 2.034068],
+        [1.19306, 2.622805],
+        [1.303448, 2.186555],
+        [2.854561, 2.579047],
+        [3.933913, -1.686513]
+      ],
+      "section": { "index": 2, "label": "livingRoom" },
+      "objects": [
+        {
+          "index": 1,
+          "identifier": "2605A7E4-12ED-4411-9B1C-B1827BDD64AF",
+          "category": "television"
+        },
+        { "index": 8, "identifier": "4A707B75-E5F0-418F-865A-F457DEA31F32", "category": "sofa" },
+        {
+          "index": 11,
+          "identifier": "88FAB42B-A7BF-4737-9494-E04AB1B39C84",
+          "category": "storage"
+        },
+        { "index": 19, "identifier": "79DDAB19-EB95-41E9-8824-8D56F3D17E2A", "category": "table" }
+      ]
+    },
+    {
+      "id": "kitchen",
+      "label": "Kitchen",
+      "type": "kitchen",
+      "areaM2": 14.1,
+      "polygon": [
+        [3.933913, -1.686513],
+        [3.050807, 1.80349],
+        [6.783171, 2.747924],
+        [7.126602, 1.3907],
+        [7.417435, 1.464293],
+        [7.613681, 0.688736],
+        [7.322848, 0.615144],
+        [7.666278, -0.742079]
+      ],
+      "section": { "index": 1, "label": "kitchen" },
+      "objects": [
+        { "index": 2, "identifier": "EBD9A8F7-05F1-40A3-B3EF-FB87604C011F", "category": "chair" },
+        { "index": 4, "identifier": "0FC478F5-3873-4503-951F-0FC75440E3E0", "category": "oven" },
+        { "index": 6, "identifier": "395F7322-02E2-4CD1-A228-893CB14EB378", "category": "storage" },
+        { "index": 9, "identifier": "5EB6B94F-45F4-407F-A952-88A9A53D6319", "category": "storage" },
+        {
+          "index": 12,
+          "identifier": "7A4EDB74-A467-4441-A808-FB3B02B01CE0",
+          "category": "storage"
+        },
+        { "index": 14, "identifier": "E9BFC660-3669-44DF-800A-F402C17BD67F", "category": "sink" },
+        { "index": 16, "identifier": "AD832F9B-253E-4F85-B80E-8C4CFE6B92D6", "category": "chair" },
+        { "index": 18, "identifier": "826A3563-6CFC-418F-A15A-4D7114F7405F", "category": "stove" },
+        { "index": 20, "identifier": "502F387A-A5CB-4EDD-9088-FDB6964BBD9D", "category": "chair" },
+        { "index": 22, "identifier": "DD5A44B5-E779-4AAB-A357-8B77BFCE0CCB", "category": "table" },
+        {
+          "index": 23,
+          "identifier": "07162307-4BAB-427C-A285-92151F1C171C",
+          "category": "refrigerator"
+        }
+      ]
+    },
+    {
+      "id": "hall",
+      "label": "Hall",
+      "type": "hallway",
+      "areaM2": 4.48,
+      "polygon": [
+        [1.85373, -3.657005],
+        [1.5103, -2.299781],
+        [4.612525, -1.514798],
+        [4.955955, -2.872021]
+      ],
+      "section": { "index": 3, "label": "unidentified" },
+      "objects": []
+    },
+    {
+      "id": "bedroom-1",
+      "label": "Bedroom 1",
+      "type": "bedroom",
+      "areaM2": 12.24,
+      "polygon": [
+        [-0.902708, -6.62383],
+        [-1.785814, -3.133826],
+        [1.5103, -2.299781],
+        [2.393407, -5.789785]
+      ],
+      "section": { "index": 5, "label": "bedroom" },
+      "objects": [
+        { "index": 3, "identifier": "3826CE5B-18E3-4511-9DE0-5C743BA08D36", "category": "bed" },
+        { "index": 13, "identifier": "2491BA76-EB9A-4CA3-AB72-EFB91EA14BE6", "category": "storage" }
+      ]
+    },
+    {
+      "id": "bathroom",
+      "label": "Bathroom",
+      "type": "bathroom",
+      "areaM2": 4.51,
+      "polygon": [
+        [2.35661, -5.644368],
+        [1.85373, -3.657005],
+        [3.98651, -3.117329],
+        [4.48939, -5.104691]
+      ],
+      "section": { "index": 4, "label": "bathroom" },
+      "objects": [
+        { "index": 5, "identifier": "D0212A28-CB2E-4EEF-ABA1-9906E4182962", "category": "sink" },
+        { "index": 7, "identifier": "AC935B41-DC76-4BBB-BBA4-7C9CF5A23CD5", "category": "toilet" },
+        {
+          "index": 10,
+          "identifier": "F9F50559-EC81-4BE1-807F-10588D6844CB",
+          "category": "bathtub"
+        },
+        { "index": 21, "identifier": "0F3E3E38-2AE3-4C70-AB95-482537D1B262", "category": "storage" }
+      ]
+    },
+    {
+      "id": "closet",
+      "label": "Closet",
+      "type": "closet",
+      "areaM2": 2.05,
+      "polygon": [
+        [4.48939, -5.104691],
+        [3.98651, -3.117329],
+        [4.955955, -2.872021],
+        [5.458836, -4.859384]
+      ],
+      "section": null,
+      "objects": [
+        { "index": 0, "identifier": "45AC18A2-E330-4817-99F1-C6421DE74D90", "category": "storage" }
+      ]
+    },
+    {
+      "id": "bedroom-2",
+      "label": "Bedroom 2",
+      "type": "bedroom",
+      "areaM2": 12.21,
+      "polygon": [
+        [5.520162, -5.101745],
+        [4.612525, -1.514798],
+        [7.811695, -0.705283],
+        [8.719332, -4.292231]
+      ],
+      "section": { "index": 0, "label": "bedroom" },
+      "objects": [
+        {
+          "index": 15,
+          "identifier": "65579A04-BA75-4DB6-9C10-2936AB8AA297",
+          "category": "storage"
+        },
+        { "index": 17, "identifier": "4B0D0F7A-DD79-4F0F-9E28-3922BAE44E1E", "category": "bed" }
+      ]
+    }
+  ],
+  "sections": [
+    { "index": 0, "label": "bedroom", "roomId": "bedroom-2" },
+    { "index": 1, "label": "kitchen", "roomId": "kitchen" },
+    { "index": 2, "label": "livingRoom", "roomId": "living-room" },
+    { "index": 3, "label": "unidentified", "roomId": "hall" },
+    { "index": 4, "label": "bathroom", "roomId": "bathroom" },
+    { "index": 5, "label": "bedroom", "roomId": "bedroom-1" }
+  ],
+  "walls": [
+    {
+      "index": 0,
+      "identifier": "595CA83B-C8C0-48B5-BBC5-2E35424AC5AD",
+      "kind": "interior",
+      "roomIds": ["hall", "bathroom"],
+      "shortEnds": [{ "end": "start", "junction": [1.85373, -3.657005], "shortByM": 0.25 }]
+    },
+    {
+      "index": 1,
+      "identifier": "CC796569-8DA0-4020-ACCD-C34FCEA365C5",
+      "kind": "outline",
+      "roomIds": ["kitchen"],
+      "shortEnds": []
+    },
+    {
+      "index": 2,
+      "identifier": "35928610-292F-4732-A674-664C9757156B",
+      "kind": "outline",
+      "roomIds": ["bedroom-2"],
+      "shortEnds": []
+    },
+    {
+      "index": 3,
+      "identifier": "C9BEA6A9-BEB3-4FD3-8C20-0845B1067EF7",
+      "kind": "outline",
+      "roomIds": ["closet"],
+      "shortEnds": []
+    },
+    {
+      "index": 4,
+      "identifier": "AF244054-4EE9-4D52-B08E-7D12F9A610DD",
+      "kind": "outline",
+      "roomIds": ["living-room"],
+      "shortEnds": []
+    },
+    {
+      "index": 5,
+      "identifier": "3CC1BF2A-0763-44B6-9D3C-E947165A79B2",
+      "kind": "outline",
+      "roomIds": ["living-room"],
+      "shortEnds": []
+    },
+    {
+      "index": 6,
+      "identifier": "3B18DFA1-A158-459A-8FD0-9A9AC949F9F9",
+      "kind": "interior",
+      "roomIds": ["hall", "bedroom-2"],
+      "shortEnds": [{ "end": "end", "junction": [4.612525, -1.514798], "shortByM": 0.2 }]
+    },
+    {
+      "index": 7,
+      "identifier": "5043AAFF-E905-464F-885F-4A69A2D29B0D",
+      "kind": "outline",
+      "roomIds": ["living-room"],
+      "shortEnds": []
+    },
+    {
+      "index": 8,
+      "identifier": "94043A4D-9DD3-4162-8FF9-497A7DB645F0",
+      "kind": "outline",
+      "roomIds": ["living-room"],
+      "shortEnds": []
+    },
+    {
+      "index": 9,
+      "identifier": "5D19FAE9-CB58-40E1-80D7-6446D3B85117",
+      "kind": "interior",
+      "roomIds": ["kitchen", "bedroom-2"],
+      "shortEnds": [{ "end": "end", "junction": [7.666278, -0.742079], "shortByM": 0.45 }]
+    },
+    {
+      "index": 10,
+      "identifier": "E26FE32E-2211-4478-8DAE-8B2CD91DED8F",
+      "kind": "outline",
+      "roomIds": ["bedroom-2"],
+      "shortEnds": []
+    },
+    {
+      "index": 11,
+      "identifier": "6B324E85-9221-468E-8A80-140819E68CC7",
+      "kind": "interior",
+      "roomIds": ["closet", "bedroom-2"],
+      "shortEnds": [{ "end": "start", "junction": [5.458836, -4.859384], "shortByM": 0.2 }]
+    },
+    {
+      "index": 12,
+      "identifier": "2A7174D4-77F7-4B7B-82D8-ACB666546FF4",
+      "kind": "outline",
+      "roomIds": ["living-room"],
+      "shortEnds": []
+    },
+    {
+      "index": 13,
+      "identifier": "FA74C7D6-A2B0-4A2A-8DC9-7F995992140A",
+      "kind": "outline",
+      "roomIds": ["kitchen"],
+      "shortEnds": []
+    },
+    {
+      "index": 14,
+      "identifier": "FE56F529-64CA-4042-B6AA-77987FA119A6",
+      "kind": "outline",
+      "roomIds": ["living-room"],
+      "shortEnds": []
+    },
+    {
+      "index": 15,
+      "identifier": "53DBE714-D438-446F-88CD-7B200B86AEAB",
+      "kind": "interior",
+      "roomIds": ["bedroom-1", "bathroom"],
+      "shortEnds": [{ "end": "start", "junction": [2.35661, -5.644368], "shortByM": 0.3 }]
+    },
+    {
+      "index": 16,
+      "identifier": "ABBEEC91-EC5D-4B55-9B03-583007251689",
+      "kind": "outline",
+      "roomIds": ["living-room"],
+      "shortEnds": []
+    },
+    {
+      "index": 17,
+      "identifier": "399F093B-9E72-4897-8E08-6F15212CEBCE",
+      "kind": "interior",
+      "roomIds": ["bathroom", "closet"],
+      "shortEnds": [{ "end": "start", "junction": [4.48939, -5.104691], "shortByM": 0.4 }]
+    },
+    {
+      "index": 18,
+      "identifier": "B6A4763C-6245-4B68-9F4A-7E31FC54901F",
+      "kind": "outline",
+      "roomIds": ["bedroom-2"],
+      "shortEnds": []
+    },
+    {
+      "index": 19,
+      "identifier": "1DA88768-0A3A-48EB-A54D-1AA0A1BEA37A",
+      "kind": "outline",
+      "roomIds": ["bedroom-1"],
+      "shortEnds": []
+    },
+    {
+      "index": 20,
+      "identifier": "8DF840F2-FB1C-48FB-A1E4-9BD9E0E58790",
+      "kind": "interior",
+      "roomIds": ["living-room", "kitchen", "hall"],
+      "shortEnds": []
+    },
+    {
+      "index": 21,
+      "identifier": "1744DC32-1F5C-4C74-AAA8-3F3C23212692",
+      "kind": "outline",
+      "roomIds": ["bedroom-1"],
+      "shortEnds": []
+    },
+    {
+      "index": 22,
+      "identifier": "3DE8E7F9-F2AC-4E9D-AAA0-DCE20AA641E8",
+      "kind": "outline",
+      "roomIds": ["living-room"],
+      "shortEnds": []
+    },
+    {
+      "index": 23,
+      "identifier": "193BD272-BDEA-44AA-8448-ABBB0865097F",
+      "kind": "interior",
+      "roomIds": ["hall", "closet"],
+      "shortEnds": []
+    },
+    {
+      "index": 24,
+      "identifier": "0E454C85-2930-42C2-A610-828220FE8354",
+      "kind": "outline",
+      "roomIds": ["living-room"],
+      "shortEnds": []
+    },
+    {
+      "index": 25,
+      "identifier": "B3173D39-5B6A-4495-90E1-5145FE454CD6",
+      "kind": "outline",
+      "roomIds": ["bathroom"],
+      "shortEnds": []
+    },
+    {
+      "index": 26,
+      "identifier": "78103319-BF40-4954-9983-FF24C0305B0F",
+      "kind": "interior",
+      "roomIds": ["hall", "bedroom-1"],
+      "shortEnds": []
+    },
+    {
+      "index": 27,
+      "identifier": "71116826-0C9C-4E41-93D5-BFE74D4EEDB2",
+      "kind": "outline",
+      "roomIds": ["living-room"],
+      "shortEnds": []
+    },
+    {
+      "index": 28,
+      "identifier": "0273B08C-FC4A-4664-8A6C-ADCBCCB05830",
+      "kind": "outline",
+      "roomIds": ["kitchen"],
+      "shortEnds": []
+    },
+    {
+      "index": 29,
+      "identifier": "3AADE12C-4B9C-4AA8-946B-44171E3F1979",
+      "kind": "interior",
+      "roomIds": ["living-room", "bedroom-1"],
+      "shortEnds": [{ "end": "start", "junction": [-1.785814, -3.133826], "shortByM": 0.5 }]
+    },
+    {
+      "index": 30,
+      "identifier": "D77076EA-E11E-40D5-89DD-334844A4E45F",
+      "kind": "outline",
+      "roomIds": ["living-room"],
+      "shortEnds": []
+    }
+  ],
+  "openings": [
+    {
+      "kind": "door",
+      "index": 0,
+      "identifier": "8F9CECB6-F144-4EEF-9089-6420C6AC37AD",
+      "wallIdentifier": "0E454C85-2930-42C2-A610-828220FE8354",
+      "isOpen": false,
+      "roomIds": ["living-room"]
+    },
+    {
+      "kind": "door",
+      "index": 1,
+      "identifier": "0611A3AF-22C5-4AE9-B3C9-367CDEA3349E",
+      "wallIdentifier": "78103319-BF40-4954-9983-FF24C0305B0F",
+      "isOpen": true,
+      "roomIds": ["hall", "bedroom-1"]
+    },
+    {
+      "kind": "door",
+      "index": 2,
+      "identifier": "DC5ED6C1-A783-4E5D-A9B5-4FF3F677607B",
+      "wallIdentifier": "595CA83B-C8C0-48B5-BBC5-2E35424AC5AD",
+      "isOpen": true,
+      "roomIds": ["hall", "bathroom"]
+    },
+    {
+      "kind": "door",
+      "index": 3,
+      "identifier": "052BB2D6-8348-4536-8201-D34698F654F9",
+      "wallIdentifier": "193BD272-BDEA-44AA-8448-ABBB0865097F",
+      "isOpen": false,
+      "roomIds": ["hall", "closet"]
+    },
+    {
+      "kind": "door",
+      "index": 4,
+      "identifier": "8995F845-43E2-46EB-94A8-85CE280AFCB3",
+      "wallIdentifier": "3B18DFA1-A158-459A-8FD0-9A9AC949F9F9",
+      "isOpen": false,
+      "roomIds": ["hall", "bedroom-2"]
+    },
+    {
+      "kind": "window",
+      "index": 0,
+      "identifier": "D10EC5C8-E235-4C2F-8349-A783CF00A4BF",
+      "wallIdentifier": "3DE8E7F9-F2AC-4E9D-AAA0-DCE20AA641E8",
+      "roomIds": ["living-room"]
+    },
+    {
+      "kind": "window",
+      "index": 1,
+      "identifier": "E1883A54-6CA5-4028-AAFE-3E40B39CB09A",
+      "wallIdentifier": "1DA88768-0A3A-48EB-A54D-1AA0A1BEA37A",
+      "roomIds": ["bedroom-1"]
+    },
+    {
+      "kind": "window",
+      "index": 2,
+      "identifier": "0F1C1233-3450-470A-BE93-0538E37CDAAE",
+      "wallIdentifier": "35928610-292F-4732-A674-664C9757156B",
+      "roomIds": ["bedroom-2"]
+    },
+    {
+      "kind": "window",
+      "index": 3,
+      "identifier": "71D89F88-447A-4D0E-BEA7-79659EEFE874",
+      "wallIdentifier": "0273B08C-FC4A-4664-8A6C-ADCBCCB05830",
+      "roomIds": ["kitchen"]
+    },
+    {
+      "kind": "opening",
+      "index": 0,
+      "identifier": "7129CF7F-900D-40FF-811A-A15ADC56E530",
+      "wallIdentifier": "8DF840F2-FB1C-48FB-A1E4-9BD9E0E58790",
+      "roomIds": ["living-room", "hall"]
+    }
+  ]
+}
