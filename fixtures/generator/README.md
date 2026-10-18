@@ -15,7 +15,7 @@ Placeholder data only: address `100 Example Street, Testville, NY 00000`, deal i
 
 ## What is generated
 
-`fixtures/generated/index.json` lists everything below.
+`fixtures/generated/index.json` lists everything below except the RoomPlan-only fixtures.
 
 | Fixture              | Visit and captures  | Shape                                                                                                                              |
 | -------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
@@ -48,6 +48,25 @@ id, the affected file and role, the mutation and its details.
 | `missing-gltf-bin`    | `mesh.glb` has no BIN chunk; its buffer is the external `mesh.bin`, which is not in the package       |
 | `las-bad-header`      | `points.las` header point count is 1000 more than the points in the file                              |
 | `dimensions-3pct-off` | `field-controls.json` long distances are 0.97 x truth (3% short), entered in mm                       |
+
+## RoomPlan-only fixtures
+
+`fixtures/generated/roomplan-only/<name>/` holds a raw RoomPlan export (`roomplan.json`) and its
+ground truth (`expected.json`), with no package around it. These are not in `index.json`, whose
+readers expect complete packages. Swift tests load them with `Fixtures.roomPlanOnly(name)`
+(CaptureCore `CaptureTestSupport`).
+
+`apartment-walkthrough` (`src/walkthrough.ts`) is a whole two-bedroom apartment scanned by walking
+through every doorway, shaped like a real iPhone export: one `CapturedRoom` (version 2, no
+top-level identifier) with one floor outlining the whole apartment (26 corners, clockwise from
++Y), 31 walls with about 15% of the outline left without a wall and 7 interior wall ends that stop
+0.2 to 0.5 m short of their junction, no wall between the kitchen and the living room, sections
+for the living room, kitchen, both bedrooms and bathroom plus an `unidentified` one in the hall
+(none for the closet), 24 objects with RoomPlan attributes and mostly low confidence, doors seen
+open and closed, one passage opening and four windows. The floor is 1.31 m below the capture
+origin and the plan is turned 14.2 degrees about +Y. `expected.json` lists each intended room
+(label, type, counter-clockwise polygon in the capture frame, area, the section and the objects in
+it), every wall (outline or interior, the rooms beside it, short ends) and every opening.
 
 ## Conventions
 

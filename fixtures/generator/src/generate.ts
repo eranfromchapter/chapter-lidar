@@ -6,6 +6,7 @@ import { buildBrokenFixtures } from "./broken.js";
 import { jsonBytes } from "./json.js";
 import { buildManifest, buildPackage, type PackageFile } from "./package.js";
 import { fixtureSpecs } from "./shapes.js";
+import { buildWalkthrough, WALKTHROUGH_NAME } from "./walkthrough.js";
 
 export const GENERATED_FORMAT_VERSION = "1.0.0";
 
@@ -83,4 +84,11 @@ export async function generateAll(outDir: string): Promise<void> {
     });
   }
   write(join(outDir, "index.json"), await jsonBytes(index));
+
+  // RoomPlan-only fixtures: a raw RoomPlan export and its ground truth, with no package around
+  // it. Not listed in index.json, whose readers expect complete packages.
+  const walkthrough = buildWalkthrough();
+  const walkthroughRoot = join(outDir, "roomplan-only", WALKTHROUGH_NAME);
+  write(join(walkthroughRoot, "roomplan.json"), await jsonBytes(walkthrough.roomPlan));
+  write(join(walkthroughRoot, "expected.json"), await jsonBytes(walkthrough.expected));
 }

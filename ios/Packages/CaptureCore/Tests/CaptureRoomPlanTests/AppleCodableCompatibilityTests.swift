@@ -38,6 +38,56 @@
       XCTAssertEqual(structure.rooms.count, 2)
     }
 
+    func testWalkthroughFixtureDecodesAsCapturedRoom() throws {
+      // The RoomPlan-only walk-through: a whole apartment as one CapturedRoom, with sections,
+      // object attributes and doors seen open and closed, like a real device export.
+      let fixture = try Fixtures.roomPlanOnly("apartment-walkthrough")
+      let data = try fixture.roomPlanData()
+      let expected = fixture.expected
+      let room = try JSONDecoder().decode(CapturedRoom.self, from: data)
+      XCTAssertEqual(room.walls.count, expected.totals.walls)
+      XCTAssertEqual(room.doors.count, expected.totals.doors)
+      XCTAssertEqual(room.windows.count, expected.totals.windows)
+      XCTAssertEqual(room.openings.count, expected.totals.openings)
+      XCTAssertEqual(room.objects.count, expected.totals.objects)
+      XCTAssertEqual(room.floors.count, 1)
+      XCTAssertEqual(room.floors.first?.polygonCorners.count, expected.totals.outlineCorners)
+      XCTAssertEqual(room.sections.map(\.label.rawValue), expected.sections.map(\.label))
+      XCTAssertEqual(room.version, 2)
+
+      let isOpen = room.doors.map { door -> Bool? in
+        if case .door(let isOpen) = door.category { return isOpen }
+        return nil
+      }
+      XCTAssertEqual(isOpen, expected.openings.filter { $0.kind == "door" }.map(\.isOpen))
+      let storage = room.objects.filter { $0.category == .storage }
+      XCTAssertEqual(Set(storage.compactMap { $0.attribute(of: StorageType.self)?.rawValue }), ["cabinet", "shelf"])
+      let parents = try XCTUnwrap(JSON.parse(data)["objects"]?.array).compactMap { $0["parentIdentifier"]?.string }
+      XCTAssertFalse(parents.isEmpty)
+      XCTAssertEqual(room.objects.compactMap { $0.parentIdentifier?.uuidString }, parents)
+      for (object, listed) in zip(room.objects, expected.rooms.flatMap(\.objects).sorted { $0.index < $1.index }) {
+        XCTAssertEqual(object.identifier.uuidString, listed.identifier)
+      }
+
+      // Apple and the mirror read the same walls, in the same order, at the same places.
+      let document = try RoomPlanDocument.decode(from: data)
+      XCTAssertFalse(document.isStructure)
+      XCTAssertEqual(document.rooms[0].walls.count, room.walls.count)
+      for (apple, mirror) in zip(room.walls + room.doors, document.rooms[0].walls + document.rooms[0].doors) {
+        XCTAssertEqual(apple.identifier.uuidString, mirror.identifier)
+        let t = apple.transform.columns.3
+        let expectedTranslation = mirror.transform.translation
+        XCTAssertEqual(Double(t.x), expectedTranslation.x, accuracy: 1e-5)
+        XCTAssertEqual(Double(t.y), expectedTranslation.y, accuracy: 1e-5)
+        XCTAssertEqual(Double(t.z), expectedTranslation.z, accuracy: 1e-5)
+      }
+      // Apple's own encoding reads back through the mirror with every element.
+      let appleDocument = try RoomPlanAdapter.document(room)
+      XCTAssertEqual(appleDocument.rooms[0].walls.count, expected.totals.walls)
+      XCTAssertEqual(appleDocument.rooms[0].objects.count, expected.totals.objects)
+      XCTAssertEqual(appleDocument.rooms[0].floors.first?.polygonCorners?.count, expected.totals.outlineCorners)
+    }
+
     func testAppleEncodingOfTheFixtureMapsToTheSameModelAsTheFixtureJSON() throws {
       let fixture = try Fixtures.load("box-room")
       let original = try fixture.roomPlanData()
