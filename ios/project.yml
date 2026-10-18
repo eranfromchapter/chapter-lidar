@@ -1,0 +1,126 @@
+# XcodeGen spec of the Chapter Capture app (spec F6, step F6.4).
+#   xcodegen generate --spec ios/project.yml   ->  ios/ChapterCapture.xcodeproj (not committed)
+# Contract with .github/workflows/ios.yml (job App) and testflight.yml: exactly one
+# ios/*.xcodeproj, scheme `App` (build = the app, test = the UI tests on the simulator),
+# CFBundleVersion from CURRENT_PROJECT_VERSION, CFBundleShortVersionString from MARKETING_VERSION.
+# No team id is committed: testflight.yml passes DEVELOPMENT_TEAM.
+name: ChapterCapture
+
+options:
+  bundleIdPrefix: com.hellochapter
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+    CODE_SIGN_STYLE: Automatic
+
+packages:
+  CaptureContract:
+    path: ../contract/swift
+  CaptureCore:
+    path: Packages/CaptureCore
+  PlanExport:
+    path: Packages/PlanExport
+  MeshExport:
+    path: Packages/MeshExport
+  FieldKit:
+    path: Packages/FieldKit
+  PackageKit:
+    path: Packages/PackageKit
+  StationClient:
+    path: Packages/StationClient
+  AppCore:
+    path: App/AppCore
+  MSAL:
+    url: https://github.com/AzureAD/microsoft-authentication-library-for-objc
+    exactVersion: 2.16.0
+
+targets:
+  App:
+    type: application
+    platform: iOS
+    configFiles:
+      Debug: App/Config/Debug.xcconfig
+      Release: App/Config/Release.xcconfig
+    sources:
+      - path: App/Sources
+        excludes: [".apple-only"]
+      # UI-test fixture (box-room capture and photo). Debug only: excluded from Release below.
+      - path: ../fixtures/generated/box-room/package
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_NAME: ChapterCapture
+        PRODUCT_BUNDLE_IDENTIFIER: com.hellochapter.capture
+        INFOPLIST_FILE: App/Resources/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: App/Resources/App.entitlements
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ENABLE_PREVIEWS: NO
+      configs:
+        Release:
+          # The UI-test stubs and fixture never ship: `UITest*` sources (also #if DEBUG) and the
+          # fixture folder are not built into Release.
+          EXCLUDED_SOURCE_FILE_NAMES: "UITest* package"
+    dependencies:
+      - package: AppCore
+        product: AppCore
+      - package: CaptureContract
+        product: CaptureContract
+      - package: CaptureCore
+        product: CaptureCore
+      - package: CaptureCore
+        product: CaptureModelMapping
+      - package: CaptureCore
+        product: CaptureRoomPlan
+      - package: CaptureCore
+        product: CaptureUI
+      - package: PlanExport
+        product: PlanExport
+      - package: MeshExport
+        product: MeshExport
+      - package: FieldKit
+        product: FieldKit
+      - package: PackageKit
+        product: PackageKit
+      - package: StationClient
+        product: StationClient
+      - package: MSAL
+        product: MSAL
+
+  AppUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: App/UITests
+        excludes: [".apple-only"]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hellochapter.capture.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: App
+    dependencies:
+      - target: App
+
+schemes:
+  App:
+    build:
+      targets:
+        App: all
+        AppUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      gatherCoverageData: false
+      targets:
+        - AppUITests
+    archive:
+      config: Release
