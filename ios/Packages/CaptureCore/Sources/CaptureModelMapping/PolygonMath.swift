@@ -46,6 +46,23 @@ public enum PolygonMath {
     return [first] + points.dropFirst().reversed()
   }
 
+  /// True when `point` lies inside the closed loop `polygon`, in plan (x, z). Even-odd rule, so
+  /// the winding does not matter; a point exactly on an edge may count either way.
+  public static func contains(_ polygon: [Vector3], _ point: Vector3) -> Bool {
+    guard polygon.count >= 3 else { return false }
+    var inside = false
+    var previous = polygon[polygon.count - 1]
+    for current in polygon {
+      if (current.z > point.z) != (previous.z > point.z) {
+        let crossingX =
+          current.x + (point.z - current.z) * (previous.x - current.x) / (previous.z - current.z)
+        if point.x < crossingX { inside.toggle() }
+      }
+      previous = current
+    }
+    return inside
+  }
+
   /// Horizontal distance from `point` to the infinite line through `start` and `end`, and the
   /// position of the point's projection along the segment (0 at `start`, `length` at `end`).
   static func project(_ point: Vector3, onto start: Vector3, _ end: Vector3) -> (

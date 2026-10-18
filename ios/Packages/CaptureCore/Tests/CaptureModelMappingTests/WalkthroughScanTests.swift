@@ -17,6 +17,13 @@ final class WalkthroughScanTests: XCTestCase {
     // Today the mapper keeps a walk-through as one room with the floor outline.
     let room = try XCTUnwrap(model.rooms.first)
     XCTAssertEqual(model.rooms.count, 1)
+    // Its sections name four kinds of room, so the one room carries the capture label and no
+    // type until phase 3 splits it into rooms.
+    XCTAssertEqual(
+      Set(document.rooms[0].sections.compactMap(\.roomType)), [.livingRoom, .kitchen, .bedroom, .bathroom])
+    XCTAssertEqual(room.label, "Apartment")
+    XCTAssertNil(room.type)
+    XCTAssertNil(room.typeSource)
     XCTAssertEqual(room.polygon.count, expected.totals.outlineCorners)
     let polygon = room.polygon.map { Vector3($0.x, $0.y, $0.z) }
     XCTAssertEqual(PolygonMath.area(polygon), expected.totals.floorAreaM2, accuracy: 0.001)
@@ -107,6 +114,29 @@ final class WalkthroughScanTests: XCTestCase {
           "\(name): \(document.rooms.count) RoomPlan room(s) -> \(model.rooms.count) room(s), "
             + "\(model.walls.count) walls, \(model.doors.count) doors, \(model.windows.count) windows, "
             + "\(model.openings.count) openings, \(model.objects.count) objects")
+
+        // Room names: unique labels; a type comes with its source; a room whose sections name two
+        // or more types (a walk-through) carries the capture label and no type, and a room whose
+        // sections name one type has that type.
+        XCTAssertEqual(Set(model.rooms.map(\.label)).count, model.rooms.count, name)
+        for (room, source) in zip(model.rooms, document.rooms) {
+          XCTAssertFalse(room.label.isEmpty, name)
+          XCTAssertEqual(room.type == nil, room.typeSource == nil, name)
+          let polygon = room.polygon.map { Vector3($0.x, $0.y, $0.z) }
+          let types = Set(
+            source.sections.filter { $0.center.map { PolygonMath.contains(polygon, $0) } ?? false }
+              .compactMap(\.roomType))
+          if types.count > 1 {
+            XCTAssertTrue(room.label.hasPrefix("Apartment"), name)
+            XCTAssertNil(room.type, name)
+          } else if let type = types.first {
+            XCTAssertEqual(room.type, type, name)
+            XCTAssertEqual(room.typeSource, .roomplanSection, name)
+          }
+          print(
+            "  \(room.id) \"\(room.label)\": type \(room.type?.rawValue ?? "none")"
+              + " (\(room.typeSource?.rawValue ?? "-")), sections \(source.sections.map(\.label))")
+        }
 
         XCTAssertTrue(model.doors.allSatisfy { $0.isOpen != nil }, "\(name): RoomPlan reports isOpen on every door")
         let objectIds = Set(model.objects.map(\.id))

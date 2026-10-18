@@ -1,0 +1,171 @@
+import CaptureContract
+
+/// Room types and labels from what RoomPlan reports: the section labels inside a room, or else
+/// the objects in it. Pure and deterministic; `CaptureModelMapper` applies it to every room.
+///
+/// Points are tested in plan (x, z) against the room's floor polygon. Section centres and object
+/// transforms are in the same RoomPlan frame as the walls and floors, which the mapper keeps as
+/// the capture frame, so they are used as they are.
+public enum RoomTyping {
+  /// What the typing found for one room.
+  public enum Result: Hashable, Sendable {
+    /// A known type and where it came from.
+    case typed(RoomType, RoomTypeSource)
+    /// Sections of two or more types inside the room: a walk-through scan that RoomPlan reports
+    /// as one room. It gets no type, so the report does not claim one; phase 3 of the floorplan
+    /// plan splits such a room into its rooms.
+    case mixed
+    /// No usable section and no object that tells the type.
+    case unknown
+
+    public var type: RoomType? {
+      if case .typed(let type, _) = self { return type }
+      return nil
+    }
+
+    public var source: RoomTypeSource? {
+      if case .typed(_, let source) = self { return source }
+      return nil
+    }
+  }
+
+  /// An object as the typing sees it: its category and the centre of its footprint.
+  public struct Object: Hashable, Sendable {
+    public var category: ObjectCategory
+    public var center: Vector3
+
+    public init(category: ObjectCategory, center: Vector3) {
+      self.category = category
+      self.center = center
+    }
+  }
+
+  /// The type of the room with floor outline `polygon`. Only sections and objects inside the
+  /// polygon count, and `unidentified` sections are ignored:
+  /// - sections of exactly one type: that type, from `roomplan_section`;
+  /// - sections of two or more types: `mixed`;
+  /// - no usable section: the type the objects point to (`inferredType(from:)`), `inferred`.
+  public static func type(polygon: [Vector3], sections: [RoomPlanSection], objects: [Object])
+    -> Result
+  {
+    var sectionTypes: Set<RoomType> = []
+    for section in sections {
+      guard let type = section.roomType, let center = section.center,
+        PolygonMath.contains(polygon, center)
+      else { continue }
+      sectionTypes.insert(type)
+    }
+    if sectionTypes.count > 1 { return .mixed }
+    if let type = sectionTypes.first { return .typed(type, .roomplanSection) }
+    let inside = objects.filter { PolygonMath.contains(polygon, $0.center) }.map(\.category)
+    return inferredType(from: inside).map { .typed($0, .inferred) } ?? .unknown
+  }
+
+  /// The type a room's objects point to. The first rule that matches wins:
+  /// toilet or bathtub: bathroom; stove, oven, refrigerator or dishwasher: kitchen; bed: bedroom;
+  /// washer-dryer: laundry; sofa, television or fireplace: living room; a table and two or more
+  /// chairs: dining room. Nil when none matches.
+  public static func inferredType(from categories: [ObjectCategory]) -> RoomType? {
+    let present = Set(categories)
+    let rules: [(categories: Set<ObjectCategory>, type: RoomType)] = [
+      ([.toilet, .bathtub], .bathroom),
+      ([.stove, .oven, .refrigerator, .dishwasher], .kitchen),
+      ([.bed], .bedroom),
+      ([.washerDryer], .laundry),
+      ([.sofa, .television, .fireplace], .livingRoom),
+    ]
+    if let rule = rules.first(where: { !$0.categories.isDisjoint(with: present) }) {
+      return rule.type
+    }
+    if present.contains(.table), categories.filter({ $0 == .chair }).count >= 2 {
+      return .diningRoom
+    }
+    return nil
+  }
+
+  /// The label of a room of `type`; nil for `other`, which is labelled like a room of unknown
+  /// type.
+  public static func label(of type: RoomType) -> String? {
+    switch type {
+    case .livingRoom: return "Living Room"
+    case .diningRoom: return "Dining Room"
+    case .kitchen: return "Kitchen"
+    case .bedroom: return "Bedroom"
+    case .bathroom: return "Bathroom"
+    case .closet: return "Closet"
+    case .hallway: return "Hallway"
+    case .laundry: return "Laundry"
+    case .office: return "Office"
+    case .utility: return "Utility"
+    case .other: return nil
+    }
+  }
+
+  /// Labels of a capture's rooms, in room order, from each room's typing `results`:
+  /// - a typed room: the label of its type, for example `Bedroom`; when two or more rooms of the
+  ///   capture have that type they are numbered in room order: `Bedroom 1`, `Bedroom 2`;
+  /// - a mixed room: `captureLabel` (for example `Apartment`), numbered the same way;
+  /// - type `other` or no type: `Room N`, N being the room's 1-based position.
+  /// Numbering counts every room, also one whose label is overridden, so renaming one room does
+  /// not renumber the others.
+  ///
+  /// `overrides[i]`, when given and not blank, replaces the label of room i. Labels are unique
+  /// within the capture, compared ignoring case and repeated spaces as the station's photo
+  /// coverage check compares them: a label already used gets ` 2`, ` 3` and so on, and a derived
+  /// label gives way to an override.
+  public static func labels(
+    for results: [Result], captureLabel: String, overrides: [String] = []
+  ) -> [String] {
+    let bases: [String?] = results.map { result in
+      switch result {
+      case .typed(let type, _): return label(of: type)
+      case .mixed: return isBlank(captureLabel) ? nil : captureLabel
+      case .unknown: return nil
+      }
+    }
+    var totals: [String: Int] = [:]
+    for case let base? in bases { totals[base, default: 0] += 1 }
+    var numbered: [String: Int] = [:]
+    let derived = bases.enumerated().map { index, base -> String in
+      guard let base else { return "Room \(index + 1)" }
+      guard totals[base, default: 0] > 1 else { return base }
+      numbered[base, default: 0] += 1
+      return "\(base) \(numbered[base, default: 0])"
+    }
+
+    let overridden: [String?] = results.indices.map { index in
+      guard overrides.indices.contains(index), !isBlank(overrides[index]) else { return nil }
+      return overrides[index]
+    }
+    let reserved = Set(overridden.compactMap { $0.map(key) })
+    var taken: Set<String> = []
+    var labels: [String] = []
+    for (index, derivedLabel) in derived.enumerated() {
+      var label = overridden[index] ?? derivedLabel
+      let isUsed = { (candidate: String) -> Bool in
+        taken.contains(key(candidate))
+          || (overridden[index] == nil && reserved.contains(key(candidate)))
+      }
+      if isUsed(label) {
+        let base = label
+        var suffix = 2
+        repeat {
+          label = "\(base) \(suffix)"
+          suffix += 1
+        } while isUsed(label) || reserved.contains(key(label))
+      }
+      taken.insert(key(label))
+      labels.append(label)
+    }
+    return labels
+  }
+
+  /// A label as the uniqueness rule compares it: lower case, runs of white space as one space.
+  static func key(_ label: String) -> String {
+    label.lowercased().split(whereSeparator: \.isWhitespace).joined(separator: " ")
+  }
+
+  private static func isBlank(_ text: String) -> Bool {
+    text.allSatisfy(\.isWhitespace)
+  }
+}

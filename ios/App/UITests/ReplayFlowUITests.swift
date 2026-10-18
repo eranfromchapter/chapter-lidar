@@ -52,7 +52,8 @@ final class ReplayFlowUITests: XCTestCase {
     // 3 Live scan (replay).
     tap(button("Finish floor"), timeout: 20)
 
-    // Photos: the fixture photo, labeled.
+    // Photos: the fixture photo, labeled. The box room is "Room 1": its RoomPlan section is
+    // unidentified and a table alone does not tell the room type.
     tap(app.buttons["Take photo"], timeout: 20)
     tap(button("Room 1"))
     tap(app.buttons["N"])

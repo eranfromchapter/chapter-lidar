@@ -21,6 +21,37 @@ final class SchemaConformanceTests: XCTestCase {
     }
   }
 
+  /// Models that carry every field schema 1.1.0 adds: room types from a section and inferred,
+  /// doors open and closed, object attributes and parents.
+  func testMappedModelsWithTheFieldsOf1_1ValidateAgainstTheSchema() throws {
+    let validator = try validator()
+    var models: [String: CaptureModel] = [:]
+    var twoRooms = try mapFixture("two-room-apartment")
+    twoRooms.context.roomLabels = []
+    models["two-room-apartment"] = try CaptureModelMapper.map(twoRooms.document, context: twoRooms.context)
+    var toilet = try mapFixture("box-room")
+    toilet.document.rooms[0].objects[0].category = RoomPlanCategory(name: "toilet")
+    models["box-room with a toilet"] = try CaptureModelMapper.map(toilet.document, context: toilet.context)
+    let walkthrough = try Fixtures.roomPlanOnly("apartment-walkthrough")
+    models["apartment-walkthrough"] = try CaptureModelMapper.map(
+      try RoomPlanDocument.decode(from: walkthrough.roomPlanData()),
+      context: MappingContext(
+        visitId: try XCTUnwrap(LowercaseUUID(rawValue: "6f1c2a8e-3b7d-4e59-9a14-2c8d5e7f0b31")),
+        captureId: try XCTUnwrap(LowercaseUUID(rawValue: "9d4e7b12-5a3c-4f86-b2e1-7c0a9f3d6e58")),
+        areaKey: "apartment", label: "Apartment"))
+
+    let all = Array(models.values)
+    XCTAssertTrue(all.flatMap(\.rooms).contains { $0.typeSource == .roomplanSection })
+    XCTAssertTrue(all.flatMap(\.rooms).contains { $0.typeSource == .inferred })
+    XCTAssertTrue(all.flatMap(\.doors).contains { $0.isOpen == true })
+    XCTAssertTrue(all.flatMap(\.doors).contains { $0.isOpen == false })
+    XCTAssertTrue(all.flatMap(\.objects).contains { $0.attributes != nil })
+    XCTAssertTrue(all.flatMap(\.objects).contains { $0.parentId != nil })
+    for (name, model) in models.sorted(by: { $0.key < $1.key }) {
+      XCTAssertEqual(validator.validate(try encodedJSON(model)), [], name)
+    }
+  }
+
   func testMappedModelsRoundTripThroughTheContractTypes() throws {
     let encoder = CaptureContractJSON.makeEncoder()
     for (name, index) in allGeneratedCaptures {

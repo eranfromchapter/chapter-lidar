@@ -84,8 +84,9 @@ final class MappingTests: XCTestCase {
       let mapped = try mapFixture(name, capture: index)
       // The generator leaves the confidence of doors, windows and openings out; real RoomPlan
       // reports it and the mapper keeps it (the schema allows it). The generator writes schema
-      // 1.0.0 and the app the current version, whose added fields (door isOpen, object
-      // attributes and parent) are checked by the tests below. Nothing else may differ.
+      // 1.0.0 and the app the current version, whose added fields (room type, door isOpen,
+      // object attributes and parent) testGeneratedFixturesGetTheFieldsOf1_1 checks. The room
+      // labels come from the generator's model (see mapFixture). Nothing else may differ.
       let json = try encodedJSON(mapped.model)
       let problems = differences(json, mapped.expected, tolerance: oneMillimetre)
         .filter { problem in
@@ -94,12 +95,36 @@ final class MappingTests: XCTestCase {
             && problem.hasSuffix("/confidence: not expected")
           let isAddedIn1_1 =
             problem.range(
-              of: #"^/(doors/\d+/isOpen|objects/\d+/(attributes|parentId)): not expected$"#,
+              of: #"^/(rooms/\d+/(type|typeSource)|doors/\d+/isOpen|objects/\d+/(attributes|parentId)): not expected$"#,
               options: .regularExpression) != nil
           return !isOpeningConfidence && !isAddedIn1_1 && !problem.hasPrefix("/schemaVersion:")
         }
       XCTAssertEqual(problems, [], "\(name) capture \(index)")
       XCTAssertEqual(json["schemaVersion"]?.string, CaptureModelSchemaVersion.current.rawValue)
+    }
+  }
+
+  /// The 1.1.0 fields the generator's 1.0.0 models do not carry: room types from the RoomPlan
+  /// sections, and door isOpen as RoomPlan reports it (closed in every generated capture).
+  func testGeneratedFixturesGetTheFieldsOf1_1() throws {
+    let expectedTypes: [String: [RoomType?]] = [
+      // An unidentified section, and a table without chairs says nothing.
+      "box-room 0": [nil],
+      "l-shaped-room 0": [nil],
+      "two-room-apartment 0": [.livingRoom, .bedroom],
+      "two-floor-house 0": [.livingRoom],
+      // An unidentified section and no objects.
+      "two-floor-house 1": [nil],
+    ]
+    for (name, index) in allGeneratedCaptures {
+      let model = try mapFixture(name, capture: index).model
+      let key = "\(name) \(index)"
+      XCTAssertEqual(model.rooms.map(\.type), try XCTUnwrap(expectedTypes[key]), key)
+      XCTAssertEqual(
+        model.rooms.map(\.typeSource), model.rooms.map { $0.type == nil ? nil : .roomplanSection }, key)
+      XCTAssertTrue(model.doors.allSatisfy { $0.isOpen == false }, key)
+      XCTAssertTrue((model.windows + model.openings).allSatisfy { $0.isOpen == nil }, key)
+      XCTAssertTrue(model.objects.allSatisfy { $0.attributes == nil && $0.parentId == nil }, key)
     }
   }
 
@@ -218,11 +243,13 @@ final class MappingTests: XCTestCase {
     XCTAssertEqual(document.rooms[0].walls.count, 4)
   }
 
-  func testRoomLabelsDefaultWhenNoneAreGiven() throws {
+  func testRoomLabelsOverrideTheDerivedLabelsAndKeepTheTypes() throws {
     var mapped = try mapFixture("two-room-apartment")
     mapped.context.roomLabels = ["Kitchen"]
     let model = try CaptureModelMapper.map(mapped.document, context: mapped.context)
-    XCTAssertEqual(model.rooms.map(\.label), ["Kitchen", "Room 2"])
+    XCTAssertEqual(model.rooms.map(\.label), ["Kitchen", "Bedroom"])
+    XCTAssertEqual(model.rooms.map(\.type), [.livingRoom, .bedroom])
+    XCTAssertEqual(model.rooms.map(\.typeSource), [.roomplanSection, .roomplanSection])
   }
 
   func testDoorsKeepIsOpenAndOnlyDoorsCarryIt() throws {

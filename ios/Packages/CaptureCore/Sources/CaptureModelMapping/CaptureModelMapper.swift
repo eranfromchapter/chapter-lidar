@@ -7,8 +7,9 @@ public struct MappingContext: Sendable {
   public var captureId: LowercaseUUID
   public var areaKey: String
   public var label: String
-  /// Room labels in room order (RoomPlan does not name rooms). Missing entries become
-  /// `Room 1`, `Room 2`, and so on.
+  /// Room labels in room order, replacing the labels derived from the room types (see
+  /// `RoomTyping.labels`). A missing or blank entry keeps the derived label; the room's type is
+  /// set either way.
   public var roomLabels: [String]
   public var refs: [CaptureModel.SourceRef]
 
@@ -51,6 +52,9 @@ public enum MappingError: Error, Equatable, CustomStringConvertible {
 /// Ids are numbered in document order across the whole capture: `room-1`, `wall-1`, `door-1`,
 /// `window-1`, `opening-1`, `object-1`. A partition that two rooms both list appears once per
 /// room, as RoomPlan reports it.
+///
+/// Each room gets a type and label from the RoomPlan sections inside it, or else from its
+/// objects (`RoomTyping`).
 public enum CaptureModelMapper {
   /// Longest gap, in metres, between wall ends that still joins them when an outline has to be
   /// built from walls.
@@ -100,16 +104,16 @@ public enum CaptureModelMapper {
       counters[kind, default: 0] += 1
       return "\(kind)-\(counters[kind]!)"
     }
+    var typings: [RoomTyping.Result] = []
     for (roomIndex, room) in document.rooms.enumerated() {
       let roomId = "room-\(roomIndex + 1)"
       let roomPlacements = wallIndexByRoom[roomIndex].map { placements[$0] }
-      let label =
-        context.roomLabels.indices.contains(roomIndex)
-        ? context.roomLabels[roomIndex] : "Room \(roomIndex + 1)"
       let polygon = try outline(of: room, walls: roomPlacements, roomIndex: roomIndex)
+      typings.append(typing(of: room, polygon: polygon, structureSections: document.sections))
+      // Labelled in pass 3, once the type of every room is known.
       model.rooms.append(
         CaptureModel.Room(
-          id: roomId, label: label, polygon: polygon.map(\.contractVec3),
+          id: roomId, label: "", polygon: polygon.map(\.contractVec3),
           heightM: (roomPlacements.map(\.heightM).max() ?? 0).cleaned))
 
       for (surfaces, kind) in [(room.doors, "door"), (room.windows, "window"), (room.openings, "opening")] {
@@ -157,7 +161,35 @@ public enum CaptureModelMapper {
             parentId: parentId == id ? nil : parentId))
       }
     }
+
+    // Pass 3: room labels, numbered across the capture (`Bedroom 1`, `Bedroom 2`), and types.
+    let labels = RoomTyping.labels(
+      for: typings, captureLabel: context.label, overrides: context.roomLabels)
+    for index in model.rooms.indices {
+      model.rooms[index].label = labels[index]
+      model.rooms[index].type = typings[index].type
+      model.rooms[index].typeSource = typings[index].source
+    }
     return model
+  }
+
+  /// The type of `room`, from its own sections or, when it has none, from the structure's
+  /// sections on the same story; otherwise from its objects. Only what lies inside `polygon`
+  /// counts.
+  static func typing(
+    of room: RoomPlanRoom, polygon: [Vector3], structureSections: [RoomPlanSection]
+  ) -> RoomTyping.Result {
+    let sections =
+      room.sections.isEmpty
+      ? structureSections.filter { section in
+        guard let story = room.story, let sectionStory = section.story else { return true }
+        return story == sectionStory
+      }
+      : room.sections
+    let objects = room.objects.map {
+      RoomTyping.Object(category: $0.category.objectCategory, center: $0.transform.translation)
+    }
+    return RoomTyping.type(polygon: polygon, sections: sections, objects: objects)
   }
 
   /// A wall surface into a centreline at the wall base. The wall's local X axis runs along the
