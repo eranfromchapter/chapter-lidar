@@ -77,25 +77,37 @@
       guard let floor = selectedFloor else { return [] }
       let id = floor.ref.captureId
       let controls = editor.controls
+      let scan = floor.scan
+      // Under the standard policy the LiDAR scan provides the measurements and tape or laser
+      // checks are optional, so nothing shows as missing.
+      let required = policy.manualControlsRequired
+      let fromScan = "From the LiDAR scan \u{00B7} tap to check with tape"
       var rows: [ControlRowContent] = []
 
       for (kind, axis) in [(ControlKind.distanceA, DistanceAxis.a), (.distanceB, .b)] {
+        let scanned = axis == .a ? scan?.distanceAMm : scan?.distanceBMm
         if let item = controls.distances.first(where: {
           $0.capture.captureId == id && $0.axis == axis
         }) {
           rows.append(
             ControlRowContent(
               kind: kind, title: kind.rowTitle, subtitle: "\(item.from) \u{2192} \(item.to)",
-              valueLines: Self.lines(item.measurement), isMissing: false))
+              valueLines: Self.lines(item.measurement) + Self.scanLine(scanned), isMissing: false))
+        } else if let scanned {
+          rows.append(
+            ControlRowContent(
+              kind: kind, title: kind.rowTitle, subtitle: fromScan,
+              valueLines: Self.lines(scanned), isMissing: false))
         } else {
           rows.append(
             ControlRowContent(
               kind: kind, title: kind.rowTitle, subtitle: "Not measured yet", valueLines: [],
-              isMissing: true))
+              isMissing: required))
         }
       }
 
       let ceilings = controls.ceilingHeights.filter { $0.capture.captureId == id }
+      let scannedHeights = scan?.ceilingHeights.map(\.heightMm) ?? []
       if let low = ceilings.map(\.measurement.valueMm).min(),
         let high = ceilings.map(\.measurement.valueMm).max()
       {
@@ -105,20 +117,40 @@
             kind: .ceilingHeight, title: ControlKind.ceilingHeight.rowTitle,
             subtitle: "\(rooms) \(rooms == 1 ? "room" : "rooms")",
             valueLines: [LengthFormatter.millimetreRange(low, high)], isMissing: false))
+      } else if let low = scannedHeights.min(), let high = scannedHeights.max() {
+        let rooms = scannedHeights.count
+        rows.append(
+          ControlRowContent(
+            kind: .ceilingHeight, title: ControlKind.ceilingHeight.rowTitle,
+            subtitle: "From the LiDAR scan \u{00B7} \(rooms) \(rooms == 1 ? "room" : "rooms")",
+            valueLines: [
+              LengthFormatter.millimetreRange(low, high),
+              low == high
+                ? LengthFormatter.feetInches(low)
+                : "\(LengthFormatter.feetInches(low)) \u{2013} \(LengthFormatter.feetInches(high))",
+            ], isMissing: false))
       } else {
         rows.append(
           ControlRowContent(
             kind: .ceilingHeight, title: ControlKind.ceilingHeight.rowTitle,
-            subtitle: "Not measured yet", valueLines: [], isMissing: true))
+            subtitle: "Not measured yet", valueLines: [], isMissing: required))
       }
 
       let openings = controls.openings.filter { $0.capture.captureId == id }
-      rows.append(
-        ControlRowContent(
-          kind: .opening, title: ControlKind.opening.rowTitle,
-          subtitle: openings.isEmpty
-            ? "Doors and windows" : openings.map(\.label).joined(separator: ", "),
-          valueLines: [String(openings.count)], isMissing: false))
+      if openings.isEmpty, let scan {
+        rows.append(
+          ControlRowContent(
+            kind: .opening, title: ControlKind.opening.rowTitle,
+            subtitle: "From the LiDAR scan \u{00B7} \(scan.openingsSummary)",
+            valueLines: [String(scan.doors + scan.windows + scan.openings)], isMissing: false))
+      } else {
+        rows.append(
+          ControlRowContent(
+            kind: .opening, title: ControlKind.opening.rowTitle,
+            subtitle: openings.isEmpty
+              ? "Doors and windows" : openings.map(\.label).joined(separator: ", "),
+            valueLines: [String(openings.count)], isMissing: false))
+      }
 
       if let upper = nextFloor {
         let pair: Set<LowercaseUUID> = [id, upper.ref.captureId]
@@ -135,7 +167,7 @@
           rows.append(
             ControlRowContent(
               kind: .floorToFloor, title: ControlKind.floorToFloor.rowTitle,
-              subtitle: "To \(upper.label)", valueLines: [], isMissing: true))
+              subtitle: "To \(upper.label)", valueLines: [], isMissing: required))
         }
         let shared = controls.landmarks.filter {
           pair.isSubset(of: Set($0.captures.map(\.captureId)))
@@ -146,9 +178,21 @@
             subtitle: "Visible from two floors",
             valueLines: shared == 0
               ? [] : ["\(shared) of \(policy.minimumLandmarksPerFloorPair)"],
-            isMissing: shared == 0))
+            isMissing: required && shared == 0))
       }
       return rows
+    }
+
+    /// True when the scan provides the measurements and tape or laser checks are optional.
+    public var measurementsFromScan: Bool { !policy.manualControlsRequired }
+
+    private static func lines(_ valueMm: Double) -> [String] {
+      [LengthFormatter.millimetres(valueMm), LengthFormatter.feetInches(valueMm)]
+    }
+
+    /// "Scan 7 512 mm" under a tape or laser value, when the scan has the same quantity.
+    private static func scanLine(_ valueMm: Double?) -> [String] {
+      valueMm.map { ["Scan \(LengthFormatter.millimetres($0))"] } ?? []
     }
 
     private static func lines(_ measurement: FieldControls.Measurement) -> [String] {

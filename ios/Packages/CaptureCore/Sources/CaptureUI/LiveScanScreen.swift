@@ -29,14 +29,7 @@
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipShape(RoundedRectangle(cornerRadius: Radius.sheet))
           VStack {
-            HStack {
-              Text(model.instruction.message)
-                .font(Typo.sans(15, weight: .semibold))
-                .foregroundStyle(Palette.ink)
-                .padding(.horizontal, Space.s3).padding(.vertical, Space.s2)
-                .background(Palette.surface, in: RoundedRectangle(cornerRadius: Radius.chip))
-              Spacer()
-            }
+            guidanceCard(model.guidance)
             Spacer()
             HStack(spacing: Space.s2) {
               count(model.progress.counts.walls, "walls")
@@ -87,6 +80,28 @@
       .padding(.horizontal, 20)
       .padding(.top, Space.s2)
       .padding(.bottom, Space.s4)
+    }
+
+    /// Direction for the operator: the step of the scan, what to do, and RoomPlan's warnings.
+    private func guidanceCard(_ guidance: ScanGuidance) -> some View {
+      VStack(alignment: .leading, spacing: 4) {
+        if let step = guidance.step {
+          Text("Step \(step) of \(ScanGuidance.stepCount)")
+            .font(Typo.sans(12, weight: .semibold)).foregroundStyle(Palette.muted)
+        }
+        Text(guidance.title)
+          .font(Typo.sans(17, weight: .semibold))
+          .foregroundStyle(guidance.isWarning ? Palette.blocked : Palette.ink)
+        Text(guidance.detail)
+          .font(Typo.sans(14)).foregroundStyle(Palette.ink)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(.horizontal, Space.s3).padding(.vertical, Space.s2)
+      .background(Palette.surface.opacity(0.94), in: RoundedRectangle(cornerRadius: Radius.card))
+      .accessibilityElement(children: .combine)
+      .accessibilityIdentifier("scan.guidance")
+      .animation(.easeInOut(duration: 0.2), value: guidance)
     }
 
     private func count(_ value: Int, _ label: String) -> some View {

@@ -38,12 +38,19 @@ public struct ChecklistPolicy: Hashable, Sendable {
   /// Shared landmarks needed between each pair of consecutive floors. Two landmarks fix both the
   /// position and the rotation of one floor against the next.
   public var minimumLandmarksPerFloorPair: Int
+  /// True: the tape or laser controls below must be recorded before the visit can finish.
+  /// False (standard, decided by Eran 2026-10-18): the LiDAR scan provides the measurements and
+  /// tape or laser checks are optional; the item passes and counts the checks that exist.
+  public var manualControlsRequired: Bool
 
-  public init(minimumLandmarksPerFloorPair: Int = 2) {
+  public init(minimumLandmarksPerFloorPair: Int = 2, manualControlsRequired: Bool = false) {
     self.minimumLandmarksPerFloorPair = minimumLandmarksPerFloorPair
+    self.manualControlsRequired = manualControlsRequired
   }
 
   public static let standard = ChecklistPolicy()
+  /// Every floor needs its tape or laser controls (the original rule).
+  public static let manualControls = ChecklistPolicy(manualControlsRequired: true)
 }
 
 public enum ChecklistItemID: String, CaseIterable, Sendable {
@@ -352,6 +359,16 @@ public enum ChecklistRules {
             lower: lower.label, upper: upper.label, have: shared,
             need: policy.minimumLandmarksPerFloorPair))
       }
+    }
+    guard policy.manualControlsRequired else {
+      let checks =
+        controls.distances.count + controls.ceilingHeights.count + controls.openings.count
+        + controls.floorToFloor.count + controls.landmarks.count
+      let detail =
+        checks == 0
+        ? "Measured by the LiDAR scan"
+        : "Measured by the LiDAR scan \u{00B7} \(checks) tape or laser \(checks == 1 ? "check" : "checks")"
+      return ChecklistItem(id: .minimumControls, passed: true, detail: detail, gaps: [])
     }
     return item(
       .minimumControls, gaps: gaps, passedDetail: "All minimum controls recorded", wording)

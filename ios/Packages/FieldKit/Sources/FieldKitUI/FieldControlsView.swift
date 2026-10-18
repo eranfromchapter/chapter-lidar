@@ -17,7 +17,10 @@
         VStack(alignment: .leading, spacing: 14) {
           Text("Field controls")
             .font(FieldTheme.title30())
-          Text("Tape or laser only. Never copy numbers from the scan.")
+          Text(
+            model.measurementsFromScan
+              ? "Measured by the LiDAR scan. Tap a row to add an optional tape or laser check."
+              : "Tape or laser only. Never copy numbers from the scan.")
             .font(.system(size: 15))
             .foregroundStyle(FieldTheme.muted)
 
@@ -35,10 +38,14 @@
         }
       }
       .safeAreaInset(edge: .bottom) {
-        PrimaryButton(title: "Save measurement", isEnabled: model.canSave) {
-          model.saveEntry()
+        // Shown only while a measurement is being entered: with the scan's values, entering
+        // one is optional and "Continue" (top right) moves on.
+        if model.activeKind != nil {
+          PrimaryButton(title: "Save measurement", isEnabled: model.canSave) {
+            model.saveEntry()
+          }
+          .padding(.top, FieldTheme.space8)
         }
-        .padding(.top, FieldTheme.space8)
       }
       .fieldScreen()
     }
@@ -93,6 +100,10 @@
         Text("\u{25A0} Missing")
           .font(.system(size: 15))
           .foregroundStyle(FieldTheme.blocked)
+      } else if row.valueLines.isEmpty {
+        Text("Optional")
+          .font(.system(size: 15))
+          .foregroundStyle(FieldTheme.muted)
       } else {
         VStack(alignment: .trailing, spacing: 0) {
           ForEach(Array(row.valueLines.enumerated()), id: \.offset) { index, line in
