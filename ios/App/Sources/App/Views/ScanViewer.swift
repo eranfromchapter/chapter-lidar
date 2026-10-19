@@ -258,7 +258,7 @@ struct ModelViewer: View {
       if let scene, let camera {
         SceneView(
           scene: scene, pointOfView: camera,
-          options: [.allowsCameraControl, .autoenablesDefaultLighting])
+          options: [.allowsCameraControl])
           .ignoresSafeArea()
           .accessibilityLabel("3D model of \(title)")
       } else if failed {
@@ -294,33 +294,16 @@ struct ModelViewer: View {
     .task { load() }
   }
 
-  /// Loads the model with a bright background and soft light, and points a camera at it from
-  /// above at an angle so the whole model is in view. Called again by Reset view.
+  /// Loads the model and styles it (`ModelStyle`): flat-shaded faces, a colour per kind of element,
+  /// key and fill light with soft shadows, and a camera that fits the whole model. Called again
+  /// by Reset view.
   private func load() {
     guard let loaded = try? SCNScene(url: url, options: nil) else {
       failed = true
       return
     }
-    loaded.background.contents = UIColor(Palette.surface)
-    let ambient = SCNNode()
-    ambient.light = SCNLight()
-    ambient.light?.type = .ambient
-    ambient.light?.intensity = 600
-    loaded.rootNode.addChildNode(ambient)
-
-    let (low, high) = loaded.rootNode.boundingBox
-    let center = SCNVector3((low.x + high.x) / 2, (low.y + high.y) / 2, (low.z + high.z) / 2)
-    let size = max(high.x - low.x, high.y - low.y, high.z - low.z, 0.5)
-    let node = SCNNode()
-    node.camera = SCNCamera()
-    node.camera?.fieldOfView = 45
-    node.camera?.zNear = 0.01
-    node.camera?.zFar = Double(size) * 20
-    node.position = SCNVector3(center.x + size * 0.9, center.y + size * 1.1, center.z + size * 0.9)
-    node.look(at: center)
-    loaded.rootNode.addChildNode(node)
+    camera = ModelStyle.apply(to: loaded, background: UIColor(Palette.surface))
     scene = loaded
-    camera = node
   }
 }
 
