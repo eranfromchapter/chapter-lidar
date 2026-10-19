@@ -1,9 +1,10 @@
 import Foundation
 
-/// Minimal PDF 1.7 writer: pages of vector lines, polylines, rectangles and text in the
-/// standard fonts Helvetica (F1) and Helvetica-Bold (F2) with WinAnsi encoding. Content streams
-/// are uncompressed so every string stays extractable as text. Coordinates are points with the
-/// origin at the bottom-left of the page.
+/// Minimal PDF 1.7 writer: pages of vector lines, polylines, rectangles, Bezier paths (arcs,
+/// circles) and text in the standard fonts Helvetica (F1) and Helvetica-Bold (F2) with WinAnsi
+/// encoding. Gray or RGB colour, dash patterns, line caps and joins, and clipping. Content
+/// streams are uncompressed so every string stays extractable as text. Coordinates are points
+/// with the origin at the bottom-left of the page.
 final class PDFPage {
   let width: Double
   let height: Double
@@ -63,6 +64,191 @@ final class PDFPage {
     emit(
       "\(PDFPage.num(x)) \(PDFPage.num(y)) \(PDFPage.num(width)) \(PDFPage.num(height)) re \(paint)\n"
     )
+  }
+
+  // MARK: Colour, dashes, caps, joins and graphics state
+
+  // Everything below only adds operators to the stream; the grayscale calls above are unchanged,
+  // so pages that never use them write the same bytes as before.
+
+  /// Stroke colour, components 0...1 (`RG`).
+  func setStrokeRGB(_ red: Double, _ green: Double, _ blue: Double) {
+    emit("\(PDFPage.unit(red)) \(PDFPage.unit(green)) \(PDFPage.unit(blue)) RG\n")
+  }
+
+  /// Fill colour, components 0...1 (`rg`). Text is painted in the fill colour.
+  func setFillRGB(_ red: Double, _ green: Double, _ blue: Double) {
+    emit("\(PDFPage.unit(red)) \(PDFPage.unit(green)) \(PDFPage.unit(blue)) rg\n")
+  }
+
+  /// Dash pattern in points (`d`): alternating on and off lengths, starting `phase` points into
+  /// the pattern. An empty array is a solid line.
+  func setDash(_ lengths: [Double], phase: Double = 0) {
+    let body = lengths.map { PDFPage.num(max(0, $0)) }.joined(separator: " ")
+    emit("[\(body)] \(PDFPage.num(phase)) d\n")
+  }
+
+  enum LineCap: Int {
+    case butt = 0
+    case round = 1
+    case square = 2
+  }
+
+  enum LineJoin: Int {
+    case miter = 0
+    case round = 1
+    case bevel = 2
+  }
+
+  func setLineCap(_ cap: LineCap) { emit("\(cap.rawValue) J\n") }
+  func setLineJoin(_ join: LineJoin) { emit("\(join.rawValue) j\n") }
+  func setMiterLimit(_ limit: Double) { emit("\(PDFPage.num(max(1, limit))) M\n") }
+
+  /// Saves the graphics state (`q`): colours, line style and clipping path.
+  func saveState() { emit("q\n") }
+  /// Restores the state saved by the matching `saveState` (`Q`).
+  func restoreState() { emit("Q\n") }
+
+  // MARK: Paths
+
+  /// How a path is painted.
+  enum Paint {
+    case fill
+    case fillEvenOdd
+    case stroke
+    case fillStroke
+    case fillEvenOddStroke
+
+    var op: String {
+      switch self {
+      case .fill: return "f"
+      case .fillEvenOdd: return "f*"
+      case .stroke: return "S"
+      case .fillStroke: return "B"
+      case .fillEvenOddStroke: return "B*"
+      }
+    }
+  }
+
+  /// Path of lines and cubic Bezier curves in page points, one or more subpaths.
+  struct Path {
+    enum Element {
+      case move(Double, Double)
+      case line(Double, Double)
+      /// Control point 1, control point 2, end point.
+      case curve(Double, Double, Double, Double, Double, Double)
+      case close
+    }
+
+    var elements: [Element] = []
+
+    mutating func move(_ x: Double, _ y: Double) { elements.append(.move(x, y)) }
+    mutating func line(_ x: Double, _ y: Double) { elements.append(.line(x, y)) }
+    mutating func curve(
+      _ c1x: Double, _ c1y: Double, _ c2x: Double, _ c2y: Double, _ x: Double, _ y: Double
+    ) {
+      elements.append(.curve(c1x, c1y, c2x, c2y, x, y))
+    }
+    mutating func close() { elements.append(.close) }
+
+    /// Circular arc from `start` to `end` degrees (counter-clockwise when `end` > `start`),
+    /// as cubic Beziers of at most 90 degrees each. Starts with a line to the first point, or a
+    /// move when the path is empty or `move` is true.
+    mutating func arc(
+      centerX: Double, centerY: Double, radius: Double, startDegrees: Double,
+      endDegrees: Double, move: Bool = false
+    ) {
+      let segments = PDFPage.arcBeziers(
+        centerX: centerX, centerY: centerY, radius: radius, startDegrees: startDegrees,
+        endDegrees: endDegrees)
+      let start = PDFPage.arcPoint(centerX, centerY, radius, startDegrees)
+      if move || elements.isEmpty {
+        self.move(start.0, start.1)
+      } else {
+        line(start.0, start.1)
+      }
+      for s in segments { curve(s.0, s.1, s.2, s.3, s.4, s.5) }
+    }
+
+    /// Closed circle as four Bezier quarter arcs, counter-clockwise from 0 degrees.
+    mutating func circle(centerX: Double, centerY: Double, radius: Double) {
+      arc(
+        centerX: centerX, centerY: centerY, radius: radius, startDegrees: 0, endDegrees: 360,
+        move: true)
+      close()
+    }
+  }
+
+  /// Writes `path` and paints it.
+  func path(_ path: Path, paint: Paint) {
+    guard !path.elements.isEmpty else { return }
+    emit(PDFPage.operators(path) + " \(paint.op)\n")
+  }
+
+  /// Intersects the clipping path with `path` (`W n` or `W* n`). Wrap in `saveState` and
+  /// `restoreState` to end the clip.
+  func clip(_ path: Path, evenOdd: Bool = false) {
+    guard !path.elements.isEmpty else { return }
+    emit(PDFPage.operators(path) + (evenOdd ? " W* n\n" : " W n\n"))
+  }
+
+  /// Circle filled and/or stroked with the current colours.
+  func circle(centerX: Double, centerY: Double, radius: Double, paint: Paint) {
+    var p = Path()
+    p.circle(centerX: centerX, centerY: centerY, radius: radius)
+    path(p, paint: paint)
+  }
+
+  private static func operators(_ path: Path) -> String {
+    var parts: [String] = []
+    for element in path.elements {
+      switch element {
+      case .move(let x, let y): parts.append("\(num(x)) \(num(y)) m")
+      case .line(let x, let y): parts.append("\(num(x)) \(num(y)) l")
+      case .curve(let a, let b, let c, let d, let e, let f):
+        parts.append("\(num(a)) \(num(b)) \(num(c)) \(num(d)) \(num(e)) \(num(f)) c")
+      case .close: parts.append("h")
+      }
+    }
+    return parts.joined(separator: " ")
+  }
+
+  /// Colour component with four decimals, clamped to 0...1.
+  private static func unit(_ value: Double) -> String {
+    Format.fixed(max(0, min(1, value)), 4)
+  }
+
+  static func arcPoint(_ cx: Double, _ cy: Double, _ r: Double, _ degrees: Double)
+    -> (Double, Double)
+  {
+    let a = degrees * .pi / 180
+    return (cx + r * cos(a), cy + r * sin(a))
+  }
+
+  /// Cubic Bezier segments (control 1, control 2, end) for a circular arc, each spanning at most
+  /// 90 degrees. The control distance 4/3 tan(theta/4) keeps the radius error below 0.03 %.
+  static func arcBeziers(
+    centerX: Double, centerY: Double, radius: Double, startDegrees: Double, endDegrees: Double
+  ) -> [(Double, Double, Double, Double, Double, Double)] {
+    let sweep = endDegrees - startDegrees
+    guard abs(sweep) > 1e-9, radius > 0 else { return [] }
+    let count = max(1, Int((abs(sweep) / 90).rounded(.up)))
+    let step = sweep / Double(count) * .pi / 180
+    let k = 4.0 / 3.0 * tan(step / 4)
+    var out: [(Double, Double, Double, Double, Double, Double)] = []
+    var angle = startDegrees * .pi / 180
+    for _ in 0..<count {
+      let next = angle + step
+      let (c0, s0, c1, s1) = (cos(angle), sin(angle), cos(next), sin(next))
+      out.append(
+        (
+          centerX + radius * (c0 - k * s0), centerY + radius * (s0 + k * c0),
+          centerX + radius * (c1 + k * s1), centerY + radius * (s1 - k * c1),
+          centerX + radius * c1, centerY + radius * s1
+        ))
+      angle = next
+    }
+    return out
   }
 
   /// Draws `text` with its baseline start, centre or end at (x, y), turned counter-clockwise by

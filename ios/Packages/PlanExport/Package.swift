@@ -14,7 +14,9 @@ let package = Package(
     .library(name: "PlanExport", targets: ["PlanExport"])
   ],
   dependencies: [
-    .package(path: "../../../contract/swift")
+    .package(path: "../../../contract/swift"),
+    // Tests only: maps the synthetic walk-through RoomPlan fixture into rooms.
+    .package(path: "../CaptureCore"),
   ],
   targets: [
     .target(
@@ -23,7 +25,10 @@ let package = Package(
     ),
     .testTarget(
       name: "PlanExportTests",
-      dependencies: ["PlanExport", .product(name: "CaptureContract", package: "swift")]
+      dependencies: [
+        "PlanExport", .product(name: "CaptureContract", package: "swift"),
+        .product(name: "CaptureModelMapping", package: "CaptureCore"),
+      ]
     ),
   ]
 )

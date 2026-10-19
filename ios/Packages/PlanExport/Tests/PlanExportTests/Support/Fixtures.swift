@@ -1,4 +1,5 @@
 import CaptureContract
+import CaptureModelMapping
 import Foundation
 import PlanExport
 import XCTest
@@ -108,6 +109,27 @@ enum Fixtures {
   static func all() throws -> [FixtureCapture] {
     try names.flatMap { try load($0) }
   }
+}
+
+/// The synthetic whole-apartment walk-through (fixtures/generated/roomplan-only), mapped and
+/// split into rooms by CaptureModelMapping as the app does: 7 rooms, interior walls that stop
+/// short of their junctions, an open kitchen, doors, windows and 24 objects.
+enum WalkthroughFixture {
+  static let model: CaptureModel = {
+    let url = Repo.root.appendingPathComponent(
+      "fixtures/generated/roomplan-only/apartment-walkthrough/roomplan.json")
+    do {
+      let document = try RoomPlanDocument.decode(from: Data(contentsOf: url))
+      return try CaptureModelMapper.map(
+        document,
+        context: MappingContext(
+          visitId: LowercaseUUID(rawValue: "c1b6d1fb-17af-4f4a-877c-2565ef9bdb86")!,
+          captureId: LowercaseUUID(rawValue: "22bfb513-226d-4eca-bde1-0b6cb0c84aad")!,
+          areaKey: "apartment", label: "Apartment"))
+    } catch {
+      fatalError("apartment walk-through fixture: \(error)")
+    }
+  }()
 }
 
 /// A small model for synthetic cases: one rectangular room with four walls.
