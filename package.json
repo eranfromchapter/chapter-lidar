@@ -20,7 +20,8 @@
     "lint": "eslint . && npm run lint:secrets",
     "lint:secrets": "secretlint --secretlintrc scripts/secretlint/secretlintrc.json --secretlintignore .gitignore \"**/*\"",
     "typecheck": "node scripts/workspaces.mjs typecheck",
-    "test": "node scripts/workspaces.mjs test && bash scripts/swift-test.sh"
+    "test": "node scripts/workspaces.mjs test && bash scripts/swift-test.sh",
+    "scan-browser": "node tools/scan-browser/server.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

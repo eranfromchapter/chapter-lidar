@@ -37,4 +37,13 @@ export default defineConfig(
       ],
     },
   },
+  {
+    // The scan browser's page script runs in the browser, not in Node.
+    files: ["tools/scan-browser/public/**/*.js"],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+      },
+    },
+  },
 );
