@@ -5,10 +5,13 @@
 /// their junction, so walls alone rarely close a room. Walls that run along the outline are left
 /// out here (the outline already bounds the rooms); they are only split downstream.
 struct WalkthroughSegments {
-  /// Outline edges (fixed), then interior wall pieces, then gap closures.
+  /// Outline edges (fixed), then interior wall pieces (walls in `canonicalOrder`), then gap
+  /// closures.
   var segments: [PlanSegment] = []
+  /// Source wall indexes, ascending.
   var outlineWalls: [Int] = []
   var interiorWalls: [Int] = []
+  /// By source wall.
   var dangling: [WalkthroughSplitter.DanglingEnd] = []
   var duplicatesMerged = 0
   var overshootsTrimmed = 0
@@ -21,7 +24,7 @@ struct WalkthroughSegments {
         PlanSegment(a: outline[i], b: outline[(i + 1) % n], kind: .outline, fixed: true))
     }
     var pieces: [PlanSegment] = []
-    for wall in plan.walls {
+    for wall in Self.canonicalOrder(plan.walls) {
       if Self.runsAlongOutline(wall, outline: outline, tolerance: p.outlineTolerance) {
         outlineWalls.append(wall.index)
         continue
@@ -31,12 +34,33 @@ struct WalkthroughSegments {
         pieces.append(PlanSegment(a: piece.0, b: piece.1, kind: .wall, wall: wall.index))
       }
     }
+    outlineWalls.sort()
+    interiorWalls.sort()
     pieces = mergeDuplicates(pieces, p)
     pieces = trimOvershoots(pieces, outline: outline, p, eps: eps)
     segments += pieces
     Self.snapEnds(&segments, outline: outline, eps: eps)
     closeDanglingEnds(outline: outline, p, eps: eps)
     Self.snapEnds(&segments, outline: outline, eps: eps)
+    // Diagnostics in document order; each wall's ends keep their order.
+    let rank = dangling.indices.sorted { (dangling[$0].wall, $0) < (dangling[$1].wall, $1) }
+    dangling = rank.map { dangling[$0] }
+  }
+
+  /// The walls longest first (lengths to a micrometre), ties by the midpoint, then the start, then
+  /// the position in the document. RoomPlan's wall order means nothing, and snapping and welding
+  /// keep the first of several ends that lie close together, so the order has to come from the
+  /// walls themselves. Lengths do not change when the capture is turned or moved; only walls of the
+  /// same length to a micrometre, which real scans rarely have, fall back to where they lie.
+  static func canonicalOrder(_ walls: [WalkthroughInput.Wall]) -> [WalkthroughInput.Wall] {
+    func key(_ wall: WalkthroughInput.Wall) -> [Int64] {
+      let m = (wall.a + wall.b) * 0.5
+      let length = Plan2D.dist(wall.a, wall.b)
+      let rounded = [-length, m.x, m.y, wall.a.x, wall.a.y].map(WalkthroughCuts.micro)
+      return rounded + [Int64(wall.index)]
+    }
+    let keys = walls.map(key)
+    return walls.indices.sorted { keys[$0].lexicographicallyPrecedes(keys[$1]) }.map { walls[$0] }
   }
 
   /// A wall is an outline wall when 4 of 5 samples along it lie within `tolerance` of a parallel
@@ -175,7 +199,10 @@ struct WalkthroughSegments {
 
   /// Snaps each end of every segment that is not on the outline, in order: to the first outline
   /// vertex within `eps`, else to the nearest outline edge within `eps`, else to the nearest other
-  /// segment within `eps` (inside its span).
+  /// segment within `eps` (inside its span, away from its ends by more than rounding). An end
+  /// next to another segment's end is left to the welding of the arrangement: a closure built to
+  /// reach a wall ends on that wall's line, so the wall's own free end can project exactly onto the
+  /// closure's tip, and rounding must not decide whether that end moves.
   static func snapEnds(_ segments: inout [PlanSegment], outline: [P2], eps: Double) {
     let n = outline.count
     for k in segments.indices where segments[k].kind != .outline {
@@ -196,7 +223,7 @@ struct WalkthroughSegments {
           var best: (distance: Double, point: P2)?
           for (j, other) in segments.enumerated() where j != k && other.kind != .outline {
             let (d, t) = Plan2D.segPoint(p, other.a, other.b)
-            if d < eps, 0 < t, t < 1, best == nil || d < best!.distance {
+            if d < eps, 1e-9 < t, t < 1 - 1e-9, best == nil || d < best!.distance {
               best = (d, other.a + (other.b - other.a) * t)
             }
           }

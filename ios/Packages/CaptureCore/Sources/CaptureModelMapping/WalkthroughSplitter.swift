@@ -86,10 +86,7 @@ public enum WalkthroughSplitter {
     /// hallway.
     public var hallWidth = 1.6
     public var hallAspect = 2.0
-    /// Room heights from walls outside this range use the scan's median wall height, clamped.
-    public var heightMin = 2.0
-    public var heightMax = 6.0
-    /// Height when the scan has no walls.
+    /// Height of a room without walls when the scan's median wall height is not above 0.
     public var heightDefault = 2.4
     /// A cut whose margin to a materially different cut is below this is marked approximate.
     public var approximateMargin = 0.6
@@ -192,7 +189,7 @@ public enum WalkthroughSplitter {
       public var areaM2: Double
       public var typing: RoomTyping.Result
       public var heightM: Double
-      /// False when the room has no wall of a usable height and got the scan's median.
+      /// False when no wall bounds the room and it got the scan's median wall height.
       public var heightFromWalls: Bool
       /// Sections inside the room (positions in `RoomPlanRoom.sections`).
       public var sectionIndexes: [Int]

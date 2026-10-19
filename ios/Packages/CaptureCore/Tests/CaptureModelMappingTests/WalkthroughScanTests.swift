@@ -97,6 +97,18 @@ final class WalkthroughScanTests: XCTestCase {
       }
     }
     XCTAssertTrue(model.walls.allSatisfy { abs($0.start.y - expected.frame.floorY) < 1e-5 }, "walls stand on the floor")
+    // Each piece lies on its source wall, from startM to endM, and the pieces of one wall meet.
+    for (index, piece) in split.wallPieces.enumerated() {
+      let wall = placements[piece.sourceWall]
+      for (point, along) in [(piece.start, piece.startM), (piece.end, piece.endM)] {
+        let truth = wall.start + (wall.end - wall.start) * (along / wall.lengthM)
+        XCTAssertEqual((point - truth).length, 0, accuracy: 1e-9, "piece \(index)")
+      }
+      if index > 0, split.wallPieces[index - 1].sourceWall == piece.sourceWall {
+        XCTAssertEqual(model.walls[index - 1].end, model.walls[index].start, "pieces \(index) and \(index + 1)")
+      }
+    }
+    XCTAssertEqual(model.walls[20].end, model.walls[21].start)
     XCTAssertTrue(split.rooms.allSatisfy(\.heightFromWalls))
     XCTAssertEqual(model.walls.map(\.heightM), split.wallPieces.map { placements[$0.sourceWall].heightM })
     XCTAssertEqual(
@@ -135,6 +147,75 @@ final class WalkthroughScanTests: XCTestCase {
       for object in expectedRoom.objects {
         XCTAssertEqual(model.objects[object.index].roomId, match[expectedRoom.id], "\(object.category) \(object.index)")
       }
+    }
+  }
+
+  func testSyntheticWalkthroughOpeningsAndObjectsMatchTheCaptureMappedWhole() throws {
+    // The same capture as a CapturedStructure is not split. Every field of an opening or object
+    // must be the same except where it is (wall, offset along it, room).
+    let (_, document, model, _) = try mapFixture()
+    let whole = try CaptureModelMapper.map(
+      RoomPlanDocument(rooms: document.rooms, isStructure: true), context: try Walkthrough.context())
+    XCTAssertEqual(whole.rooms.count, 1)
+    func placeless(_ openings: [CaptureModel.WallOpening]) -> [CaptureModel.WallOpening] {
+      openings.map {
+        var opening = $0
+        opening.wallId = ""
+        opening.offsetM = 0
+        return opening
+      }
+    }
+    XCTAssertEqual(placeless(model.doors), placeless(whole.doors))
+    XCTAssertEqual(placeless(model.windows), placeless(whole.windows))
+    XCTAssertEqual(placeless(model.openings), placeless(whole.openings))
+    XCTAssertTrue(model.windows.allSatisfy { $0.bottomM > 0.5 }, "the windows have sills")
+    XCTAssertEqual(
+      model.objects.map { object -> CaptureModel.DetectedObject in
+        var object = object
+        object.roomId = nil
+        return object
+      },
+      whole.objects.map { object -> CaptureModel.DetectedObject in
+        var object = object
+        object.roomId = nil
+        return object
+      })
+  }
+
+  func testSyntheticWalkthroughRoomsAreAsHighAsTheirWalls() throws {
+    let fixture = try Fixtures.roomPlanOnly("apartment-walkthrough")
+    let document = try RoomPlanDocument.decode(from: fixture.roomPlanData())
+    let floorY = fixture.expected.frame.floorY
+    func withHeights(_ height: (Int) -> Double) -> RoomPlanDocument {
+      var changed = document
+      for index in changed.rooms[0].walls.indices {
+        let h = height(index)
+        changed.rooms[0].walls[index].dimensions[1] = h
+        changed.rooms[0].walls[index].transform.columns[3][1] = floorY + h / 2
+      }
+      return changed
+    }
+    let context = try Walkthrough.context()
+    // Implausible heights stay as measured, as when the capture is not split, so the station
+    // flags them instead of seeing 2.0 or 6.0 m.
+    for h in [1.95, 6.4] {
+      let changed = withHeights { _ in h }
+      let model = try CaptureModelMapper.map(changed, context: context)
+      let whole = try CaptureModelMapper.map(
+        RoomPlanDocument(rooms: changed.rooms, isStructure: true), context: context)
+      XCTAssertEqual(model.rooms.count, 7)
+      XCTAssertEqual(model.rooms.map(\.heightM), Array(repeating: h, count: 7))
+      XCTAssertEqual(whole.rooms.map(\.heightM), [h])
+      XCTAssertTrue(try XCTUnwrap(try Walkthrough.split(changed)).rooms.allSatisfy(\.heightFromWalls))
+    }
+    // One 6.4 m outline wall: the room it bounds takes it, the others keep their 2.49 m.
+    let tallWall = 2
+    let bedroom = try XCTUnwrap(fixture.expected.walls.first { $0.index == tallWall }?.roomIds.first)
+    let changed = withHeights { $0 == tallWall ? 6.4 : 2.49 }
+    let model = try CaptureModelMapper.map(changed, context: context)
+    let match = try roomMatch(fixture.expected, changed, model)
+    for room in model.rooms {
+      XCTAssertEqual(room.heightM, room.id == match[bedroom] ? 6.4 : 2.49, room.label)
     }
   }
 
@@ -306,6 +387,11 @@ final class WalkthroughScanTests: XCTestCase {
       }
     }
     print("real walk-throughs checked: \(seen)")
+    // A folder of other exports is fine for testRealExportsDecodeAndMap; here it checks nothing,
+    // which must not read as a pass.
+    if seen.isEmpty {
+      throw XCTSkip("neither real walk-through A nor B is under CHAPTER_REAL_ROOMPLAN_DIR")
+    }
   }
 
   /// The `roomplan.json` files under CHAPTER_REAL_ROOMPLAN_DIR, by path; skips the test when the

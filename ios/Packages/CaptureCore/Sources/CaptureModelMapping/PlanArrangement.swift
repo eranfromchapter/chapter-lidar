@@ -128,10 +128,13 @@ struct PlanArrangement {
           append(j, min(1, max(0, r.u)), p)
         }
       }
+      // An end that projects onto one of this segment's own ends (for example the free end of a
+      // wall next to the tip of a closure built at right angles to that wall) is left to the
+      // welding: rounding must not decide whether it also splits this segment.
       for j in 0..<n where j != i {
         for e in [segments[j].a, segments[j].b] {
           let (distance, t) = Plan2D.segPoint(e, a, b)
-          if distance <= eps, 0 < t, t < 1 { append(i, t, e) }
+          if distance <= eps, 1e-9 < t, t < 1 - 1e-9 { append(i, t, e) }
         }
       }
     }
@@ -166,7 +169,9 @@ struct PlanArrangement {
   }
 
   /// The nearest node within `eps` (ties to the lowest id), or a new node. With `on`, only nodes
-  /// within 1e-7 of that segment qualify.
+  /// within 1e-7 of that segment qualify. Nodes are made in segment order, so of several ends
+  /// within `eps` the first one made stays; the walk-through passes its walls in an order taken
+  /// from the walls themselves (`WalkthroughSegments.canonicalOrder`), not from the file.
   private mutating func node(_ p: P2, on: (P2, P2)? = nil) -> Int {
     var best: (distance: Double, id: Int)?
     for (i, q) in points.enumerated() {

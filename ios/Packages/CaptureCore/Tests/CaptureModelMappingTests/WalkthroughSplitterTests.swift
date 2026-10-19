@@ -89,6 +89,38 @@ final class WalkthroughSplitterTests: XCTestCase {
     XCTAssertEqual(result.interiorWalls, [1])
   }
 
+  func testAWallEndOnTheTipOfAClosureStaysWhereItIs() {
+    // W runs 3 cm past the line of V; V stops 10 cm short of W and is joined to it at J = (3, 2),
+    // at right angles. W's free end then lies on the line of that closure, exactly at its tip
+    // (t = 1), 3 cm from J. Whether it moves onto J must not depend on rounding, so it must not
+    // depend on where the capture lies: in every frame the end stays and the faces are the same.
+    let outline = [P2(0, 0), P2(6, 0), P2(6, 4), P2(0, 4)]
+    let w = (P2(0, 2), P2(3.03, 2))
+    let v = (P2(3, 4), P2(3, 2.1))
+    var areas: [Double]?
+    for k in 0..<400 {
+      let theta = Double(k) * 0.0157 - 3.1
+      let c = cos(theta)
+      let s = sin(theta)
+      let tx = Double(k % 17) * 0.731 - 5
+      let ty = Double(k % 13) * 1.37 - 8
+      func forward(_ p: P2) -> P2 { P2(c * p.x - s * p.y + tx, s * p.x + c * p.y + ty) }
+      func back(_ p: P2) -> P2 { P2(c * (p.x - tx) + s * (p.y - ty), -s * (p.x - tx) + c * (p.y - ty)) }
+      let moved = outline.map(forward)
+      let result = segments([(forward(w.0), forward(w.1)), (forward(v.0), forward(v.1))], outline: moved)
+      let piece = result.segments.first { $0.kind == .wall && $0.wall == 0 }
+      XCTAssertEqual(Plan2D.dist(back(piece?.b ?? P2(0, 0)), w.1), 0, accuracy: 1e-9, "frame \(k)")
+      let arr = PlanArrangement(segments: result.segments, eps: 0.05, boundary: moved)
+      let faceAreas = arr.faces.indices.map { Plan2D.area(arr.polygon($0)) }.sorted()
+      if let areas {
+        XCTAssertEqual(faceAreas.count, areas.count, "frame \(k)")
+        for (a, b) in zip(faceAreas, areas) { XCTAssertEqual(a, b, accuracy: 1e-9, "frame \(k)") }
+      } else {
+        areas = faceAreas
+      }
+    }
+  }
+
   // MARK: Seeds
 
   /// An 8 x 5 m rectangle split by a wall at x = 5.
@@ -185,6 +217,146 @@ final class WalkthroughSplitterTests: XCTestCase {
     XCTAssertTrue(PolygonMath.contains(kitchen.polygon, stove))
   }
 
+  func testACutAlongTheWallsBeatsAShorterDiagonal() throws {
+    // Two rectangles that overlap at a corner. The 1.41 m diagonal between their reflex corners
+    // costs 1.41 x (1 + 4 x (sin 45 - sin 1)) = 5.31; the 3 m ray down from (3, 3) costs 3.
+    var builder = WalkthroughBuilder(outline: [(0, 0), (4, 0), (4, 2), (7, 2), (7, 6), (3, 6), (3, 3), (0, 3)])
+    builder.addSection("livingRoom", at: (1, 1))
+    builder.addSection("bedroom", at: (6, 5))
+    let (split, diagnostics) = try Walkthrough.analyze(builder.document)
+    XCTAssertEqual(diagnostics.cuts.map(\.tag), ["reflex-ray"])
+    XCTAssertEqual(diagnostics.cuts.first?.virtualLengthM ?? 0, 3, accuracy: 1e-9)
+    XCTAssertEqual(diagnostics.cuts.first?.score ?? 0, 3, accuracy: 1e-9)
+    XCTAssertEqual(Walkthrough.summary(split), ["Living Room 9.00", "Bedroom 18.00"])
+  }
+
+  func testACutAlongAWallStubBeatsAShorterOneAcrossOpenFloor() throws {
+    // Two rooms joined by a 1 x 1.5 m passage. Extending the 3 m stub costs 2 m of cut less half
+    // of the 3 m of wall it follows (0.5); across the passage costs 1.5.
+    var builder = WalkthroughBuilder(outline: [(0, 0), (9, 0), (9, 5), (6, 5), (6, 1.5), (5, 1.5), (5, 5), (0, 5)])
+    builder.addWall((2.5, 0), (2.5, 3))
+    builder.addSection("livingRoom", at: (1.2, 2.5))
+    builder.addSection("bedroom", at: (7.5, 2.5))
+    let (split, diagnostics) = try Walkthrough.analyze(builder.document)
+    XCTAssertEqual(diagnostics.cuts.map(\.tag), ["stub-extend"])
+    let cut = try XCTUnwrap(diagnostics.cuts.first)
+    XCTAssertEqual(cut.virtualLengthM, 2, accuracy: 1e-9)
+    XCTAssertEqual(cut.wallLengthM, 3, accuracy: 1e-9)
+    XCTAssertEqual(cut.score, 0.5, accuracy: 1e-9)
+    XCTAssertEqual(Walkthrough.summary(split), ["Living Room 12.50", "Bedroom 29.00"])
+  }
+
+  func testAStubIsContinuedThroughALooseWallInLineWithIt() throws {
+    // A stub from the floor edge stops 1.4 m short of a loose piece of wall in line with it. The
+    // cut bridges the gap, follows the loose piece and goes on to the far edge: 2.6 m of cut along
+    // 2.4 m of wall. Extending the stub alone costs 3.8 m of cut along 1.2 m.
+    var builder = WalkthroughBuilder(outline: WalkthroughBuilder.rectangle)
+    builder.addWall((4, 0), (4, 1.2))
+    builder.addWall((4, 2.6), (4, 3.8))
+    builder.addSection("livingRoom", at: (2, 2.5))
+    builder.addSection("bedroom", at: (6, 2.5))
+    let (split, diagnostics) = try Walkthrough.analyze(builder.document)
+    XCTAssertEqual(diagnostics.cuts.map(\.tag), ["chain-extend"])
+    let cut = try XCTUnwrap(diagnostics.cuts.first)
+    XCTAssertEqual(cut.virtualLengthM, 2.6, accuracy: 1e-9)
+    XCTAssertEqual(cut.wallLengthM, 2.4, accuracy: 1e-9)
+    XCTAssertEqual(Walkthrough.summary(split), ["Living Room 20.00", "Bedroom 20.00"])
+  }
+
+  // MARK: Limits and fallbacks
+
+  func testOnlyAShortClosureEnclosesARoomWithoutASection() throws {
+    // A wall at x = 3 parts the bedroom from the living room; a stub at x = 6 stops `gap` short of
+    // the far edge. Closing the gap would make a 10 m2 room without a section, which only a
+    // closure of at most 1.2 m may do.
+    func split(gap: Double) throws -> (summary: [String], enclosures: Int) {
+      var builder = WalkthroughBuilder(outline: WalkthroughBuilder.rectangle)
+      builder.addWall((3, 0), (3, 5))
+      builder.addWall((6, 0), (6, 5 - gap))
+      builder.addSection("bedroom", at: (1.5, 2.5))
+      builder.addSection("livingRoom", at: (4.5, 2.5))
+      let (split, diagnostics) = try Walkthrough.analyze(builder.document)
+      return (Walkthrough.summary(split), diagnostics.enclosures.count)
+    }
+    let short = try split(gap: 1.1)
+    XCTAssertEqual(short.summary, ["Bedroom 15.00", "Living Room 15.00", "Room 3 10.00"])
+    XCTAssertEqual(short.enclosures, 1)
+    let long = try split(gap: 1.3)
+    XCTAssertEqual(long.summary, ["Bedroom 15.00", "Living Room 25.00"])
+    XCTAssertEqual(long.enclosures, 0)
+  }
+
+  func testAClosureThatWouldBeMostOfARoomsBoundaryEnclosesNothing() throws {
+    // In the corner of the living room a 0.1 m stub from the right edge points at a stub from the
+    // bottom edge 1.1 m away. Closing it cuts off a 1.2 m wide alcove `depth` deep; at 0.9 m the
+    // 1.1 m closure is 26 % of the alcove's boundary (more than 25 %), at 1.2 m it is 23 %.
+    func split(depth: Double) throws -> (summary: [String], enclosures: Int) {
+      var builder = WalkthroughBuilder(outline: WalkthroughBuilder.rectangle)
+      builder.addWall((3, 0), (3, 5))
+      builder.addWall((8, depth), (7.9, depth))
+      builder.addWall((6.8, 0), (6.8, 1.5))
+      builder.addSection("bedroom", at: (1.5, 2.5))
+      builder.addSection("livingRoom", at: (4.5, 2.5))
+      let (split, diagnostics) = try Walkthrough.analyze(builder.document)
+      return (Walkthrough.summary(split), diagnostics.enclosures.count)
+    }
+    let deep = try split(depth: 1.2)
+    XCTAssertEqual(deep.summary, ["Bedroom 15.00", "Living Room 23.56", "Closet 1.44"])
+    XCTAssertEqual(deep.enclosures, 1)
+    let shallow = try split(depth: 0.9)
+    XCTAssertEqual(shallow.summary, ["Bedroom 15.00", "Living Room 25.00"])
+    XCTAssertEqual(shallow.enclosures, 0)
+  }
+
+  func testAKitchenSectionMovesOnlyToAppliancesWithinOneMetre() throws {
+    func relocated(sectionAt x: Double) throws -> [Int] {
+      var builder = twoFaces()
+      builder.addSection("livingRoom", at: (2, 2.5))
+      builder.addSection("kitchen", at: (x, 2.5))
+      builder.addObject("stove", at: (6.5, 4))
+      builder.addObject("refrigerator", at: (6.5, 1))
+      return try Walkthrough.analyze(builder.document).diagnostics.sectionsRelocated
+    }
+    XCTAssertEqual(try relocated(sectionAt: 4.1), [1], "0.9 m from the appliances' face")
+    XCTAssertEqual(try relocated(sectionAt: 3.8), [], "1.2 m from it")
+  }
+
+  func testAnArrangementThatFailsItsCheckIsBuiltAgainWithHalfTheWeld() throws {
+    // Three wall ends lie within 15 cm of each other along one line. Welded at 5 cm they leave a
+    // triangle of no area, so the faces fail their check; welded at 2.5 cm they do not.
+    var builder = WalkthroughBuilder(outline: [(0, 0), (6, 0), (6, 4), (0, 4)])
+    builder.addWall((2.95, 2.5), (1.7, 2.91))
+    builder.addWall((2.8, 2.55), (6.04, 2.44))
+    builder.addWall((2.9, 2.52), (0.07, 2.49))
+    builder.addSection("livingRoom", at: (3, 1))
+    builder.addSection("bedroom", at: (3, 3.5))
+    let (split, diagnostics) = try Walkthrough.analyze(builder.document)
+    XCTAssertEqual(diagnostics.eps, 0.025)
+    XCTAssertNil(diagnostics.fallbackReason)
+    XCTAssertEqual(split.map { Walkthrough.labels($0) }, ["Living Room", "Bedroom"])
+  }
+
+  func testARoomThatWouldTouchItselfFallsBackToOneRoom() throws {
+    // A 2 m2 diamond of walls touches the floor edge at one point. The room around it would pass
+    // through that point twice, which a contract polygon cannot; the capture maps as one room.
+    var builder = WalkthroughBuilder(outline: WalkthroughBuilder.rectangle)
+    builder.addWall((4, 0), (5, 1))
+    builder.addWall((5, 1), (4, 2))
+    builder.addWall((4, 2), (3, 1))
+    builder.addWall((3, 1), (4, 0))
+    builder.addSection("livingRoom", at: (1, 4))
+    builder.addSection("bathroom", at: (4, 1))
+    let (split, diagnostics) = try Walkthrough.analyze(builder.document)
+    XCTAssertNil(split)
+    XCTAssertEqual(diagnostics.fallbackReason, .validation)
+    let context = try Walkthrough.context()
+    let model = try CaptureModelMapper.map(builder.document, context: context)
+    XCTAssertEqual(model.rooms.count, 1)
+    XCTAssertEqual(
+      model,
+      try CaptureModelMapper.map(RoomPlanDocument(rooms: builder.document.rooms, isStructure: true), context: context))
+  }
+
   // MARK: Rooms without a section
 
   func testASmallEnclosedFaceBecomesACloset() throws {
@@ -250,6 +422,71 @@ final class WalkthroughSplitterTests: XCTestCase {
     XCTAssertNotEqual(rooms.find(strip), rooms.find(bottom))
   }
 
+  func testAFaceThatIsMostlyCutsIsKeptWhenItHoldsAToilet() {
+    // The face of the test above, with a toilet in the strip: a second bathroom without a section
+    // whose open door makes much of its boundary virtual.
+    let outline = [P2(0, 0), P2(6, 0), P2(6, 3), P2(0, 3)]
+    var segments = outline.indices.map {
+      PlanSegment(a: outline[$0], b: outline[($0 + 1) % 4], kind: .outline, fixed: true)
+    }
+    segments.append(PlanSegment(a: P2(1, 0), b: P2(1, 3), kind: .cut))
+    segments.append(PlanSegment(a: P2(1, 1), b: P2(6, 1), kind: .wall, wall: 0))
+    let arr = PlanArrangement(segments: segments, eps: 0.05, boundary: outline)
+    let top = try! XCTUnwrap(arr.faceContaining(P2(3, 2)))
+    let bottom = try! XCTUnwrap(arr.faceContaining(P2(3, 0.5)))
+    let strip = try! XCTUnwrap(arr.faceContaining(P2(0.5, 1.5)))
+    var rooms = WalkthroughRooms(arrangement: arr)
+    var diagnostics = WalkthroughSplitter.Diagnostics()
+    let toilet = WalkthroughInput.Object(
+      index: 0, identifier: "OBJECT-0001", parentIdentifier: nil, category: .toilet, center: P2(0.5, 1.5),
+      center3: Vector3(0.5, 0, 1.5), axis: P2(1, 0), width: 0.4, depth: 0.7)
+    let plan = WalkthroughInput.Plan(outline: outline, floorY: 0, walls: [], sections: [], objects: [toilet])
+    rooms.resolve(seedFaces: [top, bottom], plan: plan, parameters: .init(), diagnostics: &diagnostics)
+    XCTAssertEqual(diagnostics.merges.map(\.kind), [])
+    XCTAssertEqual(rooms.find(strip), strip)
+    XCTAssertEqual(rooms.roots().count, 3)
+  }
+
+  // MARK: Walls and openings
+
+  func testADoorOnTheSecondPieceOfASplitWall() throws {
+    // The L is cut at x = 4, which splits the bottom wall into wall-1 (living room, 0 to 4 m) and
+    // wall-2 (kitchen, 4 to 8 m).
+    var builder = WalkthroughBuilder(outline: WalkthroughBuilder.lShape)
+    builder.addSection("livingRoom", at: (2, 3))
+    builder.addSection("kitchen", at: (6, 1.5))
+    builder.addDoor(at: (6, 0), inWall: 0)
+    builder.addDoor(at: (1, 0), inWall: 0)
+    // Its centre lies past the end of the wall RoomPlan put it in: the last piece, offset from its
+    // start as for a wall that is not split.
+    builder.addDoor(at: (8.3, 0), inWall: 0)
+    let model = try CaptureModelMapper.map(builder.document, context: try Walkthrough.context())
+    XCTAssertEqual(model.rooms.map(\.label), ["Living Room", "Kitchen"])
+    XCTAssertEqual(model.walls.prefix(2).map(\.roomIds), [["room-1"], ["room-2"]])
+    XCTAssertEqual(model.doors.map(\.wallId), ["wall-2", "wall-1", "wall-2"])
+    XCTAssertEqual(model.doors[0].offsetM, 2.0, accuracy: 1e-9)
+    XCTAssertEqual(model.doors[1].offsetM, 1.0, accuracy: 1e-9)
+    XCTAssertEqual(model.doors[2].offsetM, 4.3, accuracy: 1e-9)
+  }
+
+  func testARoomCornerNearAWallEndLeavesNoShortWallPiece() throws {
+    // The bottom of the L is drawn as two walls that meet 0.1 m past the corner where the living
+    // room and the kitchen meet. That 0.1 m stays with the living-room piece of the first wall.
+    var builder = WalkthroughBuilder(outline: WalkthroughBuilder.lShape, wallsAlongOutline: false)
+    let walls: [((Double, Double), (Double, Double))] = [
+      ((0, 0), (4.1, 0)), ((4.1, 0), (8, 0)), ((8, 0), (8, 3)), ((8, 3), (4, 3)), ((4, 3), (4, 6)), ((4, 6), (0, 6)),
+      ((0, 6), (0, 0)),
+    ]
+    for wall in walls { builder.addWall(wall.0, wall.1) }
+    builder.addSection("livingRoom", at: (2, 3))
+    builder.addSection("kitchen", at: (6, 1.5))
+    let split = try XCTUnwrap(try Walkthrough.split(builder.document))
+    XCTAssertEqual(Walkthrough.summary(split), ["Living Room 24.00", "Kitchen 12.00"])
+    XCTAssertEqual(split.wallPieces.map(\.sourceWall), Array(0...6))
+    XCTAssertEqual(split.wallPieces.map(\.rooms), [[0], [1], [1], [1], [0], [0], [0]])
+    XCTAssertTrue(split.wallPieces.allSatisfy { $0.endM - $0.startM >= 0.15 })
+  }
+
   // MARK: Heights
 
   private func lShapeWithWalls(heights: [Double]) -> WalkthroughBuilder {
@@ -272,12 +509,18 @@ final class WalkthroughSplitterTests: XCTestCase {
     XCTAssertEqual(split.rooms.map(\.heightFromWalls), [true, false])
   }
 
-  func testHeightsOutsideTheRangeAreClamped() throws {
+  func testHeightsAreKeptAsMeasured() throws {
+    // Implausible heights stay as the walls measured them, so the station can flag them; a room
+    // without walls gets the median as it is.
     let low = try XCTUnwrap(try Walkthrough.split(lShapeWithWalls(heights: [1.2, 1.2, 1.2, 1.2]).document))
-    XCTAssertEqual(low.rooms.map(\.heightM), [2.0, 2.0])
+    XCTAssertEqual(low.rooms.map(\.heightM), [1.2, 1.2])
+    XCTAssertEqual(low.rooms.map(\.heightFromWalls), [true, false])
     let high = try XCTUnwrap(try Walkthrough.split(lShapeWithWalls(heights: [7, 7, 7, 7]).document))
-    XCTAssertEqual(high.rooms.map(\.heightM), [6.0, 6.0])
-    XCTAssertEqual(high.rooms.map(\.heightFromWalls), [false, false])
+    XCTAssertEqual(high.rooms.map(\.heightM), [7.0, 7.0])
+    XCTAssertEqual(high.rooms.map(\.heightFromWalls), [true, false])
+    // One tall wall: the room it bounds is as high as it, as when the capture is not split.
+    let oneTall = try XCTUnwrap(try Walkthrough.split(lShapeWithWalls(heights: [2.5, 2.5, 6.4, 2.5]).document))
+    XCTAssertEqual(oneTall.rooms.map(\.heightM), [6.4, 2.5])
   }
 
   // MARK: Objects
@@ -299,6 +542,32 @@ final class WalkthroughSplitterTests: XCTestCase {
     XCTAssertEqual(model.rooms.map(\.label), ["Living Room", "Kitchen"])
     XCTAssertEqual(
       model.objects.map { $0.roomId ?? "" }, ["room-2", "room-2", "room-2", "room-2", "room-1", "room-2"])
+  }
+
+  func testAnObjectOutsideTheFloorGoesToTheRoomItOverlapsMost() throws {
+    var builder = WalkthroughBuilder(outline: WalkthroughBuilder.lShape)
+    builder.addSection("livingRoom", at: (2, 3))
+    builder.addSection("kitchen", at: (6, 1.5))
+    // Centre in the notch of the L, 0.2 m from the kitchen and 0.3 m from the living room; 0.3 m2
+    // of the footprint lies over the living room and 0.11 m2 over the kitchen.
+    builder.addObject("storage", at: (4.3, 3.2), size: (1.6, 0.9, 0.6))
+    let model = try CaptureModelMapper.map(builder.document, context: try Walkthrough.context())
+    XCTAssertEqual(model.rooms.map(\.label), ["Living Room", "Kitchen"])
+    XCTAssertEqual(model.objects.map { $0.roomId ?? "" }, ["room-1"])
+  }
+
+  func testACycleOfThreeParentsKeepsEachObjectsOwnRoom() throws {
+    var builder = WalkthroughBuilder(outline: WalkthroughBuilder.lShape)
+    builder.addSection("livingRoom", at: (2, 3))
+    builder.addSection("kitchen", at: (6, 1.5))
+    // Living room -> kitchen -> kitchen -> living room. Walking 16 parents from the first object
+    // without noticing the cycle would stop on the second, in the kitchen.
+    builder.addObject("storage", at: (1, 1), parent: "OBJECT-0002")
+    builder.addObject("storage", at: (6, 1), parent: "OBJECT-0003")
+    builder.addObject("sink", at: (7, 1), parent: "OBJECT-0001")
+    let model = try CaptureModelMapper.map(builder.document, context: try Walkthrough.context())
+    XCTAssertEqual(model.rooms.map(\.label), ["Living Room", "Kitchen"])
+    XCTAssertEqual(model.objects.map { $0.roomId ?? "" }, ["room-1", "room-2", "room-2"])
   }
 
   // MARK: Determinism and robustness (the fixture)
@@ -352,6 +621,40 @@ final class WalkthroughSplitterTests: XCTestCase {
     }
   }
 
+  func testOrderAndPlacementDoNotMatterWhenWallsStopShort() throws {
+    // The fixture with every wall end moved by up to 3 cm, so ends stop short of each other and
+    // several of them weld and snap together.
+    let fixture = try fixtureDocument()
+    for jitter in UInt64(1)...6 {
+      let document = Walkthrough.jitter(fixture, sigma: 0.03, seed: jitter)
+      let base = try XCTUnwrap(try Walkthrough.split(document), "jitter \(jitter)")
+      for seed in UInt64(1)...3 {
+        let name = "jitter \(jitter) shuffle \(seed)"
+        let split = try XCTUnwrap(try Walkthrough.split(Walkthrough.shuffled(document, seed: seed)), name)
+        XCTAssertEqual(Walkthrough.labels(split), Walkthrough.labels(base), name)
+        for (a, b) in zip(split.rooms, base.rooms) {
+          XCTAssertLessThan(Walkthrough.hausdorff(a.polygon, b.polygon), 1e-9, name)
+        }
+      }
+      for (theta, tx, tz) in [(0.3, 1.0, -2.0), (1.1, -0.7, 16.25), (-0.7, 10.0, 10.0)] {
+        let name = "jitter \(jitter) moved \(theta)"
+        let split = try XCTUnwrap(
+          try Walkthrough.split(Walkthrough.moved(document, theta: theta, tx: tx, tz: tz)), name)
+        XCTAssertEqual(Walkthrough.labels(split), Walkthrough.labels(base), name)
+        let c = cos(theta)
+        let s = sin(theta)
+        for (room, original) in zip(split.rooms, base.rooms) {
+          let undone = room.polygon.map { p -> Vector3 in
+            let x = p.x - tx
+            let z = p.z - tz
+            return Vector3(c * x - s * z, p.y, s * x + c * z)
+          }
+          XCTAssertLessThan(Walkthrough.hausdorff(undone, original.polygon), 1e-6, name)
+        }
+      }
+    }
+  }
+
   func testWallEndsMovedByUpToFiveCentimetres() throws {
     let document = try fixtureDocument()
     let expected = types(try Walkthrough.split(document))
@@ -383,18 +686,36 @@ final class WalkthroughSplitterTests: XCTestCase {
       longer.rooms[0].walls[i].dimensions[0] += 0.8
     }
     XCTAssertEqual(Walkthrough.summary(try Walkthrough.split(longer)), Self.fixtureRooms)
-    // Interior walls doubled 3 cm apart: merged, the same rooms.
-    var doubled = document
-    for wall in document.rooms[0].walls where interior.contains(wall.identifier) {
-      var copy = wall
-      copy.identifier = wall.identifier + "-COPY"
-      copy.transform.columns[3][0] += -wall.transform.columns[0][2] * 0.03
-      copy.transform.columns[3][2] += wall.transform.columns[0][0] * 0.03
-      doubled.rooms[0].walls.append(copy)
+    // Interior walls doubled 3 cm apart by shorter copies: the copies merge into the longer
+    // originals, the same rooms, whatever the order of the walls.
+    func doubled(shortenedBy cut: Double) -> RoomPlanDocument {
+      var doubled = document
+      for wall in document.rooms[0].walls where interior.contains(wall.identifier) {
+        var copy = wall
+        copy.identifier = wall.identifier + "-COPY"
+        copy.dimensions[0] -= cut
+        copy.transform.columns[3][0] += -wall.transform.columns[0][2] * 0.03
+        copy.transform.columns[3][2] += wall.transform.columns[0][0] * 0.03
+        doubled.rooms[0].walls.append(copy)
+      }
+      return doubled
     }
-    let (split, diagnostics) = try Walkthrough.analyze(doubled)
+    let (split, diagnostics) = try Walkthrough.analyze(doubled(shortenedBy: 0.2))
     XCTAssertEqual(Walkthrough.summary(split), Self.fixtureRooms)
     XCTAssertGreaterThanOrEqual(diagnostics.duplicatesMerged, interior.count)
+    XCTAssertEqual(
+      Walkthrough.summary(try Walkthrough.split(Walkthrough.shuffled(doubled(shortenedBy: 0.2), seed: 3))),
+      Self.fixtureRooms)
+    // Copies as long as the originals: either of a pair may stay, picked by where it lies, not
+    // by the order of the walls.
+    let sameLength = try Walkthrough.split(doubled(shortenedBy: 0))
+    XCTAssertEqual(sameLength?.rooms.count, 7)
+    XCTAssertEqual(types(sameLength), types(try Walkthrough.split(document)))
+    for seed in UInt64(1)...3 {
+      XCTAssertEqual(
+        Walkthrough.summary(try Walkthrough.split(Walkthrough.shuffled(doubled(shortenedBy: 0), seed: seed))),
+        Walkthrough.summary(sameLength), "shuffle \(seed)")
+    }
   }
 
   func testWeldToleranceDoesNotChangeTheRooms() throws {

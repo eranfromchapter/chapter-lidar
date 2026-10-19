@@ -83,8 +83,10 @@ outline, two or more sections with a centre) into rooms:
 4. A face without a section is kept as a room when it is enclosed or holds a toilet, bathtub,
    appliance or bed (a closet, a second bathroom); slivers and open faces merge into a neighbour.
 5. Walls are split where rooms meet, each opening goes to the piece under its centre with its
-   offset from the piece start, objects go to the room they stand in, and a room without walls
-   gets the scan's median wall height (2.0 to 6.0 m).
+   offset from the piece start, and objects go to the room they stand in. A room is as high as the
+   tallest wall that bounds it, as measured; a room without walls gets the scan's length-weighted
+   median wall height (`heightFromWalls` is then false). Heights are never clamped, so the station
+   still flags an implausible scan.
 
 Types come from `RoomTyping` (sections, then objects); a small room without a type is a closet
 and a long narrow one a hallway (`inferred`). The splitter is pure Double arithmetic with no trig

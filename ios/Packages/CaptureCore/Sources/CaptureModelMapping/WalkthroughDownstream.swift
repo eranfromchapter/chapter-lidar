@@ -185,8 +185,10 @@ struct WalkthroughDownstream {
     }
   }
 
-  /// Per room: the tallest piece longer than 5 cm that bounds it, when within the height range;
-  /// otherwise the scan's length-weighted median wall height, clamped to the range.
+  /// Per room: the height of the tallest piece longer than 5 cm that bounds it, as measured (the
+  /// mapper takes the tallest wall of a room that is not split the same way). A room without such
+  /// a piece gets the scan's length-weighted median wall height, also as measured, so the station
+  /// still flags an implausible scan; `heightDefault` only when that median is not above 0.
   func heights(pieces: [WalkthroughSplitter.Split.WallPiece]) -> [(
     heightM: Double, fromWalls: Bool
   )] {
@@ -203,14 +205,14 @@ struct WalkthroughDownstream {
         break
       }
     }
-    let fallback = walls.isEmpty ? p.heightDefault : min(p.heightMax, max(p.heightMin, median))
+    let fallback = median > 0 ? median : p.heightDefault
     return rooms.indices.map { r in
       var tallest: Double?
       for piece in pieces where piece.rooms.contains(r) && piece.endM - piece.startM > 0.05 {
         let height = plan.walls[piece.sourceWall].heightM
         tallest = max(tallest ?? height, height)
       }
-      if let tallest, p.heightMin <= tallest, tallest <= p.heightMax { return (tallest, true) }
+      if let tallest { return (tallest, true) }
       return (fallback, false)
     }
   }
