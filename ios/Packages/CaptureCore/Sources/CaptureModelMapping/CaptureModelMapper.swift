@@ -64,6 +64,9 @@ public enum CaptureModelMapper {
     -> CaptureModel
   {
     guard !document.rooms.isEmpty else { throw MappingError.noRooms }
+    // A whole-apartment walk-through is split into its rooms; when the split fails, or for any
+    // other capture, the code below maps each RoomPlan room as one room.
+    if let model = try mapWalkthrough(document, context: context) { return model }
 
     var model = CaptureModel(
       visitId: context.visitId, captureId: context.captureId, areaKey: context.areaKey,

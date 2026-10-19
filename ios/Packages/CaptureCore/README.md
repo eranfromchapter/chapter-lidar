@@ -67,6 +67,30 @@ walls; each door, window and opening gets exactly one parent wall, from `parentI
 the closest wall it lies on (own room first); an opening that fits no wall is an error, not a guess;
 output numbers are rounded to a micrometre.
 
+### Walk-through scans
+
+An operator who keeps walking through doorways produces one `CapturedRoom` for the whole
+apartment: one floor outline, many walls, and a RoomPlan section (a label and a centre, no shape)
+per room it recognized. `WalkthroughSplitter` splits such a capture (one `CapturedRoom`, a floor
+outline, two or more sections with a centre) into rooms:
+
+1. The interior walls are clipped to the floor outline; near-duplicates are merged, overshoots
+   trimmed, ends welded, and ends that stop short are closed when the gap is short.
+2. The planar arrangement of outline and walls is traced into faces (`PlanArrangement`).
+3. Each section is a seed. A face with two or more seeds is cut along the cheapest structural cue
+   (a ray from a reflex corner, a wall stub extended or bridged); each candidate is checked by
+   building the face alone with it. A face without such a cue stays one room.
+4. A face without a section is kept as a room when it is enclosed or holds a toilet, bathtub,
+   appliance or bed (a closet, a second bathroom); slivers and open faces merge into a neighbour.
+5. Walls are split where rooms meet, each opening goes to the piece under its centre with its
+   offset from the piece start, objects go to the room they stand in, and a room without walls
+   gets the scan's median wall height (2.0 to 6.0 m).
+
+Types come from `RoomTyping` (sections, then objects); a small room without a type is a closet
+and a long narrow one a hallway (`inferred`). The splitter is pure Double arithmetic with no trig
+and no hash order, so Linux and the phone give the same rooms. Any other capture, or a split that
+fails its checks, maps as before.
+
 ## Raw originals
 
 `RawOriginalsWriter` writes bytes as given and refuses to overwrite. On the phone the folder is
