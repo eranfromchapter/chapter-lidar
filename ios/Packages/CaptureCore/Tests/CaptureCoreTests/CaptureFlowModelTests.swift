@@ -25,9 +25,38 @@ import XCTest
       var count = 0
     }
 
+    /// A session that RoomPlan stops on its own (`failure` after start), or that cannot start
+    /// at all (`startError`), as on a hot phone.
+    private final class FailingSession: CaptureSession, @unchecked Sendable {
+      let events: AsyncStream<CaptureSessionEvent>
+      private let continuation: AsyncStream<CaptureSessionEvent>.Continuation
+      private let failure: CaptureSessionError?
+      private let startError: CaptureSessionError?
+
+      init(failure: CaptureSessionError? = nil, startError: CaptureSessionError? = nil) {
+        (events, continuation) = AsyncStream.makeStream(of: CaptureSessionEvent.self)
+        self.failure = failure
+        self.startError = startError
+      }
+
+      func start(_ configuration: CaptureSessionConfiguration) async throws {
+        if let startError { throw startError }
+        continuation.yield(.stateChanged(.running))
+        if let failure {
+          continuation.yield(.stateChanged(.failed(failure.description)))
+          continuation.finish()
+        }
+      }
+      func pause() async throws {}
+      func resume() async throws {}
+      func finish() async throws -> CaptureSessionResult { throw CaptureSessionError.noRoomsCaptured }
+      func cancel() async { continuation.finish() }
+    }
+
     private func makeModel(
       lidar: Bool = true, fixture: String = "box-room", made: MadeSessions? = nil,
-      onFinished: @escaping @MainActor (CaptureFlowResult) -> Void = { _ in }
+      onFinished: @escaping @MainActor (CaptureFlowResult) -> Void = { _ in },
+      factory: (@MainActor () throws -> any CaptureSession)? = nil
     ) throws -> CaptureFlowModel {
       let fixtureData = try Fixtures.load(fixture)
       let source = ReplaySource(
@@ -45,6 +74,7 @@ import XCTest
           roomPlanSupported: true),
         projectProvider: StaticHubProjectProvider([project]), originalsRoot: temporaryDirectory(),
         makeSession: { _ in
+          if let factory { return try factory() }
           let session = try ReplaySession(source: source)
           made?.last = session
           made?.count += 1
@@ -152,8 +182,10 @@ import XCTest
 
     // MARK: Current session (the host shows its camera feed)
 
-    private func modelReadyToScan(made: MadeSessions) throws -> CaptureFlowModel {
-      let model = try makeModel(made: made)
+    private func modelReadyToScan(
+      made: MadeSessions, factory: (@MainActor () throws -> any CaptureSession)? = nil
+    ) throws -> CaptureFlowModel {
+      let model = try makeModel(made: made, factory: factory)
       model.choose(project)
       model.setAddressConfirmed(true)
       model.continueToSetup()
@@ -175,6 +207,38 @@ import XCTest
       let model = try modelReadyToScan(made: made)
       XCTAssertNil(model.currentSession)
       XCTAssertEqual(made.count, 0)
+    }
+
+    func testAScanRoomPlanStopsShowsWhyAndCanBeTriedAgain() async throws {
+      var sessions: [FailingSession] = []
+      let model = try modelReadyToScan(
+        made: MadeSessions(),
+        factory: {
+          let session = FailingSession(failure: sessions.isEmpty ? .tooHot : nil)
+          sessions.append(session)
+          return session
+        })
+      await model.startScan()
+      for _ in 0..<200 where !model.scanFailed { await Task.yield() }
+      XCTAssertTrue(model.scanFailed)
+      XCTAssertEqual(model.errorMessage, CaptureSessionError.tooHot.description)
+      XCTAssertEqual(model.step, .scanning)
+
+      await model.retryScan()
+      for _ in 0..<200 where model.sessionState != .running { await Task.yield() }
+      XCTAssertEqual(sessions.count, 2, "Try again makes a new session")
+      XCTAssertFalse(model.scanFailed)
+      XCTAssertNil(model.errorMessage)
+      XCTAssertTrue(try XCTUnwrap(model.currentSession) === sessions[1])
+    }
+
+    func testAScanThatCannotStartOffersTryAgain() async throws {
+      let model = try modelReadyToScan(made: MadeSessions(), factory: { FailingSession(startError: .tooHot) })
+      await model.startScan()
+      XCTAssertTrue(model.scanFailed)
+      XCTAssertEqual(model.errorMessage, CaptureSessionError.tooHot.description)
+      XCTAssertTrue(CaptureSessionError.trackingLost.endsTheScan)
+      XCTAssertFalse(CaptureSessionError.noRoomsCaptured.endsTheScan)
     }
 
     func testCurrentSessionIsTheFactorySessionWhileScanningAndPaused() async throws {

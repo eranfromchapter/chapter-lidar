@@ -164,6 +164,10 @@
         try await session.start(CaptureSessionConfiguration(mode: mode))
       } catch {
         await fail(error)
+        // A scan that could not start (for example the phone is too hot) shows Try again.
+        if step == .scanning, let error = error as? CaptureSessionError, error.endsTheScan {
+          sessionState = .failed(error.description)
+        }
       }
     }
 
@@ -225,6 +229,23 @@
       }
     }
 
+    /// True when the session stopped with an error; the live screen then offers Try again.
+    public var scanFailed: Bool {
+      if case .failed = sessionState { return true }
+      return false
+    }
+
+    /// "Try again" after a failed scan: drops the failed session and starts a new one with the
+    /// same draft. Nothing from the failed session is kept.
+    public func retryScan() async {
+      guard scanFailed else { return }
+      await session?.cancel()
+      eventTask?.cancel()
+      eventTask = nil
+      session = nil
+      await startScan()
+    }
+
     /// Stops the scan without keeping anything.
     public func cancelScan() async {
       await session?.cancel()
@@ -274,7 +295,11 @@
 
     private func handle(_ event: CaptureSessionEvent) {
       switch event {
-      case .stateChanged(let state): sessionState = state
+      case .stateChanged(let state):
+        sessionState = state
+        // RoomPlan stopped on its own (too hot, tracking lost): say why, so the operator is not
+        // left with a frozen timer and a Finish button that can only say "Nothing was captured".
+        if case .failed(let message) = state { errorMessage = message }
       case .progress(let value): progress = value
       case .instruction(let value): instruction = value
       }

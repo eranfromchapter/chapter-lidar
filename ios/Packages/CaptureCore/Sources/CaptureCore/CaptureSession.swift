@@ -99,6 +99,12 @@ public enum CaptureSessionError: Error, Equatable, CustomStringConvertible {
   case deviceNotSupported(String)
   case scanFailed(String)
   case noRoomsCaptured
+  /// The phone is too hot to scan (RoomPlan's deviceTooHot, or a serious thermal state).
+  case tooHot
+  /// World tracking was lost and RoomPlan stopped.
+  case trackingLost
+  /// The area is larger than RoomPlan can hold in one scan.
+  case areaTooLarge
 
   public var description: String {
     switch self {
@@ -106,6 +112,21 @@ public enum CaptureSessionError: Error, Equatable, CustomStringConvertible {
     case .deviceNotSupported(let message): return message
     case .scanFailed(let message): return "The scan failed: \(message)"
     case .noRoomsCaptured: return "Nothing was captured. Scan at least one wall before finishing."
+    case .tooHot:
+      return "The phone is too hot to scan. Let it cool down for a few minutes, out of the sun and "
+        + "out of its case, then tap Try again."
+    case .trackingLost:
+      return "The phone lost track of the room. Tap Try again, turn the lights on and move slowly."
+    case .areaTooLarge:
+      return "This area is too large for one scan. Finish this floor and scan the rest as another area."
+    }
+  }
+
+  /// True for a failure that ends the scan; the screen then offers Try again.
+  public var endsTheScan: Bool {
+    switch self {
+    case .scanFailed, .tooHot, .trackingLost, .areaTooLarge: return true
+    case .invalidState, .deviceNotSupported, .noRoomsCaptured: return false
     }
   }
 }

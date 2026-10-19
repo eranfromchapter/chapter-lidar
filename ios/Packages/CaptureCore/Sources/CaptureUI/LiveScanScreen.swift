@@ -56,25 +56,10 @@
             .frame(maxWidth: .infinity, alignment: .leading)
         }
 
-        HStack(spacing: Space.s3) {
-          Button {
-            Task { await model.togglePause() }
-          } label: {
-            Text(model.isPaused ? "Resume" : "Pause")
-              .font(Typo.body).foregroundStyle(Palette.surface)
-              .frame(maxWidth: .infinity, minHeight: Control.primaryHeight)
-              .overlay(RoundedRectangle(cornerRadius: Radius.card).stroke(Palette.surface, lineWidth: 1))
-          }
-          .buttonStyle(.plain)
-          Button {
-            Task { await model.finishFloor() }
-          } label: {
-            Text("Finish floor")
-              .font(Typo.headline).foregroundStyle(Palette.ink)
-              .frame(maxWidth: .infinity, minHeight: Control.primaryHeight)
-              .background(Palette.surface, in: RoundedRectangle(cornerRadius: Radius.card))
-          }
-          .buttonStyle(.plain)
+        if model.scanFailed {
+          failedActions
+        } else {
+          scanActions
         }
       }
       .padding(.horizontal, 20)
@@ -88,6 +73,7 @@
         new > old
       }
       .sensoryFeedback(.warning, trigger: model.instruction) { _, new in new != .normal }
+      .sensoryFeedback(.error, trigger: model.scanFailed) { _, new in new }
       .sensoryFeedback(.selection, trigger: model.isPaused)
       .task(id: model.isPaused) {
         while !Task.isCancelled {
@@ -96,6 +82,54 @@
             pulse &+= 1
           }
         }
+      }
+    }
+
+    /// After RoomPlan stopped on its own: start again, or go back to the scan setup.
+    private var failedActions: some View {
+      HStack(spacing: Space.s3) {
+        Button {
+          Task { await model.cancelScan() }
+        } label: {
+          Text("Back")
+            .font(Typo.body).foregroundStyle(Palette.surface)
+            .frame(maxWidth: .infinity, minHeight: Control.primaryHeight)
+            .overlay(RoundedRectangle(cornerRadius: Radius.card).stroke(Palette.surface, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        Button {
+          Task { await model.retryScan() }
+        } label: {
+          Text("Try again")
+            .font(Typo.headline).foregroundStyle(Palette.ink)
+            .frame(maxWidth: .infinity, minHeight: Control.primaryHeight)
+            .background(Palette.surface, in: RoundedRectangle(cornerRadius: Radius.card))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("scan.tryAgain")
+      }
+    }
+
+    private var scanActions: some View {
+      HStack(spacing: Space.s3) {
+        Button {
+          Task { await model.togglePause() }
+        } label: {
+          Text(model.isPaused ? "Resume" : "Pause")
+            .font(Typo.body).foregroundStyle(Palette.surface)
+            .frame(maxWidth: .infinity, minHeight: Control.primaryHeight)
+            .overlay(RoundedRectangle(cornerRadius: Radius.card).stroke(Palette.surface, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        Button {
+          Task { await model.finishFloor() }
+        } label: {
+          Text("Finish floor")
+            .font(Typo.headline).foregroundStyle(Palette.ink)
+            .frame(maxWidth: .infinity, minHeight: Control.primaryHeight)
+            .background(Palette.surface, in: RoundedRectangle(cornerRadius: Radius.card))
+        }
+        .buttonStyle(.plain)
       }
     }
 

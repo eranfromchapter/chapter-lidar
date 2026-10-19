@@ -79,6 +79,12 @@
       if let message = DeviceGate.evaluate(DeviceCapabilities.current()).message {
         throw CaptureSessionError.deviceNotSupported(message)
       }
+      // RoomPlan stops a second into the scan with deviceTooHot when the phone is hot; say so
+      // before starting (field test, 2026-10-19, after several scans in a row).
+      switch ProcessInfo.processInfo.thermalState {
+      case .serious, .critical: throw CaptureSessionError.tooHot
+      default: break
+      }
       self.configuration = configuration
       startedAt = Date()
       segments = []
@@ -195,7 +201,7 @@
         }
       } catch {
         roomSession = nil
-        throw CaptureSessionError.scanFailed(error.localizedDescription)
+        throw Self.sessionError(error)
       }
       roomSession = nil
       do {
@@ -247,7 +253,7 @@
           }
         } else if let error {
           // RoomPlan ended the scan on its own.
-          self.failed(CaptureSessionError.scanFailed(error.localizedDescription))
+          self.failed(Self.sessionError(error))
         }
       }
     }
@@ -427,6 +433,17 @@
           ScanProgress(
             counts: Self.sum(completedCounts, currentCounts), elapsed: elapsed,
             depthSampleCount: depthSamples.count, meshAnchorCount: meshAnchors.count)))
+    }
+
+    /// The app's error for a RoomPlan error, with plain wording for the cases an operator can act
+    /// on.
+    nonisolated static func sessionError(_ error: any Error) -> CaptureSessionError {
+      switch error as? RoomCaptureSession.CaptureError {
+      case .deviceTooHot?: return .tooHot
+      case .worldTrackingFailure?: return .trackingLost
+      case .exceedSceneSizeLimit?: return .areaTooLarge
+      default: return .scanFailed(error.localizedDescription)
+      }
     }
 
     private func setState(_ new: CaptureSessionState) {
