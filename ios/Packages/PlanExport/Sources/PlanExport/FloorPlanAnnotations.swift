@@ -57,39 +57,45 @@ struct ExteriorDimension: Sendable {
   var crowded: Bool
   /// How badly that place overlaps (see `AnnotationLayout.conflicts`); 0 when free.
   var conflictScore: Int
+  /// The overlap score plus how far out the line stands and whether the label left its line.
+  var cost: Int
 }
 
 /// Lays out the text and dimension strings of the floor plan drawing so that no label
-/// overlaps another label, a symbol or a wall. Sizes are given in paper millimetres and
-/// converted with `metresPerPaperMM` (the scale denominator / 1000).
+/// overlaps another label or a wall, and no outside dimension a symbol (room names and inside
+/// dimensions may sit over furniture, on a patch of the room's colour). Sizes are given in
+/// paper millimetres and converted with `k` (the scale denominator / 1000).
 struct AnnotationLayout {
   let style: FloorPlanStyle
   let units: UnitFormatter
   /// Plan metres per paper millimetre.
   let k: Double
   var labels: [PlacedLabel] = []
-  /// Dimension lines, leaders, witness lines and door swings, as thin boxes.
+  /// Dimension and witness lines, as thin boxes.
   var lines: [Obstacle] = []
   var symbols: [Obstacle]
+  /// The quarter circles the doors sweep.
+  var swings: [Obstacle]
   /// Outside faces of the closed exterior wall loops; labels outside stay off the building.
   var building: [Obstacle]
   var wallPieces: [Obstacle]
   var items: [DrawingLayer: [DrawingItem]] = [:]
   var exteriorDimensions: [ExteriorDimension] = []
   var droppedInteriorDimensions = 0
+  /// Short outside runs left without a dimension because it could only cross others.
+  var omittedExteriorDimensions = 0
 
   init(
     style: FloorPlanStyle, units: UnitFormatter, scaleDenominator: Double,
-    symbols: [[Point2]], building: [[Point2]], wallPieces: [[Point2]],
-    lines: [(Point2, Point2)] = []
+    symbols: [[Point2]], building: [[Point2]], wallPieces: [[Point2]], swings: [[Point2]] = []
   ) {
     self.style = style
     self.units = units
     self.k = scaleDenominator / 1000
     self.symbols = symbols.map(Obstacle.init)
+    self.swings = swings.map(Obstacle.init)
     self.building = building.map(Obstacle.init)
     self.wallPieces = wallPieces.map(Obstacle.init)
-    self.lines = lines.map { Obstacle(line: $0.0, $0.1, halfWidth: style.lineClearance * k) }
   }
 
   private mutating func add(_ item: DrawingItem, _ layer: DrawingLayer) {
@@ -127,7 +133,13 @@ struct AnnotationLayout {
   /// Reading direction for text along `direction`: left to right, or bottom to top.
   static func readingDirection(_ direction: Point2) -> Point2 {
     var u = direction.unit
-    if u.x < -1e-9 || (abs(u.x) <= 1e-9 && u.y < 0) { u = u * -1 }
+    // Mostly across the sheet: left to right. Mostly up it: bottom to top (read from the
+    // right-hand edge of the sheet).
+    if abs(u.x) >= abs(u.y) - 1e-9 {
+      if u.x < 0 { u = u * -1 }
+    } else if u.y < 0 {
+      u = u * -1
+    }
     return u
   }
 
@@ -135,7 +147,8 @@ struct AnnotationLayout {
   /// is free. Covering text, a wall or the building weighs most, a symbol less, and crossing a
   /// line least, so a crowded label goes where it hides the least.
   func conflicts(
-    _ box: OrientedBox, padding: Double, outside: Bool, ownLines: [OrientedBox] = []
+    _ box: OrientedBox, padding: Double, outside: Bool, ownLines: [OrientedBox] = [],
+    symbols checkSymbols: Bool = true, swings checkSwings: Bool = true
   ) -> Int {
     var score = 0
     var padded = box
@@ -151,7 +164,15 @@ struct AnnotationLayout {
       score += 100
     }
     for symbol in symbols
-    where symbol.extent.overlaps(extent) && Geo.convexOverlap(corners, symbol.polygon) {
+    where checkSymbols && symbol.extent.overlaps(extent)
+      && Geo.convexOverlap(corners, symbol.polygon)
+    {
+      score += 30
+    }
+    for swing in swings
+    where checkSwings && swing.extent.overlaps(extent)
+      && Geo.convexOverlap(corners, swing.polygon)
+    {
       score += 30
     }
     for line in lines
@@ -171,7 +192,7 @@ struct AnnotationLayout {
       let lineExtent = Extent(lineCorners)
       for label in labels
       where label.extent.overlaps(lineExtent) && label.box.overlaps(convex: lineCorners) {
-        score += 10
+        score += 100
       }
       if outside, line.halfWidth > 0.02 * k {
         var inner = line
@@ -191,10 +212,13 @@ struct AnnotationLayout {
 
   // MARK: Room labels
 
-  /// Puts the room's name and area at the point of the room farthest from its walls and from
-  /// the furniture (pole of inaccessibility), searching a grid and refining around the best.
+  /// Puts the room's name and area at the middle of the room: the point farthest from its
+  /// walls (pole of inaccessibility), searched on a grid and refined around the best, ties
+  /// going to the centroid. Furniture does not push the label into a corner: a place clear of
+  /// furniture and door swings wins only when it is nearly as central, else the label sits on
+  /// the furniture over a patch of the room's colour. It never covers another label.
   mutating func placeRoomLabel(
-    roomId: String, name: String?, area: String?, polygon: [Point2]
+    roomId: String, name: String?, area: String?, polygon: [Point2], fill: DrawingColor
   ) {
     var block: [(text: String, size: Double)] = []
     if let name, !name.isEmpty { block.append((name, style.roomNameSize * k)) }
@@ -209,9 +233,13 @@ struct AnnotationLayout {
       OrientedBox(center: c, u: u, halfWidth: halfWidth, halfHeight: height / 2)
     }
     let padding = 0.6 * k
-    // Score: what the label box covers (other labels, door swings and dimension lines,
-    // furniture), then its clearance from the room's walls and the furniture.
-    func score(_ c: Point2) -> (cost: Int, value: Double)? {
+    let centroid = PlanGeometry.labelPoint(of: polygon)
+    let size = max(
+      (polygon.map(\.x).max()! - polygon.map(\.x).min()!),
+      (polygon.map(\.y).max()! - polygon.map(\.y).min()!), 1e-6)
+    // Score: covering another label rules a place out; then its clearance from the walls,
+    // cut when it covers furniture or a door swing, nudged towards the centroid.
+    func score(_ c: Point2) -> (blocked: Bool, value: Double)? {
       var b = box(at: c)
       b.halfWidth += padding
       b.halfHeight += padding
@@ -221,33 +249,20 @@ struct AnnotationLayout {
       for p in corners + [c] {
         clearance = min(clearance, PlanGeometry.distanceToBoundary(of: polygon, from: p))
       }
-      var cost = 0
       let extent = Extent(corners)
-      for symbol in symbols {
-        if symbol.extent.overlaps(extent), Geo.convexOverlap(corners, symbol.polygon) {
-          cost += 2
-          continue
-        }
-        for p in corners {
-          clearance = min(
-            clearance, PlanGeometry.distanceToBoundary(of: symbol.polygon, from: p))
-        }
-      }
-      for label in labels where label.extent.overlaps(extent) && label.box.overlaps(b) {
-        cost += 100
-      }
-      for line in lines
-      where line.extent.overlaps(extent) && Geo.convexOverlap(corners, line.polygon) {
-        cost += 3
-      }
-      return (cost, clearance)
+      let blocked = labels.contains { $0.extent.overlaps(extent) && $0.box.overlaps(b) }
+      let covers =
+        symbols.contains { $0.extent.overlaps(extent) && Geo.convexOverlap(corners, $0.polygon) }
+        || swings.contains { $0.extent.overlaps(extent) && Geo.convexOverlap(corners, $0.polygon) }
+        || lines.contains { $0.extent.overlaps(extent) && Geo.convexOverlap(corners, $0.polygon) }
+      let value = clearance * (covers ? 0.6 : 1) - 0.02 * c.distance(to: centroid) / size * k
+      return (blocked, value)
     }
     let xs = polygon.map(\.x)
     let ys = polygon.map(\.y)
     var lo = Point2(x: xs.min()!, y: ys.min()!)
     var hi = Point2(x: xs.max()!, y: ys.max()!)
-    var best: (point: Point2, cost: Int, value: Double)?
-    let fallback = PlanGeometry.labelPoint(of: polygon)
+    var best: (point: Point2, blocked: Bool, value: Double)?
     for round in 0..<4 {
       let n = round == 0 ? 28 : 10
       for i in 0...n {
@@ -259,11 +274,12 @@ struct AnnotationLayout {
           let better: Bool
           if let current = best {
             better =
-              s.cost < current.cost || (s.cost == current.cost && s.value > current.value + 1e-9)
+              (!s.blocked && current.blocked)
+              || (s.blocked == current.blocked && s.value > current.value + 1e-12)
           } else {
             better = true
           }
-          if better { best = (p, s.cost, s.value) }
+          if better { best = (p, s.blocked, s.value) }
         }
       }
       guard let current = best else { break }
@@ -272,7 +288,14 @@ struct AnnotationLayout {
       lo = Point2(x: current.point.x - spanX, y: current.point.y - spanY)
       hi = Point2(x: current.point.x + spanX, y: current.point.y + spanY)
     }
-    let center = best?.point ?? fallback
+    let center = best?.point ?? centroid
+    // A patch of the room's colour behind the text, so furniture lines do not run through it.
+    var knockout = box(at: center)
+    knockout.halfWidth += 0.4 * k
+    knockout.halfHeight += 0.2 * k
+    var patch = PathBuilder()
+    patch.polygon(knockout.corners)
+    add(.shape(DrawingShape(path: patch.path, fill: fill, layer: .roomLabel)), .roomLabel)
     // Lines from the top: the name, then the area.
     var top = center.y + height / 2
     for line in block {
@@ -293,188 +316,485 @@ struct AnnotationLayout {
 
   // MARK: Exterior dimensions
 
-  /// One dimension per outer wall segment, outside the building, measured along the outside
-  /// face from corner to corner. A label that does not fit goes beside its line or past one of
-  /// its ends with a leader, on the first row (tier) where it is free; none is ever dropped.
-  mutating func placeExteriorDimensions(walls: WallLayout) {
-    // Segments in outline order, reversed, shortest first and longest first: the first order
-    // that places every label freely wins, else the one that overlaps least.
-    var natural: [(loop: Int, run: Int, segment: Int)] = []
+  /// An outside wall run to dimension: its outside face from `p0` to `p1` along `d`, facing
+  /// `out`, and `baseline` (on `out`), where its dimension rows start: its own face, or a face
+  /// across its span that stands too close in front of it to leave room, so the line clears
+  /// the building; runs on one side with close baselines share the outermost (a chain).
+  struct ExteriorItem {
+    var loop: Int
+    var run: Int
+    var p0: Point2
+    var p1: Point2
+    var d: Point2
+    var out: Point2
+    var baseline: Double
+    var length: Double { (p1 - p0).dot(d) }
+  }
+
+  /// Outside wall runs worth a dimension: every run of the outside wall loops at least
+  /// `minimum` long. Shorter steps and returns are left out (their neighbours are chained across
+  /// them), and of two short parallel runs facing each other with the same length (the two sides
+  /// of a bay) only the first is kept.
+  func exteriorItems(walls: WallLayout, minimum: Double) -> [ExteriorItem] {
+    // Outside faces corner to corner (the mitre points), whatever the joints drawn.
+    func face(_ loop: WallLayout.Loop, _ run: Int) -> (Point2, Point2) {
+      (loop.outer[run], loop.outer[(run + 1) % loop.outer.count])
+    }
+    var faces: [(Point2, Point2)] = []
+    for loop in walls.loops {
+      for run in loop.segments.indices { faces.append(face(loop, run)) }
+    }
+    var items: [ExteriorItem] = []
     for (loopIndex, loop) in walls.loops.enumerated() {
       for (runIndex, segmentIndex) in loop.segments.enumerated() {
-        natural.append((loopIndex, runIndex, segmentIndex))
+        let segment = walls.segments[segmentIndex]
+        let d = segment.direction
+        let out = segment.normal * -1
+        let (p0, p1) = face(loop, runIndex)
+        guard (p1 - p0).dot(d) >= minimum else { continue }
+        // The faces across the span (its ends left out), as ranges on `out`.
+        let lo = p0.dot(d) + 0.01
+        let hi = p1.dot(d) - 0.01
+        var ranges: [(Double, Double)] = []
+        for (a, b) in faces {
+          let ta = a.dot(d)
+          let tb = b.dot(d)
+          var u0 = 0.0
+          var u1 = 1.0
+          if abs(tb - ta) < 1e-9 {
+            guard ta > lo, ta < hi else { continue }
+          } else {
+            let ua = (lo - ta) / (tb - ta)
+            let ub = (hi - ta) / (tb - ta)
+            u0 = max(u0, min(ua, ub))
+            u1 = min(u1, max(ua, ub))
+            guard u1 > u0 else { continue }
+          }
+          let c0 = (a + (b - a) * u0).dot(out)
+          let c1 = (a + (b - a) * u1).dot(out)
+          ranges.append((min(c0, c1), max(c0, c1)))
+        }
+        // The line goes in the open space in front of the face: past any face that stands
+        // closer in front of it than a dimension needs (a wall jutting out across the span),
+        // but not past faces beyond open ground (the far side of a recess).
+        let room = (style.exteriorOffset + style.exteriorDimensionSize * 1.6 + style.labelGap) * k
+        var baseline = max(p0.dot(out), p1.dot(out))
+        var moved = true
+        while moved {
+          moved = false
+          for (c0, c1) in ranges where c0 <= baseline + room && c1 > baseline + 1e-6 {
+            baseline = c1
+            moved = true
+          }
+        }
+        let item = ExteriorItem(
+          loop: loopIndex, run: runIndex, p0: p0, p1: p1, d: d, out: out, baseline: baseline)
+        // The second side of a bay.
+        let label = units.dimension(item.length)
+        let twin = items.contains { other in
+          other.length < 1.0 && other.out.dot(out) < -0.999
+            && units.dimension(other.length) == label
+            && abs((other.p0 - p0).dot(out)) < 3.5
+            && min(other.p0.dot(d), other.p1.dot(d)) < p1.dot(d) - 0.8 * item.length
+            && max(other.p0.dot(d), other.p1.dot(d)) > p0.dot(d) + 0.8 * item.length
+        }
+        if !twin { items.append(item) }
       }
     }
-    func length(_ entry: (loop: Int, run: Int, segment: Int)) -> Double {
-      walls.segments[entry.segment].startLo.distance(to: walls.segments[entry.segment].endLo)
+    // Chains: on each side, dimension lines whose baselines are close share the outermost one.
+    let snap = 1.5 * style.exteriorTierStep * k
+    var order = items.indices.sorted {
+      let a = items[$0]
+      let b = items[$1]
+      let ka = AnnotationLayout.sideKey(a.out)
+      let kb = AnnotationLayout.sideKey(b.out)
+      if ka != kb { return ka < kb }
+      if abs(a.baseline - b.baseline) > 1e-9 { return a.baseline < b.baseline }
+      return $0 < $1
     }
-    let ascending = natural.indices.sorted {
-      let l0 = length(natural[$0])
-      let l1 = length(natural[$1])
-      return l0 < l1 - 1e-9 || (abs(l0 - l1) <= 1e-9 && $0 < $1)
-    }.map { natural[$0] }
+    var start = 0
+    while start < order.count {
+      var end = start + 1
+      let key = AnnotationLayout.sideKey(items[order[start]].out)
+      while end < order.count, AnnotationLayout.sideKey(items[order[end]].out) == key,
+        items[order[end]].baseline - items[order[start]].baseline <= snap
+      {
+        end += 1
+      }
+      let outermost = order[start..<end].map { items[$0].baseline }.max()!
+      for index in order[start..<end] { items[index].baseline = outermost }
+      start = end
+    }
+    // Placing order: the longest runs first, so the main dimensions get the best places and
+    // short steps fit round them (or are left out).
+    order = items.indices.sorted {
+      let a = items[$0].length
+      let b = items[$1].length
+      return a > b + 1e-9 || (abs(a - b) <= 1e-9 && $0 < $1)
+    }
+    return order.map { items[$0] }
+  }
+
+  /// Which side of the building a face looks out to, as a whole number of degrees.
+  static func sideKey(_ out: Point2) -> Int {
+    var degrees = Int((atan2(out.y, out.x) * 180 / .pi).rounded())
+    if degrees <= -180 { degrees += 360 }
+    return degrees
+  }
+
+  /// Distance along the ray from `p` in `direction` (a unit vector) to the first outline edge
+  /// it meets within `within`, nil when it meets none.
+  static func firstHit(
+    from p: Point2, direction: Point2, within: Double, building: [Obstacle]
+  ) -> Double? {
+    var best: Double?
+    for face in building {
+      let polygon = face.polygon
+      for index in polygon.indices {
+        let c = polygon[index]
+        let d = polygon[(index + 1) % polygon.count]
+        let e = d - c
+        let denominator = direction.cross(e)
+        guard abs(denominator) > 1e-12 else { continue }
+        let t = (c - p).cross(e) / denominator
+        let u = (c - p).cross(direction) / denominator
+        guard t > 1e-9, t <= within + 1e-9, u >= -1e-9, u <= 1 + 1e-9 else { continue }
+        if best == nil || t < best! { best = t }
+      }
+    }
+    return best
+  }
+
+  /// True when segments ab and cd cross away from their ends, or run along each other.
+  static func linesClash(_ a: Point2, _ b: Point2, _ c: Point2, _ d: Point2) -> Bool {
+    let ab = b - a
+    let cd = d - c
+    let tolerance = 1e-5
+    guard ab.length > tolerance, cd.length > tolerance else { return false }
+    let denominator = ab.cross(cd)
+    if abs(denominator) < 1e-12 * ab.length * cd.length {
+      // Parallel: a clash when on one line and overlapping by more than a touch.
+      guard abs((c - a).cross(ab.unit)) < tolerance else { return false }
+      let u = ab.unit
+      let overlap =
+        min(max(a.dot(u), b.dot(u)), max(c.dot(u), d.dot(u)))
+        - max(min(a.dot(u), b.dot(u)), min(c.dot(u), d.dot(u)))
+      return overlap > tolerance
+    }
+    let s = (c - a).cross(cd) / denominator
+    let t = (c - a).cross(ab) / denominator
+    let ms = tolerance / ab.length
+    let mt = tolerance / cd.length
+    return s > ms && s < 1 - ms && t > mt && t < 1 - mt
+  }
+
+  /// One dimension per outside wall run (see `exteriorItems`), outside the building, measured
+  /// along the outside face from corner to corner. Runs on one side share a line where they
+  /// can (a chain), at a fixed distance beyond the building there; a run whose label or lines
+  /// would clash goes on the next row out. No dimension or witness line crosses another, and
+  /// a label too long for its run goes past the end of its line or beside it. None is
+  /// dropped.
+  mutating func placeExteriorDimensions(walls: WallLayout) {
+    let items = exteriorItems(walls: walls, minimum: style.exteriorMinimumM)
+    // Longest first, shortest first, then the crowded ones of the better of those first: the
+    // order whose dimensions clash least, stand nearest their walls and leave out fewest wins.
+    let longest = Array(items.indices)
+    let shortest = Array(items.indices.reversed())
     var best: AnnotationLayout?
     var bestScore = Int.max
-    var orders = [natural, natural.reversed(), ascending, ascending.reversed()]
-    var tried = 0
-    while tried < orders.count && tried < 8 {
-      let order = orders[tried]
-      tried += 1
+    var bestOrder = longest
+    func score(_ layout: AnnotationLayout) -> Int {
+      layout.exteriorDimensions.map(\.cost).reduce(0, +)
+        + 200 * layout.omittedExteriorDimensions
+    }
+    for order in [longest, shortest] {
       var trial = self
-      trial.placeExteriorDimensions(walls: walls, order: order)
-      let score = trial.exteriorDimensions.map(\.conflictScore).reduce(0, +)
-      if score < bestScore {
+      trial.placeExteriorDimensions(items: order.map { items[$0] })
+      let value = score(trial)
+      if value < bestScore {
         best = trial
-        bestScore = score
+        bestScore = value
+        bestOrder = order
       }
-      if score == 0 { break }
-      // Repair: the crowded ones choose first next time.
-      let crowded = trial.exteriorDimensions.filter(\.crowded).map { ($0.loop, $0.run) }
-      let first = order.filter { entry in crowded.contains { $0 == (entry.loop, entry.run) } }
-      let rest = order.filter { entry in !crowded.contains { $0 == (entry.loop, entry.run) } }
-      orders.append(first + rest)
+    }
+    if let current = best, current.exteriorDimensions.contains(where: \.crowded) {
+      let crowded = Set(
+        current.exteriorDimensions.filter(\.crowded).map { "\($0.loop)/\($0.run)" })
+      let key = { (i: Int) in "\(items[i].loop)/\(items[i].run)" }
+      let order =
+        bestOrder.filter { crowded.contains(key($0)) }
+        + bestOrder.filter { !crowded.contains(key($0)) }
+      var trial = self
+      trial.placeExteriorDimensions(items: order.map { items[$0] })
+      if score(trial) < bestScore { best = trial }
     }
     if let best { self = best }
   }
 
-  private mutating func placeExteriorDimensions(
-    walls: WallLayout, order: [(loop: Int, run: Int, segment: Int)]
-  ) {
+  private mutating func placeExteriorDimensions(items: [ExteriorItem]) {
     let size = style.exteriorDimensionSize * k
     let gap = style.labelGap * k
-    do {
-      for (loopIndex, runIndex, segmentIndex) in order {
-        let segment = walls.segments[segmentIndex]
-        let d = segment.direction
-        let out = segment.normal * -1
-        let p0 = segment.startLo
-        let p1 = segment.endLo
-        let along = (p1 - p0).dot(d)
-        guard along > 0.01 else { continue }
-        let label = units.length(along)
-        let width = FontMetrics.width(label, size: size)
-        let u = AnnotationLayout.readingDirection(d)
+    let tick = style.tickLength * k
+    var dimensionLines: [(Point2, Point2)] = []
+    var witnessLines: [(Point2, Point2)] = []
+    var sideBaselines: [Int: [Double]] = [:]
+    for item in items {
+      sideBaselines[AnnotationLayout.sideKey(item.out), default: []].append(item.baseline)
+    }
+    for item in items {
+      let d = item.d
+      let out = item.out
+      let along = item.length
+      let label = units.dimension(along)
+      let width = FontMetrics.width(label, size: size)
+      let u = AnnotationLayout.readingDirection(d)
 
-        struct Candidate {
-          var tier: Int
-          var placement: String
-          var center: Point2
-          var lines: [(Point2, Point2)]
+      struct Candidate {
+        var tier: Int
+        var placement: String
+        var center: Point2
+        var line: (Point2, Point2)
+        var drawn: [(Point2, Point2)]
+        var witnesses: [(Point2, Point2)]
+        /// Witness lines that would run through the building.
+        var through: Int
+        /// How far the line stands beyond its own first row, plan metres.
+        var distance: Double
+      }
+      // Where the line can go: rows out from its own baseline, then the first two rows of the
+      // chains further out on the same side, nearest first.
+      var positions: [(tier: Int, at: Double)] = []
+      func row(_ base: Double, _ tier: Int) -> Double {
+        base + (style.exteriorOffset + Double(tier) * style.exteriorTierStep) * k
+      }
+      for tier in 0..<style.exteriorTiers { positions.append((tier, row(item.baseline, tier))) }
+      let outer = Set(sideBaselines[AnnotationLayout.sideKey(out)] ?? []).filter {
+        $0 > item.baseline + 1e-6
+      }
+      for base in outer.sorted() {
+        for tier in 0..<2 { positions.append((tier, row(base, tier))) }
+      }
+      positions.sort { $0.at < $1.at - 1e-9 || (abs($0.at - $1.at) <= 1e-9 && $0.tier < $1.tier) }
+      var candidates: [Candidate] = []
+      var previous = -Double.infinity
+      for (tier, position) in positions {
+        guard position > previous + 0.3 * style.exteriorTierStep * k else { continue }
+        previous = position
+        let a = item.p0 + out * (position - item.p0.dot(out))
+        let b = item.p1 + out * (position - item.p1.dot(out))
+        let distance = position - item.baseline - style.exteriorOffset * k
+        // At each end a tick towards the wall, or a witness line down to the corner when the
+        // line stands further off; none where it would run along a wall face.
+        var witnesses: [(Point2, Point2)] = []
+        var through = 0
+        for (end, corner) in [(a, item.p0), (b, item.p1)] {
+          let height = position - corner.dot(out)
+          var reach = height - gap <= tick * 1.5 ? min(tick, max(height - gap, 0)) : height - gap
+          // Stop short of the first wall in the way (a step in the outline above the corner).
+          if let hit = AnnotationLayout.firstHit(
+            from: end, direction: out * -1, within: reach + gap, building: building)
+          {
+            reach = min(reach, hit - gap)
+          }
+          guard reach > 1e-6 else { continue }
+          let foot = end - out * reach
+          let middle = (end + foot) * 0.5
+          // Along a wall face (an inside corner): left out. Through the building: a clash.
+          if building.contains(where: {
+            PlanGeometry.distanceToBoundary(of: $0.polygon, from: middle) < 0.05 * k
+          }) {
+            continue
+          }
+          if building.contains(where: { PlanGeometry.contains($0.polygon, middle) }) {
+            through += 1
+            continue
+          }
+          witnesses.append((foot, end))
         }
-        var candidates: [Candidate] = []
-        for tier in 1...style.exteriorTiers {
-          let offset = (style.exteriorOffset + Double(tier - 1) * style.exteriorTierStep) * k
-          let a = p0 + out * offset
-          let b = p1 + out * offset
-          let middle = (a + b) * 0.5
-          // Witness lines: short brackets on the first row, down to the wall beyond it.
-          let reach = tier == 1 ? min(style.tickLength * k, offset - gap) : offset - gap
-          // At an inside corner a witness would run along the next wall's face: left out.
-          let witnesses = [(a, a - out * reach), (b, b - out * reach)].filter { line in
-            let middle = (line.0 + line.1) * 0.5
-            return !building.contains {
-              PlanGeometry.distanceToBoundary(of: $0.polygon, from: middle) < 0.05 * k
-            }
-          }
-          let stub = style.minimumStub * k
-          if width + 2 * gap + 2 * stub <= along {
-            let cutA = middle - d * (width / 2 + gap)
-            let cutB = middle + d * (width / 2 + gap)
-            candidates.append(
-              Candidate(
-                tier: tier, placement: "line", center: middle,
-                lines: [(a, cutA), (cutB, b)] + witnesses))
-          }
-          let besideCenter = middle + out * (size * 0.6 + gap)
+        let middle = (a + b) * 0.5
+        let stub = style.minimumStub * k
+        if width + 2 * gap + 2 * stub <= along {
+          let cutA = middle - d * (width / 2 + gap)
+          let cutB = middle + d * (width / 2 + gap)
           candidates.append(
             Candidate(
-              tier: tier, placement: "beside", center: besideCenter,
-              lines: [(a, b)] + witnesses))
-          // Past an end, on the line carried on as a leader; further out when crowded.
-          for reachOut in [0.0, 3.0, 6.0] {
-            for (end, sign, name) in [(b, 1.0, "past-end"), (a, -1.0, "past-start")] {
-              let leader = gap + reachOut * k
-              let center = end + d * (sign * (leader + gap + width / 2))
-              candidates.append(
-                Candidate(
-                  tier: tier, placement: name, center: center,
-                  lines: [(a, b), (end, end + d * (sign * leader))] + witnesses))
-            }
+              tier: tier, placement: "line", center: middle, line: (a, b),
+              drawn: [(a, cutA), (cutB, b)], witnesses: witnesses, through: through,
+              distance: distance))
+        } else {
+          // Past the nearer free end, on the line carried on, with no stubs.
+          for (end, sign, name) in [(b, 1.0, "past-end"), (a, -1.0, "past-start")] {
+            candidates.append(
+              Candidate(
+                tier: tier, placement: name, center: end + d * (sign * (gap + width / 2)),
+                line: (a, b), drawn: [(a, b)], witnesses: witnesses, through: through,
+                distance: distance))
           }
         }
-        var chosen: (candidate: Candidate, conflicts: Int)?
-        for candidate in candidates {
-          let box = textBox(label, center: candidate.center, u: u, size: size)
-          let own = candidate.lines.map {
-            OrientedBox.around($0.0, $0.1, halfWidth: style.lineClearance * k)
-          }
-          let count = conflicts(
-            box, padding: style.labelPadding * k, outside: true, ownLines: own)
-          if chosen == nil || count < chosen!.conflicts { chosen = (candidate, count) }
-          if count == 0 { break }
-        }
-        guard let pick = chosen?.candidate else { continue }
-        let stroke = DrawingStroke(
-          color: style.ink, width: style.exteriorDimensionWidth * k * 1000)
-        var path = PathBuilder()
-        for (a, b) in pick.lines where a.distance(to: b) > 1e-6 { path.segment(a, b) }
-        add(
-          .shape(DrawingShape(path: path.path, stroke: stroke, layer: .exteriorDimension)),
-          .exteriorDimension)
-        add(
-          centredText(
-            label, center: pick.center, u: u, size: size, color: style.ink,
-            layer: .exteriorDimension), .exteriorDimension)
-        labels.append(
-          PlacedLabel(
-            kind: .exteriorDimension, text: label,
-            box: textBox(label, center: pick.center, u: u, size: size), roomId: nil))
-        for (a, b) in pick.lines where a.distance(to: b) > 1e-6 {
-          lines.append(Obstacle(line: a, b, halfWidth: style.lineClearance * k))
-        }
-        exteriorDimensions.append(
-          ExteriorDimension(
-            loop: loopIndex, run: runIndex, lengthM: along, label: label, tier: pick.tier,
-            placement: pick.placement, crowded: (chosen?.conflicts ?? 0) > 0,
-            conflictScore: chosen?.conflicts ?? 0))
+        candidates.append(
+          Candidate(
+            tier: tier, placement: "beside", center: middle + out * (size * 0.6 + gap),
+            line: (a, b), drawn: [(a, b)], witnesses: witnesses, through: through,
+            distance: distance))
       }
+      var chosen: (candidate: Candidate, conflicts: Int, cost: Int)?
+      for candidate in candidates {
+        let box = textBox(label, center: candidate.center, u: u, size: size)
+        let own = (candidate.drawn + candidate.witnesses).map {
+          OrientedBox.around($0.0, $0.1, halfWidth: style.lineClearance * k)
+        }
+        var count = conflicts(box, padding: style.labelPadding * k, outside: true, ownLines: own)
+        count += 1000 * candidate.through
+        // No line crosses another dimension's lines, and no label sits on them.
+        for (p, q) in witnessLines
+        where AnnotationLayout.linesClash(candidate.line.0, candidate.line.1, p, q) {
+          count += 1000
+        }
+        for (p, q) in dimensionLines {
+          if AnnotationLayout.linesClash(candidate.line.0, candidate.line.1, p, q) {
+            count += 1000
+          }
+          for w in candidate.witnesses where AnnotationLayout.linesClash(w.0, w.1, p, q) {
+            count += 1000
+          }
+        }
+        var padded = box
+        padded.halfWidth += style.labelPadding * k
+        padded.halfHeight += style.labelPadding * k
+        for (p, q) in dimensionLines + witnessLines
+        where padded.overlaps(convex: OrientedBox.around(p, q, halfWidth: 1e-4 * k).corners) {
+          count += 100
+        }
+        // Nearer rows and a label on its line win when they are as free.
+        let cost =
+          count + Int((2 * candidate.distance / (style.exteriorTierStep * k)).rounded())
+          + (candidate.placement == "line" ? 0 : 1)
+        if chosen == nil || cost < chosen!.cost { chosen = (candidate, count, cost) }
+        if cost == 0 { break }
+      }
+      guard let pick = chosen?.candidate else { continue }
+      // A short run whose dimension would cover or cross anything or stand far off (the sides
+      // of a narrow recess, a step tucked under another dimension) is left out.
+      if along < style.exteriorOptionalM,
+        (chosen?.conflicts ?? 0) > 0 || pick.distance > 2.5 * style.exteriorTierStep * k
+      {
+        omittedExteriorDimensions += 1
+        continue
+      }
+      let stroke = DrawingStroke(
+        color: style.ink, width: style.exteriorDimensionWidth * k * 1000)
+      var path = PathBuilder()
+      for (a, b) in pick.drawn + pick.witnesses where a.distance(to: b) > 1e-6 {
+        path.segment(a, b)
+      }
+      add(
+        .shape(DrawingShape(path: path.path, stroke: stroke, layer: .exteriorDimension)),
+        .exteriorDimension)
+      add(
+        centredText(
+          label, center: pick.center, u: u, size: size, color: style.ink,
+          layer: .exteriorDimension), .exteriorDimension)
+      labels.append(
+        PlacedLabel(
+          kind: .exteriorDimension, text: label,
+          box: textBox(label, center: pick.center, u: u, size: size), roomId: nil))
+      for (a, b) in pick.drawn + pick.witnesses where a.distance(to: b) > 1e-6 {
+        lines.append(Obstacle(line: a, b, halfWidth: style.lineClearance * k))
+      }
+      dimensionLines.append(pick.line)
+      witnessLines += pick.witnesses
+      exteriorDimensions.append(
+        ExteriorDimension(
+          loop: item.loop, run: item.run, lengthM: along, label: label, tier: pick.tier + 1,
+          placement: pick.placement, crowded: (chosen?.conflicts ?? 0) > 0,
+          conflictScore: chosen?.conflicts ?? 0, cost: chosen?.cost ?? 0))
     }
   }
 
   // MARK: Interior dimensions
 
-  /// One dimension along each edge of each room, just inside it, measured between the wall
-  /// faces. Longest edges first; a label that finds no free place along or beside its line is
-  /// left out together with its line.
-  mutating func placeInteriorDimensions(rooms: [(id: String, clear: [Point2])]) {
+  /// Dimensions along the edges of each room, just inside it, measured between the wall faces.
+  /// Every room first gets its overall length and width (its longest edge across the sheet and
+  /// its longest edge up it), then the other edges, longest first. A label may sit over
+  /// furniture, on a patch of the room's colour, but never over another label, a wall or a
+  /// door swing, and no line runs through a door swing; the length and width may cross a
+  /// swing when nothing else is free. Of two edges facing each other close by with the same
+  /// length (the two faces of a short return) only one is dimensioned. A dimension that finds
+  /// no place is left out.
+  mutating func placeInteriorDimensions(
+    rooms: [(id: String, clear: [Point2], fill: DrawingColor)]
+  ) {
     let size = style.interiorDimensionSize * k
     let gap = style.labelGap * k
-    var edges: [(room: Int, a: Point2, b: Point2)] = []
+    struct Edge {
+      var room: Int
+      var a: Point2
+      var b: Point2
+      var label: String
+      var required: Bool
+      var length: Double { a.distance(to: b) }
+    }
+    var edges: [Edge] = []
     for (index, room) in rooms.enumerated() {
       let polygon = room.clear
+      var roomEdges: [Edge] = []
       for i in polygon.indices {
         let a = polygon[i]
         let b = polygon[(i + 1) % polygon.count]
-        if a.distance(to: b) >= style.interiorMinimumM { edges.append((index, a, b)) }
+        let length = a.distance(to: b)
+        guard length >= style.interiorMinimumM else { continue }
+        let label = units.dimension(length)
+        let d = (b - a).unit
+        // The other face of a short return: facing this one, close by, the same length.
+        let twin = roomEdges.contains { other in
+          let e = (other.b - other.a).unit
+          guard e.dot(d) < -0.999, other.label == label else { return false }
+          let distance = abs((other.a - a).cross(d))
+          let s0 = min(other.a.dot(d), other.b.dot(d))
+          let s1 = max(other.a.dot(d), other.b.dot(d))
+          let overlap = min(s1, max(a.dot(d), b.dot(d))) - max(s0, min(a.dot(d), b.dot(d)))
+          return distance < 0.5 && overlap > 0.5 * length
+        }
+        if !twin {
+          roomEdges.append(Edge(room: index, a: a, b: b, label: label, required: false))
+        }
       }
+      // The room's length and width.
+      for across in [true, false] {
+        let pick = roomEdges.indices.filter {
+          let d = (roomEdges[$0].b - roomEdges[$0].a).unit
+          return across ? abs(d.x) >= abs(d.y) : abs(d.x) < abs(d.y)
+        }.max {
+          roomEdges[$0].length < roomEdges[$1].length - 1e-9
+            || (abs(roomEdges[$0].length - roomEdges[$1].length) <= 1e-9 && $0 > $1)
+        }
+        if let pick { roomEdges[pick].required = true }
+      }
+      edges += roomEdges
     }
     let order = edges.indices.sorted {
-      let l0 = edges[$0].a.distance(to: edges[$0].b)
-      let l1 = edges[$1].a.distance(to: edges[$1].b)
-      return l0 > l1 + 1e-9 || (abs(l0 - l1) <= 1e-9 && $0 < $1)
+      let e0 = edges[$0]
+      let e1 = edges[$1]
+      if e0.required != e1.required { return e0.required }
+      return e0.length > e1.length + 1e-9 || (abs(e0.length - e1.length) <= 1e-9 && $0 < $1)
     }
     for index in order {
       let edge = edges[index]
       let polygon = rooms[edge.room].clear
-      let length = edge.a.distance(to: edge.b)
+      let length = edge.length
       let d = (edge.b - edge.a).unit
       let inward = d.leftNormal
-      let label = units.length(length)
+      let label = edge.label
       let width = FontMetrics.width(label, size: size)
       let u = AnnotationLayout.readingDirection(d)
       let stub = style.minimumStub * k
-      var placed = false
-      tiers: for tier in 0..<2 {
+      struct Option {
+        var center: Point2
+        var lines: [(Point2, Point2)]
+        var soft: Int
+      }
+      var best: Option?
+      for tier in 0..<2 {
         let offset = (style.interiorOffset + Double(tier) * style.interiorTierStep) * k
         let a = edge.a + inward * offset
         let b = edge.b + inward * offset
@@ -500,30 +820,68 @@ struct AnnotationLayout {
             OrientedBox.around($0.0, $0.1, halfWidth: style.lineClearance * k)
           }
           guard
-            conflicts(box, padding: style.labelPadding * k, outside: false, ownLines: own) == 0
+            conflicts(
+              box, padding: style.labelPadding * k, outside: false, ownLines: own,
+              symbols: false, swings: false) == 0
           else { continue }
-          let stroke = DrawingStroke(
-            color: style.interiorDimension, width: style.interiorDimensionWidth * k * 1000)
-          var path = PathBuilder()
-          for (p, q) in option.lines where p.distance(to: q) > 1e-6 { path.segment(p, q) }
-          add(
-            .shape(DrawingShape(path: path.path, stroke: stroke, layer: .interiorDimension)),
-            .interiorDimension)
-          add(
-            centredText(
-              label, center: option.center, u: u, size: size, color: style.interiorDimension,
-              layer: .interiorDimension), .interiorDimension)
-          labels.append(
-            PlacedLabel(
-              kind: .interiorDimension, text: label, box: box, roomId: rooms[edge.room].id))
-          for (p, q) in option.lines where p.distance(to: q) > 1e-6 {
-            lines.append(Obstacle(line: p, q, halfWidth: style.lineClearance * k))
+          // Furniture under the label, a little; a door swing under it or its lines, more.
+          let corners = padded.corners
+          let extent = Extent(corners)
+          var soft = Double(tier)
+          for symbol in symbols
+          where symbol.extent.overlaps(extent) && Geo.convexOverlap(corners, symbol.polygon) {
+            soft += 2
           }
-          placed = true
-          break tiers
+          var crossesSwing = false
+          for swing in swings {
+            if swing.extent.overlaps(extent) && Geo.convexOverlap(corners, swing.polygon) {
+              crossesSwing = true
+            }
+            for line in own where Geo.convexOverlap(line.corners, swing.polygon, margin: 1e-4) {
+              crossesSwing = true
+            }
+          }
+          if crossesSwing {
+            guard edge.required else { continue }
+            soft += 20
+          }
+          if best == nil || Int(soft) < best!.soft {
+            best = Option(center: option.center, lines: option.lines, soft: Int(soft))
+          }
+          if soft == 0 { break }
         }
+        if let current = best, current.soft <= tier { break }
       }
-      if !placed { droppedInteriorDimensions += 1 }
+      guard let pick = best else {
+        droppedInteriorDimensions += 1
+        continue
+      }
+      let stroke = DrawingStroke(
+        color: style.interiorDimension, width: style.interiorDimensionWidth * k * 1000)
+      var path = PathBuilder()
+      for (p, q) in pick.lines where p.distance(to: q) > 1e-6 { path.segment(p, q) }
+      add(
+        .shape(DrawingShape(path: path.path, stroke: stroke, layer: .interiorDimension)),
+        .interiorDimension)
+      let box = textBox(label, center: pick.center, u: u, size: size)
+      var knockout = box
+      knockout.halfWidth += 0.3 * k
+      knockout.halfHeight += 0.1 * k
+      var patch = PathBuilder()
+      patch.polygon(knockout.corners)
+      add(
+        .shape(
+          DrawingShape(path: patch.path, fill: rooms[edge.room].fill, layer: .interiorDimension)
+        ), .interiorDimension)
+      add(
+        centredText(
+          label, center: pick.center, u: u, size: size, color: style.interiorDimension,
+          layer: .interiorDimension), .interiorDimension)
+      labels.append(
+        PlacedLabel(kind: .interiorDimension, text: label, box: box, roomId: rooms[edge.room].id))
+      for (p, q) in pick.lines where p.distance(to: q) > 1e-6 {
+        lines.append(Obstacle(line: p, q, halfWidth: style.lineClearance * k))
+      }
     }
   }
 }

@@ -5,8 +5,8 @@ import Foundation
 /// top, a compass at the top right when true north is known, the fully dimensioned colour plan
 /// (`FloorPlanDrawing`: outside dimensions in ink, inside dimensions in purple, room names and
 /// areas, furniture, fixture and appliance symbols) fitted to the page, a scale bar at the
-/// bottom left, a note that the measurements are approximate, and the Chapter wordmark at the
-/// bottom right.
+/// bottom left, "Measurements are approximate." in the middle, and the Chapter wordmark at
+/// the bottom right.
 ///
 /// One layout feeds both writers, so the PDF and the SVG show the same page. The page is Letter
 /// landscape or a 10 in square, whichever prints the plan larger (`Page.automatic`). The total
@@ -18,9 +18,9 @@ public enum FloorplanWriter {
     /// Letter landscape or the square page, whichever prints the plan at the larger scale;
     /// Letter landscape when both print it the same.
     case automatic
-    /// 11 x 8.5 in.
+    /// 11 × 8.5 in.
     case letterLandscape
-    /// 10 x 10 in.
+    /// 10 × 10 in.
     case square
 
     /// Paper size, millimetres; nil for `automatic`.
@@ -32,13 +32,6 @@ public enum FloorplanWriter {
       }
     }
 
-    /// How the page is named in the footer note.
-    var name: String {
-      switch self {
-      case .automatic, .letterLandscape: return "Letter"
-      case .square: return "a 10 x 10 in page"
-      }
-    }
   }
 
   public struct Options: Hashable, Sendable {
@@ -332,10 +325,11 @@ public enum FloorplanWriter {
               bar.label, position: DrawingPoint(x: margin, y: margin + 0.6),
               size: Layout.scaleBarTextSize, anchor: .leading, color: ink, layer: .scaleBar)))
       }
-      let note =
-        "Drawn at 1:\(Format.compact(denominator)) on \(page.name). Measurements are "
-        + "approximate; wall thicknesses are assumed."
-      text(note, width / 2, margin + 0.6, size: Layout.noteSize, anchor: .center, color: muted)
+      // No print scale in words: the plan is fitted to the page at whatever scale fills it,
+      // which is rarely a standard one; the scale bar holds at any print size.
+      text(
+        "Measurements are approximate.", width / 2, margin + 0.6, size: Layout.noteSize,
+        anchor: .center, color: muted)
 
       // Wordmark: "chapter" in the serif, "RENOVATION" letter-spaced beneath, centred on each
       // other and set against the right margin.

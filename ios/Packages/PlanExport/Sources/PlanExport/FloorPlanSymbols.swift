@@ -11,11 +11,14 @@ struct PlacedSymbol: Sendable {
   var footprint: [Point2]
   /// Unit vector from the centre towards the symbol's back (the nearest wall).
   var back: Point2
-  /// The outline (dashed when the detection had low confidence).
+  /// The outline.
   var outline: PathBuilder
   /// Inner detail lines.
   var details: PathBuilder
+  /// Drawn in a lighter grey.
   var lowConfidence: Bool
+  /// Hung on a wall or overhead (its underside a metre or more above the floor).
+  var overhead = false
 }
 
 /// Plan symbols in the footprint of each recognized object, built in a local frame: x across
@@ -242,20 +245,25 @@ enum FloorPlanSymbols {
       outline.rect(in: f, -h, -k, h, k)
       d.segment(f.map(-h, 0), f.map(h, 0))
     case "toilet":
+      // Tank against the wall, the bowl running from it (its back tucked under the tank).
       let tank = clamp(depth * 0.28, 0.06, 0.22)
-      let bowlDepth = depth - tank
+      let overlap = min(tank * 0.35, 0.05)
+      let bowlDepth = depth - tank + overlap
       let rx = h * 0.82
       let ry = bowlDepth / 2
       outline.rect(in: f, -h, k - tank, h, k, radius: 0.02)
       d.ellipse(in: f, cx: 0, cy: -k + ry, rx: rx, ry: ry)
       d.ellipse(in: f, cx: 0, cy: -k + ry * 0.92, rx: rx * 0.66, ry: ry * 0.7)
     case "bathtub":
+      // Rim, the basin inside it (wider rim at the tap end), the drain and the tap.
       outline.rect(in: f, -h, -k, h, k, radius: 0.04)
       let m = clamp(small * 0.1, 0.03, 0.1)
-      d.rect(in: f, -h + m, -k + m, h - m, k - m, radius: min(0.15, small * 0.2))
+      let tapEnd = min(m * 2, depth * 0.2)
+      d.rect(in: f, -h + m, -k + m, h - m, k - tapEnd, radius: min(0.15, small * 0.2))
       let r = min(0.025, small * 0.05)
-      d.circle(center: f.map(0, k - m - r * 3), radius: r)
-      d.circle(center: f.map(0, k - m / 2), radius: min(r * 0.6, m * 0.4))
+      d.circle(center: f.map(0, k - tapEnd - r * 3), radius: r)
+      let spout = min(tapEnd * 0.3, 0.03)
+      d.rect(in: f, -spout, k - tapEnd + spout * 0.4, spout, k - spout * 0.6)
     case "sink":
       outline.rect(in: f, -h, -k, h, k, radius: 0.01)
       let side = clamp(w * 0.08, 0.02, 0.06)

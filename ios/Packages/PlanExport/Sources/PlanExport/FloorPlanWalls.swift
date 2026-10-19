@@ -74,7 +74,10 @@ struct WallLayout {
     }
 
     /// The band less its cuts, as counter-clockwise quadrilaterals.
-    var pieces: [[Point2]] {
+    var pieces: [[Point2]] { cutPieces.map(\.corners) }
+
+    /// The band less its cuts, with whether each piece ends at a cut (frames an opening).
+    var cutPieces: [(corners: [Point2], atCut: Bool)] {
       var spans: [(Double, Double)] = []
       var from = 0.0
       for cut in cuts.sorted(by: { $0.0 < $1.0 }) {
@@ -83,7 +86,7 @@ struct WallLayout {
       }
       if from < 1 { spans.append((from, 1)) }
       let minimum = length > 0 ? 0.003 / length : 1
-      var out: [[Point2]] = []
+      var out: [(corners: [Point2], atCut: Bool)] = []
       for (t0, t1) in spans where t1 - t0 > minimum {
         let s = t0 <= 0 ? (startLo, startHi) : (point(t0, lo), point(t0, hi))
         let e = t1 >= 1 ? (endLo, endHi) : (point(t1, lo), point(t1, hi))
@@ -91,10 +94,13 @@ struct WallLayout {
         guard parameter(s.0) < parameter(e.0) - minimum / 2,
           parameter(s.1) < parameter(e.1) - minimum / 2
         else { continue }
-        out.append([s.0, e.0, e.1, s.1])
+        out.append(([s.0, e.0, e.1, s.1], t0 > 0 || t1 < 1))
       }
       return out
     }
+
+    /// The whole band, ignoring cuts.
+    var band: [Point2] { [startLo, endLo, endHi, startHi] }
   }
 
   /// Where an opening sits: its span on a band's reference line, and the band faces.
@@ -131,8 +137,34 @@ struct WallLayout {
   let interiorThickness: Double
 
   /// Exterior band pieces, interior and stray, all counter-clockwise: filled together with the
-  /// nonzero rule they paint as their union.
-  var pieces: [[Point2]] { segments.flatMap(\.pieces) }
+  /// nonzero rule they paint as their union. A scrap of wall shorter than half its thickness
+  /// is left out, and one shorter than one and a half times its thickness too unless it frames
+  /// an opening or meets another wall.
+  var pieces: [[Point2]] {
+    var out: [[Point2]] = []
+    for (index, segment) in segments.enumerated() {
+      let thickness = segment.hi - segment.lo
+      for piece in segment.cutPieces {
+        let c = piece.corners
+        let start = (c[0] + c[3]) * 0.5
+        let end = (c[1] + c[2]) * 0.5
+        let along = start.distance(to: end)
+        if along >= 1.5 * thickness {
+          out.append(c)
+          continue
+        }
+        let meets = [start, end].contains { p in
+          segments.indices.contains { other in
+            other != index
+              && (PlanGeometry.contains(segments[other].band, p)
+                || PlanGeometry.distanceToBoundary(of: segments[other].band, from: p) < 0.02)
+          }
+        }
+        if meets || (piece.atCut && along >= 0.5 * thickness) { out.append(c) }
+      }
+    }
+    return out
+  }
 
   /// Floor area within the outside faces of the exterior walls (closed loops only).
   var grossAreaM2: Double {
@@ -148,10 +180,11 @@ struct WallLayout {
   static let wallNearEdge = 0.30
   static let parallelSine = sin(8 * Double.pi / 180)
   /// Scanned walls stop short of corners and junctions (by up to half a metre in real
-  /// exports): gaps up to `coverageBridge` along an edge are closed, and a wall ending within
-  /// `coverageSnap` of the edge's end is carried on to it.
+  /// exports, a little more once the plan is squared): gaps up to `coverageBridge` along an
+  /// edge are closed, and a wall ending within `coverageSnap` of the edge's end is carried on
+  /// to it. A doorway is wider than that.
   static let coverageBridge = 0.25
-  static let coverageSnap = 0.55
+  static let coverageSnap = 0.65
   static let strayMinimum = 0.25
   static let chainJoin = 0.02
 
@@ -361,6 +394,41 @@ struct WallLayout {
     // 6. Openings cut the band they lie in.
     for opening in openings {
       gaps.append(cut(for: opening))
+    }
+
+    // 7. Next to an opening at a corner the walls meet square, not mitred: the wall that goes
+    //    on is carried square through the corner and the jamb is square.
+    let near = 1.5 * exterior
+    for loop in loops {
+      let count = loop.segments.count
+      for position in 0..<count where loop.closed || position + 1 < count {
+        let i = loop.segments[position]
+        let j = loop.segments[(position + 1) % count]
+        let li = segments[i].length
+        let lj = segments[j].length
+        guard li > 0, lj > 0 else { continue }
+        let openEnd = segments[i].cuts.contains { (1 - $0.1) * li <= near }
+        let openStart = segments[j].cuts.contains { $0.0 * lj <= near }
+        guard openEnd != openStart else { continue }
+        if openStart {
+          // i carries on through the corner; j starts square.
+          var s = segments[i]
+          let reach = (s.endLo - s.b).dot(s.direction)
+          s.endLo = s.b + s.normal * s.lo + s.direction * reach
+          s.endHi = s.b + s.normal * s.hi + s.direction * reach
+          segments[i] = s
+          segments[j].startLo = segments[j].a + segments[j].normal * segments[j].lo
+          segments[j].startHi = segments[j].a + segments[j].normal * segments[j].hi
+        } else {
+          var s = segments[j]
+          let reach = (s.startLo - s.a).dot(s.direction)
+          s.startLo = s.a + s.normal * s.lo + s.direction * reach
+          s.startHi = s.a + s.normal * s.hi + s.direction * reach
+          segments[j] = s
+          segments[i].endLo = segments[i].b + segments[i].normal * segments[i].lo
+          segments[i].endHi = segments[i].b + segments[i].normal * segments[i].hi
+        }
+      }
     }
   }
 

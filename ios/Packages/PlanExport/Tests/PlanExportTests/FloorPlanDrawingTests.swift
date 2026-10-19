@@ -111,12 +111,21 @@ final class FloorPlanDrawingTests: XCTestCase {
       }
       XCTAssertEqual(gap.a.distance(to: gap.b), gap.opening.widthM, accuracy: 1e-9)
     }
-    // A window is drawn as two glass lines between the wall's two faces.
-    let window = try XCTUnwrap(shapes(drawing, .window).first)
-    let moves = window.path.elements.filter {
-      if case .move = $0 { return true } else { return false }
+    // A window is drawn as the wall's two faces in the wall colour and the glass between them
+    // in a lighter grey; every opening has a jamb line at each end.
+    let windows = shapes(drawing, .window)
+    XCTAssertEqual(windows.count, 2)
+    func moves(_ shape: DrawingShape) -> Int {
+      shape.path.elements.filter {
+        if case .move = $0 { return true } else { return false }
+      }.count
     }
-    XCTAssertEqual(moves.count, 4 * capture.model.windows.count)
+    XCTAssertEqual(moves(windows[0]), 2 * capture.model.windows.count)
+    XCTAssertEqual(windows[0].stroke?.color, drawing.style.wall)
+    XCTAssertEqual(moves(windows[1]), capture.model.windows.count)
+    XCTAssertEqual(windows[1].stroke?.color, drawing.style.symbol)
+    let jambs = try XCTUnwrap(shapes(drawing, .opening).first)
+    XCTAssertEqual(moves(jambs), 2 * drawing.walls.gaps.count)
   }
 
   func testInteriorWallIsCentredOnTheSharedEdge() throws {
@@ -377,8 +386,10 @@ final class FloorPlanDrawingTests: XCTestCase {
               "\(name) 1:\(scale): '\(boxes[i].text)' overlaps '\(boxes[j].text)'")
           }
         }
+        // Room names and inside dimensions may sit over furniture (on a patch of the room's
+        // colour); outside dimensions and the scale bar stay clear of it. None is on a wall.
         for label in drawing.labels where label.kind != .room && label.kind != .compass {
-          for symbol in drawing.symbols {
+          for symbol in drawing.symbols where label.kind != .interiorDimension {
             XCTAssertFalse(
               label.box.overlaps(convex: symbol.footprint),
               "\(name) 1:\(scale): '\(label.text)' overlaps \(symbol.kind)")
@@ -398,21 +409,62 @@ final class FloorPlanDrawingTests: XCTestCase {
     }
   }
 
-  func testEveryOuterWallSegmentIsDimensioned() throws {
+  func testOuterWallsAreDimensionedWithoutClashes() throws {
     for (name, model) in try allModels() {
       for scale in [50.0, 100.0] {
         let drawing = try drawing(model) { $0.scaleDenominator = scale }
-        let segments = drawing.walls.loops.map(\.segments.count).reduce(0, +)
-        XCTAssertGreaterThanOrEqual(segments, 4, name)
-        XCTAssertEqual(drawing.exteriorDimensions.count, segments, "\(name) 1:\(scale)")
+        let style = drawing.style
+        XCTAssertGreaterThanOrEqual(drawing.exteriorDimensions.count, 4, name)
+        // Every run of a metre and a quarter or more has its dimension; none under a foot has.
+        for (l, loop) in drawing.walls.loops.enumerated() {
+          for run in loop.segments.indices {
+            let a = loop.outer[run]
+            let b = loop.outer[(run + 1) % loop.outer.count]
+            let shown = drawing.exteriorDimensions.contains { $0.loop == l && $0.run == run }
+            let length = a.distance(to: b)
+            if length >= style.exteriorOptionalM + 1e-6 {
+              XCTAssertTrue(shown, "\(name) 1:\(scale): run \(run) of \(length) m")
+            }
+            if length < style.exteriorMinimumM - 1e-6 {
+              XCTAssertFalse(shown, "\(name) 1:\(scale): step \(run) of \(length) m")
+            }
+          }
+        }
+        // Each in a free place: no label covered, no line crossing another dimension's.
         let shown = Set(texts(drawing).filter { $0.layer == .exteriorDimension }.map(\.string))
         for dimension in drawing.exteriorDimensions {
           XCTAssertTrue(shown.contains(dimension.label))
           XCTAssertFalse(
             dimension.crowded, "\(name) 1:\(scale): \(dimension.label) found no free place")
+          XCTAssertGreaterThanOrEqual(dimension.lengthM, style.exteriorMinimumM)
         }
       }
     }
+  }
+
+  func testShortStepsAndTheSecondSideOfABayGetNoDimension() throws {
+    // A 4 m by 3 m room with a 10 cm step in one wall and a bay 0.5 m deep in another.
+    var model = Synthetic.room(width: 6, length: 4)
+    let outline = [
+      (0.0, 0.0), (0.0, 4.0), (2.0, 4.0), (2.0, 4.5), (4.0, 4.5), (4.0, 4.0), (6.0, 4.0),
+      (6.0, 0.0), (3.0, 0.0), (3.0, 0.1), (0.0, 0.1),
+    ]
+    model.rooms[0].polygon = outline.map { Vec3(x: $0.0, y: 0, z: $0.1) }
+    model.walls = []
+    for index in outline.indices {
+      let a = outline[index]
+      let b = outline[(index + 1) % outline.count]
+      model.walls.append(
+        CaptureModel.Wall(
+          id: "w\(index)", start: Vec3(x: a.0, y: 0, z: a.1), end: Vec3(x: b.0, y: 0, z: b.1),
+          heightM: 2.7, thicknessM: 0))
+    }
+    let drawing = try drawing(model) { $0.alignToWalls = false }
+    let labels = drawing.exteriorDimensions.map(\.label)
+    // The 10 cm step has none, nor any "0'" length; the bay's depth is given once.
+    XCTAssertFalse(labels.contains { $0.hasPrefix("0' ") || $0 == "3.9\"" }, "\(labels)")
+    XCTAssertEqual(labels.filter { $0 == "1' 7.7\"" }.count, 1, "\(labels)")
+    XCTAssertFalse(drawing.exteriorDimensions.contains(where: \.crowded))
   }
 
   func testOutsideDimensionsMeasureTheOutsideFaces() throws {
@@ -427,7 +479,7 @@ final class FloorPlanDrawingTests: XCTestCase {
     XCTAssertTrue(shown.contains { $0.string == "14' 1.5\"" && $0.layer == .exteriorDimension })
     XCTAssertTrue(shown.contains { $0.string == "13' 1.5\"" && $0.layer == .interiorDimension })
     XCTAssertTrue(shown.contains { $0.string == "Room" && $0.layer == .roomLabel })
-    XCTAssertTrue(shown.contains { $0.string == "129.2 ft\u{00B2}" && $0.layer == .roomLabel })
+    XCTAssertTrue(shown.contains { $0.string == "129 ft\u{00B2}" && $0.layer == .roomLabel })
     // Inside dimensions in light purple, outside ones in ink.
     let inside = try XCTUnwrap(shown.first { $0.layer == .interiorDimension })
     XCTAssertGreaterThan(inside.color.blue, inside.color.red + 0.2)
@@ -437,17 +489,168 @@ final class FloorPlanDrawingTests: XCTestCase {
 
   func testLabelsUseTheSharedUnitFormatter() throws {
     let model = Synthetic.room(width: 4, length: 3)
-    // Metric: lengths in metres and areas in square metres, both to two decimals.
+    // Metric: lengths in metres to two decimals, room areas in square metres to one.
     let metric = texts(try drawing(model) { $0.units = UnitFormatter(system: .metric) })
     XCTAssertTrue(metric.contains { $0.string == "4.30 m" && $0.layer == .exteriorDimension })
     XCTAssertTrue(metric.contains { $0.string == "4.00 m" && $0.layer == .interiorDimension })
-    XCTAssertTrue(metric.contains { $0.string == "12.00 m\u{00B2}" && $0.layer == .roomLabel })
-    // Whole feet-inches for lengths; areas stay square feet to one decimal.
+    XCTAssertTrue(metric.contains { $0.string == "12.0 m\u{00B2}" && $0.layer == .roomLabel })
+    // Whole feet-inches for lengths; room areas in whole square feet from 100 ft².
     let feetInches = UnitFormatter(system: .imperial, lengthStyle: .feetInches)
     let whole = texts(try drawing(model) { $0.units = feetInches })
     XCTAssertTrue(whole.contains { $0.string == "14' 1\"" && $0.layer == .exteriorDimension })
     XCTAssertTrue(whole.contains { $0.string == "13' 1\"" && $0.layer == .interiorDimension })
-    XCTAssertTrue(whole.contains { $0.string == "129.2 ft\u{00B2}" && $0.layer == .roomLabel })
+    XCTAssertTrue(whole.contains { $0.string == "129 ft\u{00B2}" && $0.layer == .roomLabel })
+  }
+
+  func testPlanDimensionAndRoomAreaFormats() {
+    let imperial = UnitFormatter(system: .imperial)
+    let metric = UnitFormatter(system: .metric)
+    // Under a foot in inches alone; a foot and more in feet-inches.
+    XCTAssertEqual(imperial.dimension(5.1 * 0.0254), "5.1\"")
+    XCTAssertEqual(imperial.dimension(11.96 * 0.0254), "1' 0.0\"")
+    XCTAssertEqual(imperial.dimension(25.0 * 0.0254), "2' 1.0\"")
+    XCTAssertEqual(UnitFormatter(system: .imperial, lengthStyle: .feetInches).dimension(0.2), "8\"")
+    XCTAssertEqual(metric.dimension(0.13), "0.13 m")
+    // Whole square feet from 100 ft², one decimal below; square metres to one decimal.
+    let foot = UnitFormatter.squareMetresPerSquareFoot
+    XCTAssertEqual(imperial.roomArea(192.4 * foot), "192 ft\u{00B2}")
+    XCTAssertEqual(imperial.roomArea(99.96 * foot), "100 ft\u{00B2}")
+    XCTAssertEqual(imperial.roomArea(43.84 * foot), "43.8 ft\u{00B2}")
+    XCTAssertEqual(metric.roomArea(18.48), "18.5 m\u{00B2}")
+    XCTAssertEqual(metric.roomArea(.nan), "-")
+  }
+
+  // MARK: Squaring
+
+  func testWallsAFewDegreesOffAreSquaredAndTrueDiagonalsKept() throws {
+    // A room whose far wall runs 2 degrees off, and one with a 45 degree corner.
+    var tilted = Synthetic.room(width: 4, length: 3)
+    tilted.rooms[0].polygon = [(0.0, 0.0), (0.0, 3.0), (4.0, 3.14), (4.0, 0.0)].map {
+      Vec3(x: $0.0, y: 0, z: $0.1)
+    }
+    let squared = try drawing(tilted)
+    let room = try XCTUnwrap(squared.rooms.first)
+    for i in room.polygon.indices {
+      let d = room.polygon[(i + 1) % room.polygon.count] - room.polygon[i]
+      XCTAssertLessThan(min(abs(d.x), abs(d.y)), 1e-9, "edge \(i) runs along an axis")
+    }
+    XCTAssertEqual(PlanGeometry.area(of: room.polygon), 12.28, accuracy: 0.1)
+    var cut = Synthetic.room(width: 4, length: 3)
+    cut.rooms[0].polygon = [(0.0, 0.0), (0.0, 3.0), (3.0, 3.0), (4.0, 2.0), (4.0, 0.0)].map {
+      Vec3(x: $0.0, y: 0, z: $0.1)
+    }
+    let kept = try XCTUnwrap(try drawing(cut).rooms.first)
+    XCTAssertEqual(kept.polygon.count, 5)
+    XCTAssertEqual(PlanGeometry.area(of: kept.polygon), 11.5, accuracy: 1e-6)
+  }
+
+  func testWalkThroughIsSquaredAndVerticalTextReadsUp() throws {
+    let drawing = try drawing(WalkthroughFixture.model)
+    for room in drawing.rooms {
+      for i in room.polygon.indices {
+        let d = room.polygon[(i + 1) % room.polygon.count] - room.polygon[i]
+        XCTAssertLessThan(min(abs(d.x), abs(d.y)), 1e-9, "\(room.label) edge \(i)")
+      }
+    }
+    // Text runs left to right or bottom to top (read from the right-hand edge of the sheet).
+    let turned = texts(drawing).filter { $0.rotationDegrees != 0 }
+    XCTAssertFalse(turned.isEmpty)
+    for text in turned { XCTAssertEqual(text.rotationDegrees, 90, accuracy: 1e-9, text.string) }
+    let svg = drawing.svg(title: "a")
+    XCTAssertTrue(svg.contains("rotate(-90.00 "))
+    XCTAssertFalse(svg.contains("rotate(90.00 "))
+    // No dimension is written with a zero foot.
+    XCTAssertFalse(texts(drawing).contains { $0.string.hasPrefix("0' ") })
+  }
+
+  // MARK: Doors, symbols and floor
+
+  func testDoorSwingsDoNotCrossEachOther() throws {
+    // Two doors facing each other across a 1.2 m bathroom: both would swing into it and cross.
+    var model = Synthetic.room(width: 6, length: 3)
+    let spans = [(0.0, 2.4, RoomType.bedroom), (2.4, 3.6, .bathroom), (3.6, 6.0, .bedroom)]
+    model.rooms = spans.enumerated().map { index, span in
+      CaptureModel.Room(
+        id: "room-\(index)", label: "Room \(index)",
+        polygon: [(span.0, 0.0), (span.0, 3.0), (span.1, 3.0), (span.1, 0.0)].map {
+          Vec3(x: $0.0, y: 0, z: $0.1)
+        }, heightM: 2.7, type: span.2, typeSource: .operator)
+    }
+    for x in [2.4, 3.6] {
+      model.walls.append(
+        CaptureModel.Wall(
+          id: "wall-\(x)", start: Vec3(x: x, y: 0, z: 0), end: Vec3(x: x, y: 0, z: 3),
+          heightM: 2.7, thicknessM: 0))
+      model.doors.append(
+        CaptureModel.WallOpening(
+          id: "door-\(x)", wallId: "wall-\(x)", offsetM: 1.5, bottomM: 0, widthM: 0.8,
+          heightM: 2))
+    }
+    let drawing = try drawing(model)
+    let swings = FloorPlanDrawing.openingItems(
+      walls: drawing.walls, rooms: drawing.rooms, symbols: [], style: drawing.style, k: 0.05
+    ).swings
+    XCTAssertEqual(swings.count, 2)
+    XCTAssertFalse(Geo.convexOverlap(swings[0], swings[1], margin: 0.02))
+  }
+
+  func testSymbolsAreSolidAndOverheadOnesDashed() throws {
+    var model = Synthetic.room(width: 4, length: 3)
+    func cabinet(_ id: String, x: Double, bottom: Double, confidence: DetectionConfidence)
+      -> CaptureModel.DetectedObject
+    {
+      CaptureModel.DetectedObject(
+        id: id, category: .storage,
+        box: CaptureModel.OrientedBox(
+          center: Vec3(x: x, y: bottom + 0.35, z: 0.3), sizeM: Vec3(x: 1.0, y: 0.7, z: 0.6)),
+        confidence: confidence, attributes: ["StorageType": "cabinet"])
+    }
+    model.objects = [
+      cabinet("base", x: 1, bottom: 0, confidence: .high),
+      cabinet("upper", x: 1, bottom: 1.45, confidence: .high),
+      cabinet("faint", x: 3, bottom: 0, confidence: .low),
+    ]
+    let drawing = try drawing(model)
+    let overhead = Dictionary(
+      uniqueKeysWithValues: drawing.symbols.map { ($0.objectId, $0.overhead) })
+    XCTAssertEqual(overhead, ["base": false, "upper": true, "faint": false])
+    let symbols = shapes(drawing, .symbol)
+    XCTAssertEqual(symbols.count, 3, "each object drawn once")
+    XCTAssertEqual(symbols.filter { !($0.stroke?.dash.isEmpty ?? true) }.count, 1, "overhead")
+    XCTAssertTrue(symbols.contains { $0.stroke?.color == drawing.style.faintSymbol })
+  }
+
+  func testFloorLeftOutBetweenRoomsIsFilledWhereADoorLeadsIn() throws {
+    // Two rooms 0.6 m apart; a door in the first opens onto the strip between them.
+    var model = Synthetic.room(width: 6.6, length: 3)
+    model.rooms = [(0.0, 3.0), (3.6, 6.6)].enumerated().map { index, span in
+      CaptureModel.Room(
+        id: "room-\(index)", label: "Room \(index)",
+        polygon: [(span.0, 0.0), (span.0, 3.0), (span.1, 3.0), (span.1, 0.0)].map {
+          Vec3(x: $0.0, y: 0, z: $0.1)
+        }, heightM: 2.7, type: .bedroom, typeSource: .operator)
+    }
+    model.walls = [
+      CaptureModel.Wall(
+        id: "wall-a", start: Vec3(x: 3, y: 0, z: 0), end: Vec3(x: 3, y: 0, z: 3), heightM: 2.7,
+        thicknessM: 0)
+    ]
+    model.doors = [
+      CaptureModel.WallOpening(
+        id: "door", wallId: "wall-a", offsetM: 1.5, bottomM: 0, widthM: 0.8, heightM: 2)
+    ]
+    let plan = try drawing(model)
+    let fills = shapes(plan, .roomFill)
+    XCTAssertEqual(fills.count, 3, "two rooms and the strip")
+    let strip = try XCTUnwrap(fills.first)
+    // From the outside face of one room's wall to the other's (6 in walls, plan metres).
+    let xs = strip.path.points.map { $0.x / 1000 }
+    XCTAssertLessThanOrEqual(xs.min()!, 3.16)
+    XCTAssertGreaterThanOrEqual(xs.max()!, 3.44)
+    XCTAssertEqual(strip.fill, FloorPlanStyle.roomFill(.bedroom), "the colour of the room")
+    // Without the door the strip is outside.
+    model.doors = []
+    XCTAssertEqual(shapes(try drawing(model), .roomFill).count, 2)
   }
 
   func testScaleBarInFeetOrMetres() throws {

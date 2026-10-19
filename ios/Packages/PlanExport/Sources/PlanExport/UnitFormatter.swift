@@ -58,6 +58,34 @@ public struct UnitFormatter: Hashable, Sendable {
     }
   }
 
+  /// A length given in metres as a plan dimension: as `length`, but a feet-inches length under
+  /// a foot is written in inches alone (`5.1"`, never `0' 5.1"`).
+  public func dimension(_ metres: Double) -> String {
+    let text = length(metres)
+    switch lengthStyle {
+    case .feetInchesTenths, .feetInches:
+      if text.hasPrefix("0' ") { return String(text.dropFirst(3)) }
+      if text.hasPrefix("-0' ") { return "-" + text.dropFirst(4) }
+      return text
+    default:
+      return text
+    }
+  }
+
+  /// A room's floor area as a plan label: whole square feet from 100 ft² (`192 ft²`), one
+  /// decimal below that (`43.8 ft²`); square metres to one decimal (`17.8 m²`).
+  public func roomArea(_ squareMetres: Double) -> String {
+    switch system {
+    case .imperial:
+      let feet = squareMetres / Self.squareMetresPerSquareFoot
+      guard let tenths = Self.steps(feet, of: 0.1) else { return Self.invalid }
+      let places = tenths.magnitude >= 1000 ? 0 : 1
+      return Self.decimals(feet, places: places).map { "\($0) ft\u{00B2}" } ?? Self.invalid
+    case .metric:
+      return Self.decimals(squareMetres, places: 1).map { "\($0) m\u{00B2}" } ?? Self.invalid
+    }
+  }
+
   /// An approximate area given in square metres, rounded for a headline: whole square feet
   /// (`866 ft²`) or square metres to one decimal (`80.4 m²`).
   public func approximateArea(_ squareMetres: Double) -> String {

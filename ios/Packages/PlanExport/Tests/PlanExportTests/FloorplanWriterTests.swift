@@ -76,17 +76,17 @@ final class FloorplanWriterTests: XCTestCase {
       model: model, options: .init(address: address, northDegrees: 0)
     ).drawing
     for room in drawing.rooms {
-      XCTAssertTrue(shown.contains(units.area(room.areaM2)), "area of \(room.label)")
+      XCTAssertTrue(shown.contains(units.roomArea(room.areaM2)), "area of \(room.label)")
     }
-    // Feet-inch dimensions, the scale bar and the print scale.
+    // Feet-inch dimensions, the scale bar and the note.
     XCTAssertGreaterThan(shown.filter { $0.contains("' ") && $0.hasSuffix("\"") }.count, 20)
     XCTAssertTrue(shown.contains { $0.hasSuffix(" ft") && $0.count <= 6 }, "scale bar")
-    XCTAssertTrue(
-      shown.contains { $0.hasPrefix("Drawn at 1:\(Format.compact(plan.scaleDenominator)) on ") })
+    XCTAssertTrue(shown.contains("Measurements are approximate."))
+    XCTAssertFalse(shown.contains { $0.contains("1:") }, "no print scale in words")
     // Colour: slate walls, ink outside dimensions, purple inside dimensions.
     let stream = try XCTUnwrap(pdf.contentStreams.first)
     XCTAssertTrue(stream.contains("0.3600 0.3700 0.4200 rg"), "slate walls")
-    XCTAssertTrue(stream.contains("0.6000 0.5700 0.9400 RG"), "purple inside dimensions")
+    XCTAssertTrue(stream.contains("0.5412 0.5098 0.9020 RG"), "purple inside dimensions")
     XCTAssertTrue(stream.contains("1.0000 1.0000 1.0000 rg"), "white paper")
   }
 
