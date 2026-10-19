@@ -254,7 +254,7 @@ public enum WalkthroughSplitter {
     }
     guard WalkthroughInput.isWalkthrough(document),
       let plan = WalkthroughInput.plan(of: document, placements: placements),
-      plan.walls.count == document.rooms[0].walls.count
+      plan.walls.count == document.rooms[0].walls.count, WalkthroughInput.isBounded(plan)
     else { return fail(.notWalkthrough) }
 
     // Segments and the first arrangement, welded at eps, eps/2 or eps/4.

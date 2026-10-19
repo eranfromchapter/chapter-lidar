@@ -4,6 +4,9 @@
 /// RoomPlan leaves parts of the outline without a wall and stops wall ends 0.15 to 3.6 m short of
 /// their junction, so walls alone rarely close a room. Walls that run along the outline are left
 /// out here (the outline already bounds the rooms); they are only split downstream.
+///
+/// Two points touch when they are less than `eps` apart, in every step here and in the welding of
+/// `PlanArrangement`, so an end that touches something is never also left open.
 struct WalkthroughSegments {
   /// Outline edges (fixed), then interior wall pieces (walls in `canonicalOrder`), then gap
   /// closures.
@@ -38,6 +41,7 @@ struct WalkthroughSegments {
     interiorWalls.sort()
     pieces = mergeDuplicates(pieces, p)
     pieces = trimOvershoots(pieces, outline: outline, p, eps: eps)
+    pieces = Self.weldEnds(pieces, outline: outline, eps: eps)
     segments += pieces
     Self.snapEnds(&segments, outline: outline, eps: eps)
     closeDanglingEnds(outline: outline, p, eps: eps)
@@ -156,7 +160,12 @@ struct WalkthroughSegments {
   }
 
   /// A dangling end at most `overshoot` past the nearest crossing (at 30 degrees or more) of its
-  /// piece is cut back to that crossing.
+  /// piece is cut back to that crossing. Only crossings more than `eps` from both ends count (a
+  /// crossing at an end is where that end touches), a segment counts as crossed when the piece
+  /// passes within `eps` of its span (a wall that stops just short of the piece makes a T as much
+  /// as one that runs just past it), and no end is cut back to the middle of its piece or beyond.
+  /// A piece that trimming would leave `eps` long or shorter is kept as it is, for the closing of
+  /// dangling ends.
   private mutating func trimOvershoots(
     _ pieces: [PlanSegment], outline: [P2], _ p: WalkthroughSplitter.Parameters, eps: Double
   ) -> [PlanSegment] {
@@ -171,28 +180,102 @@ struct WalkthroughSegments {
       guard let u = Plan2D.unit(b - a) else { continue }
       var xs: [Double] = []
       for (j, segment) in base.enumerated() where j != n + k {
-        if let r = Plan2D.segSeg(a, b, segment.0, segment.1), 0 < r.t, r.t < 1,
-          -1e-9 <= r.u, r.u <= 1 + 1e-9, let e = Plan2D.unit(segment.1 - segment.0),
-          abs(Plan2D.cross(u, e)) >= Plan2D.sin30
+        let span = Plan2D.dist(segment.0, segment.1)
+        if let r = Plan2D.segSeg(a, b, segment.0, segment.1), eps / length < r.t,
+          r.t < 1 - eps / length, -eps / span <= r.u, r.u <= 1 + eps / span,
+          let e = Plan2D.unit(segment.1 - segment.0), abs(Plan2D.cross(u, e)) >= Plan2D.sin30
         {
           xs.append(r.t)
         }
       }
       var trimmed = piece
+      var trims = 0
       for (isStart, tEnd) in [(true, 0.0), (false, 1.0)] {
         let end = isStart ? piece.a : piece.b
         let touching = base.enumerated().contains { j, segment in
-          j != n + k && Plan2D.segPoint(end, segment.0, segment.1).distance <= eps
+          j != n + k && Plan2D.segPoint(end, segment.0, segment.1).distance < eps
         }
         guard !touching, let first = xs.min(), let last = xs.max() else { continue }
         let t = isStart ? first : last
         let over = abs(t - tEnd) * length
-        if eps < over, over <= p.overshoot {
+        if eps < over, over <= p.overshoot, over < length / 2 {
           if isStart { trimmed.a = a + (b - a) * t } else { trimmed.b = a + (b - a) * t }
-          overshootsTrimmed += 1
+          trims += 1
         }
       }
-      if Plan2D.dist(trimmed.a, trimmed.b) > eps { out.append(trimmed) }
+      if Plan2D.dist(trimmed.a, trimmed.b) > eps {
+        out.append(trimmed)
+        overshootsTrimmed += trims
+      } else {
+        out.append(piece)
+      }
+    }
+    return out
+  }
+
+  /// Wall-piece ends that meet move onto one point. Two ends meet when they are less than `eps`
+  /// apart, or when one touches the other's piece less than `eps` from that end (a wall that stops
+  /// beside another wall's end), directly or through other ends. Each group moves to its first end
+  /// that touches the outline, else to its first end that touches a piece outside the group, else
+  /// to its first end (pieces are in `canonicalOrder`, `a` before `b`); `snapEnds` then puts it
+  /// on what it touches. Ends that do not meet are then `eps` or more apart, so whether ends meet
+  /// never depends on which of several close ends the arrangement welds first, and an end that
+  /// touches another end is never left open. A piece whose two ends meet is dropped.
+  static func weldEnds(_ pieces: [PlanSegment], outline: [P2], eps: Double) -> [PlanSegment] {
+    var ends: [P2] = []
+    for piece in pieces { ends += [piece.a, piece.b] }
+    // Union-find; each root is the lowest index of its group.
+    var parent = Array(ends.indices)
+    func root(_ i: Int) -> Int {
+      var i = i
+      while parent[i] != i { i = parent[i] }
+      return i
+    }
+    func union(_ i: Int, _ j: Int) {
+      let ri = root(i)
+      let rj = root(j)
+      if ri != rj { parent[max(ri, rj)] = min(ri, rj) }
+    }
+    for i in ends.indices {
+      for j in (i + 1)..<ends.count where Plan2D.dist(ends[i], ends[j]) < eps { union(i, j) }
+    }
+    for i in ends.indices {
+      for (k, piece) in pieces.enumerated() where k != i / 2 {
+        let (distance, t) = Plan2D.segPoint(ends[i], piece.a, piece.b)
+        guard distance < eps else { continue }
+        let length = Plan2D.dist(piece.a, piece.b)
+        let (along, end) = t <= 0.5 ? (t * length, 2 * k) : ((1 - t) * length, 2 * k + 1)
+        if along < eps { union(i, end) }
+      }
+    }
+    // The point of each group.
+    let n = outline.count
+    func touchesOutline(_ p: P2) -> Bool {
+      (0..<n).contains { Plan2D.segPoint(p, outline[$0], outline[($0 + 1) % n]).distance < eps }
+    }
+    func touchesOtherPiece(_ i: Int) -> Bool {
+      pieces.indices.contains { k in
+        root(2 * k) != root(i) && root(2 * k + 1) != root(i)
+          && Plan2D.segPoint(ends[i], pieces[k].a, pieces[k].b).distance < eps
+      }
+    }
+    var groups = [[Int]](repeating: [], count: ends.count)
+    for i in ends.indices { groups[root(i)].append(i) }
+    var point = ends
+    for (r, group) in groups.enumerated() where group.count > 1 {
+      let i =
+        group.first { touchesOutline(ends[$0]) } ?? group.first(where: touchesOtherPiece) ?? r
+      point[r] = ends[i]
+    }
+    var out: [PlanSegment] = []
+    for (k, piece) in pieces.enumerated() {
+      let ra = root(2 * k)
+      let rb = root(2 * k + 1)
+      if ra == rb { continue }
+      var welded = piece
+      welded.a = point[ra]
+      welded.b = point[rb]
+      out.append(welded)
     }
     return out
   }
@@ -200,9 +283,10 @@ struct WalkthroughSegments {
   /// Snaps each end of every segment that is not on the outline, in order: to the first outline
   /// vertex within `eps`, else to the nearest outline edge within `eps`, else to the nearest other
   /// segment within `eps` (inside its span, away from its ends by more than rounding). An end
-  /// next to another segment's end is left to the welding of the arrangement: a closure built to
-  /// reach a wall ends on that wall's line, so the wall's own free end can project exactly onto the
-  /// closure's tip, and rounding must not decide whether that end moves.
+  /// next to another segment's end is left to the welding of the arrangement (wall ends that close
+  /// already coincide, `weldEnds`): a closure built to reach a wall ends on that wall's line, so
+  /// the wall's own free end can project exactly onto the closure's tip, and rounding must not
+  /// decide whether that end moves.
   static func snapEnds(_ segments: inout [PlanSegment], outline: [P2], eps: Double) {
     let n = outline.count
     for k in segments.indices where segments[k].kind != .outline {
@@ -237,7 +321,8 @@ struct WalkthroughSegments {
   }
 
   /// The nearest hit of the ray from `o` along `d` up to `maxLength`: a segment it crosses, or a
-  /// segment end within `lateral` of the ray. Returns the distance along the ray.
+  /// segment end within `lateral` of the ray (no end when `lateral` is negative). Returns the
+  /// distance along the ray.
   static func rayHit(
     _ o: P2, _ d: P2, _ segments: [(P2, P2)], maxLength: Double, lateral: Double, skip: Int? = nil
   ) -> Double? {
@@ -261,10 +346,16 @@ struct WalkthroughSegments {
     return best
   }
 
-  /// Closes each wall-piece end that touches nothing: to the nearest point of another segment
-  /// within `join`; else along the wall to the first segment within `ext` (or to the crossing of
-  /// two such rays, an L corner); else to the nearest vertex within `ext` and 20 degrees of the
-  /// wall direction. Every decision looks only at the segments as they were before closing.
+  /// Closes each wall-piece end that touches nothing (no segment less than `eps` away): to the
+  /// nearest point of another segment within `join` (or, when two such ends would each join the
+  /// other's piece, to each other); else along the wall to the first segment within `ext` (or to
+  /// the crossing of two such rays at 30 degrees or more, an L corner); else to the nearest vertex
+  /// within `ext` and 20 degrees of the wall direction. Every decision looks only at the segments
+  /// as they were before closing.
+  ///
+  /// Two rays that are nearly in line (the ends of a doorway in one wall) make no corner: where
+  /// their lines cross would be decided by rounding, so the result would depend on how the capture
+  /// is turned.
   private mutating func closeDanglingEnds(
     outline: [P2], _ p: WalkthroughSplitter.Parameters, eps: Double
   ) {
@@ -279,7 +370,7 @@ struct WalkthroughSegments {
     for (k, segment) in segments.enumerated() where segment.kind == .wall {
       for (end, other) in [(segment.a, segment.b), (segment.b, segment.a)] {
         let free = base.enumerated().allSatisfy { j, s in
-          j == k || Plan2D.segPoint(end, s.0, s.1).distance > eps
+          j == k || Plan2D.segPoint(end, s.0, s.1).distance >= eps
         }
         if free, let d = Plan2D.unit(end - other) {
           ends.append(End(segment: k, p: end, d: d, wall: segment.wall))
@@ -288,20 +379,54 @@ struct WalkthroughSegments {
     }
     let reach = p.extend
     let rays = ends.map { ($0.p, $0.p + $0.d * reach) }
-    for (i, end) in ends.enumerated() {
-      var near: (distance: Double, point: P2)?
+    // The nearest point of another segment within `join`, per end.
+    let nearest = ends.map { end -> (distance: Double, point: P2, segment: Int)? in
+      var near: (distance: Double, point: P2, segment: Int)?
       for (j, s) in base.enumerated() where j != end.segment {
         let (d, t) = Plan2D.segPoint(end.p, s.0, s.1)
-        if d <= p.join, near == nil || d < near!.distance { near = (d, s.0 + (s.1 - s.0) * t) }
+        if d <= p.join, near == nil || d < near!.distance {
+          near = (d, s.0 + (s.1 - s.0) * t, j)
+        }
       }
-      if let near {
+      return near
+    }
+    // Two ends within `join` of each other that would each join the other's piece (two pieces
+    // in line that overlap a little, side by side) are linked end to end instead: two joins
+    // would cross and close a loop of a few centimetres that hides both pieces from the cuts.
+    var partner = [Int?](repeating: nil, count: ends.count)
+    for i in ends.indices where partner[i] == nil {
+      guard let near = nearest[i] else { continue }
+      var best: (distance: Double, end: Int)?
+      for k in ends.indices where k != i && partner[k] == nil && ends[k].segment == near.segment {
+        let d = Plan2D.dist(ends[i].p, ends[k].p)
+        if nearest[k]?.segment == ends[i].segment, d <= p.join, best == nil || d < best!.distance {
+          best = (d, k)
+        }
+      }
+      if let best {
+        partner[i] = best.end
+        partner[best.end] = i
+      }
+    }
+    for (i, end) in ends.enumerated() {
+      if let k = partner[i] {
+        if i < k {
+          segments.append(PlanSegment(a: end.p, b: ends[k].p, kind: .gap, wall: end.wall))
+        }
+        dangling.append(
+          .init(wall: end.wall ?? -1, method: .join, gapM: Plan2D.dist(end.p, ends[k].p)))
+        continue
+      }
+      if let near = nearest[i] {
         segments.append(PlanSegment(a: end.p, b: near.point, kind: .gap, wall: end.wall))
         dangling.append(.init(wall: end.wall ?? -1, method: .join, gapM: near.distance))
         continue
       }
       let hit = Self.rayHit(end.p, end.d, base, maxLength: reach, lateral: eps, skip: end.segment)
-      let otherRays = rays.enumerated().filter { $0.offset != i }.map(\.element)
-      let corner = Self.rayHit(end.p, end.d, otherRays, maxLength: reach, lateral: 0)
+      let otherRays = ends.indices.filter {
+        $0 != i && abs(Plan2D.cross(ends[$0].d, end.d)) >= Plan2D.sin30
+      }.map { rays[$0] }
+      let corner = Self.rayHit(end.p, end.d, otherRays, maxLength: reach, lateral: -1)
       if let hit, corner == nil || hit <= corner! + 1e-9 {
         segments.append(PlanSegment(a: end.p, b: end.p + end.d * hit, kind: .gap, wall: end.wall))
         dangling.append(.init(wall: end.wall ?? -1, method: .ray, gapM: hit))

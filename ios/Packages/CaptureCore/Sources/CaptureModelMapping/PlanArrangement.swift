@@ -99,15 +99,26 @@ struct PlanArrangement {
     self.eps = eps
     self.boundary = boundary
     for p in boundary { _ = fixedNode(p) }
-    for segment in segments where !segment.fixed {
-      _ = node(segment.a)
-      _ = node(segment.b)
+    // The node of each end of a segment that is not fixed, found once, in segment order.
+    var endNode = [[Int]](repeating: [], count: segments.count)
+    for (i, segment) in segments.enumerated() where !segment.fixed {
+      endNode[i] = [node(segment.a), node(segment.b)]
     }
 
-    // Split parameters: (t, point, append order).
-    var params: [[(t: Double, p: P2, order: Int)]] = segments.map { [(0, $0.a, 0), (1, $0.b, 1)] }
-    func append(_ i: Int, _ t: Double, _ p: P2) {
-      params[i].append((t, p, params[i].count))
+    // Split parameters: (t, point, append order, what the point is). A segment end, wherever it
+    // splits a segment, is the node found for it above, and a crossing is one node on both
+    // segments; found again later, a point could weld to a node made in between, and an edge
+    // would then cross another without a node.
+    enum Source {
+      case end(Int, Int)
+      case crossing(Int)
+    }
+    var params: [[(t: Double, p: P2, order: Int, source: Source)]] = segments.indices.map {
+      [(0, segments[$0].a, 0, .end($0, 0)), (1, segments[$0].b, 1, .end($0, 1))]
+    }
+    var crossings = 0
+    func append(_ i: Int, _ t: Double, _ p: P2, _ source: Source) {
+      params[i].append((t, p, params[i].count, source))
     }
     let n = segments.count
     for i in 0..<n {
@@ -123,27 +134,41 @@ struct PlanArrangement {
         if let r = Plan2D.segSeg(a, b, c, d), -eps / l <= r.t, r.t <= 1 + eps / l,
           -eps / m <= r.u, r.u <= 1 + eps / m
         {
+          // Parameters past an end stay as they are: such a crossing extends the segment, so it
+          // comes before its start or after its end, not between the start and the next point.
           let p = a + (b - a) * r.t
-          append(i, min(1, max(0, r.t)), p)
-          append(j, min(1, max(0, r.u)), p)
+          append(i, r.t, p, .crossing(crossings))
+          append(j, r.u, p, .crossing(crossings))
+          crossings += 1
         }
       }
       // An end that projects onto one of this segment's own ends (for example the free end of a
       // wall next to the tip of a closure built at right angles to that wall) is left to the
       // welding: rounding must not decide whether it also splits this segment.
       for j in 0..<n where j != i {
-        for e in [segments[j].a, segments[j].b] {
+        for (k, e) in [segments[j].a, segments[j].b].enumerated() {
           let (distance, t) = Plan2D.segPoint(e, a, b)
-          if distance <= eps, 1e-9 < t, t < 1 - 1e-9 { append(i, t, e) }
+          if distance < eps, 1e-9 < t, t < 1 - 1e-9 { append(i, t, e, .end(j, k)) }
         }
       }
     }
+    var crossingNode = [Int?](repeating: nil, count: crossings)
     for (i, segment) in segments.enumerated() {
       let sorted = params[i].sorted { ($0.t, $0.order) < ($1.t, $1.order) }
       var ids: [Int] = []
-      let on = segment.fixed ? (segment.a, segment.b) : nil
       for entry in sorted {
-        let id = node(entry.p, on: on)
+        let id: Int
+        switch entry.source {
+        case .end(let j, let k) where !segment.fixed && !endNode[j].isEmpty:
+          id = endNode[j][k]
+        case .crossing(let c) where !segment.fixed && crossingNode[c] != nil:
+          id = crossingNode[c]!
+        case .crossing(let c):
+          id = node(entry.p, on: segment.fixed ? (segment.a, segment.b) : nil)
+          if crossingNode[c] == nil { crossingNode[c] = id }
+        default:
+          id = node(entry.p, on: segment.fixed ? (segment.a, segment.b) : nil)
+        }
         if ids.last != id { ids.append(id) }
       }
       for k in ids.indices.dropFirst() {
@@ -168,10 +193,11 @@ struct PlanArrangement {
     return points.count - 1
   }
 
-  /// The nearest node within `eps` (ties to the lowest id), or a new node. With `on`, only nodes
-  /// within 1e-7 of that segment qualify. Nodes are made in segment order, so of several ends
-  /// within `eps` the first one made stays; the walk-through passes its walls in an order taken
-  /// from the walls themselves (`WalkthroughSegments.canonicalOrder`), not from the file.
+  /// The nearest node less than `eps` away (ties to the lowest id), or a new node. With `on`, only
+  /// nodes within 1e-7 of that segment qualify. Nodes are made in segment order, so of several
+  /// ends within `eps` the first one made stays; the walk-through passes its walls in an order
+  /// taken from the walls themselves (`WalkthroughSegments.canonicalOrder`), not from the file,
+  /// and has already moved wall ends that meet onto one point (`WalkthroughSegments.weldEnds`).
   private mutating func node(_ p: P2, on: (P2, P2)? = nil) -> Int {
     var best: (distance: Double, id: Int)?
     for (i, q) in points.enumerated() {

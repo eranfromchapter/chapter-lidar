@@ -17,6 +17,15 @@ struct WalkthroughCuts {
     /// The virtual segments of the cut; the wall parts are hint edges already in the arrangement.
     var segments: [(P2, P2)]
     var tag: String
+    /// Every kind of candidate that gave these segments, `tag` first: a ray that ends on a stub's
+    /// tip can be the same closure as joining two stubs.
+    var tags: [String]
+
+    init(segments: [(P2, P2)], tag: String) {
+      self.segments = segments
+      self.tag = tag
+      tags = [tag]
+    }
   }
 
   struct Check {
@@ -58,39 +67,77 @@ struct WalkthroughCuts {
     return out
   }
 
-  /// The nearest crossing of the ray from `o` along `d` with the ring, up to `maxLength`, skipping
-  /// the two edges at vertex `skipVertex`.
-  static func boundaryHit(_ poly: [P2], _ o: P2, _ d: P2, maxLength: Double, skipVertex: Int? = nil)
-    -> Double?
-  {
-    var best: Double?
-    let n = poly.count
-    let far = o + d * maxLength
-    for i in 0..<n {
-      if let skipVertex, i == skipVertex || (i + 1) % n == skipVertex { continue }
-      if let r = Plan2D.segSeg(o, far, poly[i], poly[(i + 1) % n]), -1e-9 <= r.u, r.u <= 1 + 1e-9 {
-        let s = r.t * maxLength
-        if 1e-6 < s, s <= maxLength, best == nil || s < best! { best = s }
-      }
-    }
-    return best
+  /// Where a ray stops: the distance along it and the point (on the ray, or the vertex it hits).
+  struct Hit {
+    var distance: Double
+    var point: P2
   }
 
-  static func hintHit(
-    _ arr: PlanArrangement, _ hints: [EdgeKey], _ o: P2, _ d: P2, maxLength: Double,
-    skipNodes: [Int]
-  ) -> Double? {
-    var best: Double?
+  /// The nearest hit of the ray from `o` along `d` up to `maxLength` among `edges`: an edge it
+  /// crosses, or an edge end less than `eps` beside the ray and more than `eps` ahead, which the
+  /// ray then ends on. Whether a ray passes exactly through a vertex is decided by rounding, so a
+  /// vertex just beside it counts as hit, as it does for the closing of wall ends
+  /// (`WalkthroughSegments.rayHit`); an end within `eps` of the nearest crossing wins over it.
+  static func nearestHit(
+    _ o: P2, _ d: P2, _ edges: [(P2, P2)], vertices: [P2], maxLength: Double, eps: Double
+  ) -> Hit? {
+    var crossing: Hit?
     let far = o + d * maxLength
-    for key in hints where !skipNodes.contains(key.u) && !skipNodes.contains(key.v) {
-      if let r = Plan2D.segSeg(o, far, arr.points[key.u], arr.points[key.v]),
-        -1e-9 <= r.u, r.u <= 1 + 1e-9
-      {
+    for edge in edges {
+      if let r = Plan2D.segSeg(o, far, edge.0, edge.1), -1e-9 <= r.u, r.u <= 1 + 1e-9 {
         let s = r.t * maxLength
-        if 1e-6 < s, s <= maxLength, best == nil || s < best! { best = s }
+        if 1e-6 < s, s <= maxLength, crossing == nil || s < crossing!.distance {
+          crossing = Hit(distance: s, point: o + d * s)
+        }
       }
     }
-    return best
+    var vertex: Hit?
+    for v in vertices {
+      let w = v - o
+      let s = Plan2D.dot(w, d)
+      if eps < s, s <= maxLength, abs(Plan2D.cross(d, w)) < eps,
+        vertex == nil || s < vertex!.distance
+      {
+        vertex = Hit(distance: s, point: v)
+      }
+    }
+    if let vertex, crossing == nil || vertex.distance <= crossing!.distance + eps {
+      return vertex
+    }
+    return crossing
+  }
+
+  /// The nearest hit (`nearestHit`) of the ray from `o` along `d` with the ring, up to
+  /// `maxLength`, skipping the two edges at vertex `skipVertex` and their vertices.
+  static func boundaryHit(
+    _ poly: [P2], _ o: P2, _ d: P2, maxLength: Double, eps: Double, skipVertex: Int? = nil
+  ) -> Hit? {
+    let n = poly.count
+    var edges: [(P2, P2)] = []
+    var vertices: [P2] = []
+    for i in 0..<n {
+      let besideSkipped = skipVertex.map { [($0 + n - 1) % n, $0, ($0 + 1) % n].contains(i) }
+      if besideSkipped != true { vertices.append(poly[i]) }
+      if let skipVertex, i == skipVertex || (i + 1) % n == skipVertex { continue }
+      edges.append((poly[i], poly[(i + 1) % n]))
+    }
+    return nearestHit(o, d, edges, vertices: vertices, maxLength: maxLength, eps: eps)
+  }
+
+  /// The nearest hit (`nearestHit`) of the ray from `o` along `d` with the hint edges that do not
+  /// touch `skipNodes`, up to `maxLength`.
+  static func hintHit(
+    _ arr: PlanArrangement, _ hints: [EdgeKey], _ o: P2, _ d: P2, maxLength: Double, eps: Double,
+    skipNodes: [Int]
+  ) -> Hit? {
+    var edges: [(P2, P2)] = []
+    var nodes: [Int] = []
+    for key in hints where !skipNodes.contains(key.u) && !skipNodes.contains(key.v) {
+      edges.append((arr.points[key.u], arr.points[key.v]))
+      for node in [key.u, key.v] where !nodes.contains(node) { nodes.append(node) }
+    }
+    return nearestHit(
+      o, d, edges, vertices: nodes.map { arr.points[$0] }, maxLength: maxLength, eps: eps)
   }
 
   struct StubPath {
@@ -169,7 +216,7 @@ struct WalkthroughCuts {
 
   /// Cut candidates in face `f`, in a fixed order: rays from reflex corners; per wall stub the
   /// extension, the two perpendiculars and bridges to corners and edges; stub to stub; corner to
-  /// corner. Duplicates keep the first.
+  /// corner. Duplicates keep the place and tag of the first and add their tags to its `tags`.
   func candidates(_ arr: PlanArrangement, _ f: Int, _ hints: [EdgeKey]) -> [Candidate] {
     let p = parameters
     let ring = arr.faces[f]
@@ -182,12 +229,13 @@ struct WalkthroughCuts {
       _ o: P2, _ d: P2, _ tag: String, gaps: [(P2, P2)] = [], skipNodes: [Int] = [],
       skipVertex: Int? = nil
     ) {
-      let h = Self.boundaryHit(poly, o, d, maxLength: p.cutMax, skipVertex: skipVertex)
-      if let h { out.append(Candidate(segments: gaps + [(o, o + d * h)], tag: tag)) }
-      if let s = Self.hintHit(arr, hints, o, d, maxLength: p.cutMax, skipNodes: skipNodes),
-        h == nil || s < h! - 1e-9
+      let h = Self.boundaryHit(poly, o, d, maxLength: p.cutMax, eps: eps, skipVertex: skipVertex)
+      if let h { out.append(Candidate(segments: gaps + [(o, h.point)], tag: tag)) }
+      if let s = Self.hintHit(
+        arr, hints, o, d, maxLength: p.cutMax, eps: eps, skipNodes: skipNodes),
+        h == nil || s.distance < h!.distance - 1e-9
       {
-        out.append(Candidate(segments: gaps + [(o, o + d * s)], tag: tag + "-to-stub"))
+        out.append(Candidate(segments: gaps + [(o, s.point)], tag: tag + "-to-stub"))
       }
     }
 
@@ -209,14 +257,13 @@ struct WalkthroughCuts {
         else { continue }
         let d1 = axes.snap(u1)
         let d2 = axes.snap(u2)
-        if let h1 = Self.boundaryHit(poly, pts[0], d1, maxLength: p.cutMax),
-          let h2 = Self.boundaryHit(poly, pts[pts.count - 1], d2, maxLength: p.cutMax)
+        if let h1 = Self.boundaryHit(poly, pts[0], d1, maxLength: p.cutMax, eps: eps),
+          let h2 = Self.boundaryHit(poly, pts[pts.count - 1], d2, maxLength: p.cutMax, eps: eps)
         {
           out.append(
             Candidate(
-              segments: [
-                (pts[0] + d1 * h1, pts[0]), (pts[pts.count - 1], pts[pts.count - 1] + d2 * h2),
-              ], tag: "floating-extend"))
+              segments: [(h1.point, pts[0]), (pts[pts.count - 1], h2.point)],
+              tag: "floating-extend"))
         }
         continue
       }
@@ -260,7 +307,7 @@ struct WalkthroughCuts {
       }
     }
 
-    var seen = Set<[Int64]>()
+    var seen: [[Int64]: Int] = [:]
     var result: [Candidate] = []
     for var candidate in out {
       candidate.segments = candidate.segments.filter { Plan2D.dist($0.0, $0.1) > 1e-9 }
@@ -270,15 +317,23 @@ struct WalkthroughCuts {
         let b = [Self.micro(segment.1.x), Self.micro(segment.1.y)]
         return a.lexicographicallyPrecedes(b) ? a + b : b + a
       }.sorted { $0.lexicographicallyPrecedes($1) }.flatMap { $0 }
-      if seen.contains(key) { continue }
-      seen.insert(key)
+      if let first = seen[key] {
+        if !result[first].tags.contains(candidate.tag) { result[first].tags.append(candidate.tag) }
+        continue
+      }
+      seen[key] = result.count
       result.append(candidate)
     }
     return result
   }
 
-  /// `x` rounded to a micrometre, as an integer key.
-  static func micro(_ x: Double) -> Int64 { Int64((x * 1e6).rounded(.toNearestOrEven)) }
+  /// `x` rounded to a micrometre, as an integer key. Never traps: values beyond about 9e12 m are
+  /// clamped (the splitter refuses plans that large, `WalkthroughInput.isBounded`) and NaN is 0.
+  static func micro(_ x: Double) -> Int64 {
+    let v = (x * 1e6).rounded(.toNearestOrEven)
+    if v.isNaN { return 0 }
+    return Int64(max(-9.2e18, min(9.2e18, v)))
+  }
 
   // MARK: Local check
 
@@ -447,7 +502,14 @@ struct WalkthroughCuts {
       let second = ranked.first { !samePartition(best.check, $0.check, seedCount: inside.count) }
       let trial =
         segments + best.candidate.segments.map { PlanSegment(a: $0.0, b: $0.1, kind: .cut) }
-      if !build(trial).selfCheck() {
+      // The cut must also part the seeds in the whole scan, welded at `eps`; otherwise the same
+      // face would be cut the same way again.
+      let trialArrangement = build(trial)
+      if !trialArrangement.selfCheck()
+        || WalkthroughSeeds.byFace(trialArrangement, seeds).contains(where: {
+          $0.map { seeds[$0].id }.sorted() == key
+        })
+      {
         stuck.append(key)
         diagnostics.unsplit.append(inside.map(\.label))
         continue
@@ -465,13 +527,16 @@ struct WalkthroughCuts {
     return (segments, build(segments))
   }
 
-  static let enclosureTags: Set<String> = [
-    "stub-extend", "chain-extend", "stub-stub", "stub-extend-to-stub", "chain-extend-to-stub",
+  /// The kinds of candidate that may enclose a room, in the order they are reported in when one
+  /// closure is several of them (two stubs joined, whether or not one also extends to the other).
+  static let enclosureTags = [
+    "stub-stub", "stub-extend", "chain-extend", "stub-extend-to-stub", "chain-extend-to-stub",
   ]
 
   /// Closes off rooms without a section: in a face with at most one seed, a short closure (at most
   /// `enclose` long) from a wall stub that cuts off a seedless piece of at least `minPiece` whose
-  /// boundary is mostly real.
+  /// boundary is mostly real. A candidate qualifies when any kind that gave it is an enclosure
+  /// kind (`Candidate.tags`).
   func enclose(
     _ input: [PlanSegment], seeds: [WalkthroughSeed],
     diagnostics: inout WalkthroughSplitter.Diagnostics
@@ -487,8 +552,9 @@ struct WalkthroughCuts {
         if inside.count >= 2 { continue }
         let hints = faceHints(arr, f)
         var best: (candidate: Candidate, check: Check)?
-        for candidate in candidates(arr, f, hints) where Self.enclosureTags.contains(candidate.tag)
-        {
+        for var candidate in candidates(arr, f, hints) {
+          guard let tag = Self.enclosureTags.first(where: candidate.tags.contains) else { continue }
+          candidate.tag = tag
           var length = 0.0
           for segment in candidate.segments { length += Plan2D.dist(segment.0, segment.1) }
           if length > p.enclose { continue }

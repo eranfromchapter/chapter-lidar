@@ -128,6 +128,21 @@ enum WalkthroughInput {
       outline: outline, floorY: loop[0].y, walls: walls, sections: sections, objects: objects)
   }
 
+  /// Farthest a plan coordinate may be from the origin, in metres. RoomPlan measures from where the
+  /// session started, so real captures stay within a few hundred metres; anything past this is a
+  /// corrupt file, and at this size a micrometre is still far above the rounding of a Double.
+  static let coordinateLimit = 1e6
+
+  /// True when every coordinate of the plan (outline, walls, sections, objects) is finite and
+  /// within `coordinateLimit`. The splitter maps any other capture as one room.
+  static func isBounded(_ plan: Plan) -> Bool {
+    var points = plan.outline
+    for wall in plan.walls { points += [wall.a, wall.b] }
+    points += plan.sections.map(\.at)
+    points += plan.objects.map(\.center)
+    return points.allSatisfy { abs($0.x) <= coordinateLimit && abs($0.y) <= coordinateLimit }
+  }
+
   /// The room type only `category` belongs to (`RoomTyping.defining`), or nil.
   static func definingType(of category: ObjectCategory) -> RoomType? {
     RoomTyping.defining.first { $0.categories.contains(category) }?.type
