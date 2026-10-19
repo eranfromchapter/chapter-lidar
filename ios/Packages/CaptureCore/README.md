@@ -89,7 +89,7 @@ outline, two or more sections with a centre) into rooms:
 Types come from `RoomTyping` (sections, then objects); a small room without a type is a closet
 and a long narrow one a hallway (`inferred`). The splitter is pure Double arithmetic with no trig
 and no hash order, so Linux and the phone give the same rooms. Any other capture, or a split that
-fails its checks, maps as before.
+fails its checks, maps as before (goldens in `Tests/CaptureModelMappingTests/Golden`).
 
 ## Raw originals
 

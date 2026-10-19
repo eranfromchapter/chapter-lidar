@@ -93,4 +93,23 @@ struct WalkthroughBuilder {
 
   /// A plain 8 x 5 m rectangle.
   static let rectangle: [(Double, Double)] = [(0, 0), (8, 0), (8, 5), (0, 5)]
+
+  /// Walk-throughs with nothing between their sections to split along (no interior wall, no
+  /// corner): they map as one room, exactly as before phase 3. Their goldens in `Golden/` were
+  /// written by the mapper of commit cd97c36.
+  static var unsplittable: [(name: String, document: RoomPlanDocument)] {
+    var livingKitchen = WalkthroughBuilder(outline: rectangle)
+    livingKitchen.addObject("stove", at: (7.2, 4.4), size: (0.76, 0.92, 0.64))
+    livingKitchen.addObject("sofa", at: (1.5, 1.0), size: (2.1, 0.85, 0.95))
+    livingKitchen.addSection("livingRoom", at: (2.0, 2.5))
+    livingKitchen.addSection("kitchen", at: (6.3, 2.5))
+    var bedroomUnidentified = livingKitchen
+    bedroomUnidentified.sections = []
+    bedroomUnidentified.addSection("bedroom", at: (2.0, 2.5))
+    bedroomUnidentified.addSection("unidentified", at: (6.3, 2.5))
+    return [
+      ("rectangle-living-kitchen", livingKitchen.document),
+      ("rectangle-bedroom-unidentified", bedroomUnidentified.document),
+    ]
+  }
 }

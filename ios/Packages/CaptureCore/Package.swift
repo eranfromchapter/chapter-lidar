@@ -66,7 +66,9 @@ let package = Package(
       dependencies: [
         "CaptureModelMapping", "CaptureTestSupport",
         .product(name: "CaptureContract", package: "swift"),
-      ]
+      ],
+      // Capture models of the mapper before walk-through splitting; the tests read them in place.
+      exclude: ["Golden"]
     ),
     // Empty on Linux; on the macOS runner it checks the RoomPlan Codable assumptions.
     .testTarget(

@@ -1,0 +1,183 @@
+{
+  "areaKey" : "floor-1",
+  "captureId" : "9d4e7b12-5a3c-4f86-b2e1-7c0a9f3d6e58",
+  "coordinateSystem" : {
+    "handedness" : "right",
+    "units" : "m",
+    "up" : "+Y"
+  },
+  "doors" : [
+
+  ],
+  "label" : "Floor 1",
+  "objects" : [
+    {
+      "box" : {
+        "center" : [
+          7.2,
+          -0.85,
+          4.4
+        ],
+        "rotation" : [
+          0,
+          0,
+          0,
+          1
+        ],
+        "sizeM" : [
+          0.76,
+          0.92,
+          0.64
+        ]
+      },
+      "category" : "stove",
+      "confidence" : "high",
+      "id" : "object-1",
+      "roomId" : "room-1"
+    },
+    {
+      "box" : {
+        "center" : [
+          1.5,
+          -0.885,
+          1
+        ],
+        "rotation" : [
+          0,
+          0,
+          0,
+          1
+        ],
+        "sizeM" : [
+          2.1,
+          0.85,
+          0.95
+        ]
+      },
+      "category" : "sofa",
+      "confidence" : "high",
+      "id" : "object-2",
+      "roomId" : "room-1"
+    }
+  ],
+  "openings" : [
+
+  ],
+  "refs" : [
+
+  ],
+  "rooms" : [
+    {
+      "heightM" : 2.49,
+      "id" : "room-1",
+      "label" : "Bedroom",
+      "polygon" : [
+        [
+          0,
+          -1.31,
+          0
+        ],
+        [
+          0,
+          -1.31,
+          5
+        ],
+        [
+          8,
+          -1.31,
+          5
+        ],
+        [
+          8,
+          -1.31,
+          0
+        ]
+      ],
+      "type" : "bedroom",
+      "typeSource" : "roomplan_section"
+    }
+  ],
+  "schemaVersion" : "1.1.0",
+  "visitId" : "6f1c2a8e-3b7d-4e59-9a14-2c8d5e7f0b31",
+  "walls" : [
+    {
+      "confidence" : "high",
+      "end" : [
+        8,
+        -1.31,
+        0
+      ],
+      "heightM" : 2.49,
+      "id" : "wall-1",
+      "roomIds" : [
+        "room-1"
+      ],
+      "start" : [
+        0,
+        -1.31,
+        0
+      ],
+      "thicknessM" : 0
+    },
+    {
+      "confidence" : "high",
+      "end" : [
+        8,
+        -1.31,
+        5
+      ],
+      "heightM" : 2.49,
+      "id" : "wall-2",
+      "roomIds" : [
+        "room-1"
+      ],
+      "start" : [
+        8,
+        -1.31,
+        0
+      ],
+      "thicknessM" : 0
+    },
+    {
+      "confidence" : "high",
+      "end" : [
+        0,
+        -1.31,
+        5
+      ],
+      "heightM" : 2.49,
+      "id" : "wall-3",
+      "roomIds" : [
+        "room-1"
+      ],
+      "start" : [
+        8,
+        -1.31,
+        5
+      ],
+      "thicknessM" : 0
+    },
+    {
+      "confidence" : "high",
+      "end" : [
+        0,
+        -1.31,
+        0
+      ],
+      "heightM" : 2.49,
+      "id" : "wall-4",
+      "roomIds" : [
+        "room-1"
+      ],
+      "start" : [
+        0,
+        -1.31,
+        5
+      ],
+      "thicknessM" : 0
+    }
+  ],
+  "windows" : [
+
+  ]
+}

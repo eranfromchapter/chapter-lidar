@@ -1,0 +1,216 @@
+{
+  "areaKey" : "floor-1",
+  "captureId" : "9d4e7b12-5a3c-4f86-b2e1-7c0a9f3d6e58",
+  "coordinateSystem" : {
+    "handedness" : "right",
+    "units" : "m",
+    "up" : "+Y"
+  },
+  "doors" : [
+    {
+      "bottomM" : 0,
+      "confidence" : "high",
+      "heightM" : 2.1,
+      "id" : "door-1",
+      "isOpen" : false,
+      "offsetM" : 1,
+      "wallId" : "wall-6",
+      "widthM" : 0.9
+    }
+  ],
+  "label" : "Floor 1",
+  "objects" : [
+
+  ],
+  "openings" : [
+    {
+      "bottomM" : 0,
+      "confidence" : "high",
+      "heightM" : 2.1,
+      "id" : "opening-1",
+      "offsetM" : 1,
+      "wallId" : "wall-5",
+      "widthM" : 1
+    }
+  ],
+  "refs" : [
+
+  ],
+  "rooms" : [
+    {
+      "heightM" : 2.7,
+      "id" : "room-1",
+      "label" : "Room 1",
+      "polygon" : [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          4
+        ],
+        [
+          3,
+          0,
+          4
+        ],
+        [
+          3,
+          0,
+          2
+        ],
+        [
+          6,
+          0,
+          2
+        ],
+        [
+          6,
+          0,
+          0
+        ]
+      ]
+    }
+  ],
+  "schemaVersion" : "1.1.0",
+  "visitId" : "6f1c2a8e-3b7d-4e59-9a14-2c8d5e7f0b31",
+  "walls" : [
+    {
+      "confidence" : "high",
+      "end" : [
+        0,
+        0,
+        4
+      ],
+      "heightM" : 2.7,
+      "id" : "wall-1",
+      "roomIds" : [
+        "room-1"
+      ],
+      "start" : [
+        0,
+        0,
+        0
+      ],
+      "thicknessM" : 0
+    },
+    {
+      "confidence" : "high",
+      "end" : [
+        3,
+        0,
+        4
+      ],
+      "heightM" : 2.7,
+      "id" : "wall-2",
+      "roomIds" : [
+        "room-1"
+      ],
+      "start" : [
+        0,
+        0,
+        4
+      ],
+      "thicknessM" : 0
+    },
+    {
+      "confidence" : "high",
+      "end" : [
+        3,
+        0,
+        2
+      ],
+      "heightM" : 2.7,
+      "id" : "wall-3",
+      "roomIds" : [
+        "room-1"
+      ],
+      "start" : [
+        3,
+        0,
+        4
+      ],
+      "thicknessM" : 0
+    },
+    {
+      "confidence" : "high",
+      "end" : [
+        6,
+        0,
+        2
+      ],
+      "heightM" : 2.7,
+      "id" : "wall-4",
+      "roomIds" : [
+        "room-1"
+      ],
+      "start" : [
+        3,
+        0,
+        2
+      ],
+      "thicknessM" : 0
+    },
+    {
+      "confidence" : "high",
+      "end" : [
+        6,
+        0,
+        0
+      ],
+      "heightM" : 2.7,
+      "id" : "wall-5",
+      "roomIds" : [
+        "room-1"
+      ],
+      "start" : [
+        6,
+        0,
+        2
+      ],
+      "thicknessM" : 0
+    },
+    {
+      "confidence" : "high",
+      "end" : [
+        0,
+        0,
+        0
+      ],
+      "heightM" : 2.7,
+      "id" : "wall-6",
+      "roomIds" : [
+        "room-1"
+      ],
+      "start" : [
+        6,
+        0,
+        0
+      ],
+      "thicknessM" : 0
+    }
+  ],
+  "windows" : [
+    {
+      "bottomM" : 0.9,
+      "confidence" : "high",
+      "heightM" : 1.2,
+      "id" : "window-1",
+      "offsetM" : 2,
+      "wallId" : "wall-1",
+      "widthM" : 1.2
+    },
+    {
+      "bottomM" : 0.9,
+      "confidence" : "high",
+      "heightM" : 1.2,
+      "id" : "window-2",
+      "offsetM" : 1.5,
+      "wallId" : "wall-4",
+      "widthM" : 1.2
+    }
+  ]
+}
