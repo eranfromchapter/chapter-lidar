@@ -2,8 +2,11 @@
 // previewed). Every string that comes from the data folder reaches the page through textContent
 // or setAttribute, never innerHTML, so file names, labels and JSON values are always plain text.
 
+// The page's CSP (server.mjs) allows exactly this URL; the hash pins its content, so a changed
+// file from the CDN is refused instead of run.
 const MODEL_VIEWER_URL =
   "https://cdn.jsdelivr.net/npm/@google/model-viewer@3.5.0/dist/model-viewer.min.js";
+const MODEL_VIEWER_SRI = "sha384-Ftcjj/GNLxPvzNDftO/oryXB9aGxsGZY9JGqsXG0uUKgQDl9RfDgsx9NJ/4IVNPe";
 const JSON_PAGE = 200;
 
 const app = document.getElementById("app");
@@ -482,6 +485,13 @@ function captureSection(c, id) {
       ["Finished", c.finishedAt ? fmtDate(c.finishedAt) : null],
       ["In capture record", c.inRecord ? "yes" : "no (not built into a package yet)"],
     ]),
+    c.raw.length === 0 && !c.exports && c.photos.every((p) => p.missing)
+      ? h(
+          "p",
+          { class: "problem" },
+          "None of this capture's files are in this copy: it is known only from the capture record or photo records.",
+        )
+      : null,
     h("h3", {}, "Room sketch"),
     sketchBlock(c),
     h("h3", {}, "Raw scan (originals) ", count(c.raw)),
@@ -498,6 +508,21 @@ function exportsBlock(c) {
     return muted('No exports yet: they are written when "Package ready" is built on the phone.');
   }
   const e = c.exports;
+  if (e.source === "package") {
+    return h(
+      "div",
+      {},
+      h(
+        "p",
+        { class: "muted small" },
+        "From sealed package ",
+        mono(e.packageId),
+        e.sealedAt ? ` · sealed ${fmtDate(e.sealedAt)}` : "",
+        " · no draft in this copy has this capture",
+      ),
+      fileTable(e.files),
+    );
+  }
   const older = c.olderExports.length
     ? h(
         "details",
@@ -726,7 +751,8 @@ function packageBlock(k) {
 // ---------------------------------------------------------------------------------------------
 // File tables and previews
 
-function fileTable(files, { pkg = false, nameOf = (f) => f.name } = {}) {
+// A capture's files carry a label: their path below the capture folder (subfolders included).
+function fileTable(files, { pkg = false, nameOf = (f) => f.label || f.name } = {}) {
   // Fixed layout with set column widths, so a wide preview (a CSV table, a long text line)
   // scrolls inside its own row instead of widening the table.
   const heads = [
@@ -975,14 +1001,20 @@ let modelViewerLoading = null;
 function loadModelViewer() {
   if (customElements.get("model-viewer")) return Promise.resolve();
   modelViewerLoading ??= new Promise((resolve, reject) => {
-    const script = h("script", { type: "module", src: MODEL_VIEWER_URL, crossorigin: "anonymous" });
+    const script = h("script", {
+      type: "module",
+      src: MODEL_VIEWER_URL,
+      integrity: MODEL_VIEWER_SRI,
+      crossorigin: "anonymous",
+      referrerpolicy: "no-referrer",
+    });
     script.addEventListener("load", () => customElements.whenDefined("model-viewer").then(resolve));
     script.addEventListener("error", () => {
       modelViewerLoading = null;
       script.remove();
       reject(
         new Error(
-          "The 3D viewer (@google/model-viewer from cdn.jsdelivr.net) could not be loaded. Offline? Download the GLB instead.",
+          "The 3D viewer (@google/model-viewer from cdn.jsdelivr.net) could not be loaded: offline, or the file did not match its pinned hash. Download the GLB instead.",
         ),
       );
     });
@@ -1072,7 +1104,11 @@ function photoCard(p) {
     h(
       "div",
       { class: "small" },
-      h("a", { href: downloadUrl(p.file.path), download: p.file.name }, p.file.name),
+      h(
+        "a",
+        { href: downloadUrl(p.file.path), download: p.file.name },
+        p.file.label || p.file.name,
+      ),
       ` · ${fmtBytes(p.file.size)}`,
     ),
     p.record ? null : h("div", { class: "warn small" }, "Not in photo-records.json"),

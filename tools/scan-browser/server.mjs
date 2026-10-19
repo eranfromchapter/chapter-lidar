@@ -109,10 +109,17 @@ const SECURITY_HEADERS = {
   "Cache-Control": "no-store",
 };
 
-/** The page itself. The 3D viewer script is the only thing loaded from elsewhere. */
+/**
+ * The 3D viewer, the only script loaded from elsewhere. The CSP allows this one file (not the
+ * whole CDN, which serves any npm package), and the page loads it with an SRI hash (app.js).
+ */
+const MODEL_VIEWER_URL =
+  "https://cdn.jsdelivr.net/npm/@google/model-viewer@3.5.0/dist/model-viewer.min.js";
+
+/** The page itself. */
 const PAGE_CSP = [
   "default-src 'self'",
-  "script-src 'self' https://cdn.jsdelivr.net",
+  `script-src 'self' ${MODEL_VIEWER_URL}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "connect-src 'self' data: blob:",
@@ -194,9 +201,10 @@ async function readdirSafe(dir) {
   }
 }
 
-/** Every regular file under root (symlinks are listed, never followed). */
+/** Every regular file and real folder under root (symlinks are listed, never followed). */
 async function walkFiles(root) {
   const files = [];
+  const dirs = [];
   const symlinks = [];
   async function visit(dir, parts, depth) {
     if (depth > 16 || files.length > 100000) return;
@@ -208,6 +216,7 @@ async function walkFiles(root) {
       if (entry.isSymbolicLink()) {
         symlinks.push(rel);
       } else if (entry.isDirectory()) {
+        dirs.push(rel);
         await visit(abs, rel, depth + 1);
       } else if (entry.isFile()) {
         try {
@@ -220,7 +229,7 @@ async function walkFiles(root) {
     }
   }
   await visit(root, [], 0);
-  return { files, symlinks };
+  return { files, dirs, symlinks };
 }
 
 async function readHead(abs, length) {
@@ -318,22 +327,26 @@ function fileInfo(visitRel, f, extra = {}) {
 
 const newest = (files) => files.reduce((m, f) => Math.max(m, f.mtimeMs), 0);
 
+// Counts keyed by values from the files (phase, role) are kept in Maps and turned into objects
+// with Object.fromEntries, which defines own properties: a value such as "__proto__" or
+// "constructor" is then just another key and never reaches Object.prototype.
+
 function summarizeUploadState(value) {
   const files = Array.isArray(value?.files) ? value.files : [];
-  const phases = {};
+  const phases = new Map();
   let rejected = 0;
   for (const f of files) {
     const phase = typeof f?.phase === "string" ? f.phase : "unknown";
-    phases[phase] = (phases[phase] ?? 0) + 1;
+    phases.set(phase, (phases.get(phase) ?? 0) + 1);
     rejected += Number.isFinite(f?.rejectedUploads) ? f.rejectedUploads : 0;
   }
-  const verified = phases.verified ?? 0;
+  const verified = phases.get("verified") ?? 0;
   const sealStatus = typeof value?.sealResult?.status === "string" ? value.sealResult.status : null;
   return {
     packageId: value?.packageId ?? null,
     dealId: value?.dealId ?? null,
     files: files.length,
-    phases,
+    phases: Object.fromEntries(phases),
     verified,
     rejected,
     sealStatus,
@@ -344,13 +357,14 @@ function summarizeUploadState(value) {
 
 function summarizeManifest(value) {
   const files = Array.isArray(value?.files) ? value.files : [];
-  const roles = {};
+  const roles = new Map();
   let bytes = 0;
   for (const f of files) {
     const role = typeof f?.role === "string" ? f.role : "unknown";
-    roles[role] = roles[role] ?? { files: 0, bytes: 0 };
-    roles[role].files += 1;
-    roles[role].bytes += Number.isFinite(f?.bytes) ? f.bytes : 0;
+    if (!roles.has(role)) roles.set(role, { files: 0, bytes: 0 });
+    const r = roles.get(role);
+    r.files += 1;
+    r.bytes += Number.isFinite(f?.bytes) ? f.bytes : 0;
     bytes += Number.isFinite(f?.bytes) ? f.bytes : 0;
   }
   return {
@@ -360,19 +374,27 @@ function summarizeManifest(value) {
     sealedAt: value?.sealedAt ?? null,
     files: files.length,
     bytes,
-    roles,
+    roles: Object.fromEntries(roles),
   };
 }
 
 /** Walks one visit folder and sorts every file into the VisitWorkspace layout. */
 async function analyzeVisit(visitRel) {
   const { abs } = await resolveDataPath(visitRel, "dir");
-  const { files, symlinks } = await walkFiles(abs);
+  const { files, dirs, symlinks } = await walkFiles(abs);
   const captures = new Map();
   const capture = (areaKey, captureId) => {
     const key = `${areaKey}/${captureId}`;
     if (!captures.has(key)) {
-      captures.set(key, { key, areaKey, captureId, raw: [], photoFiles: [], drafts: new Map() });
+      captures.set(key, {
+        key,
+        areaKey,
+        captureId,
+        raw: [],
+        photoFiles: [],
+        drafts: new Map(),
+        packages: new Map(),
+      });
     }
     return captures.get(key);
   };
@@ -394,21 +416,23 @@ async function analyzeVisit(visitRel) {
   const other = [];
   let photoRecordsFile = null;
 
+  // A file under {areaKey}/{captureId}/ may sit in a subfolder (layout.json: mesh companions), so
+  // the depths below are minimums; such files keep the rest of their path as their label.
   for (const f of files) {
     const p = f.parts;
     const n = p.length;
-    if (p[0] === "originals" && p[1] === "Original Exports" && n === 5) {
+    if (p[0] === "originals" && p[1] === "Original Exports" && n >= 5) {
       capture(p[2], p[3]).raw.push(f);
     } else if (p[0] === "photos" && n === 2 && p[1] === "photo-records.json") {
       photoRecordsFile = f;
-    } else if (p[0] === "photos" && p[1] === "Site Photos" && n === 5) {
+    } else if (p[0] === "photos" && p[1] === "Site Photos" && n >= 5) {
       capture(p[2], p[3]).photoFiles.push(f);
     } else if (p[0] === "controls" && p[1] === "Field Measurements" && n === 4) {
       controls.push(f);
     } else if (p[0] === "drafts" && n >= 3) {
       const d = draft(p[1]);
       d.files.push(f);
-      if (p[2] === "Original Exports" && n === 6) {
+      if (p[2] === "Original Exports" && n >= 6) {
         const c = capture(p[3], p[4]);
         if (!c.drafts.has(d.id)) c.drafts.set(d.id, []);
         c.drafts.get(d.id).push(f);
@@ -425,14 +449,20 @@ async function analyzeVisit(visitRel) {
       k.files.push(f);
       if (p[2] === "Source Register" && n === 5 && p[4] === "capture-record.json") k.recordFile = f;
       if (p[2] === "Source Register" && n === 5 && p[4] === "manifest.json") k.manifestFile = f;
+      if (p[2] === "Original Exports" && n >= 6) {
+        const c = capture(p[3], p[4]);
+        if (!c.packages.has(k.id)) c.packages.set(k.id, []);
+        c.packages.get(k.id).push(f);
+      }
     } else {
       other.push(f);
     }
   }
 
-  // A sealed package folder copied without its files (read-only on the phone) still counts.
-  for (const entry of await readdirSafe(path.join(abs, "packages"))) {
-    if (entry.isDirectory()) pkg(entry.name);
+  // A sealed package folder copied without its files (read-only on the phone) still counts. The
+  // folders come from the walk, so a symlinked packages folder is never read.
+  for (const parts of dirs) {
+    if (parts.length === 2 && parts[0] === "packages") pkg(parts[1]);
   }
   for (const d of drafts.values()) {
     d.builtMs = d.recordFile?.mtimeMs ?? newest(d.files);
@@ -461,6 +491,22 @@ async function analyzeVisit(visitRel) {
     const parsed = await readJson(path.join(abs, ...photoRecordsFile.parts));
     if (Array.isArray(parsed.value))
       photoRecords = parsed.value.filter((r) => r && typeof r === "object");
+  }
+
+  // A capture named by the capture record or a photo record is shown even when none of its files
+  // were copied (a partial copy), so its photo records still appear, as "File missing".
+  const isId = (v) => typeof v === "string" && v.length > 0 && v.length <= 512;
+  const known = new Set([...captures.values()].map((c) => c.captureId));
+  for (const r of [...recordCaptures(record), ...photoRecords]) {
+    if (!isId(r.captureId) || known.has(r.captureId)) continue;
+    const fromPath = typeof r.path === "string" ? r.path.split("/") : [];
+    const areaKey = isId(r.areaKey)
+      ? r.areaKey
+      : fromPath[0] === "Site Photos" && isId(fromPath[1])
+        ? fromPath[1]
+        : "unknown";
+    capture(areaKey, r.captureId);
+    known.add(r.captureId);
   }
 
   for (const k of packages.values()) {
@@ -604,27 +650,40 @@ async function visitDetail(visitRel) {
   );
   const photoRoot = (f) => f.parts.slice(1).join("/");
 
+  // A capture's file is labelled by its path below {areaKey}/{captureId}/: that folder is 4 parts
+  // deep in originals and photos, 5 in drafts and packages.
+  const captureFile = (depth) => (f) => info(f, { label: f.parts.slice(depth).join("/") });
+
   const captures = captureList.map((c) => {
     const rec = recordCaps.find((r) => r.captureId === c.captureId) ?? null;
     const exportsList = a.drafts
       .filter((d) => c.drafts.has(d.id))
       .map((d) => ({
+        source: "draft",
         draftId: d.id,
         builtAt: iso(d.builtMs),
         latest: d === a.latestDraft,
-        files: c.drafts.get(d.id).map((f) => info(f)),
+        files: c.drafts.get(d.id).map(captureFile(5)),
       }));
-    const exports = exportsList[0] ?? null;
-    let sketchPath = exports?.files.find((f) => f.name === "capture-model.json")?.path ?? null;
+    // No draft has this capture (drafts/ missing from a partial copy, say): the newest sealed
+    // package that has it holds the same exports.
+    const sealed = a.packages.find((k) => c.packages.has(k.id)) ?? null;
+    const sealedAt = sealed?.manifest?.sealedAt;
+    const fromPackage = sealed
+      ? {
+          source: "package",
+          packageId: sealed.id,
+          sealedAt: typeof sealedAt === "string" ? sealedAt : null,
+          files: c.packages.get(sealed.id).map(captureFile(5)),
+        }
+      : null;
+    const exports = exportsList[0] ?? fromPackage;
+    let sketchPath = exports?.files.find((f) => f.label === "capture-model.json")?.path ?? null;
     if (!sketchPath) {
       for (const k of a.packages) {
-        const f = k.files.find(
-          (x) =>
-            x.parts[2] === "Original Exports" &&
-            x.parts[3] === c.areaKey &&
-            x.parts[4] === c.captureId &&
-            x.parts[5] === "capture-model.json",
-        );
+        const f = c.packages
+          .get(k.id)
+          ?.find((x) => x.parts.length === 6 && x.parts[5] === "capture-model.json");
         if (f) {
           sketchPath = `${visitRel}/${f.parts.join("/")}`;
           break;
@@ -633,7 +692,7 @@ async function visitDetail(visitRel) {
     }
     const photos = c.photoFiles.map((f) => {
       const r = a.photoRecords.find((x) => x.path === photoRoot(f)) ?? null;
-      return { file: info(f), record: r, missing: false };
+      return { file: captureFile(4)(f), record: r, missing: false };
     });
     for (const r of a.photoRecords) {
       if (r.captureId !== c.captureId) continue;
@@ -650,7 +709,7 @@ async function visitDetail(visitRel) {
       capturedAt: rec?.capturedAt ?? null,
       finishedAt: rec?.finishedAt ?? null,
       inRecord: !!rec,
-      raw: c.raw.map((f) => info(f)),
+      raw: c.raw.map(captureFile(4)),
       exports,
       olderExports: exportsList.slice(1),
       photos,
@@ -839,11 +898,13 @@ async function csvPreview(abs, stat) {
 function redactUploadState(value) {
   if (Array.isArray(value)) return value.map(redactUploadState);
   if (value && typeof value === "object") {
-    const out = {};
-    for (const [key, v] of Object.entries(value)) {
-      out[key] = key === "target" && v !== null ? "[hidden: upload target]" : redactUploadState(v);
-    }
-    return out;
+    // fromEntries: a "__proto__" key from the file stays an own key (see summarizeUploadState).
+    return Object.fromEntries(
+      Object.entries(value).map(([key, v]) => [
+        key,
+        key === "target" && v !== null ? "[hidden: upload target]" : redactUploadState(v),
+      ]),
+    );
   }
   return value;
 }
@@ -1678,29 +1739,54 @@ function localPathFor(rel) {
   return dest;
 }
 
-/** Creates a folder chain inside DATA; folders copied read-only by hand are made owner-writable. */
+/**
+ * Creates a folder chain inside DATA. New folders are owner-only (0700): they hold photos and
+ * plans of real homes. Folders copied read-only by hand are made owner-writable. A symlink or a
+ * file in the way fails; the error's `dir` is the folder that failed.
+ */
 async function ensureWritableDir(dir) {
-  const parts = path.relative(DATA, dir).split(path.sep).filter(Boolean);
   let current = DATA;
-  for (const part of parts) {
-    current = path.join(current, part);
-    let st;
-    try {
-      st = await fsp.lstat(current);
-    } catch (err) {
-      if (err.code !== "ENOENT") throw err;
+  try {
+    for (const part of path.relative(DATA, dir).split(path.sep).filter(Boolean)) {
+      current = path.join(current, part);
       try {
-        await fsp.mkdir(current);
-      } catch (mkdirErr) {
-        if (mkdirErr.code !== "EEXIST") throw mkdirErr;
+        await fsp.mkdir(current, { mode: 0o700 });
+        continue; // Made just now: a real folder.
+      } catch (err) {
+        if (err.code !== "EEXIST") throw err;
       }
-      continue;
+      const st = await fsp.lstat(current);
+      if (st.isSymbolicLink() || !st.isDirectory())
+        throw new Error(`${path.relative(DATA, current)} is not a folder`);
+      if ((st.mode & 0o700) !== 0o700) await fsp.chmod(current, (st.mode & 0o7777) | 0o700);
     }
-    if (st.isSymbolicLink() || !st.isDirectory())
-      throw new Error(`${path.relative(DATA, current)} is not a folder`);
-    if ((st.mode & 0o700) !== 0o700) await fsp.chmod(current, (st.mode & 0o7777) | 0o700);
+  } catch (err) {
+    err.dir = current;
+    throw err;
   }
 }
+
+/**
+ * True when every component from DATA down to dir is a real folder (no symlink, nothing missing).
+ * Checked right before sync writes into a folder or sets its time, so a symlink inside the data
+ * folder can never send a write outside it: sync refuses symlinks just as the read side does.
+ */
+async function isRealDirInsideData(dir) {
+  if (dir !== DATA && !isInsideData(dir)) return false;
+  let current = DATA;
+  for (const part of path.relative(DATA, dir).split(path.sep).filter(Boolean)) {
+    current = path.join(current, part);
+    try {
+      const st = await fsp.lstat(current);
+      if (st.isSymbolicLink() || !st.isDirectory()) return false;
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
+const isUnder = (p, dir) => p === dir || p.startsWith(dir + path.sep);
 
 class SyncStop extends Error {}
 
@@ -1759,7 +1845,7 @@ async function runSync() {
     const remote = parseRemoteListing(JSON.parse(await fsp.readFile(filesJson, "utf8")));
 
     // Plan: folders first (so empty visits show up too), then every file that is new or changed.
-    const queue = [];
+    const files = [];
     const dirs = new Set();
     for (const item of remote) {
       if (item.isLink) continue;
@@ -1772,11 +1858,39 @@ async function runSync() {
       }
       if (item.isDir) {
         dirs.add(local);
+      } else {
+        dirs.add(path.dirname(local));
+        files.push({ ...item, local });
+      }
+    }
+    // A folder that cannot be made (a symlink or a file is in the way) takes every file under it
+    // out of the copy, so nothing is written through a symlink.
+    const badDirs = [];
+    for (const dir of [...dirs].sort()) {
+      if (badDirs.some((bad) => isUnder(dir, bad))) continue; // Reported with its parent.
+      try {
+        await ensureWritableDir(dir);
+      } catch (err) {
+        const bad = err.dir ?? dir;
+        badDirs.push(bad);
+        s.failures.push({
+          path: path.relative(DATA, bad),
+          error: `Folder could not be created: ${err.message}`,
+        });
+      }
+    }
+    const queue = [];
+    for (const item of files) {
+      const bad = badDirs.find((dir) => isUnder(item.local, dir));
+      if (bad) {
+        s.failures.push({
+          path: item.rel,
+          error: `Not copied: its folder ${path.relative(DATA, bad)} could not be created.`,
+        });
         continue;
       }
-      dirs.add(path.dirname(local));
       try {
-        const st = await fsp.lstat(local);
+        const st = await fsp.lstat(item.local);
         if (
           st.isFile() &&
           st.size === item.size &&
@@ -1789,17 +1903,7 @@ async function runSync() {
       } catch {
         // Not copied yet.
       }
-      queue.push({ ...item, local });
-    }
-    for (const dir of [...dirs].sort()) {
-      try {
-        await ensureWritableDir(dir);
-      } catch (err) {
-        s.failures.push({
-          path: path.relative(DATA, dir),
-          error: `Folder could not be created: ${err.message}`,
-        });
-      }
+      queue.push(item);
     }
     s.total = queue.length;
     s.totalBytes = queue.reduce((sum, q) => sum + q.size, 0);
@@ -1812,6 +1916,16 @@ async function runSync() {
         const item = queue[next];
         next += 1;
         s.message = `Copying ${Math.min(s.done + 1, s.total)} of ${s.total} files from ${device.name}…`;
+        if (!(await isRealDirInsideData(path.dirname(item.local)))) {
+          // A symlink appeared in the folder chain after it was made: never write through it.
+          s.failures.push({
+            path: item.rel,
+            error: "Not copied: its folder in the data folder is a symbolic link or is missing.",
+          });
+          s.done += 1;
+          s.doneBytes += item.size;
+          continue;
+        }
         const tmpName = path.join(
           path.dirname(item.local),
           `.${path.basename(item.local)}.partial-${randomBytes(4).toString("hex")}`,
@@ -1853,7 +1967,7 @@ async function runSync() {
         } else {
           consecutiveFailures = 0;
           if (Number.isFinite(item.mtimeMs))
-            await fsp.utimes(item.local, new Date(), new Date(item.mtimeMs)).catch(() => {});
+            await fsp.lutimes(item.local, new Date(), new Date(item.mtimeMs)).catch(() => {});
           s.copied += 1;
           s.copiedBytes += item.size;
         }
@@ -1865,11 +1979,14 @@ async function runSync() {
     // Folder times as on the phone (deepest first), so an empty visit shows when it was started.
     const remoteDirs = remote.filter((item) => item.isDir && Number.isFinite(item.mtimeMs));
     remoteDirs.sort((a, b) => b.rel.split("/").length - a.rel.split("/").length);
+    // Only real folders: a symlink anywhere in the chain is skipped, as it is for files.
     for (const item of remoteDirs) {
       try {
-        await fsp.utimes(localPathFor(item.rel), new Date(), new Date(item.mtimeMs));
+        const local = localPathFor(item.rel);
+        if (!(await isRealDirInsideData(local))) continue; // Not created (already reported).
+        await fsp.lutimes(local, new Date(), new Date(item.mtimeMs));
       } catch {
-        // Not created (already reported) or not settable: the time is only informational.
+        // Not settable: the time is only informational.
       }
     }
     if (consecutiveFailures >= 6 && s.done < s.total) {
@@ -2088,9 +2205,14 @@ async function main() {
     process.exit(2);
   };
   if (insideRepo(config.dataDir)) refuse(config.dataDir);
-  await fsp.mkdir(config.dataDir, { recursive: true });
+  // Owner-only (0700), like every folder sync makes: on macOS every standard account is in the
+  // staff group, so a 0755 folder would let other accounts on the Mac read the photos and plans.
+  // A folder that already exists is left as it is, with a note when others can open it.
+  const created = await fsp.mkdir(config.dataDir, { recursive: true, mode: 0o700 });
   DATA = await fsp.realpath(config.dataDir);
   if (insideRepo(DATA)) refuse(DATA);
+  if (created !== undefined) await fsp.chmod(DATA, 0o700);
+  const dataMode = (await fsp.stat(DATA)).mode & 0o777;
   CACHE = cacheRoot();
   await fsp.mkdir(CACHE, { recursive: true, mode: 0o700 });
   PORT = config.port;
@@ -2116,6 +2238,11 @@ async function main() {
   server.listen(PORT, "127.0.0.1", () => {
     console.log(`Scan browser: http://127.0.0.1:${PORT}/`);
     console.log(`Data folder:  ${DATA}`);
+    if (dataMode & 0o077) {
+      console.warn(
+        `Note: other accounts on this Mac can open the data folder (mode ${dataMode.toString(8)}). To keep the scans private: chmod 700 "${DATA}"`,
+      );
+    }
   });
 }
 

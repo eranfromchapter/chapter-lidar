@@ -17,7 +17,10 @@ SCAN_BROWSER_DATA=~/some/folder npm run scan-browser
 Then open <http://127.0.0.1:4321/>. Node 22, no dependencies, no build step.
 
 The data folder must be outside this repository (the server refuses to start otherwise): it holds
-photos and floor plans of real homes.
+photos and floor plans of real homes. The server creates it owner-only (`0700`), and sync creates
+its folders the same way, so other accounts on the Mac cannot read them. A data folder that already
+exists keeps its permissions; the server prints a note with the `chmod 700` command when other
+accounts can open it.
 
 ## What it shows
 
@@ -26,7 +29,9 @@ operator, project, deal and address, areas, file counts and a status: _scanned_ 
 _package built_ (a `drafts/` build), _sealed_ (`packages/`) and the upload state of each sealed
 package (files verified, station status).
 
-**Visit page**, per capture (area label, area key and capture id):
+**Visit page**, per capture (area label, area key and capture id). A capture is shown when any of
+its files are present, or when the capture record or a photo record names it, so a partial copy
+still lists its captures and their missing photos:
 
 - **Room sketch**: a top-down SVG of `capture-model.json` from the latest draft (rooms with labels
   and areas in m² and ft², walls, doors, windows and openings). Plan axes are x and z; plan up is
@@ -34,9 +39,12 @@ package (files verified, station status).
 - **Raw scan (originals)**: `roomplan.json`, `depth-samples.bin`, `camera-poses.json`,
   `mesh-anchors.bin`.
 - **Exports** from the latest draft that has this capture (the draft id and build time are shown;
-  older drafts are listed below it).
-- **Photos** with room, direction and subject from `photo-records.json`. HEIC is converted to JPEG
-  on the fly with macOS `sips`, cached in `~/Library/Caches/ChapterScanBrowser`.
+  older drafts are listed below it). When no draft has the capture (a copy without `drafts/`), the
+  exports come from the newest sealed package that has them. Files in subfolders of a capture
+  folder (mesh companions) are listed with their subfolder.
+- **Photos** with room, direction and subject from `photo-records.json`; a record whose file is
+  not in the copy shows as "File missing". HEIC is converted to JPEG on the fly with macOS `sips`,
+  cached in `~/Library/Caches/ChapterScanBrowser`.
 
 Visit-wide: field controls, source register (capture record), photo records, sealed packages (each
 file with its manifest role and upload phase, plus the manifest and upload state), all drafts, and
@@ -54,7 +62,7 @@ Every file has its size, modified time, Open, Download and a Preview:
 | `*.upload-state.json`      | phases and station status; upload targets (SAS URLs) are hidden   |
 | `manifest.json`            | files per role, sizes, sealed time                                |
 | CSV                        | a table                                                           |
-| GLB                        | `@google/model-viewer` 3.5.0, loaded from jsDelivr only on demand |
+| GLB                        | `@google/model-viewer` 3.5.0, jsDelivr, on demand, hash-pinned    |
 | OBJ, MTL, DXF              | the first 64 KB as text                                           |
 | LAS                        | header: version, point format, point count, scale, offset, bounds |
 | `depth-samples.bin` (CHDS) | sample count, size check, bounds, confidence and colour counts    |
@@ -73,6 +81,11 @@ single `devicectl device copy from` of the whole folder creates read-only folder
 their files ("Permission denied"). Folders copied that way by hand are made owner-writable and
 filled in on the next sync. Failed files are listed with devicectl's reason; the rest still copy.
 
+Sync never writes through a symbolic link. A folder that cannot be made because a symlink or a
+file is in the way is reported, and every file under it is skipped (and listed as failed). Right
+before each file is copied, and before a folder's time is set, every folder from the data folder
+down to it is checked again with `lstat`.
+
 It uses `DEVELOPER_DIR` when set, else `/Applications/Xcode-beta.app`, else `/Applications/Xcode.app`.
 With no phone connected, no Xcode, or the app not installed, it says so instead of failing.
 
@@ -83,10 +96,17 @@ With no phone connected, no Xcode, or the app not installed, it says so instead 
   `Origin`, so another web page cannot trigger it.
 - Files are served only from inside the data folder: every path is split into segments (no `..`,
   empty or absolute segments, backslashes or NUL), resolved, and checked again after `realpath`, so
-  symlinks cannot escape it. Symlinks inside visits are listed, never followed.
+  symlinks cannot escape it. Symlinks inside visits are listed, never followed, and folders are
+  listed from the same walk (a symlinked `packages` folder is never read). Sync writes only into
+  real folders (see above).
 - The page never uses `innerHTML`: every file name, label and JSON value is set as text. A strict
-  Content Security Policy allows scripts only from the server and jsDelivr (for the 3D viewer).
-  Raw files are served with `X-Content-Type-Options: nosniff` and a sandbox policy (PDFs excepted,
-  which the browser's viewer needs), and never as HTML.
+  Content Security Policy allows scripts only from the server and the one pinned
+  `model-viewer.min.js` URL on jsDelivr (not the whole CDN), and the page loads that file with an
+  SRI hash, so a changed file is refused. Raw files are served with
+  `X-Content-Type-Options: nosniff` and a sandbox policy (PDFs excepted, which the browser's viewer
+  needs), and never as HTML.
+- Counts keyed by values from the files (manifest roles, upload phases) are kept in `Map`s, and the
+  redacted upload state is rebuilt with `Object.fromEntries`, so a key such as `__proto__` stays
+  plain data and cannot change `Object.prototype`.
 - `devicectl` and `sips` run through `execFile` with argument arrays; no shell.
 - No network calls except to the phone (devicectl) and, when a GLB is previewed, jsDelivr.
