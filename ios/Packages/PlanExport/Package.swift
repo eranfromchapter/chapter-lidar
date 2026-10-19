@@ -1,6 +1,7 @@
 // swift-tools-version: 6.0
 // PlanExport: plan files written from a CaptureModel on the phone, with no network:
-// DXF, room CSV, plan PDF, Spatial Report PDF, PNG and SVG previews.
+// DXF, room CSV, plan PDF, Spatial Report PDF, PNG and SVG previews, and the one-page colour
+// Floorplan (PDF and SVG).
 // Pure Swift + Foundation (no CoreGraphics, PDFKit or UIKit) so every writer builds and tests on Linux.
 import PackageDescription
 

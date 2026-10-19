@@ -1,10 +1,10 @@
 import Foundation
 
 /// Minimal PDF 1.7 writer: pages of vector lines, polylines, rectangles, Bezier paths (arcs,
-/// circles) and text in the standard fonts Helvetica (F1) and Helvetica-Bold (F2) with WinAnsi
-/// encoding. Gray or RGB colour, dash patterns, line caps and joins, and clipping. Content
-/// streams are uncompressed so every string stays extractable as text. Coordinates are points
-/// with the origin at the bottom-left of the page.
+/// circles) and text in the standard fonts Helvetica (F1), Helvetica-Bold (F2) and, for the
+/// wordmark, Times-Roman (F3) with WinAnsi encoding. Gray or RGB colour, dash patterns, line
+/// caps and joins, and clipping. Content streams are uncompressed so every string stays
+/// extractable as text. Coordinates are points with the origin at the bottom-left of the page.
 final class PDFPage {
   let width: Double
   let height: Double
@@ -251,15 +251,23 @@ final class PDFPage {
     return out
   }
 
+  /// True once a text was drawn in Times-Roman (F3); the document then declares that font.
+  private(set) var usesSerif = false
+
   /// Draws `text` with its baseline start, centre or end at (x, y), turned counter-clockwise by
-  /// `rotation` degrees. Uses the current fill colour.
+  /// `rotation` degrees. Uses the current fill colour. `serif` sets it in Times-Roman (F3);
+  /// `letterSpacing` adds that many points after each character (`Tc`, saved and restored
+  /// around the text so later text is not spaced).
   func text(
     _ text: String, x: Double, y: Double, size: Double, bold: Bool = false,
-    anchor: Anchor = .leading, rotation: Double = 0
+    anchor: Anchor = .leading, rotation: Double = 0, serif: Bool = false,
+    letterSpacing: Double = 0
   ) {
     let clean = Format.singleLine(text)
     guard !clean.isEmpty else { return }
-    let width = FontMetrics.width(clean, size: size, bold: bold)
+    let width =
+      FontMetrics.width(clean, size: size, bold: bold, serif: serif)
+      + letterSpacing * Double(max(0, clean.unicodeScalars.count - 1))
     let shift: Double
     switch anchor {
     case .leading: shift = 0
@@ -271,12 +279,18 @@ final class PDFPage {
     let s = sin(radians)
     let startX = x + shift * c
     let startY = y + shift * s
-    emit("BT /\(bold ? "F2" : "F1") \(PDFPage.num(size)) Tf ")
+    let spaced = letterSpacing != 0
+    if spaced { emit("q\n") }
+    if serif { usesSerif = true }
+    let font = serif ? "F3" : bold ? "F2" : "F1"
+    emit("BT /\(font) \(PDFPage.num(size)) Tf ")
+    if spaced { emit("\(PDFPage.num(letterSpacing)) Tc ") }
     emit(
       "\(Format.fixed(c, 5)) \(Format.fixed(s, 5)) \(Format.fixed(-s, 5)) \(Format.fixed(c, 5)) "
         + "\(PDFPage.num(startX)) \(PDFPage.num(startY)) Tm (")
     content.append(contentsOf: PDFPage.encode(clean))
     emit(") Tj ET\n")
+    if spaced { emit("Q\n") }
   }
 
   // MARK: WinAnsi
@@ -331,13 +345,16 @@ struct PDFDocument {
   /// Serialises the document with a correct cross-reference table.
   func render() -> Data {
     // Object numbers: 1 catalog, 2 pages, 3 Helvetica, 4 Helvetica-Bold, 5 info,
-    // then page and content stream pairs.
+    // then page and content stream pairs, then Times-Roman when a page uses it (so documents
+    // without serif text are written exactly as before).
     var objects: [[UInt8]] = []
     func ascii(_ text: String) -> [UInt8] { Array(text.utf8) }
     func string(_ text: String) -> String {
       "(" + String(decoding: PDFPage.encode(text), as: UTF8.self) + ")"
     }
     let pageCount = pages.count
+    let serifNumber = pages.contains(where: \.usesSerif) ? 6 + pageCount * 2 : nil
+    let serifResource = serifNumber.map { " /F3 \($0) 0 R" } ?? ""
     let kids = (0..<pageCount).map { "\(6 + $0 * 2) 0 R" }.joined(separator: " ")
     objects.append(ascii("<< /Type /Catalog /Pages 2 0 R /Lang (en-US) >>"))
     objects.append(ascii("<< /Type /Pages /Kids [\(kids)] /Count \(pageCount) >>"))
@@ -356,12 +373,17 @@ struct PDFDocument {
       objects.append(
         ascii(
           "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 \(Format.fixed(page.width, 3)) "
-            + "\(Format.fixed(page.height, 3))] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> "
-            + "/Contents \(contentNumber) 0 R >>"))
+            + "\(Format.fixed(page.height, 3))] /Resources << /Font << /F1 3 0 R /F2 4 0 R"
+            + "\(serifResource) >> >> /Contents \(contentNumber) 0 R >>"))
       var stream = ascii("<< /Length \(page.content.count) >>\nstream\n")
       stream.append(contentsOf: page.content)
       stream.append(contentsOf: ascii("endstream"))
       objects.append(stream)
+    }
+    if serifNumber != nil {
+      objects.append(
+        ascii(
+          "<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman /Encoding /WinAnsiEncoding >>"))
     }
 
     var out: [UInt8] = ascii("%PDF-1.7\n")

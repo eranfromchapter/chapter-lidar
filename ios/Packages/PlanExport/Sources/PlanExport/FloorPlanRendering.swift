@@ -1,8 +1,8 @@
 import CaptureContract
 import Foundation
 
-// Writers for `FloorPlanDrawing`: onto a PDF page, as SVG, and a one-page colour floor plan
-// sheet (title, address, total area, the plan, compass and scale bar).
+// Writers for `FloorPlanDrawing`: onto a PDF page and as SVG. The one-page floor plan with its
+// title, address and total area is `FloorplanWriter`.
 
 extension FloorPlanDrawing {
   /// Draws the drawing on `page` with its bounds' lower-left corner at (`x`, `y`) points, at
@@ -36,17 +36,6 @@ extension FloorPlanDrawing {
   public func svg(title: String) -> String {
     let b = bounds
     func n(_ value: Double) -> String { Format.fixed(value, 2) }
-    func point(_ p: DrawingPoint) -> String { "\(n(p.x)) \(n(b.maxY - p.y))" }
-    func path(_ path: DrawingPath) -> String {
-      path.elements.map { element -> String in
-        switch element {
-        case .move(let p): return "M\(point(p))"
-        case .line(let p): return "L\(point(p))"
-        case .curve(let c1, let c2, let p): return "C\(point(c1)) \(point(c2)) \(point(p))"
-        case .close: return "Z"
-        }
-      }.joined(separator: " ")
-    }
     let denominator = options.scaleDenominator
     var out = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
     out +=
@@ -60,6 +49,31 @@ extension FloorPlanDrawing {
     out +=
       "  <rect x=\"0\" y=\"0\" width=\"\(n(b.width))\" height=\"\(n(b.height))\" "
       + "fill=\"#ffffff\"/>\n"
+    out += DrawingSVG.elements(items, minX: b.minX, maxY: b.maxY)
+    out += "</svg>\n"
+    return out
+  }
+}
+
+/// SVG elements for drawing primitives: one `<g class="layer">` per run of items on the same
+/// layer, paths with their fill and stroke, text in Helvetica (Times for serif text), and
+/// clipped groups. Coordinates are moved so `minX` is 0 and flipped so `maxY` is the top (SVG
+/// y runs down), two decimals.
+enum DrawingSVG {
+  static func elements(_ items: [DrawingItem], minX: Double, maxY: Double) -> String {
+    func n(_ value: Double) -> String { Format.fixed(value, 2) }
+    func point(_ p: DrawingPoint) -> String { "\(n(p.x - minX)) \(n(maxY - p.y))" }
+    func path(_ path: DrawingPath) -> String {
+      path.elements.map { element -> String in
+        switch element {
+        case .move(let p): return "M\(point(p))"
+        case .line(let p): return "L\(point(p))"
+        case .curve(let c1, let c2, let p): return "C\(point(c1)) \(point(c2)) \(point(p))"
+        case .close: return "Z"
+        }
+      }.joined(separator: " ")
+    }
+    var out = ""
     var openLayer: DrawingLayer?
     var clipCount = 0
     func open(_ layer: DrawingLayer, indent: String) {
@@ -87,8 +101,8 @@ extension FloorPlanDrawing {
         out += "\(indent)  <path \(attributes)/>\n"
       case .text(let text):
         open(text.layer, indent: indent)
-        let x = n(text.position.x)
-        let y = n(b.maxY - text.position.y)
+        let x = n(text.position.x - minX)
+        let y = n(maxY - text.position.y)
         let anchor: String
         switch text.anchor {
         case .leading: anchor = "start"
@@ -98,10 +112,14 @@ extension FloorPlanDrawing {
         let rotate =
           text.rotationDegrees == 0
           ? "" : " transform=\"rotate(\(n(-text.rotationDegrees)) \(x) \(y))\""
+        let family =
+          text.serif ? "Times New Roman, Times, serif" : "Helvetica, Arial, sans-serif"
+        let weight = text.bold && !text.serif ? " font-weight=\"bold\"" : ""
+        let spacing = text.letterSpacing == 0 ? "" : " letter-spacing=\"\(n(text.letterSpacing))\""
         out +=
-          "\(indent)  <text x=\"\(x)\" y=\"\(y)\" font-family=\"Helvetica, Arial, sans-serif\" "
+          "\(indent)  <text x=\"\(x)\" y=\"\(y)\" font-family=\"\(family)\" "
           + "font-size=\"\(n(text.size))\" text-anchor=\"\(anchor)\" "
-          + "fill=\"\(text.color.hexString)\"\(text.bold ? " font-weight=\"bold\"" : "")"
+          + "fill=\"\(text.color.hexString)\"\(weight)\(spacing)"
           + "\(rotate)>\(SVGWriter.escape(text.string))</text>\n"
       case .clipped(let clip, let children):
         if openLayer != nil {
@@ -121,7 +139,6 @@ extension FloorPlanDrawing {
     }
     for item in items { emit(item, indent: "  ") }
     if openLayer != nil { out += "  </g>\n" }
-    out += "</svg>\n"
     return out
   }
 }
@@ -227,7 +244,8 @@ struct PDFDrawingRenderer {
         }
         page.text(
           text.string, x: x(text.position), y: y(text.position), size: text.size * scale,
-          bold: text.bold, anchor: anchor, rotation: text.rotationDegrees)
+          bold: text.bold, anchor: anchor, rotation: text.rotationDegrees, serif: text.serif,
+          letterSpacing: text.letterSpacing * scale)
       case .clipped(let clip, let children):
         page.saveState()
         page.clip(pdfPath(clip))
@@ -236,70 +254,5 @@ struct PDFDrawingRenderer {
         page.restoreState()
       }
     }
-  }
-}
-
-/// A one-page colour floor plan: "Floorplan", the address and the approximate total area at
-/// the top, the drawing fitted to the page (Letter landscape) with its compass and scale bar,
-/// and a note that measurements are estimates. Not part of `PlanExporter.exportAll`.
-public enum FloorPlanSheet {
-  static let pageWidthMM = 279.4
-  static let pageHeightMM = 215.9
-  static let marginMM = 12.0
-  static let headerMM = 30.0
-  static let footerMM = 10.0
-
-  /// The fitted drawing for the sheet's drawing area.
-  public static func drawing(model: CaptureModel, options: FloorPlanDrawing.Options) throws
-    -> FloorPlanDrawing
-  {
-    try FloorPlanDrawing.fitted(
-      model: model, widthMM: pageWidthMM - 2 * marginMM,
-      heightMM: pageHeightMM - 2 * marginMM - headerMM - footerMM, options: options)
-  }
-
-  public static func pdf(
-    model: CaptureModel, address: String, creationDate: String = "D:20260101000000Z",
-    options: FloorPlanDrawing.Options = FloorPlanDrawing.Options()
-  ) throws -> Data {
-    let drawing = try drawing(model: model, options: options)
-    let mm = 72.0 / 25.4
-    let page = PDFPage(width: pageWidthMM * mm, height: pageHeightMM * mm)
-    let ink = drawing.style.ink
-    let top = pageHeightMM - marginMM
-    page.setFillRGB(ink.red, ink.green, ink.blue)
-    page.text(
-      "Floorplan", x: pageWidthMM / 2 * mm, y: (top - 7) * mm, size: 18, bold: true, anchor: .center
-    )
-    page.text(address, x: pageWidthMM / 2 * mm, y: (top - 15) * mm, size: 11, anchor: .center)
-    let units = drawing.options.units
-    let total = units.area(drawing.grossAreaM2 > 0 ? drawing.grossAreaM2 : drawing.roomAreaM2)
-    page.text(
-      "Approximately \(total) total", x: pageWidthMM / 2 * mm, y: (top - 21.5) * mm, size: 9.5,
-      anchor: .center)
-    // Drawing, centred in the area between header and footer.
-    let areaX = marginMM
-    let areaY = marginMM + footerMM
-    let areaW = pageWidthMM - 2 * marginMM
-    let areaH = pageHeightMM - 2 * marginMM - headerMM - footerMM
-    let width = drawing.bounds.width / drawing.options.scaleDenominator
-    let height = drawing.bounds.height / drawing.options.scaleDenominator
-    drawing.render(
-      on: page, x: (areaX + (areaW - width) / 2) * mm, y: (areaY + (areaH - height) / 2) * mm)
-    let muted = DrawingColor(hex: 0x6B6557)
-    page.setFillRGB(muted.red, muted.green, muted.blue)
-    page.text(
-      "Chapter  |  Floor plan from a LiDAR scan. Measurements are estimates; wall thicknesses "
-        + "are assumed.",
-      x: marginMM * mm, y: (marginMM + 2) * mm, size: 7)
-    page.text(
-      "1:\(Format.compact(drawing.options.scaleDenominator)) on Letter",
-      x: (pageWidthMM - marginMM) * mm, y: (marginMM + 2) * mm, size: 7, anchor: .trailing)
-    var document = PDFDocument(
-      title: "Floorplan - \(address)", author: "Chapter", subject: "Floor plan",
-      creator: "\(PlanExportInfo.generator) \(PlanExportInfo.generatorVersion)",
-      creationDate: creationDate)
-    document.pages = [page]
-    return document.render()
   }
 }

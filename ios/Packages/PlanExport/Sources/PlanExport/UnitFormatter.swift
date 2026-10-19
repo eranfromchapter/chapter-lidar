@@ -58,6 +58,18 @@ public struct UnitFormatter: Hashable, Sendable {
     }
   }
 
+  /// An approximate area given in square metres, rounded for a headline: whole square feet
+  /// (`866 ft²`) or square metres to one decimal (`80.4 m²`).
+  public func approximateArea(_ squareMetres: Double) -> String {
+    switch system {
+    case .imperial:
+      return Self.decimals(squareMetres / Self.squareMetresPerSquareFoot, places: 0)
+        .map { "\($0) ft\u{00B2}" } ?? Self.invalid
+    case .metric:
+      return Self.decimals(squareMetres, places: 1).map { "\($0) m\u{00B2}" } ?? Self.invalid
+    }
+  }
+
   /// A volume given in cubic metres: `2476.67 ft³` or `70.13 m³`.
   public func volume(_ cubicMetres: Double) -> String {
     switch system {

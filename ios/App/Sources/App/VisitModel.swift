@@ -81,13 +81,14 @@ final class VisitModel {
 
   /// This visit's scans, in capture order, for review before upload.
   var scanItems: [ScanItem] {
-    (flow.record?.captures ?? []).compactMap { capture in
+    let address = flow.record?.address.formatted
+    return (flow.record?.captures ?? []).compactMap { capture in
       ScanLibrary.item(
         folder: workspace.originalsRoot
           .appendingPathComponent("Original Exports", isDirectory: true)
           .appendingPathComponent(capture.areaKey, isDirectory: true)
           .appendingPathComponent(capture.captureId.rawValue, isDirectory: true),
-        title: capture.label)
+        title: capture.label, address: address, displayUnits: capture.units.display)
     }
   }
 

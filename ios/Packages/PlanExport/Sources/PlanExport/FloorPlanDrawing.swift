@@ -112,13 +112,17 @@ public struct FloorPlanDrawing: Sendable {
     /// Assumed wall thicknesses, metres (RoomPlan measures none).
     public var interiorWallThicknessM: Double
     public var exteriorWallThicknessM: Double
+    /// Further quarter turns counter-clockwise after squaring, so a plan can be laid on a page
+    /// the way it fits best.
+    public var quarterTurns: Int
 
     public init(
       scaleDenominator: Double = 50, units: UnitFormatter = UnitFormatter(system: .imperial),
       exteriorDimensions: Bool = true, interiorDimensions: Bool = true, roomNames: Bool = true,
       roomAreas: Bool = true, symbols: Bool = true, scaleBar: Bool = true,
       northDegrees: Double? = nil, alignToWalls: Bool = true,
-      interiorWallThicknessM: Double = 0.1143, exteriorWallThicknessM: Double = 0.1524
+      interiorWallThicknessM: Double = 0.1143, exteriorWallThicknessM: Double = 0.1524,
+      quarterTurns: Int = 0
     ) {
       self.scaleDenominator = scaleDenominator
       self.units = units
@@ -132,6 +136,7 @@ public struct FloorPlanDrawing: Sendable {
       self.alignToWalls = alignToWalls
       self.interiorWallThicknessM = interiorWallThicknessM
       self.exteriorWallThicknessM = exteriorWallThicknessM
+      self.quarterTurns = quarterTurns
     }
   }
 
@@ -185,7 +190,10 @@ public struct FloorPlanDrawing: Sendable {
       throw PlanExportError.invalidGeometry("the drawing scale is not a positive number")
     }
     let k = options.scaleDenominator / 1000
-    let theta = options.alignToWalls ? FloorPlanDrawing.alignment(of: geometry) : 0
+    let turns = ((options.quarterTurns % 4) + 4) % 4
+    let theta =
+      (options.alignToWalls ? FloorPlanDrawing.alignment(of: geometry) : 0)
+      - Double(turns) * .pi / 2
     if theta != 0 { geometry = geometry.rotated(by: -theta) }
 
     // Rooms, counter-clockwise, without repeated or straight-on corners.
@@ -364,9 +372,11 @@ public struct FloorPlanDrawing: Sendable {
   }
 
   /// The drawing at the largest whole-number scale (1:n) that fits `widthMM` by `heightMM` of
-  /// paper; `options.scaleDenominator` is replaced.
+  /// paper; `options.scaleDenominator` is replaced. `start` is a first guess of n (for example
+  /// from `estimatedDenominator`), which saves drawings when it is close.
   public static func fitted(
-    model: CaptureModel, widthMM: Double, heightMM: Double, options: Options = Options()
+    model: CaptureModel, widthMM: Double, heightMM: Double, options: Options = Options(),
+    start: Double? = nil
   ) throws -> FloorPlanDrawing {
     guard widthMM > 0, heightMM > 0 else {
       throw PlanExportError.invalidGeometry("the drawing area is empty")
@@ -376,6 +386,7 @@ public struct FloorPlanDrawing: Sendable {
     let span = max(planBounds.width, planBounds.height, 0.5) * 1000
     // Start as if a quarter of the paper went to dimensions, then correct from the result.
     var denominator = max(1, (span / (min(widthMM, heightMM) * 0.75)).rounded(.up))
+    if let start, start.isFinite, start >= 1 { denominator = start.rounded(.up) }
     var options = options
     var fits: FloorPlanDrawing?
     var last: FloorPlanDrawing?
@@ -399,6 +410,29 @@ public struct FloorPlanDrawing: Sendable {
       }
     }
     return fits ?? last!
+  }
+
+  /// Estimate of the whole-number scale (1:n) at which this drawing, redrawn, would just fit
+  /// `widthMM` by `heightMM` of paper: the plan (walls and rooms) scales with n, while the
+  /// annotations around it keep their paper size. Nil when the annotations alone do not fit.
+  public func estimatedDenominator(widthMM: Double, heightMM: Double) -> Double? {
+    let points = walls.pieces.flatMap { $0 } + rooms.flatMap(\.polygon)
+    guard let first = points.first else { return nil }
+    var low = first
+    var high = first
+    for p in points {
+      low = Point2(x: min(low.x, p.x), y: min(low.y, p.y))
+      high = Point2(x: max(high.x, p.x), y: max(high.y, p.y))
+    }
+    let n = options.scaleDenominator
+    let planWidth = (high.x - low.x) * 1000
+    let planHeight = (high.y - low.y) * 1000
+    // Paper taken by the annotations at this scale, which stays the same at any scale.
+    let extraWidth = (bounds.width - planWidth) / n
+    let extraHeight = (bounds.height - planHeight) / n
+    guard widthMM > extraWidth, heightMM > extraHeight else { return nil }
+    return max(1, planWidth / (widthMM - extraWidth), planHeight / (heightMM - extraHeight))
+      .rounded(.up)
   }
 
   // MARK: Pieces
@@ -663,7 +697,7 @@ public struct FloorPlanDrawing: Sendable {
 
   /// Corners of the box a text item covers (descender to cap height), plan millimetres.
   static func textCorners(_ text: DrawingText) -> [Point2] {
-    let width = FontMetrics.width(text.string, size: text.size, bold: text.bold)
+    let width = text.width
     let shift: Double
     switch text.anchor {
     case .leading: shift = 0

@@ -1,3 +1,4 @@
+import AppCore
 import CaptureContract
 import CaptureModelMapping
 import CaptureUI
@@ -17,11 +18,14 @@ private typealias Control = ChapterTokens.Control
 private typealias Radius = ChapterTokens.Radius
 
 /// One scanned floor or area on this phone: the folder that holds its `roomplan.json`
-/// (`<visit>/originals/Original Exports/<areaKey>/<captureId>/`).
+/// (`<visit>/originals/Original Exports/<areaKey>/<captureId>/`), with the visit's address and
+/// the capture's display units when they are known.
 struct ScanItem: Identifiable, Hashable {
   var folder: URL
   var title: String
   var date: Date
+  var address: String? = nil
+  var displayUnits: DisplayUnitSystem? = nil
   var id: String { folder.path }
 }
 
@@ -30,15 +34,19 @@ enum ScanLibrary {
   static let roomPlanFile = "roomplan.json"
 
   static func items(visitsRoot: URL) -> [ScanItem] {
-    let files = FileManager.default
-    guard let visits = try? files.contentsOfDirectory(at: visitsRoot, includingPropertiesForKeys: nil)
-    else { return [] }
     var items: [ScanItem] = []
-    for visit in visits {
+    for visit in children(of: visitsRoot) {
+      let record = record(visit: visit)
       let exports = visit.appendingPathComponent("originals/Original Exports", isDirectory: true)
-      for area in (try? files.contentsOfDirectory(at: exports, includingPropertiesForKeys: nil)) ?? [] {
-        for capture in (try? files.contentsOfDirectory(at: area, includingPropertiesForKeys: nil)) ?? [] {
-          if let item = item(folder: capture, title: title(areaKey: area.lastPathComponent)) {
+      for area in children(of: exports) {
+        for capture in children(of: area) {
+          let units = record?.captures.first {
+            $0.captureId.rawValue == capture.lastPathComponent
+          }?.units.display
+          if let item = item(
+            folder: capture, title: title(areaKey: area.lastPathComponent),
+            address: record?.address.formatted, displayUnits: units)
+          {
             items.append(item)
           }
         }
@@ -47,13 +55,41 @@ enum ScanLibrary {
     return items.sorted { $0.date > $1.date }
   }
 
-  static func item(folder: URL, title: String) -> ScanItem? {
+  static func item(
+    folder: URL, title: String, address: String? = nil, displayUnits: DisplayUnitSystem? = nil
+  ) -> ScanItem? {
     let file = folder.appendingPathComponent(roomPlanFile)
     guard
       let values = try? file.resourceValues(forKeys: [.contentModificationDateKey]),
       let date = values.contentModificationDate
     else { return nil }
-    return ScanItem(folder: folder, title: title, date: date)
+    return ScanItem(
+      folder: folder, title: title, date: date, address: address, displayUnits: displayUnits)
+  }
+
+  /// The newest capture record written for a visit (by "Package ready", under
+  /// `drafts/<draft>/Source Register/<visitId>/`); nil before there is one.
+  static func record(visit: URL) -> CaptureRecord? {
+    var newest: (date: Date, url: URL)?
+    for draft in children(of: VisitWorkspace(root: visit).draftsRoot) {
+      let register = draft.appendingPathComponent(PackageFolder.sourceRegister.name)
+      for folder in children(of: register) {
+        let file = folder.appendingPathComponent(PackageLayout.captureRecordFileName)
+        guard
+          let date = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?
+            .contentModificationDate
+        else { continue }
+        if newest == nil || date > newest!.date { newest = (date, file) }
+      }
+    }
+    guard let url = newest?.url, let data = try? Data(contentsOf: url) else { return nil }
+    return try? CaptureContractJSON.makeDecoder().decode(CaptureRecord.self, from: data)
+  }
+
+  /// What a folder holds; empty when it cannot be read.
+  private static func children(of folder: URL) -> [URL] {
+    (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil))
+      ?? []
   }
 
   /// "floor-1" → "Floor 1".
@@ -63,12 +99,12 @@ enum ScanLibrary {
   }
 }
 
-/// Loads one scan for viewing: the floor plan image and the measurements from our own mapping,
-/// and (on request) a USDZ model from Apple's RoomPlan export for the 3D view.
+/// Loads one scan for viewing: the Floorplan and the measurements from our own mapping, and
+/// (on request) a USDZ model from Apple's RoomPlan export for the 3D view.
 @MainActor @Observable
 final class ScanViewerModel {
   let item: ScanItem
-  private(set) var plan: UIImage?
+  private(set) var floorplan: FloorplanModel?
   private(set) var measurements: ScanMeasurements?
   private(set) var counts: String?
   private(set) var errorMessage: String?
@@ -92,12 +128,16 @@ final class ScanViewerModel {
           document,
           context: MappingContext(
             visitId: LowercaseUUID(), captureId: LowercaseUUID(), areaKey: "scan", label: title))
-        let png = try PNGWriter.write(model: model, displayUnits: .imperial).data
-        return (png, ScanMeasurements(model: model), model.walls.count, model.rooms.count)
+        return (model, ScanMeasurements(model: model), model.walls.count, model.rooms.count)
       }.value
-      plan = UIImage(data: result.0)
       measurements = result.1
       counts = "\(result.3) \(result.3 == 1 ? "room" : "rooms") \u{00B7} \(result.2) walls"
+      let floorplan = FloorplanModel(
+        model: result.0, address: item.address, units: item.displayUnits ?? .imperial,
+        exportName: item.folder.lastPathComponent)
+      self.floorplan = floorplan
+      isLoading = false
+      await floorplan.write()
     } catch {
       errorMessage = "This scan could not be drawn: \(error.localizedDescription)"
     }
@@ -136,7 +176,8 @@ final class ScanViewerModel {
   }
 }
 
-/// One scan: the floor plan (pinch to zoom), the measurements and a 3D view of the model.
+/// One scan: the Floorplan (pinch to zoom, units, download), the measurements and a 3D view of
+/// the model.
 struct ScanViewer: View {
   @State private var model: ScanViewerModel
   @Environment(\.dismiss) private var dismiss
@@ -160,24 +201,20 @@ struct ScanViewer: View {
           .frame(minHeight: Control.minTouch)
       }
 
-      ZStack {
-        Palette.surface
-        if let plan = model.plan {
-          ZoomableImage(image: plan)
-        } else if model.isLoading {
-          ProgressView("Drawing the floor plan…")
-        } else {
-          Text(model.errorMessage ?? "No floor plan").font(Typo.caption)
-            .foregroundStyle(Palette.blocked).padding()
+      if let floorplan = model.floorplan {
+        FloorplanView(floorplan: floorplan)
+      } else {
+        ZStack {
+          Palette.surface
+          if model.isLoading {
+            ProgressView("Drawing the floor plan…")
+          } else {
+            Text(model.errorMessage ?? "No floor plan").font(Typo.caption)
+              .foregroundStyle(Palette.blocked).padding()
+          }
         }
-      }
-      .clipShape(RoundedRectangle(cornerRadius: Radius.card))
-      .overlay(RoundedRectangle(cornerRadius: Radius.card).stroke(Palette.line, lineWidth: 1))
-      .overlay(alignment: .bottomTrailing) {
-        if model.plan != nil {
-          Text("Pinch to zoom").font(Typo.caption).foregroundStyle(Palette.muted)
-            .padding(Space.s2)
-        }
+        .clipShape(RoundedRectangle(cornerRadius: Radius.card))
+        .overlay(RoundedRectangle(cornerRadius: Radius.card).stroke(Palette.line, lineWidth: 1))
       }
 
       if let scan = model.measurements { measurements(scan) }
@@ -385,63 +422,5 @@ struct ScanList: View {
     }
     .background(Palette.surface, in: RoundedRectangle(cornerRadius: Radius.card))
     .overlay(RoundedRectangle(cornerRadius: Radius.card).stroke(Palette.line, lineWidth: 1))
-  }
-}
-
-/// A UIScrollView image view: pinch to zoom, pan, double-tap to zoom in or back out.
-private struct ZoomableImage: UIViewRepresentable {
-  let image: UIImage
-
-  func makeCoordinator() -> Coordinator { Coordinator() }
-
-  func makeUIView(context: Context) -> UIScrollView {
-    let scroll = UIScrollView()
-    scroll.delegate = context.coordinator
-    scroll.minimumZoomScale = 1
-    scroll.maximumZoomScale = 8
-    scroll.showsHorizontalScrollIndicator = false
-    scroll.showsVerticalScrollIndicator = false
-    let imageView = UIImageView(image: image)
-    imageView.contentMode = .scaleAspectFit
-    imageView.translatesAutoresizingMaskIntoConstraints = false
-    scroll.addSubview(imageView)
-    NSLayoutConstraint.activate([
-      imageView.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor),
-      imageView.heightAnchor.constraint(equalTo: scroll.frameLayoutGuide.heightAnchor),
-      imageView.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor),
-      imageView.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor),
-      imageView.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor),
-      imageView.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor),
-    ])
-    context.coordinator.imageView = imageView
-    let doubleTap = UITapGestureRecognizer(
-      target: context.coordinator, action: #selector(Coordinator.doubleTapped(_:)))
-    doubleTap.numberOfTapsRequired = 2
-    scroll.addGestureRecognizer(doubleTap)
-    return scroll
-  }
-
-  func updateUIView(_ scroll: UIScrollView, context: Context) {
-    context.coordinator.imageView?.image = image
-  }
-
-  final class Coordinator: NSObject, UIScrollViewDelegate {
-    weak var imageView: UIImageView?
-
-    func viewForZooming(in scrollView: UIScrollView) -> UIView? { imageView }
-
-    @objc func doubleTapped(_ gesture: UITapGestureRecognizer) {
-      guard let scroll = gesture.view as? UIScrollView else { return }
-      if scroll.zoomScale > 1 {
-        scroll.setZoomScale(1, animated: true)
-      } else {
-        let point = gesture.location(in: imageView)
-        let size = CGSize(width: scroll.bounds.width / 3, height: scroll.bounds.height / 3)
-        scroll.zoom(
-          to: CGRect(
-            origin: CGPoint(x: point.x - size.width / 2, y: point.y - size.height / 2), size: size),
-          animated: true)
-      }
-    }
   }
 }

@@ -543,43 +543,27 @@ final class FloorPlanDrawingTests: XCTestCase {
     XCTAssertTrue(svg.contains("width=\"\(Format.fixed(drawing.bounds.width / 50, 2))mm\""))
   }
 
-  func testSheetPDFIsValidWithColourAndText() throws {
-    let model = WalkthroughFixture.model
-    let data = try FloorPlanSheet.pdf(
-      model: model, address: "1 Test Street", options: .init(northDegrees: 0))
-    try Repo.write(
-      ExportedFile(
-        fileName: "floor-plan-sheet.pdf", role: .planPDF, mime: "application/pdf", data: data),
-      folder: "apartment-walkthrough")
-    let pdf = PDFFile(data)
-    XCTAssertEqual(pdf.header, "%PDF-1.7")
-    XCTAssertTrue(pdf.text.hasSuffix("%%EOF\n"))
-    XCTAssertEqual(pdf.mediaBoxes.first ?? [], [0, 0, 792, 612])
-    let shown = pdf.shownText()
-    for expected in ["Floorplan", "1 Test Street", "Living Room", "Kitchen", "Bedroom 1", "N"] {
-      XCTAssertTrue(shown.contains(expected), expected)
-    }
-    XCTAssertTrue(shown.contains { $0.hasSuffix(" ft") }, "scale bar")
-    XCTAssertTrue(
-      shown.contains { $0.hasPrefix("Approximately ") && $0.hasSuffix(" ft\u{00B2} total") })
-    let stream = try XCTUnwrap(pdf.contentStreams.first)
-    XCTAssertTrue(stream.contains("0.3600 0.3700 0.4200 rg"), "slate walls")
-    XCTAssertTrue(stream.contains(" c "), "curves")
-    XCTAssertTrue(stream.contains(" d\n"), "dashes")
-    // Fits the page.
-    let drawing = try FloorPlanSheet.drawing(model: model, options: .init(northDegrees: 0))
-    XCTAssertLessThanOrEqual(drawing.bounds.width / drawing.options.scaleDenominator, 279.4 - 24)
-    XCTAssertLessThanOrEqual(drawing.bounds.height / drawing.options.scaleDenominator, 215.9 - 64)
-  }
-
   func testDrawingAndWritersAreByteStable() throws {
     let model = WalkthroughFixture.model
     let first = try drawing(model) { $0.northDegrees = 33 }
     let second = try drawing(model) { $0.northDegrees = 33 }
     XCTAssertEqual(first.items, second.items)
     XCTAssertEqual(first.svg(title: "a"), second.svg(title: "a"))
-    let pdf1 = try FloorPlanSheet.pdf(model: model, address: "x")
-    let pdf2 = try FloorPlanSheet.pdf(model: model, address: "x")
-    XCTAssertEqual(pdf1, pdf2)
+    XCTAssertEqual(first.pdf(title: "a"), second.pdf(title: "a"))
+  }
+
+  func testSVGStartsAtTheViewBoxOrigin() throws {
+    // Coordinates are moved so the drawing's lower-left corner is the view box origin.
+    let drawing = try drawing(WalkthroughFixture.model)
+    let svg = drawing.svg(title: "a")
+    var numbers: [Double] = []
+    for match in svg.split(separator: "\"") where match.first == "M" {
+      let tokens = match.split(whereSeparator: { " MLCZ".contains($0) })
+      numbers += tokens.compactMap { Double($0) }
+    }
+    XCTAssertFalse(numbers.isEmpty)
+    let side = max(drawing.bounds.width, drawing.bounds.height)
+    XCTAssertGreaterThanOrEqual(numbers.min() ?? -1, -0.01)
+    XCTAssertLessThanOrEqual(numbers.max() ?? .infinity, side + 0.01)
   }
 }

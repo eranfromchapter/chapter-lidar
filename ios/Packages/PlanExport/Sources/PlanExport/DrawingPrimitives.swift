@@ -127,6 +127,8 @@ public enum DrawingLayer: String, Hashable, Sendable, CaseIterable {
   case roomLabel = "room-label"
   case compass = "compass"
   case scaleBar = "scale-bar"
+  /// Title, address, notes and the wordmark around a drawing on a page.
+  case sheet = "sheet"
 }
 
 public struct DrawingShape: Hashable, Sendable {
@@ -156,7 +158,7 @@ public enum DrawingTextAnchor: String, Hashable, Sendable {
   case trailing
 }
 
-/// One line of text in Helvetica.
+/// One line of text in Helvetica, or in Times when `serif` is true (the Chapter wordmark).
 public struct DrawingText: Hashable, Sendable {
   public var string: String
   /// Baseline point at the anchor, plan millimetres.
@@ -167,13 +169,17 @@ public struct DrawingText: Hashable, Sendable {
   public var rotationDegrees: Double
   public var anchor: DrawingTextAnchor
   public var bold: Bool
+  /// Times Roman instead of Helvetica; `bold` is ignored.
+  public var serif: Bool
+  /// Extra space after each character, plan millimetres.
+  public var letterSpacing: Double
   public var color: DrawingColor
   public var layer: DrawingLayer
 
   public init(
     _ string: String, position: DrawingPoint, size: Double, rotationDegrees: Double = 0,
-    anchor: DrawingTextAnchor = .center, bold: Bool = false, color: DrawingColor,
-    layer: DrawingLayer
+    anchor: DrawingTextAnchor = .center, bold: Bool = false, serif: Bool = false,
+    letterSpacing: Double = 0, color: DrawingColor, layer: DrawingLayer
   ) {
     self.string = string
     self.position = position
@@ -181,8 +187,16 @@ public struct DrawingText: Hashable, Sendable {
     self.rotationDegrees = rotationDegrees
     self.anchor = anchor
     self.bold = bold
+    self.serif = serif
+    self.letterSpacing = letterSpacing
     self.color = color
     self.layer = layer
+  }
+
+  /// Width from the first glyph's start to the last glyph's end, plan millimetres.
+  var width: Double {
+    FontMetrics.width(string, size: size, bold: bold, serif: serif)
+      + letterSpacing * Double(max(0, string.unicodeScalars.count - 1))
   }
 }
 

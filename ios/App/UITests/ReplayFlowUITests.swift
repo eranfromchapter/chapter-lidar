@@ -1,8 +1,9 @@
 import XCTest
 
 /// Replays the bundled box-room capture through every screen of the frozen design:
-/// capture record -> scan (replay) -> photos -> controls -> checklist -> package ready ->
-/// uploading -> station status "Checks queued". Uses the Debug-only stub station.
+/// capture record -> scan (replay) -> photos -> controls -> checklist -> package ready (and the
+/// scan's Floorplan) -> uploading -> station status "Checks queued". Uses the Debug-only stub
+/// station.
 final class ReplayFlowUITests: XCTestCase {
   private var app: XCUIApplication!
 
@@ -25,6 +26,22 @@ final class ReplayFlowUITests: XCTestCase {
 
   private func button(_ label: String) -> XCUIElement {
     app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", label)).firstMatch
+  }
+
+  /// Keeps a screenshot in the result bundle, to look at the screen after the run.
+  private func attachScreenshot(_ name: String) {
+    let shot = XCTAttachment(screenshot: app.screenshot())
+    shot.name = name
+    shot.lifetime = .keepAlways
+    add(shot)
+  }
+
+  private func waitForLabel(_ element: XCUIElement, _ label: String, timeout: TimeInterval = 30) {
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline, !(element.exists && element.label == label) {
+      Thread.sleep(forTimeInterval: 0.25)
+    }
+    XCTAssertEqual(element.label, label)
   }
 
   func testReplayCaptureReachesChecksQueued() {
@@ -87,6 +104,27 @@ final class ReplayFlowUITests: XCTestCase {
     // Package ready, then seal and upload.
     XCTAssertTrue(app.staticTexts["Package ready"].waitForExistence(timeout: 30))
     XCTAssertTrue(app.staticTexts["Source Register"].waitForExistence(timeout: 30))
+
+    // Review the scan first: the Floorplan, its units and Download (PDF and PNG).
+    tap(button("Floor 1"))
+    let page = app.descendants(matching: .any)["floorplan.page"]
+    XCTAssertTrue(page.waitForExistence(timeout: 30), "floor plan page")
+    let download = app.descendants(matching: .any)["floorplan.download"]
+    waitForLabel(download, "Download floor plan, PDF and PNG")
+    attachScreenshot("Floorplan")
+    let units = app.buttons["floorplan.units"]
+    XCTAssertTrue(units.waitForExistence(timeout: 10))
+    XCTAssertEqual(units.label, "Units, feet and inches")
+    units.tap()
+    tap(app.buttons["Metric (m)"])
+    waitForLabel(units, "Units, metres")
+    waitForLabel(download, "Download floor plan, PDF and PNG")
+    attachScreenshot("Floorplan, metric")
+    XCTAssertTrue(page.exists)
+    XCTAssertTrue(app.buttons["scan.view3D"].exists)
+    tap(app.buttons["Done"])
+    XCTAssertTrue(app.staticTexts["Package ready"].waitForExistence(timeout: 10))
+
     tap(button("Seal and upload"))
 
     // Uploading and station status.
