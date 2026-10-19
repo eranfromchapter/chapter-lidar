@@ -120,11 +120,22 @@ final class VisitFlowTests: XCTestCase {
     try flow.controlsDone()
     try flow.takePhoto(captureId: full.captures[0].captureId, room: "Kitchen")
     XCTAssertEqual(flow.step, .photos(captureId: full.captures[0].captureId, initialRoom: "Kitchen"))
+    // From the checklist, "Done" goes straight back to it, not through field controls.
     try flow.photosDone()
-    try flow.controlsDone()
+    XCTAssertEqual(flow.step, .checklist)
+    XCTAssertFalse(flow.photosFromChecklist)
     XCTAssertThrowsError(try flow.takePhoto(captureId: LowercaseUUID(), room: nil))
     try flow.addControls()
     XCTAssertEqual(flow.step, .controls)
+  }
+
+  func testPhotosAfterAScanStillLeadToControls() throws {
+    let full = try record()
+    var flow = VisitFlow()
+    try flow.scanStarted()
+    try flow.floorFinished(floorRecord(full, 0))
+    try flow.photosDone()
+    XCTAssertEqual(flow.step, .controls, "after a scan the camera leads on to field controls")
   }
 
   func testScanCancelReturnsToTheCaptureRecord() throws {

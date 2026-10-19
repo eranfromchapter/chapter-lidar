@@ -13,32 +13,42 @@
       self.model = model
     }
 
+    // The labels scroll and "Save and take next" stays pinned at the bottom: with "More…" open,
+    // a plain VStack pushed the button off screen and the photo could not be saved.
     public var body: some View {
-      VStack(alignment: .leading, spacing: FieldTheme.space16) {
-        HStack {
-          Text(model.title).font(FieldTheme.headline)
-          Spacer()
-          Text("Original kept").font(FieldTheme.caption).foregroundStyle(FieldTheme.muted)
+      ScrollView {
+        VStack(alignment: .leading, spacing: FieldTheme.space16) {
+          HStack {
+            Text(model.title).font(FieldTheme.headline)
+            Spacer()
+            Text("Original kept").font(FieldTheme.caption).foregroundStyle(FieldTheme.muted)
+          }
+
+          photo
+          roomSection
+          directionSection
+          subjectSection
+
+          Text("Keep personal items and people out of the frame.")
+            .font(FieldTheme.caption)
+            .foregroundStyle(FieldTheme.muted)
         }
-
-        photo
-        roomSection
-        directionSection
-        subjectSection
-
-        Text("Keep personal items and people out of the frame.")
-          .font(FieldTheme.caption)
-          .foregroundStyle(FieldTheme.muted)
-
-        if let message = model.errorMessage {
-          Text(message).font(FieldTheme.caption).foregroundStyle(FieldTheme.blocked)
+      }
+      .scrollDismissesKeyboard(.interactively)
+      .safeAreaInset(edge: .bottom, spacing: 0) {
+        VStack(alignment: .leading, spacing: FieldTheme.space8) {
+          if let message = model.errorMessage {
+            Text(message).font(FieldTheme.caption).foregroundStyle(FieldTheme.blocked)
+          } else if let hint = model.missingHint {
+            Text(hint).font(FieldTheme.caption).foregroundStyle(FieldTheme.muted)
+              .accessibilityIdentifier("photo.missingHint")
+          }
+          PrimaryButton(title: "Save and take next", isEnabled: model.canSave) {
+            model.saveAndTakeNext()
+          }
         }
-
-        Spacer(minLength: 0)
-
-        PrimaryButton(title: "Save and take next", isEnabled: model.canSave) {
-          model.saveAndTakeNext()
-        }
+        .padding(.top, FieldTheme.space8)
+        .background(FieldTheme.ground)
       }
       .fieldScreen()
     }

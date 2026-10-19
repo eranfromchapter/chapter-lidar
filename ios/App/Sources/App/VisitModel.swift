@@ -133,7 +133,7 @@ final class VisitModel {
   func photosDone() {
     do {
       try flow.photosDone()
-      openControls()
+      if flow.step == .controls { openControls() }
     } catch { message = String(describing: error) }
   }
 

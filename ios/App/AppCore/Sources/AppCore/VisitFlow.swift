@@ -56,6 +56,9 @@ public struct VisitFlow: Equatable, Sendable {
   /// The operator's "No rooms skipped" tap on the checklist. A new visit starts unconfirmed; the
   /// tap covers only the captures that existed when it was made (FieldRules' rule).
   public private(set) var noRoomsSkipped = NoRoomsSkippedConfirmation()
+  /// True while the camera was opened from a checklist row ("Take photo"): "Done" then goes
+  /// back to the checklist instead of through field controls again.
+  public private(set) var photosFromChecklist = false
 
   public init() {}
 
@@ -118,12 +121,14 @@ public struct VisitFlow: Equatable, Sendable {
 
   // MARK: Field work
 
-  /// "Done" on the camera: on to field controls.
+  /// "Done" on the camera: on to field controls, or back to the checklist when the camera was
+  /// opened from it.
   public mutating func photosDone() throws {
     guard case .photos = step else {
       throw VisitFlowError.invalidTransition(from: step, event: "finish photos")
     }
-    step = .controls
+    step = photosFromChecklist ? .checklist : .controls
+    photosFromChecklist = false
   }
 
   /// "Continue" on field controls: on to "Before you leave".
@@ -139,6 +144,7 @@ public struct VisitFlow: Equatable, Sendable {
       throw VisitFlowError.unknownCapture(captureId)
     }
     step = .photos(captureId: captureId, initialRoom: room)
+    photosFromChecklist = true
   }
 
   /// "No rooms skipped" on the checklist's skipped-rooms row: the operator confirms that no room

@@ -57,6 +57,15 @@
 
     public var canSave: Bool { pendingOriginal != nil && draft.isComplete }
 
+    /// What still has to be chosen before the photo can be saved, for example
+    /// "Choose Looking toward and Subject to save."; nil when nothing is missing.
+    public var missingHint: String? {
+      guard pendingOriginal != nil else { return nil }
+      let names = draft.missing.map(\.title)
+      guard !names.isEmpty else { return nil }
+      return "Choose \(ListFormatter.localizedString(byJoining: names)) to save."
+    }
+
     public func takePhoto() async {
       guard !isCapturing else { return }
       isCapturing = true
