@@ -5,8 +5,8 @@ import FieldRules
 import Foundation
 import Observation
 import PlanExport
-import QuickLook
 import RoomPlan
+import SceneKit
 import SwiftUI
 import UIKit
 
@@ -64,7 +64,7 @@ enum ScanLibrary {
 }
 
 /// Loads one scan for viewing: the floor plan image and the measurements from our own mapping,
-/// and (on request) a USDZ model from Apple's RoomPlan export for Quick Look.
+/// and (on request) a USDZ model from Apple's RoomPlan export for the 3D view.
 @MainActor @Observable
 final class ScanViewerModel {
   let item: ScanItem
@@ -103,7 +103,7 @@ final class ScanViewerModel {
     }
   }
 
-  /// Exports Apple's 3D model of the scan once, then opens it in Quick Look. The cached file is
+  /// Exports Apple's 3D model of the scan once, then opens it in the 3D view. The cached file is
   /// named after the capture folder (the capture id), so it is found again after a relaunch.
   func open3D() async {
     let target = FileManager.default.temporaryDirectory
@@ -136,7 +136,7 @@ final class ScanViewerModel {
   }
 }
 
-/// One scan: the floor plan (pinch to zoom), the measurements and a 3D view in Quick Look.
+/// One scan: the floor plan (pinch to zoom), the measurements and a 3D view of the model.
 struct ScanViewer: View {
   @State private var model: ScanViewerModel
   @Environment(\.dismiss) private var dismiss
@@ -202,7 +202,9 @@ struct ScanViewer: View {
     .padding(.top, Space.s4)
     .padding(.bottom, Space.s4)
     .background(Palette.ground.ignoresSafeArea())
-    .quickLookPreview($model.modelURL)
+    .fullScreenCover(item: $model.modelURL) { url in
+      ModelViewer(url: url, title: model.item.title)
+    }
     .task { await model.load() }
   }
 
@@ -233,6 +235,92 @@ struct ScanViewer: View {
     .foregroundStyle(Palette.ink)
     .padding(.horizontal, Space.s4).padding(.vertical, 10)
     .accessibilityElement(children: .combine)
+  }
+}
+
+extension URL: @retroactive Identifiable {
+  public var id: String { absoluteString }
+}
+
+/// The scan's 3D model on its own, on a bright background: drag to turn it, pinch to zoom, two
+/// fingers to move it. There is no AR (camera) mode; Quick Look always offered one.
+struct ModelViewer: View {
+  let url: URL
+  let title: String
+  @State private var scene: SCNScene?
+  @State private var camera: SCNNode?
+  @State private var failed = false
+  @Environment(\.dismiss) private var dismiss
+
+  var body: some View {
+    ZStack {
+      Palette.surface.ignoresSafeArea()
+      if let scene, let camera {
+        SceneView(
+          scene: scene, pointOfView: camera,
+          options: [.allowsCameraControl, .autoenablesDefaultLighting])
+          .ignoresSafeArea()
+          .accessibilityLabel("3D model of \(title)")
+      } else if failed {
+        Text("The 3D model could not be opened.").font(Typo.body).foregroundStyle(Palette.blocked)
+      } else {
+        ProgressView()
+      }
+    }
+    .overlay(alignment: .top) {
+      HStack {
+        Button { dismiss() } label: {
+          Image(systemName: "xmark").font(.system(size: 17, weight: .semibold))
+            .frame(width: Control.minTouch, height: Control.minTouch)
+        }
+        .accessibilityLabel("Close")
+        Spacer()
+        Text(title).font(Typo.sans(15, weight: .semibold)).lineLimit(1)
+        Spacer()
+        Button { load() } label: {
+          Image(systemName: "arrow.counterclockwise").font(.system(size: 17, weight: .semibold))
+            .frame(width: Control.minTouch, height: Control.minTouch)
+        }
+        .accessibilityLabel("Reset view")
+        ShareLink(item: url) {
+          Image(systemName: "square.and.arrow.up").font(.system(size: 17, weight: .semibold))
+            .frame(width: Control.minTouch, height: Control.minTouch)
+        }
+      }
+      .foregroundStyle(Palette.ink)
+      .padding(.horizontal, Space.s4)
+      .background(Palette.surface.opacity(0.9))
+    }
+    .task { load() }
+  }
+
+  /// Loads the model with a bright background and soft light, and points a camera at it from
+  /// above at an angle so the whole model is in view. Called again by Reset view.
+  private func load() {
+    guard let loaded = try? SCNScene(url: url, options: nil) else {
+      failed = true
+      return
+    }
+    loaded.background.contents = UIColor(Palette.surface)
+    let ambient = SCNNode()
+    ambient.light = SCNLight()
+    ambient.light?.type = .ambient
+    ambient.light?.intensity = 600
+    loaded.rootNode.addChildNode(ambient)
+
+    let (low, high) = loaded.rootNode.boundingBox
+    let center = SCNVector3((low.x + high.x) / 2, (low.y + high.y) / 2, (low.z + high.z) / 2)
+    let size = max(high.x - low.x, high.y - low.y, high.z - low.z, 0.5)
+    let node = SCNNode()
+    node.camera = SCNCamera()
+    node.camera?.fieldOfView = 45
+    node.camera?.zNear = 0.01
+    node.camera?.zFar = Double(size) * 20
+    node.position = SCNVector3(center.x + size * 0.9, center.y + size * 1.1, center.z + size * 0.9)
+    node.look(at: center)
+    loaded.rootNode.addChildNode(node)
+    scene = loaded
+    camera = node
   }
 }
 
