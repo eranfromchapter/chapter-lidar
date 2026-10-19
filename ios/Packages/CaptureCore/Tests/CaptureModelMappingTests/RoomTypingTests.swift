@@ -119,7 +119,7 @@ final class RoomTypingTests: XCTestCase {
       ([.sofa], .livingRoom),
       ([.television], .livingRoom),
       ([.fireplace], .livingRoom),
-      ([.chair, .table, .chair], .diningRoom),
+      ([.chair, .table, .chair], nil),  // a desk and office chairs look the same
       ([.table, .chair], nil),
       ([.chair, .chair], nil),
       ([.sink, .storage, .stairs, .other], nil),
@@ -134,6 +134,33 @@ final class RoomTypingTests: XCTestCase {
     for (categories, type) in cases {
       XCTAssertEqual(RoomTyping.inferredType(from: categories), type, "\(categories)")
     }
+  }
+
+  func testAreaNamesThatNameARoom() {
+    let cases: [(String, RoomType?)] = [
+      ("Office", .office), ("Home study", .office), ("Kitchen", .kitchen),
+      ("Primary bedroom", .bedroom), ("Guest Bath", .bathroom), ("Hall bath", .bathroom),
+      ("Living / dining", .livingRoom), ("Dining room", .diningRoom), ("Front hall", .hallway),
+      ("Laundry", .laundry), ("Coat closet", .closet), ("Floor 1", nil), ("Apartment", nil),
+      ("", nil), ("Bedrooms wing", nil),
+    ]
+    for (label, type) in cases {
+      XCTAssertEqual(RoomTyping.areaType(label), type, label)
+    }
+  }
+
+  func testTheOperatorNamesASingleRoom() {
+    let inferred = RoomTyping.Result.typed(.diningRoom, .inferred)
+    XCTAssertEqual(RoomTyping.namedByOperator([inferred], captureLabel: "Office"), [.typed(.office, .operator)])
+    XCTAssertEqual(
+      RoomTyping.namedByOperator([.typed(.bedroom, .roomplanSection)], captureLabel: "Kitchen"),
+      [.typed(.kitchen, .operator)], "the operator wins over RoomPlan's section")
+    XCTAssertEqual(RoomTyping.namedByOperator([.unknown], captureLabel: "Floor 1"), [.unknown])
+    XCTAssertEqual(
+      RoomTyping.namedByOperator([inferred, .unknown], captureLabel: "Office"), [inferred, .unknown],
+      "two or more rooms keep their own types")
+    XCTAssertEqual(
+      RoomTyping.labels(for: [.typed(.office, .operator)], captureLabel: "Eran's office"), ["Eran's office"])
   }
 
   func testLabelsOfEveryType() {
@@ -322,7 +349,7 @@ final class RoomTypingTests: XCTestCase {
       (["bed"], .bedroom, "Bedroom"),
       (["washerDryer"], .laundry, "Laundry"),
       (["television"], .livingRoom, "Living Room"),
-      (["table", "chair", "chair"], .diningRoom, "Dining Room"),
+      (["table", "chair", "chair"], nil, "Room 1"),
       (["table", "chair"], nil, "Room 1"),
     ]
     for (categories, type, label) in cases {

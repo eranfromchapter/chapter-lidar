@@ -166,6 +166,8 @@ public enum CaptureModelMapper {
     }
 
     // Pass 3: room labels, numbered across the capture (`Bedroom 1`, `Bedroom 2`), and types.
+    // A single room the operator named ("Office") takes that name and type.
+    typings = RoomTyping.namedByOperator(typings, captureLabel: context.label)
     let labels = RoomTyping.labels(
       for: typings, captureLabel: context.label, overrides: context.roomLabels)
     for index in model.rooms.indices {

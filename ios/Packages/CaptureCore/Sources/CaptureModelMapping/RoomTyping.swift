@@ -82,8 +82,9 @@ public enum RoomTyping {
 
   /// The type a room's objects point to. The first rule that matches wins:
   /// toilet or bathtub: bathroom; stove, oven, refrigerator or dishwasher: kitchen; bed: bedroom;
-  /// washer-dryer: laundry; sofa, television or fireplace: living room; a table and two or more
-  /// chairs: dining room. Nil when none matches.
+  /// washer-dryer: laundry; sofa, television or fireplace: living room. Nil when none matches.
+  /// A table with chairs says nothing: RoomPlan reports a desk and office chairs the same way
+  /// (field test, 2026-10-19: an office came out as "Dining Room").
   public static func inferredType(from categories: [ObjectCategory]) -> RoomType? {
     let present = Set(categories)
     let rules: [(categories: Set<ObjectCategory>, type: RoomType)] = [
@@ -93,13 +94,38 @@ public enum RoomTyping {
       ([.washerDryer], .laundry),
       ([.sofa, .television, .fireplace], .livingRoom),
     ]
-    if let rule = rules.first(where: { !$0.categories.isDisjoint(with: present) }) {
-      return rule.type
-    }
-    if present.contains(.table), categories.filter({ $0 == .chair }).count >= 2 {
-      return .diningRoom
-    }
-    return nil
+    return rules.first(where: { !$0.categories.isDisjoint(with: present) })?.type
+  }
+
+  /// The room type the operator's own name for a floor or area says, for example "Office",
+  /// "Kitchen" or "Primary bedroom"; nil when the name names no room ("Floor 1", "Apartment").
+  /// Whole words, ignoring case; the first match in this order wins, so "Hall bath" is a
+  /// bathroom and "Living / dining" a living room.
+  public static func areaType(_ label: String) -> RoomType? {
+    let words = Set(
+      label.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init))
+    let rules: [(words: Set<String>, type: RoomType)] = [
+      (["bathroom", "bath", "wc", "toilet", "powder", "ensuite", "restroom", "washroom"], .bathroom),
+      (["bedroom", "nursery"], .bedroom),
+      (["kitchen", "kitchenette"], .kitchen),
+      (["closet", "wardrobe"], .closet),
+      (["laundry"], .laundry),
+      (["utility", "mechanical", "boiler"], .utility),
+      (["office", "study"], .office),
+      (["living", "lounge", "family", "den"], .livingRoom),
+      (["dining"], .diningRoom),
+      (["hall", "hallway", "corridor", "entry", "foyer", "entrance"], .hallway),
+    ]
+    return rules.first(where: { !$0.words.isDisjoint(with: words) })?.type
+  }
+
+  /// The operator names the room when a capture has a single room: if `captureLabel` names a
+  /// room type (`areaType(_:)`), that room takes it, with source `operator`, and `labels(for:)`
+  /// uses the operator's name as its label. The operator stood in the room, so this wins over
+  /// RoomPlan's section and the objects. Captures of two or more rooms are returned unchanged.
+  public static func namedByOperator(_ results: [Result], captureLabel: String) -> [Result] {
+    guard results.count == 1, let type = areaType(captureLabel) else { return results }
+    return [.typed(type, .operator)]
   }
 
   /// The label of a room of `type`; nil for `other`, which is labelled like a room of unknown
@@ -121,6 +147,8 @@ public enum RoomTyping {
   }
 
   /// Labels of a capture's rooms, in room order, from each room's typing `results`:
+  /// - the single room of a capture the operator named (`namedByOperator(_:captureLabel:)`):
+  ///   `captureLabel`;
   /// - a typed room: the label of its type, for example `Bedroom`; when two or more rooms of the
   ///   capture have that type they are numbered in room order: `Bedroom 1`, `Bedroom 2`;
   /// - a mixed room: `captureLabel` (for example `Apartment`), numbered the same way;
@@ -140,6 +168,8 @@ public enum RoomTyping {
   ) -> [String] {
     let bases: [String?] = results.map { result in
       switch result {
+      case .typed(let type, .operator) where results.count == 1:
+        return isBlank(captureLabel) ? label(of: type) : captureLabel
       case .typed(let type, _): return label(of: type)
       case .mixed: return isBlank(captureLabel) ? nil : captureLabel
       case .unknown: return nil

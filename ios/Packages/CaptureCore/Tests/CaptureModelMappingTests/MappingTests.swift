@@ -293,6 +293,20 @@ final class MappingTests: XCTestCase {
     XCTAssertEqual(objects.map(\.attributes), [nil, nil, ["StorageType": "cabinet"], nil, nil])
   }
 
+  func testASingleRoomTakesTheOperatorsAreaName() throws {
+    var mapped = try mapFixture("box-room")
+    mapped.context.label = "Office"
+    mapped.context.roomLabels = []
+    let room = try CaptureModelMapper.map(mapped.document, context: mapped.context).rooms[0]
+    XCTAssertEqual(room.label, "Office")
+    XCTAssertEqual(room.type, .office)
+    XCTAssertEqual(room.typeSource, .operator)
+
+    mapped.context.label = "Floor 1"
+    let unnamed = try CaptureModelMapper.map(mapped.document, context: mapped.context).rooms[0]
+    XCTAssertNotEqual(unnamed.typeSource, .operator, "a floor name does not name the room")
+  }
+
   func testAttributeValuesOutsideTheSchemaLengthAreLeftOut() throws {
     var mapped = try mapFixture("box-room")
     var table = mapped.document.rooms[0].objects[0]
