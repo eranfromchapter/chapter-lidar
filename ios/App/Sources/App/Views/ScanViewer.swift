@@ -242,7 +242,7 @@ extension URL: @retroactive Identifiable {
   public var id: String { absoluteString }
 }
 
-/// The scan's 3D model on its own, on a bright background: drag to turn it, pinch to zoom, two
+/// The scan's 3D model on its own, on a light warm grey: drag to turn it, pinch to zoom, two
 /// fingers to move it. There is no AR (camera) mode; Quick Look always offered one.
 struct ModelViewer: View {
   let url: URL
@@ -250,11 +250,15 @@ struct ModelViewer: View {
   @State private var scene: SCNScene?
   @State private var camera: SCNNode?
   @State private var failed = false
+  /// The full-screen view's size, which the model is framed for.
+  @State private var size = CGSize.zero
   @Environment(\.dismiss) private var dismiss
+
+  private let background = Color(uiColor: ModelStyle.backgroundColor)
 
   var body: some View {
     ZStack {
-      Palette.surface.ignoresSafeArea()
+      background.ignoresSafeArea()
       if let scene, let camera {
         SceneView(
           scene: scene, pointOfView: camera,
@@ -289,20 +293,33 @@ struct ModelViewer: View {
       }
       .foregroundStyle(Palette.ink)
       .padding(.horizontal, Space.s4)
-      .background(Palette.surface.opacity(0.9))
+      .background(background.opacity(0.9))
     }
-    .task { load() }
+    .background {
+      GeometryReader { proxy in
+        Color.clear
+          .onAppear {
+            size = proxy.size
+            load()
+          }
+          .onChange(of: proxy.size) { _, new in size = new }
+      }
+      .ignoresSafeArea()
+    }
   }
 
-  /// Loads the model and styles it (`ModelStyle`): flat-shaded faces, a colour per kind of element,
-  /// key and fill light with soft shadows, and a camera that fits the whole model. Called again
-  /// by Reset view.
+  /// Loads the model and styles it (`ModelStyle`): walls, floor, doors, windows and furniture
+  /// rebuilt as a clean model, soft light, and a camera that fits the whole model to the view's
+  /// shape. Called again by Reset view.
   private func load() {
     guard let loaded = try? SCNScene(url: url, options: nil) else {
       failed = true
       return
     }
-    camera = ModelStyle.apply(to: loaded, background: UIColor(Palette.surface))
+    let aspect =
+      size.width > 0 && size.height > 0
+      ? Float(size.width / size.height) : ModelStyle.defaultAspect
+    camera = ModelStyle.apply(to: loaded, background: ModelStyle.backgroundColor, aspect: aspect)
     scene = loaded
   }
 }
