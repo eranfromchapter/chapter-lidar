@@ -217,7 +217,9 @@ struct ScanViewer: View {
         .overlay(RoundedRectangle(cornerRadius: Radius.card).stroke(Palette.line, lineWidth: 1))
       }
 
-      if let scan = model.measurements { measurements(scan) }
+      if let scan = model.measurements {
+        measurements(scan, units: model.floorplan?.units ?? .imperial)
+      }
 
       Button {
         Task { await model.open3D() }
@@ -245,17 +247,21 @@ struct ScanViewer: View {
     .task { await model.load() }
   }
 
-  private func measurements(_ scan: ScanMeasurements) -> some View {
-    VStack(spacing: 0) {
-      row("Long distance A", scan.distanceAMm.map(LengthFormatter.both) ?? "\u{2014}")
-      row("Long distance B", scan.distanceBMm.map(LengthFormatter.both) ?? "\u{2014}")
+  /// The measurements in the units the Floorplan is shown in, written as the plan writes them.
+  private func measurements(_ scan: ScanMeasurements, units: DisplayUnitSystem) -> some View {
+    let formatter = UnitFormatter(system: units)
+    let length = { (millimetres: Double) in formatter.dimension(millimetres / 1000) }
+    return VStack(spacing: 0) {
+      row("Long distance A", scan.distanceAMm.map(length) ?? "\u{2014}")
+      row("Long distance B", scan.distanceBMm.map(length) ?? "\u{2014}")
       row(
         "Ceiling height",
         {
           let heights = scan.ceilingHeights.map(\.heightMm)
           guard let low = heights.min(), let high = heights.max() else { return "\u{2014}" }
-          return low == high
-            ? LengthFormatter.both(low) : LengthFormatter.millimetreRange(low, high)
+          let lowText = length(low)
+          let highText = length(high)
+          return lowText == highText ? lowText : "\(lowText) \u{2013} \(highText)"
         }())
       row("Openings", scan.openingsSummary)
     }

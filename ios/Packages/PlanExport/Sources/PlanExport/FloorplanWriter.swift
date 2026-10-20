@@ -4,16 +4,18 @@ import Foundation
 /// The floor plan as one page: "Floorplan", the address and the approximate total area at the
 /// top, a compass at the top right when true north is known, the fully dimensioned colour plan
 /// (`FloorPlanDrawing`: outside dimensions in ink, inside dimensions in bronze, room names and
-/// areas, furniture, fixture and appliance symbols) fitted to the page, a scale bar at the
-/// bottom left, "Measurements are approximate." in the middle, and the Chapter logo at the
-/// bottom right. Chapter type and colours (`ChapterBrand`): the title in Times, the rest in
-/// Inter.
+/// areas, furniture, fixture and appliance symbols) fitted to the page but never drawn larger
+/// than 1:50, a scale bar and the print scale at the bottom left, "Measurements are
+/// approximate." in the middle, and the Chapter logo at the bottom right. Chapter type and
+/// colours (`ChapterBrand`): the title in Times, the rest in Inter.
 ///
 /// One layout feeds both writers, so the PDF and the SVG show the same page. The page is Letter
 /// landscape or a 10 in square, whichever prints the plan larger (`Page.automatic`). The total
 /// is the exterior floor area estimate of `PlanTotals` (RoomPlan measures no wall thickness, so
-/// it is always "approximately"). A pure function of the model and the options: the same input
-/// writes the same bytes. Not part of `PlanExporter.exportAll` yet.
+/// it is always "approximately"); for a single room it is the room's own floor area, so it
+/// agrees with the room's label. `screenPDF` is the plan alone for a phone screen. A pure
+/// function of the model and the options: the same input writes the same bytes. Not part of
+/// `PlanExporter.exportAll` yet.
 public enum FloorplanWriter {
   public enum Page: String, CaseIterable, Hashable, Sendable {
     /// Letter landscape or the square page, whichever prints the plan at the larger scale;
@@ -110,6 +112,36 @@ public enum FloorplanWriter {
     public let totalText: String
   }
 
+  /// The plan alone, for a phone screen: no title, total or footer, the drawing cropped to its
+  /// own extent with a 4 mm margin and fitted to `widthMM` by `heightMM` of "paper" (about a
+  /// phone's width), so that shown across a screen its names and dimensions are several times
+  /// larger than on the page. A compass is drawn when north is known.
+  public static func screenPDF(
+    model: CaptureModel, options: Options = Options(), widthMM: Double = 110,
+    heightMM: Double = 150
+  ) throws -> Data {
+    let drawingOptions = FloorPlanDrawing.Options(
+      units: options.units, exteriorDimensions: options.exteriorDimensions,
+      interiorDimensions: options.interiorDimensions, roomNames: options.roomNames,
+      roomAreas: options.roomAreas, symbols: options.furniture, scaleBar: false,
+      northDegrees: options.compass ? options.northDegrees : nil, alignToWalls: true,
+      interiorWallThicknessM: options.interiorWallThicknessM,
+      exteriorWallThicknessM: options.exteriorWallThicknessM)
+    var best: FloorPlanDrawing?
+    for turn in options.turnToFit ? [0, 3] : [0] {
+      var turned = drawingOptions
+      turned.quarterTurns = turn
+      let drawing = try FloorPlanDrawing.fitted(
+        model: model, widthMM: widthMM, heightMM: heightMM, options: turned,
+        minimumDenominator: 50)
+      if best == nil || drawing.options.scaleDenominator < best!.options.scaleDenominator {
+        best = drawing
+      }
+    }
+    let title = Format.singleLine(options.title)
+    return best!.pdf(title: title, creationDate: options.creationDate, marginMM: 4)
+  }
+
   /// Writes the page as PDF and SVG.
   public static func write(model: CaptureModel, options: Options = Options()) throws -> Floorplan {
     let sheet = try Sheet(model: model, options: options)
@@ -146,6 +178,8 @@ public enum FloorplanWriter {
     static let gap = 4.0
     static let footerHeight = 8.0
     static let compassRadius = 6.5
+    /// A small plan is drawn at this scale (1:50) at the most, not blown up to fill the page.
+    static let largestScaleDenominator = 50.0
 
     /// Header height below the top margin: title, address (when given) and total.
     static func headerHeight(hasAddress: Bool) -> Double { hasAddress ? 21.5 : 15.0 }
@@ -223,12 +257,16 @@ public enum FloorplanWriter {
       turned.quarterTurns = best!.turn
       let drawing = try FloorPlanDrawing.fitted(
         model: model, widthMM: area.width, heightMM: area.height, options: turned,
-        start: best!.estimate)
+        start: best!.estimate, minimumDenominator: Layout.largestScaleDenominator)
 
-      // Total: the exterior estimate, as the report states it.
+      // Total: the exterior estimate, as the report states it; for one room, its floor area
+      // (a total taken to the outside of walls only assumed would read as an error beside
+      // the room's own area).
       let settings = MeasurementSettings(exteriorWallThicknessM: options.exteriorWallThicknessM)
       var total = (try? PlanTotals(model, settings: settings))?.exteriorAreaEstimateM2 ?? 0
-      if !(total > 0) {
+      if drawing.rooms.count == 1, drawing.roomAreaM2 > 0 {
+        total = drawing.roomAreaM2
+      } else if !(total > 0) {
         total = drawing.grossAreaM2 > 0 ? drawing.grossAreaM2 : drawing.roomAreaM2
       }
       let totalText = "Approximately \(options.units.approximateArea(total)) total"
@@ -328,9 +366,14 @@ public enum FloorplanWriter {
             DrawingText(
               bar.label, position: DrawingPoint(x: margin, y: margin + 0.6),
               size: Layout.scaleBarTextSize, anchor: .leading, color: ink, layer: .scaleBar)))
+        // The print scale beside the bar, for this page printed at full size.
+        items.append(
+          .text(
+            DrawingText(
+              "1:\(Format.compact(denominator))",
+              position: DrawingPoint(x: margin + length + 2.5, y: barY - 0.2),
+              size: Layout.noteSize, anchor: .leading, color: muted, layer: .scaleBar)))
       }
-      // No print scale in words: the plan is fitted to the page at whatever scale fills it,
-      // which is rarely a standard one; the scale bar holds at any print size.
       text(
         "Measurements are approximate.", width / 2, margin + 0.6, size: Layout.noteSize,
         anchor: .center, color: muted)

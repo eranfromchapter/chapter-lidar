@@ -137,9 +137,9 @@ struct WallLayout {
   let interiorThickness: Double
 
   /// Exterior band pieces, interior and stray, all counter-clockwise: filled together with the
-  /// nonzero rule they paint as their union. A scrap of wall shorter than half its thickness
-  /// is left out, and one shorter than one and a half times its thickness too unless it frames
-  /// an opening or meets another wall.
+  /// nonzero rule they paint as their union. A scrap of wall shorter than one and a half times
+  /// its thickness is left out unless it meets another wall, or frames an opening and is at
+  /// least as long as the wall is thick (a shorter one would be a loose square).
   var pieces: [[Point2]] {
     var out: [[Point2]] = []
     for (index, segment) in segments.enumerated() {
@@ -160,7 +160,7 @@ struct WallLayout {
                 || PlanGeometry.distanceToBoundary(of: segments[other].band, from: p) < 0.02)
           }
         }
-        if meets || (piece.atCut && along >= 0.5 * thickness) { out.append(c) }
+        if meets || (piece.atCut && along >= thickness - 1e-6) { out.append(c) }
       }
     }
     return out
@@ -457,27 +457,76 @@ struct WallLayout {
         normal: direction.leftNormal, distanceToStart: 0, distanceToEnd: 0)
     }
     let host = segments[chosen]
+    // The opening's span on the host, kept within the faces of the walls that meet the host
+    // there: an opening scanned a little wider than the space between them would otherwise
+    // bite a notch out of each and leave stepped jambs.
+    let p0 = host.parameter(opening.from)
+    let p1 = host.parameter(opening.to)
+    var low = min(p0, p1) * host.length
+    var high = max(p0, p1) * host.length
+    let width = high - low
+    for (index, other) in segments.enumerated() where index != chosen && other.length > 0 {
+      guard abs(other.direction.cross(host.direction)) > 0.5,
+        let (u0, u1) = WallLayout.span(of: other.band, across: host)
+      else { continue }
+      if u0 <= low + 1e-6, u1 > low, u1 < high {
+        low = u1
+      } else if u1 >= high - 1e-6, u0 < high, u0 > low {
+        high = u0
+      }
+    }
+    if high - low < 0.5 * width {
+      low = min(p0, p1) * host.length
+      high = max(p0, p1) * host.length
+    }
+    let from = host.a + host.direction * low
+    let to = host.a + host.direction * high
     for (index, segment) in segments.enumerated() {
       let inLine =
         index == chosen
         || (segment.kind == host.kind && abs(segment.direction.cross(host.direction)) < 0.02
           && abs((segment.a - host.a).dot(host.normal)) < 0.02)
       guard inLine, segment.length > 0 else { continue }
-      let p0 = segment.parameter(opening.from)
-      let p1 = segment.parameter(opening.to)
-      let t0 = max(0, min(p0, p1))
-      let t1 = min(1, max(p0, p1))
+      let q0 = segment.parameter(from)
+      let q1 = segment.parameter(to)
+      let t0 = max(0, min(q0, q1))
+      let t1 = min(1, max(q0, q1))
       if t1 > t0 { segments[index].cuts.append((t0, t1)) }
     }
-    let p0 = host.parameter(opening.from)
-    let p1 = host.parameter(opening.to)
-    let (s0, s1) = (min(p0, p1), max(p0, p1))
+    let s0 = low / host.length
+    let s1 = high / host.length
     let a = host.point(s0, 0)
     let b = host.point(s1, 0)
     return Gap(
       opening: opening, segment: chosen, a: a, b: b, lo: host.lo, hi: host.hi,
       normal: host.normal, distanceToStart: max(0, s0) * host.length,
       distanceToEnd: max(0, 1 - s1) * host.length)
+  }
+
+  /// Where `polygon` (a convex band) lies within `host`'s band, as a range of distances along
+  /// the host from its start; nil when they share no area. The polygon is clipped to the strip
+  /// between the host's two faces (Sutherland-Hodgman), so a mitred corner counts only as far
+  /// as it reaches into the host.
+  static func span(of polygon: [Point2], across host: Segment) -> (Double, Double)? {
+    var points = polygon
+    for (bound, sign) in [(host.lo, 1.0), (host.hi, -1.0)] {
+      // Keep the side where sign * (offset - bound) >= 0.
+      let value = { (p: Point2) in sign * ((p - host.a).dot(host.normal) - bound) }
+      var out: [Point2] = []
+      for index in points.indices {
+        let p = points[index]
+        let q = points[(index + 1) % points.count]
+        let vp = value(p)
+        let vq = value(q)
+        if vp >= 0 { out.append(p) }
+        if (vp >= 0) != (vq >= 0) { out.append(p + (q - p) * (vp / (vp - vq))) }
+      }
+      points = out
+      if points.count < 3 { return nil }
+    }
+    guard abs(Geo.signedArea(points)) > 1e-6 else { return nil }
+    let along = points.map { ($0 - host.a).dot(host.direction) }
+    return (along.min()!, along.max()!)
   }
 
   /// Parameter ranges of segment ab that lie along any of `lines` (parallel and within

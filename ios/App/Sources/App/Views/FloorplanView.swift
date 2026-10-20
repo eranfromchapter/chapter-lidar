@@ -17,8 +17,8 @@ private typealias Control = ChapterTokens.Control
 private typealias Radius = ChapterTokens.Radius
 
 /// Writes the Floorplan of one scan (PlanExport's `FloorplanWriter`) and the files to share:
-/// `floorplan.pdf`, and `floorplan.png` drawn from that PDF at 300 dpi. Pure functions, run off
-/// the main actor.
+/// `floorplan.pdf`, and `floorplan.png` drawn from that PDF at 300 dpi; and the plan alone for
+/// the screen. Pure functions, run off the main actor.
 enum FloorplanFiles {
   static let dpi: CGFloat = 300
 
@@ -30,6 +30,13 @@ enum FloorplanFiles {
   static func pdf(model: CaptureModel, address: String?, units: DisplayUnitSystem) throws -> Data {
     let options = FloorplanWriter.Options(address: address, units: UnitFormatter(system: units))
     return try FloorplanWriter.pdf(model: model, options: options)
+  }
+
+  /// The plan alone, laid out for a phone's width so its names and dimensions read at a glance
+  /// (no title or footer: the screen has its own).
+  static func screenPDF(model: CaptureModel, units: DisplayUnitSystem) throws -> Data {
+    let options = FloorplanWriter.Options(units: UnitFormatter(system: units))
+    return try FloorplanWriter.screenPDF(model: model, options: options)
   }
 
   /// The PDF's first page as a PNG at `dpi` on white, with that resolution in the file so it
@@ -88,6 +95,8 @@ final class FloorplanModel {
   @ObservationIgnored private let exportName: String
   private(set) var units: DisplayUnitSystem
   private(set) var pdf: Data?
+  /// The plan alone, shown on screen.
+  private(set) var screen: Data?
   /// `floorplan.pdf` and `floorplan.png`, once written for the current units.
   private(set) var files: [URL] = []
   private(set) var isWriting = false
@@ -101,8 +110,9 @@ final class FloorplanModel {
     self.exportName = exportName
   }
 
-  /// Writes the plan in `units` (the current units when nil): first the PDF, shown at once,
-  /// then the PNG and both files. A newer request makes an older one's results be dropped.
+  /// Writes the plan in `units` (the current units when nil): first the screen version, shown
+  /// at once, then the page PDF, the PNG and both files. A newer request makes an older one's
+  /// results be dropped.
   func write(units newUnits: DisplayUnitSystem? = nil) async {
     if let newUnits { units = newUnits }
     generation += 1
@@ -117,6 +127,11 @@ final class FloorplanModel {
     files = []
     errorMessage = nil
     do {
+      let screen = try await Task.detached(priority: .userInitiated) {
+        try FloorplanFiles.screenPDF(model: model, units: units)
+      }.value
+      guard current == generation else { return }
+      self.screen = screen
       let pdf = try await Task.detached(priority: .userInitiated) {
         try FloorplanFiles.pdf(model: model, address: address, units: units)
       }.value
@@ -135,9 +150,9 @@ final class FloorplanModel {
   }
 }
 
-/// The Floorplan card: the page itself (pinch to zoom, double-tap to zoom in), a Units menu
-/// that rewrites it in feet-inches or metres, and Download, which shares floorplan.pdf and a
-/// 300 dpi floorplan.png.
+/// The Floorplan card: the plan alone, filling the card (pinch to zoom, double-tap to zoom
+/// in), a Units menu that rewrites it in feet-inches or metres, and Download, which shares the
+/// full page as floorplan.pdf and a 300 dpi floorplan.png.
 struct FloorplanView: View {
   let floorplan: FloorplanModel
 
@@ -150,8 +165,8 @@ struct FloorplanView: View {
       }
       ZStack {
         Color.white
-        if let pdf = floorplan.pdf {
-          PDFPageView(data: pdf)
+        if let screen = floorplan.screen {
+          PDFPageView(data: screen)
             .accessibilityLabel("Floor plan")
             .accessibilityIdentifier("floorplan.page")
         } else if let message = floorplan.errorMessage {
@@ -163,7 +178,7 @@ struct FloorplanView: View {
       .clipShape(RoundedRectangle(cornerRadius: Radius.card))
       .overlay(RoundedRectangle(cornerRadius: Radius.card).stroke(Palette.line, lineWidth: 1))
       .overlay(alignment: .bottomTrailing) {
-        if floorplan.pdf != nil {
+        if floorplan.screen != nil {
           Text("Pinch to zoom").font(Typo.caption).foregroundStyle(Palette.muted)
             .padding(Space.s2)
         }

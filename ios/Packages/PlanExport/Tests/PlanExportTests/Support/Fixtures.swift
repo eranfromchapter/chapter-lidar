@@ -134,6 +134,62 @@ enum WalkthroughFixture {
 
 /// A small model for synthetic cases: one rectangular room with four walls.
 enum Synthetic {
+  /// Rooms from outlines in model metres (x, z), with a wall along every room edge (shared
+  /// edges once) and, when given, a door on the wall from `door.from` to `door.to`.
+  static func rooms(
+    _ rooms: [(label: String, type: RoomType, outline: [(Double, Double)])],
+    door: (from: (Double, Double), to: (Double, Double))? = nil
+  ) -> CaptureModel {
+    var model = room(width: 1, length: 1)
+    model.rooms = rooms.enumerated().map { index, room in
+      CaptureModel.Room(
+        id: "room-\(index + 1)", label: room.label,
+        polygon: room.outline.map { Vec3(x: $0.0, y: 0, z: $0.1) }, heightM: 2.7,
+        type: room.type, typeSource: .operator)
+    }
+    model.walls = []
+    var seen: [((Double, Double), (Double, Double))] = []
+    for room in rooms {
+      for index in room.outline.indices {
+        let a = room.outline[index]
+        let b = room.outline[(index + 1) % room.outline.count]
+        guard !seen.contains(where: { ($0.0 == a && $0.1 == b) || ($0.0 == b && $0.1 == a) })
+        else { continue }
+        seen.append((a, b))
+        model.walls.append(
+          CaptureModel.Wall(
+            id: "wall-\(model.walls.count + 1)", start: Vec3(x: a.0, y: 0, z: a.1),
+            end: Vec3(x: b.0, y: 0, z: b.1), heightM: 2.7, thicknessM: 0))
+      }
+    }
+    if let door {
+      let index = seen.firstIndex {
+        ($0.0 == door.from && $0.1 == door.to) || ($0.0 == door.to && $0.1 == door.from)
+      }!
+      let wall = model.walls[index]
+      let length = hypot(door.to.0 - door.from.0, door.to.1 - door.from.1)
+      model.doors = [
+        CaptureModel.WallOpening(
+          id: "door-1", wallId: wall.id, offsetM: length / 2, bottomM: 0, widthM: length,
+          heightM: 2)
+      ]
+    }
+    return model
+  }
+
+  /// Rooms side by side along x, each `length` deep, with one wall per edge.
+  static func twoRooms(widths: [Double], length: Double) -> CaptureModel {
+    var x = 0.0
+    var outlines: [(label: String, type: RoomType, outline: [(Double, Double)])] = []
+    for (index, width) in widths.enumerated() {
+      outlines.append(
+        ("Room \(index + 1)", .bedroom, [(x, 0), (x, length), (x + width, length), (x + width, 0)])
+      )
+      x += width
+    }
+    return rooms(outlines)
+  }
+
   static func room(width: Double, length: Double, label: String = "Room", id: String = "room-1")
     -> CaptureModel
   {

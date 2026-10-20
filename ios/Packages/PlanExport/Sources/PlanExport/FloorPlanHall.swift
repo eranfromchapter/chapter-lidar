@@ -6,17 +6,21 @@ import Foundation
 /// metres: the rooms and walls, closed up by `reach` (gaps narrower than twice that are
 /// filled, square corners stay square), less what was there; a filled region is kept when it
 /// is at least `minimumArea` and touches a door or an opening, or is closed in all round.
+/// Where a region meets unscanned ground (no wall, room or opening there) its edge is given
+/// as straight runs at least `minimumEdge` long, for a thin line that closes the floor.
 /// Plan metres.
 struct HallFill {
   var cell = 0.025
   var reach = 0.5
   var minimumArea = 0.25
+  var minimumEdge = 0.15
 
-  /// Rectangles covering each region, with the room the region opens to (nil when none).
+  /// Rectangles covering each region, with the room the region opens to (nil when none) and
+  /// its edges against unscanned ground.
   func regions(
     rooms: [[Point2]], walls: [[Point2]], openings: [(a: Point2, b: Point2, normal: Point2,
       lo: Double, hi: Double)]
-  ) -> [(rects: [[Point2]], room: Int?)] {
+  ) -> [(rects: [[Point2]], room: Int?, edges: [(Point2, Point2)])] {
     let shapes = rooms + walls
     let points = shapes.flatMap { $0 }
     guard let first = points.first else { return [] }
@@ -89,7 +93,7 @@ struct HallFill {
 
     // Regions of the added floor.
     var region = [Int](repeating: -1, count: width * height)
-    var results: [(rects: [[Point2]], room: Int?)] = []
+    var results: [(rects: [[Point2]], room: Int?, edges: [(Point2, Point2)])] = []
     var next = 0
     for start in 0..<(width * height) where closed[start] && !solid[start] && region[start] < 0 {
       var stack = [start]
@@ -196,7 +200,58 @@ struct HallFill {
         rects.append(rectangle(run.i0, run.i1, run.j0, previousRow!))
       }
       rects.sort { ($0[0].y, $0[0].x) < ($1[0].y, $1[0].x) }
-      results.append((rects, room))
+      // Cell sides facing ground outside the closing, joined into straight runs along each
+      // grid line: rows of horizontal sides (below and above each cell), then columns.
+      var edges: [(Point2, Point2)] = []
+      func outside(_ i: Int, _ j: Int) -> Bool {
+        i < 0 || j < 0 || i >= width || j >= height || !closed[j * width + i]
+      }
+      for horizontal in [true, false] {
+        for side in [-1, 1] {
+          var runs: [Int: [Int]] = [:]
+          for index in members {
+            let i = index % width
+            let j = index / width
+            let faces = horizontal ? outside(i, j + side) : outside(i + side, j)
+            guard faces else { continue }
+            let line = horizontal ? j : i
+            runs[line, default: []].append(horizontal ? i : j)
+          }
+          for line in runs.keys.sorted() {
+            let steps = runs[line]!.sorted()
+            var first = steps[0]
+            var last = steps[0]
+            for step in steps.dropFirst() + [Int.max] {
+              if step == last + 1 {
+                last = step
+                continue
+              }
+              let length = Double(last - first + 1) * cell
+              if length >= minimumEdge {
+                let across = Double(line) + (side > 0 ? 1 : 0)
+                if horizontal {
+                  let y = low.y + across * cell
+                  edges.append(
+                    (
+                      Point2(x: low.x + Double(first) * cell, y: y),
+                      Point2(x: low.x + Double(last + 1) * cell, y: y)
+                    ))
+                } else {
+                  let x = low.x + across * cell
+                  edges.append(
+                    (
+                      Point2(x: x, y: low.y + Double(first) * cell),
+                      Point2(x: x, y: low.y + Double(last + 1) * cell)
+                    ))
+                }
+              }
+              first = step
+              last = step
+            }
+          }
+        }
+      }
+      results.append((rects, room, edges))
     }
     return results
   }

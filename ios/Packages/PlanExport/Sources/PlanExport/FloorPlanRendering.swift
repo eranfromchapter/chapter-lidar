@@ -15,10 +15,12 @@ extension FloorPlanDrawing {
     renderer.draw(items)
   }
 
-  /// One-page PDF of the drawing alone, printed at its scale with a 10 mm margin.
-  public func pdf(title: String, creationDate: String = "D:20260101000000Z") -> Data {
+  /// One-page PDF of the drawing alone, printed at its scale with a `marginMM` margin.
+  public func pdf(
+    title: String, creationDate: String = "D:20260101000000Z", marginMM: Double = 10
+  ) -> Data {
     let mm = 72.0 / 25.4
-    let margin = 10.0
+    let margin = marginMM
     let width = bounds.width / options.scaleDenominator + 2 * margin
     let height = bounds.height / options.scaleDenominator + 2 * margin
     let page = PDFPage(width: width * mm, height: height * mm)

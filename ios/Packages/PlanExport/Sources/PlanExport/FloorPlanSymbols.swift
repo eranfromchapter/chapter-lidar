@@ -19,6 +19,16 @@ struct PlacedSymbol: Sendable {
   var lowConfidence: Bool
   /// Hung on a wall or overhead (its underside a metre or more above the floor).
   var overhead = false
+  /// Height of its top above the floor, metres; 0 when not known.
+  var top = 0.0
+
+  /// A plumbing fixture or an appliance: a symbol full of detail that a label must not cover.
+  var isFixture: Bool {
+    [
+      "toilet", "bathtub", "sink", "stove", "oven", "refrigerator", "dishwasher",
+      "washer-dryer", "fireplace", "stairs",
+    ].contains(kind)
+  }
 }
 
 /// Plan symbols in the footprint of each recognized object, built in a local frame: x across

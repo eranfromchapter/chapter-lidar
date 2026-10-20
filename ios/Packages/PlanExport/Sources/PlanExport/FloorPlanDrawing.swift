@@ -16,12 +16,14 @@ struct FloorPlanStyle: Sendable {
   // Line widths.
   var symbolWidth = 0.12
   var jambWidth = 0.12
-  var leafWidth = 0.3
+  var leafWidth = 0.15
   var swingWidth = 0.13
   var windowWidth = 0.12
-  var glassWidth = 0.1
+  var glassWidth = 0.2
   var exteriorDimensionWidth = 0.14
   var interiorDimensionWidth = 0.12
+  /// A door leaf is drawn as a panel this thick.
+  var leafThickness = 0.5
 
   // Text sizes (em).
   var roomNameSize = 3.1
@@ -36,14 +38,18 @@ struct FloorPlanStyle: Sendable {
   var labelGap = 0.8
   /// Space kept free around every label.
   var labelPadding = 0.3
+  /// Open floor wanted round a room name before it moves off the middle of the room to get
+  /// it (plan metres).
+  var labelFurnitureClearance = 0.25
   /// Half width of a dimension line when checking it against labels.
   var lineClearance = 0.12
   /// Outside dimensions: first row from the wall face, then each further row.
   var exteriorOffset = 5.0
   var exteriorTierStep = 4.5
   var exteriorTiers = 6
-  /// Outside wall runs shorter than this (plan metres) get no dimension of their own.
-  var exteriorMinimumM = 0.3
+  /// Outside wall runs (and pieces of a run between partitions) shorter than this (plan
+  /// metres, about 2 ft) get no dimension of their own.
+  var exteriorMinimumM = 0.6
   /// Outside runs shorter than this may go without a dimension when it would cross others.
   var exteriorOptionalM = 1.25
   var tickLength = 2.0
@@ -54,8 +60,8 @@ struct FloorPlanStyle: Sendable {
   var interiorTierStep = 3.2
   /// Room edges shorter than this (plan metres) get no inside dimension.
   var interiorMinimumM = 0.25
-  /// Door and window jamb lines run this far past the wall faces.
-  var jambOverhang = 0.8
+  /// Door and passage jamb lines run this far past the wall faces (window frames stop at them).
+  var jambOverhang = 0.6
   var compassRadius = 7.0
   var scaleBarHeight = 0.9
 
@@ -194,6 +200,8 @@ public struct FloorPlanDrawing: Sendable {
   let labels: [PlacedLabel]
   let exteriorDimensions: [ExteriorDimension]
   let droppedInteriorDimensions: Int
+  /// Short outside runs left without a dimension (see `AnnotationLayout`).
+  let omittedExterior: Int
 
   public init(model: CaptureModel, options: Options = Options()) throws {
     let style = FloorPlanStyle()
@@ -253,6 +261,7 @@ public struct FloorPlanDrawing: Sendable {
         {
           if let box = source?.box {
             symbol.overhead = box.center.y - abs(box.sizeM.y) / 2 - floor >= 1.0
+            symbol.top = box.center.y + abs(box.sizeM.y) / 2 - floor
           }
           symbols.append(symbol)
         }
@@ -268,6 +277,7 @@ public struct FloorPlanDrawing: Sendable {
       openings: walls.gaps.filter { $0.opening.kind != .window }.map {
         ($0.a, $0.b, $0.normal, $0.lo, $0.hi)
       })
+    var hallEdges = PathBuilder()
     for region in hall {
       var path = PathBuilder()
       for rect in region.rects { path.polygon(rect) }
@@ -275,6 +285,7 @@ public struct FloorPlanDrawing: Sendable {
       items.append(
         .shape(
           DrawingShape(path: path.path, fill: FloorPlanStyle.roomFill(type), layer: .roomFill)))
+      for (a, b) in region.edges { hallEdges.segment(a, b) }
     }
     // Room fills.
     for room in rooms {
@@ -285,15 +296,34 @@ public struct FloorPlanDrawing: Sendable {
           DrawingShape(
             path: path.path, fill: FloorPlanStyle.roomFill(room.type), layer: .roomFill)))
     }
-    // Symbols: each drawn once in thin solid grey, lighter for a low-confidence detection.
-    // Overhead and wall-hung objects (upper cabinets, a mounted television) are drawn as a
-    // dashed outline only, the drafting sign for something above the cut.
-    for symbol in symbols {
+    // Symbols, each filled with the floor colour under it and outlined once in thin solid
+    // grey (lighter for a low-confidence detection), lowest first, so where furniture overlaps
+    // (a coffee table run under a sofa) the taller piece hides the lower one cleanly. Overhead
+    // and wall-hung objects (upper cabinets, a mounted television) come last as a light dashed
+    // outline only, the drafting sign for something above the cut.
+    func floorColour(at p: Point2) -> DrawingColor {
+      if let room = rooms.first(where: { PlanGeometry.contains($0.polygon, p) }) {
+        return FloorPlanStyle.roomFill(room.type)
+      }
+      for region in hall where region.rects.contains(where: { PlanGeometry.contains($0, p) }) {
+        return FloorPlanStyle.roomFill(region.room.map { rooms[$0].type } ?? .hallway)
+      }
+      return .white
+    }
+    let order = symbols.indices.sorted {
+      let a = symbols[$0]
+      let b = symbols[$1]
+      if a.overhead != b.overhead { return !a.overhead }
+      return a.top < b.top - 1e-9 || (abs(a.top - b.top) <= 1e-9 && $0 < $1)
+    }
+    for index in order {
+      let symbol = symbols[index]
       let stroke = DrawingStroke(
         color: symbol.lowConfidence ? style.faintSymbol : style.symbol,
         width: style.symbolWidth * k * 1000, cap: .round, join: .round)
       if symbol.overhead {
         var dashed = stroke
+        dashed.color = style.faintSymbol
         dashed.dash = [1.0 * k * 1000, 0.6 * k * 1000]
         var outline = PathBuilder()
         outline.polygon(symbol.footprint)
@@ -303,26 +333,42 @@ public struct FloorPlanDrawing: Sendable {
       var path = symbol.outline.path
       path.append(symbol.details.path)
       if !path.elements.isEmpty {
-        items.append(.shape(DrawingShape(path: path, stroke: stroke, layer: .symbol)))
+        let center = symbol.footprint.reduce(Point2(x: 0, y: 0), +) * 0.25
+        items.append(
+          .shape(
+            DrawingShape(
+              path: path, fill: floorColour(at: center), stroke: stroke, layer: .symbol)))
       }
     }
-    // Walls: one path, nonzero winding, so overlapping pieces paint as their union.
+    // Walls: one path, nonzero winding, so overlapping pieces paint as their union. The jamb
+    // lines of doors and passages go under them, the rest of each opening over them.
+    let openings = FloorPlanDrawing.openingItems(
+      walls: walls, wallPieces: wallPieces, rooms: rooms, floor: hall.flatMap(\.rects),
+      symbols: symbols.filter { !$0.overhead }.map(\.footprint), style: style, k: k)
+    items += openings.under
+    // Where that floor stops at unscanned ground, a thin line closes it.
+    if !hallEdges.isEmpty {
+      items.append(
+        .shape(
+          DrawingShape(
+            path: hallEdges.path,
+            stroke: DrawingStroke(color: style.symbol, width: style.jambWidth * k * 1000),
+            layer: .opening)))
+    }
     var wallPath = PathBuilder()
     for piece in wallPieces { wallPath.polygon(piece) }
     if !wallPath.isEmpty {
       items.append(.shape(DrawingShape(path: wallPath.path, fill: style.wall, layer: .wall)))
     }
-    let openings = FloorPlanDrawing.openingItems(
-      walls: walls, rooms: rooms, symbols: symbols.filter { !$0.overhead }.map(\.footprint),
-      style: style, k: k)
-    items += openings.items
+    items += openings.over
 
     // Annotations.
     let building = walls.loops.filter { $0.closed && Geo.signedArea($0.outer) > 0 }.map(\.outer)
     var layout = AnnotationLayout(
       style: style, units: options.units, scaleDenominator: options.scaleDenominator,
-      symbols: symbols.map(\.footprint), building: building, wallPieces: wallPieces,
-      swings: openings.swings)
+      symbols: symbols.filter { !$0.overhead }.map(\.footprint),
+      fixtures: symbols.filter { !$0.overhead && $0.isFixture }.map(\.footprint),
+      building: building, wallPieces: wallPieces, swings: openings.swings)
     if options.roomNames || options.roomAreas {
       for room in rooms {
         layout.placeRoomLabel(
@@ -412,16 +458,18 @@ public struct FloorPlanDrawing: Sendable {
     self.labels = layout.labels
     self.exteriorDimensions = layout.exteriorDimensions
     self.droppedInteriorDimensions = layout.droppedInteriorDimensions
+    self.omittedExterior = layout.omittedExteriorDimensions
     self.grossAreaM2 = walls.grossAreaM2
     self.roomAreaM2 = rooms.map(\.areaM2).reduce(0, +)
   }
 
   /// The drawing at the largest whole-number scale (1:n) that fits `widthMM` by `heightMM` of
-  /// paper; `options.scaleDenominator` is replaced. `start` is a first guess of n (for example
-  /// from `estimatedDenominator`), which saves drawings when it is close.
+  /// paper, but none larger than 1:`minimumDenominator` (a small plan is not blown up to fill
+  /// the paper); `options.scaleDenominator` is replaced. `start` is a first guess of n (for
+  /// example from `estimatedDenominator`), which saves drawings when it is close.
   public static func fitted(
     model: CaptureModel, widthMM: Double, heightMM: Double, options: Options = Options(),
-    start: Double? = nil
+    start: Double? = nil, minimumDenominator: Double = 1
   ) throws -> FloorPlanDrawing {
     guard widthMM > 0, heightMM > 0 else {
       throw PlanExportError.invalidGeometry("the drawing area is empty")
@@ -430,8 +478,9 @@ public struct FloorPlanDrawing: Sendable {
     guard let planBounds = geometry.bounds else { throw PlanExportError.noPlanGeometry }
     let span = max(planBounds.width, planBounds.height, 0.5) * 1000
     // Start as if a quarter of the paper went to dimensions, then correct from the result.
-    var denominator = max(1, (span / (min(widthMM, heightMM) * 0.75)).rounded(.up))
-    if let start, start.isFinite, start >= 1 { denominator = start.rounded(.up) }
+    let least = max(1, minimumDenominator.rounded(.up))
+    var denominator = max(least, (span / (min(widthMM, heightMM) * 0.75)).rounded(.up))
+    if let start, start.isFinite, start >= 1 { denominator = max(least, start.rounded(.up)) }
     var options = options
     var fits: FloorPlanDrawing?
     var last: FloorPlanDrawing?
@@ -445,7 +494,7 @@ public struct FloorPlanDrawing: Sendable {
       if needed <= 1 {
         // Fits: try the finer scale the margin allows; stop when there is none.
         fits = candidate
-        let finer = max(1, (denominator * needed).rounded(.up))
+        let finer = max(least, (denominator * needed).rounded(.up))
         if finer >= denominator { break }
         denominator = finer
       } else {
@@ -568,43 +617,71 @@ public struct FloorPlanDrawing: Sendable {
     return Geo.signedArea(out) > 0 ? out : polygon
   }
 
-  /// Door leaves and swings, window glazing and the jamb lines of each opening, and each
-  /// door's swing (the quarter circle it sweeps) for label placement to keep clear of.
-  ///
-  /// A door swings into the room it belongs to, hinged at the end nearer a corner, unless that
-  /// swing would cross another door's or sweep over a fixture or piece of furniture; then it is
-  /// hinged at its other end or swung the other way, whichever is clear. A door that cannot
-  /// swing clear any way is drawn as a cased opening (jambs only).
-  static func openingItems(
-    walls: WallLayout, rooms: [DrawnRoom], symbols: [[Point2]], style: FloorPlanStyle,
-    k: Double
-  ) -> (items: [DrawingItem], swings: [[Point2]]) {
+  /// What `openingItems` draws: jamb lines to go under the walls (so a jamb never crosses a
+  /// wall it meets), the rest over them, and each door's swing (the quarter circle it sweeps,
+  /// drawn a little large so it covers the arc) for labels and dimensions to keep clear of.
+  struct OpeningDrawing {
+    var under: [DrawingItem] = []
+    var over: [DrawingItem] = []
     var swings: [[Point2]] = []
+  }
+
+  /// Door leaves and swings, windows and the jamb lines of each opening.
+  ///
+  /// - A window is drawn inside the wall thickness only: a white frame outlined in the light
+  ///   symbol grey and a heavier glass line along its middle, so it reads lighter than a
+  ///   doorway and nothing of it runs past the wall faces.
+  /// - A door or an open passage has jamb lines a little past both wall faces; a passage also
+  ///   has its two faces drawn thin across it, so the floor on either side reads as closed.
+  /// - A door swings into the room it belongs to, hinged at the end nearer a corner, unless
+  ///   that swing would cross another door's, run out onto unscanned ground (neither a room
+  ///   nor `floor`), lay its leaf on a wall face, or sweep over a fixture or piece of
+  ///   furniture; then it is hinged at its other end or swung the other way, whichever is
+  ///   clear. A door that cannot swing clear any way is drawn as a cased opening (jambs only).
+  ///   The leaf is a thin white panel outlined in the wall colour, so it shows on a wall too.
+  static func openingItems(
+    walls: WallLayout, wallPieces: [[Point2]], rooms: [DrawnRoom], floor: [[Point2]],
+    symbols: [[Point2]], style: FloorPlanStyle, k: Double
+  ) -> OpeningDrawing {
+    var swings: [[Point2]] = []
+    var padded: [[Point2]] = []
     var doors = PathBuilder()
     var leaves = PathBuilder()
     var jambs = PathBuilder()
     var faces = PathBuilder()
+    var frames = PathBuilder()
     var glazing = PathBuilder()
     let overhang = style.jambOverhang * k
+    let leafThickness = style.leafThickness * k
+    let wallObstacles = wallPieces.map(Obstacle.init)
+    let footprints = symbols.map(Obstacle.init)
+    func onFloor(_ p: Point2) -> Bool {
+      rooms.contains { PlanGeometry.contains($0.polygon, p) }
+        || floor.contains { PlanGeometry.contains($0, p) }
+    }
     for gap in walls.gaps {
       let n = gap.normal
       let width = gap.a.distance(to: gap.b)
       guard width > 0.01 else { continue }
-      // Jamb lines across the wall at both ends, a little past its faces.
-      for end in [gap.a, gap.b] {
-        jambs.segment(end + n * (gap.lo - overhang), end + n * (gap.hi + overhang))
-      }
       switch gap.opening.kind {
       case .opening:
-        continue
-      case .window:
-        // The two wall faces and the glass between them.
+        for end in [gap.a, gap.b] {
+          jambs.segment(end + n * (gap.lo - overhang), end + n * (gap.hi + overhang))
+        }
         for offset in [gap.lo, gap.hi] {
           faces.segment(gap.a + n * offset, gap.b + n * offset)
         }
+      case .window:
+        // The frame inside the wall thickness and the glass along its middle.
+        frames.polygon([
+          gap.a + n * gap.lo, gap.b + n * gap.lo, gap.b + n * gap.hi, gap.a + n * gap.hi,
+        ])
         let middle = (gap.lo + gap.hi) / 2
         glazing.segment(gap.a + n * middle, gap.b + n * middle)
       case .door:
+        for end in [gap.a, gap.b] {
+          jambs.segment(end + n * (gap.lo - overhang), end + n * (gap.hi + overhang))
+        }
         // Into the room the door belongs to, hinged at the end nearer a corner.
         let middle = (gap.a + gap.b) * 0.5
         let above = rooms.firstIndex {
@@ -618,12 +695,15 @@ public struct FloorPlanDrawing: Sendable {
           side = FloorPlanDrawing.doorRoomOrder(rooms[above], rooms[below]) ? 1 : -1
         } else if below != nil {
           side = -1
+        } else if above == nil, onFloor(middle + n * (gap.lo - 0.12)) {
+          side = -1
         }
         let hingeAtA = gap.distanceToStart <= gap.distanceToEnd
         struct Swing {
           var hinge: Point2
           var tip: Point2
           var jamb: Point2
+          var leaf: [Point2]
           var sector: [Point2]
           var score: Int
         }
@@ -638,33 +718,47 @@ public struct FloorPlanDrawing: Sendable {
           let hinge = (atA ? gap.a : gap.b) + n * face
           let jamb = (atA ? gap.b : gap.a) + n * face
           let tip = hinge + n * (s * width)
-          var sector = [hinge]
-          let start = atan2((tip - hinge).y, (tip - hinge).x)
-          var sweep = atan2((jamb - hinge).y, (jamb - hinge).x) - start
-          while sweep > .pi { sweep -= 2 * .pi }
-          while sweep < -.pi { sweep += 2 * .pi }
-          for step in 0...8 {
-            let angle = start + sweep * Double(step) / 8
-            sector.append(hinge + Point2(x: cos(angle), y: sin(angle)) * width)
-          }
-          sector = Geo.counterClockwise(sector)
+          let sector = FloorPlanDrawing.sector(hinge: hinge, tip: tip, jamb: jamb, pad: 0)
+          // The leaf: a thin panel from the hinge to the tip, on the side towards the jamb.
+          let toJamb = (jamb - hinge).unit * leafThickness
+          let leaf = Geo.counterClockwise([hinge, tip, tip + toJamb, hinge + toJamb])
           var score = option.preference
-          // Into a room, not out of the building.
+          // Into a room or onto floor, not out onto unscanned ground.
           let into = middle + n * (s * (abs(face) + width / 2))
-          if !rooms.contains(where: { PlanGeometry.contains($0.polygon, into) }) { score += 20 }
+          if !onFloor(into) { score += 100 }
           let margin = 0.02
           for other in swings where Geo.convexOverlap(sector, other, margin: margin) {
             score += 100
           }
-          for footprint in symbols where Geo.convexOverlap(sector, footprint, margin: margin) {
+          // Furniture under the swing, more when the open leaf would cut through it.
+          for footprint in footprints
+          where Geo.convexOverlap(sector, footprint.polygon, margin: margin) {
             score += 10
+            if Geo.convexOverlap(leaf, footprint.polygon, margin: 0.005) { score += 30 }
+          }
+          // A leaf lying on a wall face disappears into the wall, and one close beside it
+          // reads poorly.
+          let probes = (1...4).map { hinge + (tip - hinge) * (Double($0) / 4) + toJamb * 0.5 }
+          let gaps = probes.map { p in
+            wallObstacles.map {
+              PlanGeometry.contains($0.polygon, p)
+                ? 0 : PlanGeometry.distanceToBoundary(of: $0.polygon, from: p)
+            }.min() ?? .infinity
+          }
+          let near = max(leafThickness * 1.5, 1.5 * k)
+          let clearance = gaps.sorted()[1]
+          if clearance < leafThickness {
+            score += 40
+          } else if clearance < near {
+            score += Int((20 * (1 - clearance / near)).rounded(.up))
           }
           if best == nil || score < best!.score {
-            best = Swing(hinge: hinge, tip: tip, jamb: jamb, sector: sector, score: score)
+            best = Swing(
+              hinge: hinge, tip: tip, jamb: jamb, leaf: leaf, sector: sector, score: score)
           }
         }
         guard let swing = best, swing.score < 100 else { continue }
-        leaves.segment(swing.hinge, swing.tip)
+        leaves.polygon(swing.leaf)
         let startDegrees =
           atan2((swing.tip - swing.hinge).y, (swing.tip - swing.hinge).x) * 180 / .pi
         var sweep =
@@ -677,12 +771,15 @@ public struct FloorPlanDrawing: Sendable {
           cx: 0, cy: 0, rx: width, ry: width, start: startDegrees, end: startDegrees + sweep,
           move: true)
         swings.append(swing.sector)
+        padded.append(
+          FloorPlanDrawing.sector(
+            hinge: swing.hinge, tip: swing.tip, jamb: swing.jamb, pad: style.labelPadding * k))
       }
     }
-    var items: [DrawingItem] = []
+    var drawing = OpeningDrawing(swings: padded)
     let mm = k * 1000
     if !jambs.isEmpty {
-      items.append(
+      drawing.under.append(
         .shape(
           DrawingShape(
             path: jambs.path,
@@ -690,38 +787,66 @@ public struct FloorPlanDrawing: Sendable {
             layer: .opening)))
     }
     if !faces.isEmpty {
-      items.append(
+      drawing.over.append(
         .shape(
           DrawingShape(
             path: faces.path,
-            stroke: DrawingStroke(color: style.wall, width: style.windowWidth * mm),
+            stroke: DrawingStroke(color: style.symbol, width: style.jambWidth * mm),
+            layer: .opening)))
+    }
+    if !frames.isEmpty {
+      drawing.over.append(
+        .shape(
+          DrawingShape(
+            path: frames.path, fill: .white,
+            stroke: DrawingStroke(color: style.symbol, width: style.windowWidth * mm),
             layer: .window)))
     }
     if !glazing.isEmpty {
-      items.append(
+      drawing.over.append(
         .shape(
           DrawingShape(
             path: glazing.path,
-            stroke: DrawingStroke(color: style.symbol, width: style.glassWidth * mm),
+            stroke: DrawingStroke(color: style.wall, width: style.glassWidth * mm),
             layer: .window)))
     }
     if !leaves.isEmpty {
-      items.append(
+      drawing.over.append(
         .shape(
           DrawingShape(
-            path: leaves.path,
-            stroke: DrawingStroke(color: style.wall, width: style.leafWidth * mm, cap: .round),
+            path: leaves.path, fill: .white,
+            stroke: DrawingStroke(color: style.wall, width: style.leafWidth * mm, join: .round),
             layer: .door)))
     }
     if !doors.isEmpty {
-      items.append(
+      drawing.over.append(
         .shape(
           DrawingShape(
             path: doors.path,
             stroke: DrawingStroke(color: style.wall, width: style.swingWidth * mm),
             layer: .door)))
     }
-    return (items, swings)
+    return drawing
+  }
+
+  /// The quarter circle a door sweeps from `tip` to `jamb` about `hinge`, as a convex outline
+  /// that covers the arc (its chords pushed out to touch it) grown by `pad`.
+  static func sector(hinge: Point2, tip: Point2, jamb: Point2, pad: Double) -> [Point2] {
+    let radius = hinge.distance(to: tip)
+    let start = atan2((tip - hinge).y, (tip - hinge).x)
+    var sweep = atan2((jamb - hinge).y, (jamb - hinge).x) - start
+    while sweep > .pi { sweep -= 2 * .pi }
+    while sweep < -.pi { sweep += 2 * .pi }
+    let steps = 8
+    let reach = (radius + pad) / cos(abs(sweep) / Double(steps) / 2)
+    var points: [Point2] = []
+    let back = Point2(x: -cos(start + sweep / 2), y: -sin(start + sweep / 2))
+    points.append(hinge + back * pad)
+    for step in 0...steps {
+      let angle = start + sweep * Double(step) / Double(steps)
+      points.append(hinge + Point2(x: cos(angle), y: sin(angle)) * reach)
+    }
+    return Geo.counterClockwise(points)
   }
 
   /// True when a door between `a` and `b` belongs to (swings into) `a`: a bathroom, then a

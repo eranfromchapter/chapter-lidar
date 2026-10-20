@@ -82,15 +82,19 @@ final class FloorplanWriterTests: XCTestCase {
     XCTAssertGreaterThan(shown.filter { $0.contains("' ") && $0.hasSuffix("\"") }.count, 20)
     XCTAssertTrue(shown.contains { $0.hasSuffix(" ft") && $0.count <= 6 }, "scale bar")
     XCTAssertTrue(shown.contains("Measurements are approximate."))
-    XCTAssertFalse(shown.contains { $0.contains("1:") }, "no print scale in words")
-    // Chapter colours: warm charcoal walls, bronze inside dimensions, brand black text.
+    // The print scale beside the bar, as the page is printed at full size.
+    XCTAssertTrue(shown.contains("1:\(Format.compact(plan.scaleDenominator))"), "print scale")
+    XCTAssertGreaterThanOrEqual(plan.scaleDenominator, 50)
+    // Chapter colours: warm charcoal walls, bronze inside dimensions on paler lines, brand
+    // black text.
     let stream = try XCTUnwrap(pdf.contentStreams.first)
     func rgb(_ color: DrawingColor, _ op: String) -> String {
       [color.red, color.green, color.blue].map { Format.fixed($0, 4) }.joined(separator: " ")
         + " \(op)"
     }
     XCTAssertTrue(stream.contains(rgb(ChapterBrand.wall, "rg")), "Chapter walls")
-    XCTAssertTrue(stream.contains(rgb(ChapterBrand.accentLine, "RG")), "bronze inside dimensions")
+    XCTAssertTrue(stream.contains(rgb(ChapterBrand.accent, "rg")), "bronze inside dimensions")
+    XCTAssertTrue(stream.contains(rgb(ChapterBrand.accentLine, "RG")), "paler dimension lines")
     XCTAssertTrue(stream.contains(rgb(ChapterBrand.ink, "rg")), "brand black")
     XCTAssertTrue(stream.contains("1.0000 1.0000 1.0000 rg"), "white paper")
   }
@@ -109,11 +113,15 @@ final class FloorplanWriterTests: XCTestCase {
     let metres = UnitFormatter.decimals(totals.exteriorAreaEstimateM2, places: 1)!
     XCTAssertEqual(metric.totalText, "Approximately \(metres) m\u{00B2} total")
     // The total follows the assumed exterior wall thickness.
-    let room = Synthetic.room(width: 4, length: 3)
-    let thick = try write(room)
-    let thin = try write(room) { $0.exteriorWallThicknessM = 0.05 }
-    XCTAssertEqual(thick.totalAreaM2, (4 + 2 * 0.1524) * (3 + 2 * 0.1524), accuracy: 0.02)
-    XCTAssertEqual(thin.totalAreaM2, 4.1 * 3.1, accuracy: 0.02)
+    let rooms = Synthetic.twoRooms(widths: [4, 2], length: 3)
+    let thick = try write(rooms)
+    let thin = try write(rooms) { $0.exteriorWallThicknessM = 0.05 }
+    XCTAssertEqual(thick.totalAreaM2, (6 + 2 * 0.1524) * (3 + 2 * 0.1524), accuracy: 0.02)
+    XCTAssertEqual(thin.totalAreaM2, 6.1 * 3.1, accuracy: 0.02)
+    // One room: its own floor area, the same as its label, not a total to walls assumed.
+    let single = try write(Synthetic.room(width: 4, length: 3))
+    XCTAssertEqual(single.totalAreaM2, 12, accuracy: 1e-9)
+    XCTAssertEqual(single.totalText, "Approximately 129 ft\u{00B2} total")
   }
 
   func testApproximateAreaFormat() {
@@ -218,11 +226,11 @@ final class FloorplanWriterTests: XCTestCase {
     let long = try write(Synthetic.room(width: 14, length: 4))
     XCTAssertEqual(long.page, .letterLandscape)
     XCTAssertEqual(PDFFile(long.pdf).mediaBoxes.first ?? [], [0, 0, 792, 612])
-    let square = try write(Synthetic.room(width: 5, length: 5))
+    let square = try write(Synthetic.room(width: 11, length: 11))
     XCTAssertEqual(square.page, .square)
     XCTAssertEqual(PDFFile(square.pdf).mediaBoxes.first ?? [], [0, 0, 720, 720])
     // A page can be forced.
-    let forced = try write(Synthetic.room(width: 5, length: 5)) { $0.page = .letterLandscape }
+    let forced = try write(Synthetic.room(width: 11, length: 11)) { $0.page = .letterLandscape }
     XCTAssertEqual(forced.page, .letterLandscape)
     XCTAssertGreaterThan(forced.scaleDenominator, square.scaleDenominator)
     // A tall room is turned a quarter round on Letter landscape.
@@ -261,11 +269,47 @@ final class FloorplanWriterTests: XCTestCase {
       let height = drawing.bounds.height / denominator
       XCTAssertLessThanOrEqual(width, area.width + 1e-6)
       XCTAssertLessThanOrEqual(height, area.height + 1e-6)
-      // And fills it in one direction.
-      XCTAssertGreaterThan(
-        max(width / area.width, height / area.height), 0.85,
-        "\(model.label) \(page) 1:\(denominator)")
+      // And fills it in one direction, unless it is small enough to print at 1:50, the
+      // largest scale used; then it sits in the middle.
+      if denominator > FloorplanWriter.Layout.largestScaleDenominator {
+        XCTAssertGreaterThan(
+          max(width / area.width, height / area.height), 0.85,
+          "\(model.label) \(page) 1:\(denominator)")
+      } else {
+        XCTAssertEqual(denominator, FloorplanWriter.Layout.largestScaleDenominator)
+      }
     }
+  }
+
+  func testASmallPlanIsDrawnAtOneToFiftyInTheMiddle() throws {
+    let sheet = try sheet(Synthetic.room(width: 4, length: 3))
+    XCTAssertEqual(sheet.drawing.options.scaleDenominator, 50)
+    let area = FloorplanWriter.Layout.drawingArea(
+      width: sheet.widthMM, height: sheet.heightMM, hasAddress: true)
+    let walls = sheet.items.compactMap { item -> DrawingShape? in
+      if case .shape(let shape) = item, shape.layer == .wall { return shape }
+      return nil
+    }
+    let xs = walls.flatMap(\.path.points).map(\.x)
+    XCTAssertEqual(
+      (xs.min()! + xs.max()!) / 2, area.x + area.width / 2, accuracy: 0.25 * area.width)
+  }
+
+  func testScreenVersionIsThePlanAloneWithLargerType() throws {
+    let model = WalkthroughFixture.model
+    let screen = PDFFile(try FloorplanWriter.screenPDF(model: model))
+    let sheet = PDFFile(try write(model).pdf)
+    let shown = screen.shownText()
+    // No title, total or footer; every room by name.
+    for absent in ["Floorplan", "Measurements are approximate.", "chapter"] {
+      XCTAssertFalse(shown.contains(absent), absent)
+    }
+    for room in model.rooms { XCTAssertTrue(shown.contains(room.label), room.label) }
+    // A page about a phone's width, so names print larger against the plan than on the sheet.
+    let box = try XCTUnwrap(screen.mediaBoxes.first)
+    XCTAssertLessThan(box[2] / 72 * 25.4, 130)
+    let sheetBox = try XCTUnwrap(sheet.mediaBoxes.first)
+    XCTAssertLessThan(box[2], sheetBox[2] / 2)
   }
 
   func testEstimateIsCloseToTheFittedScale() throws {
