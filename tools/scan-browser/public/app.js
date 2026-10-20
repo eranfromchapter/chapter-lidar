@@ -116,11 +116,31 @@ function factList(pairs) {
   );
 }
 
+// Status chips in the Chapter verdict tones. A verdict always carries its word and a shape too
+// (● ready, ▲ limited, ■ blocked), never colour alone; the steps before it (scanned, built,
+// sealed) are plain chips.
+const CHIP_TONES = {
+  uploaded: ["ready", "●"],
+  upload: ["limited", "▲"],
+  "upload-error": ["blocked", "■"],
+  empty: ["muted", null],
+};
+
+function chip(key, label) {
+  const [tone, shape] = Object.hasOwn(CHIP_TONES, key) ? CHIP_TONES[key] : ["step", null];
+  return h(
+    "span",
+    { class: `chip chip-${tone}` },
+    shape ? h("span", { class: "shape", "aria-hidden": "true" }, shape) : null,
+    label,
+  );
+}
+
 function statusChips(list) {
   return h(
     "div",
     { class: "chips" },
-    (list ?? []).map((st) => h("span", { class: `chip chip-${st.key}` }, st.label)),
+    (list ?? []).map((st) => chip(st.key, st.label)),
   );
 }
 
@@ -244,13 +264,14 @@ function visitRow(v) {
     ),
     h(
       "td",
-      {},
+      { class: "visit" },
       h("a", { href: visitHref(v.id) }, title),
       sub ? h("div", { class: "muted small" }, sub) : null,
       h("div", { class: "mono small muted" }, v.id),
     ),
-    h("td", {}, v.operator ?? "—"),
-    h("td", {}, v.areas?.length ? v.areas.join(", ") : "—"),
+    // The labels show only on phone widths, where the table becomes stacked rows.
+    h("td", { "data-label": "Operator" }, v.operator ?? "—"),
+    h("td", { "data-label": "Areas" }, v.areas?.length ? v.areas.join(", ") : "—"),
     h(
       "td",
       { class: "nowrap" },
@@ -264,7 +285,7 @@ function visitRow(v) {
     ),
     h(
       "td",
-      {},
+      { class: "status" },
       statusChips(v.status),
       v.error ? h("div", { class: "problem small" }, v.error) : null,
     ),
@@ -437,7 +458,7 @@ async function renderVisit(id, token) {
   const sections = [];
   const toc = [];
   v.captures.forEach((c, index) => {
-    const section = captureSection(c, `capture-${index}`);
+    const section = captureSection(c, `capture-${index}`, sum.id);
     sections.push(section);
     toc.push([`${c.label ?? c.areaKey}`, section]);
   });
@@ -465,7 +486,7 @@ async function renderVisit(id, token) {
   app.replaceChildren(header, nav, ...sections);
 }
 
-function captureSection(c, id) {
+function captureSection(c, id, visitId) {
   return h(
     "section",
     { class: "card capture", id },
@@ -492,6 +513,13 @@ function captureSection(c, id) {
           "None of this capture's files are in this copy: it is known only from the capture record or photo records.",
         )
       : null,
+    h(
+      "h3",
+      {},
+      "Floorplan ",
+      h("span", { class: "h-note" }, "(rendered now with the current app code)"),
+    ),
+    floorplanBlock(visitId, c),
     h("h3", {}, "Room sketch"),
     sketchBlock(c),
     h("h3", {}, "Raw scan (originals) ", count(c.raw)),
@@ -508,6 +536,14 @@ function exportsBlock(c) {
     return muted('No exports yet: they are written when "Package ready" is built on the phone.');
   }
   const e = c.exports;
+  // These files are what the phone wrote, not the current code (the Floorplan above is).
+  const writtenBy = h(
+    "p",
+    { class: "muted small" },
+    "Written on the phone by the app build that made the package",
+    e.app ? ` (app ${e.app.version ?? "?"}, build ${e.app.build ?? "?"})` : "",
+    ", so they show that build's plan code, not the current one.",
+  );
   if (e.source === "package") {
     return h(
       "div",
@@ -520,6 +556,7 @@ function exportsBlock(c) {
         e.sealedAt ? ` · sealed ${fmtDate(e.sealedAt)}` : "",
         " · no draft in this copy has this capture",
       ),
+      writtenBy,
       fileTable(e.files),
     );
   }
@@ -553,6 +590,7 @@ function exportsBlock(c) {
         ? "the latest draft"
         : "not the latest draft (the latest has no files for this capture)",
     ),
+    writtenBy,
     fileTable(e.files),
     older,
   );
@@ -654,7 +692,7 @@ function visitWideSections(v) {
                     h("td", { class: "nowrap" }, fmtDate(d.builtAt)),
                     h("td", { class: "num" }, String(d.files)),
                     h("td", { class: "num nowrap" }, fmtBytes(d.bytes)),
-                    h("td", {}, d.latest ? h("span", { class: "chip chip-built" }, "latest") : ""),
+                    h("td", {}, d.latest ? chip("built", "latest") : ""),
                   ),
                 ),
               ),
@@ -801,8 +839,8 @@ function fileTable(files, { pkg = false, nameOf = (f) => f.label || f.name } = {
         ),
         h("td", { class: "num nowrap" }, fmtBytes(f.size)),
         h("td", { class: "nowrap" }, fmtDate(f.mtime)),
-        pkg ? h("td", { class: "small" }, f.role ?? "—") : null,
-        pkg ? h("td", { class: "small" }, f.phase ?? "—") : null,
+        pkg ? h("td", { class: "small", "data-label": "Role" }, f.role ?? "—") : null,
+        pkg ? h("td", { class: "small", "data-label": "Upload" }, f.phase ?? "—") : null,
         h(
           "td",
           { class: "actions nowrap" },
@@ -1154,11 +1192,200 @@ lightbox.addEventListener("click", (event) => {
 });
 
 // ---------------------------------------------------------------------------------------------
-// Room sketch: top-down SVG of capture-model.json (plan axes x and z; SVG y = z, so plan up is −z).
+// Floorplan: the page the phone shows, rendered by the server with the current app code
+// (tools/plan-render). The server builds the renderer on first need, so the page asks once with
+// start=1 and then polls until the page is ready or has failed.
+
+const FLOORPLAN_POLL_MS = 1000;
+const PAGE_NAMES = { letterLandscape: "Letter landscape page", square: "10 in square page" };
+
+function floorplanBlock(visitId, c) {
+  const sources = c.floorplan?.sources ?? [];
+  if (!sources.length) {
+    return muted(
+      "No roomplan.json or capture-model.json for this capture, so there is no Floorplan to draw.",
+    );
+  }
+  let current = sources[0].id;
+  let generation = 0;
+  let timer = 0;
+  const note = h("p", { class: "muted small" });
+  const box = h("div", { class: "floorplan-box" });
+  const buttons = sources.map((src) =>
+    h(
+      "button",
+      {
+        type: "button",
+        class: "segment",
+        "aria-pressed": String(src.id === current),
+        title: src.detail,
+        onclick: () => {
+          if (src.id === current) return;
+          current = src.id;
+          buttons.forEach((b, i) =>
+            b.setAttribute("aria-pressed", String(sources[i].id === current)),
+          );
+          load(true);
+        },
+      },
+      src.label,
+    ),
+  );
+  const switcher =
+    sources.length > 1
+      ? h(
+          "div",
+          { class: "segmented", role: "group", "aria-label": "Draw the Floorplan from" },
+          h("span", { class: "muted small" }, "Draw from"),
+          buttons,
+        )
+      : null;
+  const wrap = h("div", { class: "floorplan" }, switcher, note, box);
+
+  const retry = () =>
+    h("button", { type: "button", class: "secondary", onclick: () => load(true) }, "Try again");
+  // Redrawn only when the state changes, so the spinner turns smoothly between polls.
+  let working = "";
+  const showWorking = (st) => {
+    const state = st ? `${st.status}\n${st.message ?? ""}` : "start";
+    if (state === working) return;
+    working = state;
+    box.replaceChildren(
+      h(
+        "div",
+        { class: "working", role: "status" },
+        h("span", { class: "spinner", "aria-hidden": "true" }),
+        h(
+          "div",
+          {},
+          h("strong", {}, "Rendering floor plan…"),
+          st?.status === "building" ? h("p", { class: "muted small" }, st.message) : null,
+        ),
+      ),
+    );
+  };
+  const show = (...nodes) => {
+    working = "";
+    box.replaceChildren(...nodes);
+  };
+
+  function load(start) {
+    const gen = ++generation;
+    clearTimeout(timer);
+    const source = sources.find((x) => x.id === current);
+    note.textContent = `From ${source.detail}.`;
+    if (start) showWorking(null);
+    const url = `/api/floorplan?visit=${enc(visitId)}&capture=${enc(c.key)}&source=${enc(current)}${start ? "&start=1" : ""}`;
+    api(url)
+      .then((st) => {
+        if (gen !== generation || !wrap.isConnected) return;
+        if (st.status === "ready") {
+          show(...floorplanPage(st, c));
+        } else if (st.status === "error") {
+          show(h("pre", { class: "problem" }, st.message), retry());
+        } else {
+          showWorking(st);
+          timer = setTimeout(() => load(false), FLOORPLAN_POLL_MS);
+        }
+      })
+      .catch((err) => {
+        if (gen === generation && wrap.isConnected) show(errorBox(err.message), retry());
+      });
+  }
+  load(true);
+  return wrap;
+}
+
+function floorplanPage(st, c) {
+  const url = (name, download) =>
+    `/api/floorplan-file?key=${enc(st.key)}&name=${name}${download ? "&download=1" : ""}`;
+  const s = st.summary ?? {};
+  const rooms = Number.isFinite(s.rooms) ? `${s.rooms} room${s.rooms === 1 ? "" : "s"}` : null;
+  const scale = Number.isFinite(s.scaleDenominator)
+    ? `1:${Math.round(s.scaleDenominator)} on a ${PAGE_NAMES[s.page] ?? "page"}`
+    : null;
+  const units = st.options?.units === "metric" ? "metres" : "feet and inches";
+  const facts = [
+    s.totalText,
+    rooms,
+    scale,
+    units,
+    st.renderedAt ? `rendered ${fmtDate(st.renderedAt)}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const name = c.label ?? c.areaKey;
+  return [
+    h(
+      "a",
+      {
+        href: url("floorplan.pdf"),
+        target: "_blank",
+        rel: "noopener",
+        class: "floorplan-page",
+        title: "Open the PDF",
+      },
+      h("img", { src: url("floorplan.png"), alt: `Floorplan of ${name}` }),
+    ),
+    h("p", { class: "small" }, facts),
+    h(
+      "p",
+      { class: "links small" },
+      h("a", { href: url("floorplan.pdf"), target: "_blank", rel: "noopener" }, "Open PDF"),
+      h("a", { href: url("floorplan.pdf", true), download: "" }, "Download PDF"),
+      h("a", { href: url("floorplan.svg"), target: "_blank", rel: "noopener" }, "Open SVG"),
+      h("a", { href: url("floorplan.svg", true), download: "" }, "Download SVG"),
+      h("a", { href: url("floorplan.png", true), download: "" }, "Download PNG (200 dpi)"),
+    ),
+  ];
+}
+
+// ---------------------------------------------------------------------------------------------
+// Room sketch: top-down SVG of capture-model.json (plan axes x and z; SVG y = z, so plan up is −z),
+// in the Floorplan's palette: rooms filled by type, warm charcoal walls.
+
+/** Room fills by room type, as on the Floorplan (PlanExport FloorPlanStyle.roomFill). */
+const ROOM_FILLS = {
+  bedroom: "#EDEEE5",
+  living_room: "#F8F0E5",
+  dining_room: "#F6ECE0",
+  kitchen: "#F5E6DB",
+  bathroom: "#E8ECF1",
+  closet: "#EFE9E1",
+  hallway: "#F6F1EA",
+  laundry: "#EBEEF2",
+  office: "#F2ECE7",
+  utility: "#EFEDEA",
+  other: "#F5F2EE",
+};
+
+/** Room type from a label, for models written before rooms had a type (as the Floorplan does). */
+const LABEL_TYPES = [
+  ["bedroom", ["bed"]],
+  ["bathroom", ["bath", "toilet", "shower", "wc"]],
+  ["kitchen", ["kitchen"]],
+  ["living_room", ["living", "lounge", "family"]],
+  ["dining_room", ["dining"]],
+  ["closet", ["closet", "wardrobe", "pantry"]],
+  ["hallway", ["hall", "corridor", "entry", "foyer"]],
+  ["laundry", ["laundry"]],
+  ["office", ["office", "study"]],
+];
+
+function roomFill(room) {
+  if (room.type && Object.hasOwn(ROOM_FILLS, room.type)) return ROOM_FILLS[room.type];
+  const text = String(room.label ?? "").toLowerCase();
+  const match = LABEL_TYPES.find(([, words]) => words.some((w) => text.includes(w)));
+  return ROOM_FILLS[match ? match[0] : "other"];
+}
 
 function sketchBlock(c) {
-  if (!c.sketchPath)
-    return muted("No capture-model.json yet (no export), so there is nothing to draw.");
+  if (!c.sketchPath) {
+    const fromRaw = c.floorplan?.sources?.some((x) => x.id === "roomplan");
+    return muted(
+      `No capture-model.json yet (no export), so there is no sketch.${fromRaw ? " The Floorplan above is drawn from the raw scan." : ""}`,
+    );
+  }
   const box = h("div", { class: "sketch-box" }, muted("Drawing…"));
   api(`/api/sketch?path=${enc(c.sketchPath)}`)
     .then((data) => box.replaceChildren(...renderSketch(data).filter(Boolean)))
@@ -1183,21 +1410,19 @@ function renderSketch(d) {
   });
 
   const rooms = s("g", { class: "rooms" });
-  d.rooms.forEach((room, i) => {
-    const hue = Math.round((i * 137.508) % 360);
+  for (const room of d.rooms) {
     rooms.append(
       s(
         "polygon",
         {
           points: room.polygon.map(([x, z]) => `${x},${z}`).join(" "),
           class: "room",
-          fill: `hsl(${hue}, 70%, 55%)`,
-          stroke: `hsl(${hue}, 60%, 40%)`,
+          fill: roomFill(room),
         },
         s("title", {}, `${room.label}: ${fmtNum(room.areaM2)} m² (${fmtNum(room.areaFt2, 1)} ft²)`),
       ),
     );
-  });
+  }
   const walls = s("g", { class: "walls" });
   for (const w of d.walls) {
     walls.append(
@@ -1215,13 +1440,16 @@ function renderSketch(d) {
   const openings = s("g", { class: "openings" });
   for (const o of d.openings) {
     const state = o.isOpen === true ? " (open)" : o.isOpen === false ? " (closed)" : "";
+    const ends = { x1: o.a[0], y1: o.a[1], x2: o.b[0], y2: o.b[1] };
     openings.append(
       s(
         "line",
-        { x1: o.a[0], y1: o.a[1], x2: o.b[0], y2: o.b[1], class: `opening-${o.kind}` },
+        { ...ends, class: `opening-${o.kind}` },
         s("title", {}, `${o.kind} ${o.id}${state}: ${fmtNum(o.widthM)} m wide on ${o.wallId}`),
       ),
     );
+    // A window reads as the drafting double line: a pale core inside its grey edges.
+    if (o.kind === "window") openings.append(s("line", { ...ends, class: "window-core" }));
   }
   const labels = s("g", { class: "labels", "font-size": font });
   for (const room of d.rooms) {
@@ -1233,7 +1461,7 @@ function renderSketch(d) {
         s("tspan", { x, dy: `${-0.2}em`, class: "room-name" }, room.label),
         s(
           "tspan",
-          { x, dy: "1.25em" },
+          { x, dy: "1.25em", class: "room-area" },
           `${fmtNum(room.areaM2, 1)} m² · ${fmtNum(room.areaFt2, 0)} ft²`,
         ),
       ),

@@ -1,48 +1,48 @@
-:root {
-  color-scheme: light dark;
-  --bg: #f6f7f9;
-  --card: #ffffff;
-  --text: #1d2127;
-  --muted: #667085;
-  --line: #e3e6eb;
-  --accent: #2563eb;
-  --accent-text: #ffffff;
-  --code-bg: #f1f3f6;
-  --ok: #15803d;
-  --warn: #b45309;
-  --bad: #b91c1c;
-  --info: #1d4ed8;
-  --wall: #1f2937;
-  --door: #ea580c;
-  --window: #0284c7;
-  --opening: #7c3aed;
-  --sketch-bg: #fbfbfd;
-  --label-halo: #ffffff;
-  --chip-bg: #eef1f5;
+/* Chapter brand: the app tokens (docs/waves/design/DESIGN.md), the Floorplan's plan palette
+   (PlanExport ChapterBrand and FloorPlanStyle), Times for headings and Inter for everything else.
+   Inter is served from web/public/brand; nothing is loaded from the internet. */
+
+@font-face {
+  font-family: Inter;
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/brand/inter-400.woff2") format("woff2");
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #111317;
-    --card: #1a1d23;
-    --text: #e6e8eb;
-    --muted: #98a2b3;
-    --line: #2c313a;
-    --accent: #60a5fa;
-    --accent-text: #0b1220;
-    --code-bg: #20242c;
-    --ok: #4ade80;
-    --warn: #fbbf24;
-    --bad: #f87171;
-    --info: #93c5fd;
-    --wall: #e5e7eb;
-    --door: #fb923c;
-    --window: #38bdf8;
-    --opening: #a78bfa;
-    --sketch-bg: #15181d;
-    --label-halo: #15181d;
-    --chip-bg: #262b33;
-  }
+@font-face {
+  font-family: Inter;
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/brand/inter-600.woff2") format("woff2");
+}
+
+:root {
+  color-scheme: light;
+  --brand-black: #231f20;
+  --ink: #1f2429;
+  --ground: #f5efe6;
+  --surface: #faf5ee;
+  --nude: #e8ddd0;
+  --line: #d9ccbc;
+  --muted: #6b6557;
+  --ready: #2e5e2e;
+  --limited: #9a6a1e;
+  --limited-text: #7a5214;
+  --blocked: #8b2e2e;
+  --paper: #ffffff;
+  /* Plan palette, as on the Floorplan. */
+  --wall: #4d4744;
+  --symbol: #8e8781;
+  --faint: #bdb8b8;
+  --bronze: #7a6347;
+  --bronze-line: #b39f87;
+  --font-display: Times, "Times New Roman", serif;
+  --font-body: Inter, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --radius-chip: 8px;
+  --radius-card: 12px;
 }
 
 * {
@@ -51,24 +51,31 @@
 
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font:
-    15px/1.45 -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    system-ui,
-    sans-serif;
+  background: var(--ground);
+  color: var(--ink);
+  font: 15px/1.45 var(--font-body);
 }
 
 a {
-  color: var(--accent);
+  color: var(--ink);
+  text-decoration-color: var(--line);
+  text-underline-offset: 2px;
+}
+
+a:hover {
+  color: var(--muted);
+  text-decoration-color: currentColor;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
 }
 
 .mono,
 pre,
 code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.86em;
 }
 
@@ -90,35 +97,43 @@ code {
 }
 
 .ok {
-  color: var(--ok);
+  color: var(--ready);
 }
 
 .warn {
-  color: var(--warn);
+  color: var(--limited-text);
 }
 
 .bad {
-  color: var(--bad);
+  color: var(--blocked);
 }
 
 .info {
-  color: var(--info);
+  color: var(--ink);
 }
 
 .problem {
-  color: var(--bad);
-  border-left: 3px solid var(--bad);
+  color: var(--blocked);
+  border-left: 3px solid var(--blocked);
   padding: 4px 10px;
   margin: 8px 0;
 }
 
+pre.problem {
+  font-family: var(--font-body);
+  font-size: 0.92em;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Header: the Chapter logo beside the tool's name. */
 .topbar {
   display: flex;
-  align-items: baseline;
-  gap: 16px;
+  align-items: center;
+  gap: 8px 20px;
   flex-wrap: wrap;
   padding: 12px 24px;
-  background: var(--card);
+  background: var(--surface);
   border-bottom: 1px solid var(--line);
   position: sticky;
   top: 0;
@@ -126,10 +141,29 @@ code {
 }
 
 .brand {
-  font-weight: 700;
-  font-size: 1.1em;
-  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--brand-black);
   text-decoration: none;
+}
+
+.brand:hover {
+  color: var(--brand-black);
+}
+
+.brand .logo {
+  display: block;
+  height: 30px;
+  width: auto;
+}
+
+.brand-name {
+  font-family: var(--font-display);
+  font-size: 22px;
+  line-height: 1;
+  padding-left: 14px;
+  border-left: 1px solid var(--line);
 }
 
 .topbar-note {
@@ -149,37 +183,54 @@ code {
 main {
   max-width: 1280px;
   margin: 0 auto;
-  padding: 20px 24px 64px;
+  padding: 24px 24px 64px;
 }
 
 .card {
-  background: var(--card);
+  background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 16px 20px;
-  margin-bottom: 18px;
+  border-radius: var(--radius-card);
+  padding: 18px 24px;
+  margin-bottom: 20px;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  color: var(--ink);
 }
 
 h1 {
-  font-size: 1.45em;
-  margin: 4px 0 8px;
+  font-size: 30px;
+  line-height: 1.15;
+  margin: 6px 0 10px;
 }
 
 h2 {
-  font-size: 1.2em;
+  font-size: 24px;
+  line-height: 1.2;
   margin: 0 0 8px;
 }
 
 h3 {
-  font-size: 1em;
-  margin: 22px 0 8px;
-  padding-top: 12px;
+  font-size: 20px;
+  margin: 24px 0 10px;
+  padding-top: 14px;
   border-top: 1px solid var(--line);
 }
 
 h4 {
-  font-size: 0.95em;
+  font-size: 17px;
   margin: 16px 0 6px;
+}
+
+.h-note {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--muted);
 }
 
 .section-head {
@@ -196,12 +247,14 @@ h4 {
 .count {
   display: inline-block;
   min-width: 1.6em;
-  padding: 0 6px;
+  padding: 1px 6px;
   border-radius: 999px;
-  background: var(--chip-bg);
-  color: var(--muted);
-  font-size: 0.75em;
+  background: var(--nude);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 12px;
   font-weight: 600;
+  line-height: 1.4;
   text-align: center;
   vertical-align: middle;
 }
@@ -213,22 +266,31 @@ button {
 
 button.primary,
 button.secondary {
-  border-radius: 8px;
-  padding: 7px 14px;
+  border-radius: var(--radius-chip);
+  padding: 8px 16px;
+  min-height: 40px;
   border: 1px solid var(--line);
   white-space: nowrap;
-}
-
-button.primary {
-  background: var(--accent);
-  color: var(--accent-text);
-  border-color: var(--accent);
   font-weight: 600;
 }
 
+button.primary {
+  background: var(--ink);
+  color: var(--surface);
+  border-color: var(--ink);
+}
+
+button.primary:hover:not(:disabled) {
+  background: var(--brand-black);
+}
+
 button.secondary {
-  background: var(--card);
-  color: var(--text);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+button.secondary:hover:not(:disabled) {
+  border-color: var(--muted);
 }
 
 button:disabled {
@@ -240,8 +302,15 @@ button.link {
   background: none;
   border: 0;
   padding: 0;
-  color: var(--accent);
+  color: var(--ink);
   text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-underline-offset: 2px;
+}
+
+button.link:hover {
+  color: var(--muted);
+  text-decoration-color: currentColor;
 }
 
 .back {
@@ -250,18 +319,20 @@ button.link {
 
 .sync-message {
   margin: 10px 0 6px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 progress {
   width: 100%;
   height: 10px;
+  accent-color: var(--ink);
 }
 
 .failures li {
   margin: 2px 0;
 }
 
+/* Status chips: verdicts in their tone with word and shape; steps in plain ink. */
 .chips {
   display: flex;
   flex-wrap: wrap;
@@ -270,51 +341,65 @@ progress {
 }
 
 .chip {
-  display: inline-block;
-  padding: 1px 9px;
-  border-radius: 999px;
-  font-size: 0.78em;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: var(--radius-chip);
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 12px;
   font-weight: 600;
-  background: var(--chip-bg);
-  color: var(--muted);
   white-space: nowrap;
 }
 
-.chip-scanned {
-  color: var(--info);
+.chip .shape {
+  font-size: 0.85em;
 }
 
-.chip-built {
-  color: var(--opening);
+.chip-step {
+  background: var(--nude);
+  border-color: var(--nude);
 }
 
-.chip-sealed {
-  color: var(--warn);
+.chip-muted {
+  color: var(--muted);
 }
 
-.chip-upload,
-.chip-upload-error {
-  color: var(--bad);
+.chip-ready {
+  color: var(--ready);
+  border-color: var(--ready);
 }
 
-.chip-uploaded {
-  color: var(--ok);
+.chip-limited {
+  color: var(--limited-text);
+  border-color: var(--limited);
+}
+
+.chip-blocked {
+  color: var(--blocked);
+  border-color: var(--blocked);
 }
 
 .toc {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin: -6px 0 16px;
+  margin: -8px 0 20px;
 }
 
 .chip-button {
   border: 1px solid var(--line);
-  background: var(--card);
-  color: var(--text);
-  border-radius: 999px;
-  padding: 3px 12px;
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: var(--radius-chip);
+  padding: 4px 12px;
   font-size: 0.85em;
+}
+
+.chip-button:hover {
+  border-color: var(--muted);
 }
 
 .facts {
@@ -345,15 +430,15 @@ table {
 th,
 td {
   text-align: left;
-  padding: 6px 10px;
+  padding: 7px 10px;
   border-bottom: 1px solid var(--line);
   vertical-align: top;
 }
 
 th {
-  font-size: 0.78em;
+  font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   color: var(--muted);
   font-weight: 600;
 }
@@ -363,7 +448,7 @@ table.visits tr.clickable {
 }
 
 table.visits tr.clickable:hover {
-  background: var(--code-bg);
+  background: var(--ground);
 }
 
 tr.dim td {
@@ -391,7 +476,7 @@ table.files th.col-phase {
 }
 
 table.files th.col-actions {
-  width: 200px;
+  width: 210px;
 }
 
 table.files > tbody > tr > td {
@@ -426,7 +511,7 @@ table.data td {
 }
 
 .preview-cell {
-  background: var(--code-bg);
+  background: var(--ground);
   padding: 12px;
 }
 
@@ -442,7 +527,7 @@ table.data td {
 }
 
 .preview-img.svg {
-  background: #ffffff;
+  background: var(--paper);
   padding: 8px;
   width: min(100%, 960px);
 }
@@ -452,13 +537,13 @@ iframe.pdf {
   height: 78vh;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: #ffffff;
+  background: var(--paper);
 }
 
 pre.text {
   max-height: 60vh;
   overflow: auto;
-  background: var(--card);
+  background: var(--paper);
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 10px;
@@ -467,9 +552,9 @@ pre.text {
 }
 
 .json {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.82em;
-  background: var(--card);
+  background: var(--paper);
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 8px 10px;
@@ -495,7 +580,7 @@ pre.text {
 }
 
 .j-key {
-  color: var(--info);
+  color: var(--bronze);
 }
 
 .j-idx {
@@ -503,16 +588,16 @@ pre.text {
 }
 
 .j-str {
-  color: var(--ok);
+  color: var(--ready);
 }
 
 .j-num {
-  color: var(--door);
+  color: var(--limited-text);
 }
 
 .j-bool,
 .j-null {
-  color: var(--opening);
+  color: var(--blocked);
 }
 
 .j-brace {
@@ -546,9 +631,9 @@ details.older > summary {
 .photo {
   margin: 0;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-chip);
   padding: 8px;
-  background: var(--card);
+  background: var(--paper);
 }
 
 .photo .thumb {
@@ -557,7 +642,7 @@ details.older > summary {
   aspect-ratio: 4 / 3;
   padding: 0;
   border: 0;
-  background: var(--code-bg);
+  background: var(--ground);
   border-radius: 6px;
   overflow: hidden;
 }
@@ -576,7 +661,7 @@ details.older > summary {
   width: 100%;
   aspect-ratio: 4 / 3;
   color: var(--muted);
-  background: var(--code-bg);
+  background: var(--ground);
   border-radius: 6px;
 }
 
@@ -588,14 +673,14 @@ dialog#lightbox {
   max-width: min(1400px, 95vw);
   max-height: 95vh;
   border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--card);
-  color: var(--text);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  color: var(--ink);
   padding: 12px 16px;
 }
 
 dialog#lightbox::backdrop {
-  background: rgb(0 0 0 / 60%);
+  background: rgb(35 31 32 / 60%);
 }
 
 dialog#lightbox img {
@@ -615,14 +700,110 @@ dialog#lightbox img {
 .model model-viewer {
   width: 100%;
   height: 65vh;
-  background: var(--sketch-bg);
+  background: var(--paper);
   border-radius: 6px;
 }
 
-.sketch-frame {
-  background: var(--sketch-bg);
+/* Floorplan: the page as the phone writes it, on white paper. */
+.floorplan .segmented {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.segment {
   border: 1px solid var(--line);
-  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  border-radius: var(--radius-chip);
+  padding: 4px 12px;
+  font-size: 0.85em;
+}
+
+.segment[aria-pressed="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--surface);
+  font-weight: 600;
+}
+
+.floorplan > p.muted {
+  margin: 4px 0 10px;
+}
+
+.floorplan-box {
+  max-width: 920px;
+}
+
+.floorplan-page {
+  display: block;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  overflow: hidden;
+}
+
+.floorplan-page img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.floorplan-page:hover {
+  border-color: var(--muted);
+}
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 6px 0 0;
+}
+
+.working {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 24px;
+  background: var(--paper);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-chip);
+}
+
+.working p {
+  margin: 4px 0 0;
+}
+
+.spinner {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border: 2px solid var(--line);
+  border-top-color: var(--ink);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+
+/* Room sketch in the plan palette. */
+.sketch-frame {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
   padding: 8px;
 }
 
@@ -634,52 +815,64 @@ svg.sketch {
 }
 
 svg.sketch .room {
-  fill-opacity: 0.2;
+  stroke: var(--line);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
 }
 
 svg.sketch .room:hover {
-  fill-opacity: 0.4;
+  stroke: var(--muted);
+  stroke-width: 2;
 }
 
 svg.sketch line {
   vector-effect: non-scaling-stroke;
-  stroke-linecap: round;
+  stroke-linecap: butt;
 }
 
 svg.sketch .wall {
   stroke: var(--wall);
-  stroke-width: 2.5;
+  stroke-width: 3;
+  stroke-linecap: square;
 }
 
 svg.sketch .opening-door {
-  stroke: var(--door);
+  stroke: var(--bronze);
   stroke-width: 6;
 }
 
 svg.sketch .opening-window {
-  stroke: var(--window);
+  stroke: var(--symbol);
   stroke-width: 6;
 }
 
+svg.sketch .window-core {
+  stroke: var(--paper);
+  stroke-width: 2;
+  pointer-events: none;
+}
+
 svg.sketch .opening-opening {
-  stroke: var(--opening);
+  stroke: var(--faint);
   stroke-width: 6;
   stroke-dasharray: 4 3;
 }
 
 svg.sketch .labels text {
-  fill: var(--text);
+  fill: var(--ink);
   paint-order: stroke;
-  stroke: var(--label-halo);
+  stroke: var(--paper);
   stroke-width: 0.06px;
   stroke-linejoin: round;
   pointer-events: none;
 }
 
 svg.sketch .labels .room-name {
-  font-weight: 700;
+  font-weight: 600;
+}
+
+svg.sketch .labels .room-area {
+  fill: var(--muted);
 }
 
 svg.sketch .scale line,
@@ -705,8 +898,7 @@ svg.sketch .axes text {
 .swatch {
   display: inline-block;
   width: 18px;
-  height: 4px;
-  border-radius: 2px;
+  height: 5px;
   margin-right: 6px;
   vertical-align: middle;
 }
@@ -716,15 +908,18 @@ svg.sketch .axes text {
 }
 
 .swatch.door {
-  background: var(--door);
+  background: var(--bronze);
 }
 
 .swatch.window {
-  background: var(--window);
+  height: 6px;
+  background: var(--paper);
+  border-top: 2px solid var(--symbol);
+  border-bottom: 2px solid var(--symbol);
 }
 
 .swatch.opening {
-  background: var(--opening);
+  background: repeating-linear-gradient(90deg, var(--faint) 0 4px, transparent 4px 7px);
 }
 
 .package {
@@ -743,8 +938,20 @@ svg.sketch .axes text {
 }
 
 @media (max-width: 720px) {
+  .topbar {
+    padding: 10px 16px;
+  }
+
   main {
-    padding: 12px;
+    padding: 16px;
+  }
+
+  .card {
+    padding: 14px 16px;
+  }
+
+  h1 {
+    font-size: 26px;
   }
 
   table.files th.col-date,
@@ -759,5 +966,106 @@ svg.sketch .axes text {
 
   .facts {
     grid-template-columns: 1fr;
+  }
+
+  .facts dd {
+    margin-bottom: 6px;
+  }
+}
+
+/* Phone widths: file and visit tables become stacked rows (name first, then the details), so
+   nothing is squeezed into a column a few letters wide. */
+@media (max-width: 600px) {
+  h1 {
+    overflow-wrap: anywhere;
+  }
+
+  .section-head {
+    flex-wrap: wrap;
+  }
+
+  table.files,
+  table.files > tbody,
+  table.visits,
+  table.visits > tbody {
+    display: block;
+  }
+
+  table.files > thead,
+  table.visits > thead {
+    display: none;
+  }
+
+  /* A file: its name, then size, date (role and upload phase) as they fit, then its actions. */
+  table.files > tbody > tr:not(.preview-row) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 14px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  /* A visit: its name first, then date and operator, areas and files in two columns. */
+  table.visits > tbody > tr {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 2px 14px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  table.files > tbody > tr > td,
+  table.visits > tbody > tr > td {
+    display: block;
+    padding: 0;
+    border: 0;
+    text-align: left;
+  }
+
+  table.files > tbody > tr.preview-row:not([hidden]) {
+    display: block;
+  }
+
+  table.files > tbody > tr.preview-row > td {
+    padding: 10px;
+  }
+
+  table.files td.name,
+  table.files td.actions {
+    flex-basis: 100%;
+  }
+
+  table.visits td.visit,
+  table.visits td.status {
+    grid-column: 1 / -1;
+  }
+
+  table.files td.actions {
+    margin-top: 2px;
+  }
+
+  table.visits td.visit {
+    order: -1;
+    margin-bottom: 2px;
+  }
+
+  table.files td[data-label]::before,
+  table.visits td[data-label]::before {
+    content: attr(data-label) ": ";
+    color: var(--muted);
+  }
+
+  table.visits td.status {
+    margin-top: 4px;
+  }
+}
+
+@media (max-width: 480px) {
+  .brand .logo {
+    height: 26px;
+  }
+
+  .brand-name {
+    font-size: 19px;
   }
 }
