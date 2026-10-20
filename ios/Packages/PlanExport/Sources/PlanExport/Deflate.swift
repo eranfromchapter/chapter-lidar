@@ -195,7 +195,8 @@ enum CRC32 {
   }
 }
 
-/// PNG encoder (8-bit grayscale) with a `pHYs` chunk for the resolution.
+/// PNG encoder (8-bit grayscale, or 8-bit RGB through a colour per gray level) with a `pHYs`
+/// chunk for the resolution.
 public enum PNGEncoder {
   /// Encodes `pixels` (row-major, one byte per pixel, 0 black and 255 white).
   /// `dpi` sets the physical resolution (300 means 11811 pixels per metre).
@@ -203,6 +204,46 @@ public enum PNGEncoder {
     -> Data
   {
     precondition(width > 0 && height > 0 && pixels.count == width * height)
+    var raw: [UInt8] = []
+    raw.reserveCapacity((width + 1) * height)
+    for row in 0..<height {
+      raw.append(0)
+      raw += pixels[(row * width)..<((row + 1) * width)]
+    }
+    return file(width: width, height: height, colorType: 0, raw: raw, dpi: dpi)
+  }
+
+  /// Encodes `pixels` (row-major gray levels, one byte per pixel) as 8-bit RGB, level `g` in
+  /// `colors[g]` (256 colours), so a gray raster prints in any palette. Rows are unfiltered:
+  /// on a large plan raster the Sub and Up filters, and a per-row choice, made larger files
+  /// with this Deflate and none was faster. `dpi` as for `encodeGrayscale`.
+  public static func encodeRGB(
+    width: Int, height: Int, pixels: [UInt8], colors: [DrawingColor], dpi: Int? = nil
+  ) -> Data {
+    precondition(width > 0 && height > 0 && pixels.count == width * height && colors.count == 256)
+    // R, G, B bytes of each level, rounded as `DrawingColor.hexString` rounds.
+    let table: [UInt8] = colors.flatMap { color in
+      [color.red, color.green, color.blue].map { UInt8((max(0, min(1, $0)) * 255).rounded()) }
+    }
+    // Each row is a 0 (no filter) byte and three bytes per pixel.
+    var raw = [UInt8](repeating: 0, count: (width * 3 + 1) * height)
+    var out = 0
+    for (index, level) in pixels.enumerated() {
+      if index % width == 0 { out += 1 }
+      let entry = Int(level) * 3
+      raw[out] = table[entry]
+      raw[out + 1] = table[entry + 1]
+      raw[out + 2] = table[entry + 2]
+      out += 3
+    }
+    return file(width: width, height: height, colorType: 2, raw: raw, dpi: dpi)
+  }
+
+  /// The PNG file around `raw`: the rows of 8-bit samples of `colorType` (0 gray, 2 RGB), each
+  /// led by its filter byte.
+  private static func file(width: Int, height: Int, colorType: UInt8, raw: [UInt8], dpi: Int?)
+    -> Data
+  {
     func chunk(_ type: String, _ body: [UInt8]) -> [UInt8] {
       var out: [UInt8] = []
       func append(_ value: UInt32) {
@@ -225,16 +266,10 @@ public enum PNGEncoder {
     }
 
     var out: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
-    out += chunk("IHDR", be32(width) + be32(height) + [8, 0, 0, 0, 0])
+    out += chunk("IHDR", be32(width) + be32(height) + [8, colorType, 0, 0, 0])
     if let dpi {
       let perMetre = Int((Double(dpi) / 0.0254).rounded())
       out += chunk("pHYs", be32(perMetre) + be32(perMetre) + [1])
-    }
-    var raw: [UInt8] = []
-    raw.reserveCapacity((width + 1) * height)
-    for row in 0..<height {
-      raw.append(0)
-      raw += pixels[(row * width)..<((row + 1) * width)]
     }
     out += chunk("IDAT", Deflate.zlibCompress(raw))
     out += chunk("IEND", [])
