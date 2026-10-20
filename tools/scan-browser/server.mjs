@@ -2,10 +2,13 @@
 // Scan browser: a small local web app for field testing. It lists the visits the Chapter Capture
 // field-test build wrote on the iPhone and shows every file of every scan: raw originals, the
 // latest "Package ready" exports, photos, field controls, the source register, sealed packages
-// and their upload state. "Sync from iPhone" copies the visits off a connected phone.
+// and their upload state, and each scan's Chapter Floorplan rendered now with the current app code
+// (tools/plan-render, a Swift tool it builds on first need). "Sync from iPhone" copies the visits
+// off a connected phone.
 //
-// Testing tool only. Node built-ins only, no build step. It binds 127.0.0.1, answers only requests
-// addressed to 127.0.0.1 or localhost, and serves files only from inside the data folder.
+// Testing tool only. Node built-ins only, no build step for the page. It binds 127.0.0.1, answers
+// only requests addressed to 127.0.0.1 or localhost, and serves files only from inside the data
+// folder, besides the page itself, the Chapter brand files and its own cache entries.
 //
 // Usage: node tools/scan-browser/server.mjs [--data <dir>] [--port <port>]
 //   (or: npm run scan-browser -- --data <dir>). See README.md.
@@ -23,6 +26,28 @@ import { parseArgs } from "node:util";
 const TOOL_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(TOOL_DIR, "public");
 const REPO_ROOT = path.resolve(TOOL_DIR, "..", "..");
+/** Chapter logo and Inter fonts, shared with the web app. */
+const BRAND_DIR = path.join(REPO_ROOT, "web", "public", "brand");
+/** The Floorplan renderer (a SwiftPM package) and the binary `swift build` makes. */
+const PLAN_RENDER_DIR = path.join(REPO_ROOT, "tools", "plan-render");
+const PLAN_RENDER_BIN = path.join(PLAN_RENDER_DIR, ".build", "release", "plan-render");
+/** What plan-render is built from: a file newer than the binary means a rebuild. */
+const PLAN_RENDER_SOURCES = [
+  "tools/plan-render/Package.swift",
+  "tools/plan-render/Sources",
+  "ios/Packages/PlanExport/Package.swift",
+  "ios/Packages/PlanExport/Sources",
+  "ios/Packages/CaptureCore/Package.swift",
+  "ios/Packages/CaptureCore/Sources/CaptureModelMapping",
+  "contract/swift/Package.swift",
+  "contract/swift/Sources",
+].map((rel) => path.join(REPO_ROOT, ...rel.split("/")));
+const BUILD_TIMEOUT_MS = 20 * 60 * 1000;
+const RENDER_TIMEOUT_MS = 2 * 60 * 1000;
+const FLOORPLAN_INPUT_MAX_BYTES = 64 * 1024 * 1024;
+/** Cached floor plans older than this are removed when a new one is written. */
+const FLOORPLAN_CACHE_DAYS = 30;
+const FLOORPLAN_FILES = ["floorplan.png", "floorplan.pdf", "floorplan.svg"];
 
 export const BUNDLE_ID = "com.hellochapter.capture";
 export const REMOTE_ROOT = "Library/Application Support/FieldTestVisits";
@@ -654,6 +679,8 @@ async function visitDetail(visitRel) {
   // deep in originals and photos, 5 in drafts and packages.
   const captureFile = (depth) => (f) => info(f, { label: f.parts.slice(depth).join("/") });
 
+  // Which app build wrote each draft and package (shown with its exports and Floorplan source).
+  await readApps(a);
   const captures = captureList.map((c) => {
     const rec = recordCaps.find((r) => r.captureId === c.captureId) ?? null;
     const exportsList = a.drafts
@@ -663,6 +690,7 @@ async function visitDetail(visitRel) {
         draftId: d.id,
         builtAt: iso(d.builtMs),
         latest: d === a.latestDraft,
+        app: d.app,
         files: c.drafts.get(d.id).map(captureFile(5)),
       }));
     // No draft has this capture (drafts/ missing from a partial copy, say): the newest sealed
@@ -674,22 +702,13 @@ async function visitDetail(visitRel) {
           source: "package",
           packageId: sealed.id,
           sealedAt: typeof sealedAt === "string" ? sealedAt : null,
+          app: sealed.app,
           files: c.packages.get(sealed.id).map(captureFile(5)),
         }
       : null;
     const exports = exportsList[0] ?? fromPackage;
-    let sketchPath = exports?.files.find((f) => f.label === "capture-model.json")?.path ?? null;
-    if (!sketchPath) {
-      for (const k of a.packages) {
-        const f = c.packages
-          .get(k.id)
-          ?.find((x) => x.parts.length === 6 && x.parts[5] === "capture-model.json");
-        if (f) {
-          sketchPath = `${visitRel}/${f.parts.join("/")}`;
-          break;
-        }
-      }
-    }
+    const model = captureModelSource(a, c);
+    const sketchPath = model ? `${visitRel}/${model.file.parts.join("/")}` : null;
     const photos = c.photoFiles.map((f) => {
       const r = a.photoRecords.find((x) => x.path === photoRoot(f)) ?? null;
       return { file: captureFile(4)(f), record: r, missing: false };
@@ -714,6 +733,7 @@ async function visitDetail(visitRel) {
       olderExports: exportsList.slice(1),
       photos,
       sketchPath,
+      floorplan: { sources: floorplanSources(a, c), options: floorplanOptions(a, c) },
     };
   });
 
@@ -1556,21 +1576,26 @@ async function sketch(rel) {
 // Photos: HEIC (and other images) to JPEG with macOS sips, cached outside the data folder.
 
 const converting = new Map();
-let sipsRunning = 0;
-const sipsQueue = [];
 
-/** At most three sips at a time; a finished job hands its slot to the next waiting one. */
-async function withSipsSlot(task) {
-  if (sipsRunning >= 3) await new Promise((resolve) => sipsQueue.push(resolve));
-  else sipsRunning += 1;
-  try {
-    return await task();
-  } finally {
-    const waiting = sipsQueue.shift();
-    if (waiting) waiting();
-    else sipsRunning -= 1;
-  }
+/** Runs at most `limit` tasks at a time; a finished task hands its slot to the next waiting one. */
+function slotLimiter(limit) {
+  let running = 0;
+  const queue = [];
+  return async (task) => {
+    if (running >= limit) await new Promise((resolve) => queue.push(resolve));
+    else running += 1;
+    try {
+      return await task();
+    } finally {
+      const waiting = queue.shift();
+      if (waiting) waiting();
+      else running -= 1;
+    }
+  };
 }
+
+/** At most three sips at a time. */
+const withSipsSlot = slotLimiter(3);
 
 async function photoJpeg(rel, widthParam) {
   const { abs, stat, name } = await resolveDataPath(rel, "file");
@@ -1620,6 +1645,448 @@ async function photoJpeg(rel, widthParam) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Floorplan: the one-page Chapter Floorplan of a capture (PlanExport's FloorplanWriter, the page
+// the phone shows), rendered now with the current app code by tools/plan-render. The renderer is
+// built with `swift build` on first need, and again when its Swift sources are newer than the
+// binary: one build at a time, never while a render runs. Pages are cached in
+// <cache>/floorplans/<key>/ (owner-only folders), keyed by the SHA-256 of the input bytes, the
+// options and the renderer version (the binary's mtime and size), so a new build draws afresh.
+
+/** Folder of cached floor plans. Set by main(). */
+let FLOORPLANS = "";
+const FLOORPLAN_KEY_RE = /^[0-9a-f]{64}$/;
+const FLOORPLAN_TMP_RE = /^\.[0-9a-f]{64}\.[0-9a-f]{8}$/;
+
+/** The renderer: idle (not looked at yet), building, ready (with its version) or error. */
+const planRenderer = { status: "idle", message: "", version: null, builtFrom: 0 };
+/** Renders running, by cache key. */
+const floorplanJobs = new Map();
+/** Renders that failed, by cache key: the reason, until a page asks afresh. */
+const floorplanErrors = new Map();
+/** Cache entries this server wrote or checked (key to download name): the only ones it serves. */
+const knownFloorplans = new Map();
+const withRenderSlot = slotLimiter(2);
+
+const atDepth = (name, depth) => (f) => f.parts.length === depth && f.parts[depth - 1] === name;
+const shortId = (id) => String(id).slice(0, 8);
+
+/**
+ * Sets `app` on each draft and sealed package of an analysed visit: the app version and build
+ * from its capture record (the app build that wrote it), or null.
+ */
+async function readApps(a) {
+  const text = (v) => (typeof v === "string" || typeof v === "number" ? String(v) : null);
+  for (const x of [...a.drafts, ...a.packages]) {
+    x.app = null;
+    if (!x.recordFile) continue;
+    const app = (await readJson(path.join(a.abs, ...x.recordFile.parts))).value?.app;
+    if (app && typeof app === "object")
+      x.app = { version: text(app.version), build: text(app.build) };
+  }
+}
+
+const appText = (app) => `app ${app.version ?? "?"}, build ${app.build ?? "?"}`;
+
+/**
+ * The capture-model.json of a capture, as the room sketch draws it: from the latest draft that
+ * has the capture, else from the newest sealed package that has one.
+ */
+function captureModelSource(a, c) {
+  const isModel = atDepth("capture-model.json", 6);
+  const draft = a.drafts.find((d) => c.drafts.has(d.id));
+  const fromDraft = draft ? c.drafts.get(draft.id).find(isModel) : null;
+  if (fromDraft) return { file: fromDraft, draftId: draft.id, app: draft.app };
+  for (const k of a.packages) {
+    const f = c.packages.get(k.id)?.find(isModel);
+    if (f) return { file: f, packageId: k.id, app: k.app };
+  }
+  return null;
+}
+
+/** The raw RoomPlan capture: from the originals, else from the newest sealed package. */
+function roomplanSource(a, c) {
+  const raw = c.raw.find(atDepth("roomplan.json", 5));
+  if (raw) return { file: raw };
+  for (const k of a.packages) {
+    const f = c.packages.get(k.id)?.find(atDepth("roomplan.json", 6));
+    if (f) return { file: f, packageId: k.id };
+  }
+  return null;
+}
+
+/**
+ * What a capture's Floorplan can be drawn from, preferred first: the capture model of the latest
+ * draft (it has the operator's room labels), then the raw scan, mapped with the current code as
+ * the phone's scan viewer maps it. Needs readApps(a) first.
+ */
+function floorplanSources(a, c) {
+  const rel = (f) => `${a.visitRel}/${f.parts.join("/")}`;
+  const out = [];
+  const model = captureModelSource(a, c);
+  if (model) {
+    const app = model.app;
+    const where = model.draftId
+      ? `draft ${shortId(model.draftId)}`
+      : `sealed package ${shortId(model.packageId)}`;
+    out.push({
+      id: "model",
+      label: "Capture model (package)",
+      path: rel(model.file),
+      detail: `capture-model.json of ${where}${app ? `, mapped on the phone by ${appText(app)}` : ""}`,
+    });
+  }
+  const raw = roomplanSource(a, c);
+  if (raw) {
+    const where = raw.packageId ? `sealed package ${shortId(raw.packageId)}` : "the originals";
+    out.push({
+      id: "roomplan",
+      label: "Raw scan (as on the phone)",
+      path: rel(raw.file),
+      detail: `roomplan.json of ${where}, mapped now with the current code (as the phone's scan viewer does)`,
+    });
+  }
+  return out;
+}
+
+/** Address and units as the capture record gives them (imperial when it does not say). */
+function floorplanOptions(a, c) {
+  const rec = recordCaptures(a.record).find((r) => r.captureId === c.captureId);
+  const formatted = a.record?.address?.formatted;
+  const address = typeof formatted === "string" ? formatted.trim().slice(0, 300) : "";
+  return {
+    title: "Floorplan",
+    address: address || null,
+    units: rec?.units?.display === "metric" ? "metric" : "imperial",
+  };
+}
+
+/** Newest modification time of a file, or of a folder and everything in it. */
+async function newestMtime(p, depth = 0) {
+  let st;
+  try {
+    st = await fsp.lstat(p);
+  } catch {
+    return 0;
+  }
+  if (!st.isDirectory() || depth > 12) return st.mtimeMs;
+  // The folder's own time counts too: a deleted file shows only there.
+  let newestMs = st.mtimeMs;
+  for (const entry of await readdirSafe(p)) {
+    if (entry.name.startsWith(".")) continue;
+    newestMs = Math.max(newestMs, await newestMtime(path.join(p, entry.name), depth + 1));
+  }
+  return newestMs;
+}
+
+async function newestRendererSource() {
+  return Math.max(0, ...(await Promise.all(PLAN_RENDER_SOURCES.map((p) => newestMtime(p)))));
+}
+
+/** The renderer version in cache keys: the binary's modified time and size. */
+const rendererVersion = (bin) => `${Math.round(bin.mtimeMs)}-${bin.size}`;
+
+/**
+ * The useful lines of a failed `swift build`: the compiler's errors (file:line:column), else any
+ * error line, else its last lines. The compiler colours its output even into a pipe.
+ */
+function buildError(r) {
+  const lines = `${r.stderr}\n${r.stdout}`
+    // eslint-disable-next-line no-control-regex
+    .replace(/\x1b\[[0-9;]*m/g, "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const diagnostics = lines.filter((l) => /:\d+:\d+: error:/.test(l));
+  const errors = diagnostics.length ? diagnostics : lines.filter((l) => /\berror:/.test(l));
+  return (errors.length ? errors.slice(0, 6) : lines.slice(-6))
+    .map((l) => l.replaceAll(REPO_ROOT + path.sep, ""))
+    .join("\n")
+    .slice(0, 2000);
+}
+
+function startRendererBuild() {
+  const r = planRenderer;
+  if (r.status === "building") return;
+  r.status = "building";
+  r.message =
+    "Building the floor plan renderer (swift build of tools/plan-render); the first build takes a minute or two.";
+  r.version = null;
+  const started = Date.now();
+  console.log("[floorplan] building tools/plan-render…");
+  (async () => {
+    const sourcesMs = await newestRendererSource();
+    // Never replace the binary under a running render.
+    await Promise.allSettled([...floorplanJobs.values()]);
+    const b = await run("swift", ["build", "-c", "release", "--package-path", PLAN_RENDER_DIR], {
+      env: xcodeEnv(["Xcode.app", "Xcode-beta.app"]),
+      timeoutMs: BUILD_TIMEOUT_MS,
+    });
+    if (b.error?.code === "ENOENT") {
+      throw new Error(
+        "Swift was not found. The Floorplan is drawn by a small Swift tool: install Xcode (or set DEVELOPER_DIR to its Contents/Developer folder) and reload.",
+      );
+    }
+    if (b.error?.killed) {
+      throw new Error(`swift build did not finish within ${BUILD_TIMEOUT_MS / 60000} minutes.`);
+    }
+    if (b.code !== 0) throw new Error(`swift build of tools/plan-render failed:\n${buildError(b)}`);
+    r.version = rendererVersion(await fsp.stat(PLAN_RENDER_BIN));
+    r.builtFrom = sourcesMs;
+  })()
+    .then(() => {
+      r.status = "ready";
+      r.message = "";
+      console.log(
+        `[floorplan] plan-render built in ${Math.round((Date.now() - started) / 1000)} s`,
+      );
+    })
+    .catch((err) => {
+      r.status = "error";
+      r.message = err.message;
+      r.version = null;
+      console.error(`[floorplan] ${err.message}`);
+    });
+}
+
+/**
+ * The renderer's state. `check` (a page asking afresh) builds it when the binary is missing or
+ * older than its sources, and retries a failed build; polls just read the state.
+ */
+async function rendererState(check) {
+  const r = planRenderer;
+  if (r.status === "building" || (r.status !== "idle" && !check)) return r;
+  // The binary's version when it is there and newer than every source, else null.
+  let version = null;
+  try {
+    const bin = await fsp.stat(PLAN_RENDER_BIN);
+    if ((await newestRendererSource()) <= Math.max(bin.mtimeMs, r.builtFrom)) {
+      version = rendererVersion(bin);
+    }
+  } catch {
+    // No binary yet.
+  }
+  if (r.status === "building") return r; // Started by another request meanwhile.
+  if (version === null) {
+    startRendererBuild();
+  } else {
+    r.version = version;
+    r.status = "ready";
+    r.message = "";
+  }
+  return r;
+}
+
+function floorplanKey(bytes, source, options, version) {
+  return createHash("sha256")
+    .update(
+      `scan-browser floorplan 1\0${path.basename(source.path)}\0${JSON.stringify(options)}\0${version}\0`,
+    )
+    .update(bytes)
+    .digest("hex");
+}
+
+/** A complete cache entry (result.json and the three files, no symlinks), or null. */
+async function cachedFloorplan(key) {
+  if (!FLOORPLAN_KEY_RE.test(key)) return null;
+  const dir = path.join(FLOORPLANS, key);
+  try {
+    if (!(await fsp.lstat(dir)).isDirectory()) return null;
+    for (const name of FLOORPLAN_FILES) {
+      if (!(await fsp.lstat(path.join(dir, name))).isFile()) return null;
+    }
+    const result = JSON.parse(await fsp.readFile(path.join(dir, "result.json"), "utf8"));
+    const name =
+      typeof result?.downloadName === "string" && /^[\w.-]{1,100}$/.test(result.downloadName)
+        ? result.downloadName
+        : "floorplan";
+    knownFloorplans.set(key, name);
+    return result;
+  } catch {
+    return null;
+  }
+}
+
+/** The useful line of a failed plan-render (it writes one line to stderr). */
+function renderError(r) {
+  if (r.error?.killed) return `plan-render did not finish within ${RENDER_TIMEOUT_MS / 1000} s.`;
+  const line = `${r.stderr}\n${r.stdout}`
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .at(-1);
+  return (line ?? `plan-render failed (exit code ${r.code}).`).replace(/^plan-render: /, "");
+}
+
+async function renderFloorplan({ key, bytes, source, options, version, downloadName }) {
+  const tmp = path.join(FLOORPLANS, `.${key}.${randomBytes(4).toString("hex")}`);
+  await fsp.mkdir(tmp, { mode: 0o700 });
+  try {
+    // The exact bytes the key was made from (a sync may be rewriting the original), removed
+    // again once drawn.
+    const inputDir = path.join(tmp, "input");
+    const input = path.join(inputDir, path.basename(source.path));
+    await fsp.mkdir(inputDir, { mode: 0o700 });
+    await fsp.writeFile(input, bytes, { mode: 0o600 });
+    const args = [input, tmp, "--units", options.units, "--title", options.title];
+    if (options.address) args.push("--address", options.address);
+    const r = await withRenderSlot(() =>
+      run(PLAN_RENDER_BIN, args, { timeoutMs: RENDER_TIMEOUT_MS }),
+    );
+    await fsp.rm(inputDir, { recursive: true, force: true });
+    if (r.code !== 0) throw new Error(renderError(r));
+    let summary = null;
+    try {
+      summary = JSON.parse(r.stdout.trim().split("\n").at(-1));
+    } catch {
+      // Drawn, without a summary: the page is still shown.
+    }
+    const result = {
+      summary,
+      source,
+      options,
+      rendererVersion: version,
+      renderedAt: new Date().toISOString(),
+      downloadName,
+    };
+    await fsp.writeFile(path.join(tmp, "result.json"), JSON.stringify(result), { mode: 0o600 });
+    try {
+      await fsp.rename(tmp, path.join(FLOORPLANS, key));
+    } catch (err) {
+      // Another render of the same input finished first.
+      if (!(await cachedFloorplan(key))) throw err;
+    }
+  } finally {
+    await fsp.rm(tmp, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+/** Removes cache entries older than FLOORPLAN_CACHE_DAYS and leftovers of interrupted renders. */
+async function pruneFloorplans() {
+  const now = Date.now();
+  for (const entry of await readdirSafe(FLOORPLANS)) {
+    const isTmp = FLOORPLAN_TMP_RE.test(entry.name);
+    if (!isTmp && !FLOORPLAN_KEY_RE.test(entry.name)) continue; // Not written by this server.
+    try {
+      const age = now - (await fsp.lstat(path.join(FLOORPLANS, entry.name))).mtimeMs;
+      if (age > (isTmp ? 3600 * 1000 : FLOORPLAN_CACHE_DAYS * 86400 * 1000)) {
+        await fsp.rm(path.join(FLOORPLANS, entry.name), { recursive: true, force: true });
+        knownFloorplans.delete(entry.name);
+      }
+    } catch {
+      // Gone already.
+    }
+  }
+}
+
+/**
+ * GET /api/floorplan?visit=<visit>&capture=<areaKey/captureId>[&source=model|roomplan][&start=1]:
+ * the state of that capture's Floorplan (building, rendering, ready or error). The page asks
+ * with start=1 when it opens and then polls; the input file and the options come from the
+ * server's own reading of the visit, never from the request.
+ */
+async function floorplanStatus(url) {
+  const wanted = url.searchParams.get("source");
+  if (wanted !== null && wanted !== "model" && wanted !== "roomplan") {
+    throw fail(400, "Unknown floor plan source.");
+  }
+  const start = url.searchParams.get("start") === "1";
+  const a = await analyzeVisit(url.searchParams.get("visit"));
+  const c = a.captures.get(url.searchParams.get("capture") ?? "");
+  if (!c) throw fail(404, "This capture is not in the visit.");
+  await readApps(a);
+  const sources = floorplanSources(a, c);
+  const source = wanted === null ? sources[0] : sources.find((x) => x.id === wanted);
+  if (!source) {
+    throw fail(404, "This capture has no roomplan.json or capture-model.json to draw from.");
+  }
+  const options = floorplanOptions(a, c);
+  const reply = (status, extra) => ({ status, source, options, ...extra });
+
+  const r = await rendererState(start);
+  if (r.status === "building") return reply("building", { message: r.message });
+  if (r.status === "error") return reply("error", { message: r.message });
+  const { abs, stat } = await resolveDataPath(source.path, "file");
+  if (stat.size > FLOORPLAN_INPUT_MAX_BYTES) {
+    return reply("error", {
+      message: `${path.basename(abs)} is too large (${fmtBytes(stat.size)}).`,
+    });
+  }
+  const bytes = await fsp.readFile(abs);
+  const key = floorplanKey(bytes, source, options, r.version);
+  const cached = await cachedFloorplan(key);
+  if (cached) {
+    // Used again: kept from pruning for another FLOORPLAN_CACHE_DAYS.
+    const now = new Date();
+    await fsp.utimes(path.join(FLOORPLANS, key), now, now).catch(() => {});
+    return reply("ready", {
+      key,
+      summary: cached.summary ?? null,
+      renderedAt: cached.renderedAt ?? null,
+    });
+  }
+  if (floorplanErrors.has(key) && !start) {
+    return reply("error", { message: floorplanErrors.get(key) });
+  }
+  if (!floorplanJobs.has(key)) {
+    floorplanErrors.delete(key);
+    const downloadName = `floorplan-${c.areaKey}-${shortId(c.captureId)}`
+      .replace(/[^\w.-]+/g, "_")
+      .slice(0, 100);
+    const job = renderFloorplan({ key, bytes, source, options, version: r.version, downloadName })
+      .then(() => pruneFloorplans())
+      .catch((err) => {
+        floorplanErrors.set(key, err.message);
+        console.error(`[floorplan] ${source.path}: ${err.message}`);
+      })
+      .finally(() => floorplanJobs.delete(key));
+    floorplanJobs.set(key, job);
+  }
+  return reply("rendering", { message: "Rendering floor plan…" });
+}
+
+/** GET /api/floorplan-file?key=<sha256>&name=floorplan.png|pdf|svg[&download=1]. */
+async function serveFloorplanFile(req, res, url) {
+  const key = url.searchParams.get("key") ?? "";
+  const name = url.searchParams.get("name") ?? "";
+  if (!FLOORPLAN_KEY_RE.test(key) || !FLOORPLAN_FILES.includes(name)) {
+    throw fail(400, "Invalid floor plan file.");
+  }
+  // Only entries this server wrote or checked: never any other path in the cache.
+  if (!knownFloorplans.has(key)) throw fail(404, "No such floor plan (reload the visit).");
+  const dir = path.join(FLOORPLANS, key);
+  const abs = path.join(dir, name);
+  let stat;
+  try {
+    if (!(await fsp.lstat(dir)).isDirectory()) throw new Error("not a folder");
+    stat = await fsp.lstat(abs);
+  } catch {
+    throw fail(404, "No such floor plan (reload the visit).");
+  }
+  if (!stat.isFile()) throw fail(404, "No such floor plan.");
+  const download = url.searchParams.get("download") === "1";
+  const type = FILE_TYPES[path.extname(name)];
+  res.writeHead(200, {
+    ...SECURITY_HEADERS,
+    "Content-Type": type,
+    "Content-Length": String(stat.size),
+    "Content-Security-Policy": type === "application/pdf" && !download ? PDF_CSP : FILE_CSP,
+    "Content-Disposition": contentDisposition(
+      download ? "attachment" : "inline",
+      `${knownFloorplans.get(key)}${path.extname(name)}`,
+    ),
+    // A key names one page for good.
+    "Cache-Control": "private, max-age=86400",
+  });
+  if (req.method === "HEAD") {
+    res.end();
+    return;
+  }
+  const stream = createReadStream(abs);
+  stream.on("error", () => res.destroy());
+  stream.pipe(res);
+}
+
+// ---------------------------------------------------------------------------------------------
 // Sync from iPhone (xcrun devicectl; every command is execFile with an argument array).
 
 function run(cmd, args, { env = process.env, timeoutMs = 60000 } = {}) {
@@ -1636,14 +2103,17 @@ function run(cmd, args, { env = process.env, timeoutMs = 60000 } = {}) {
   });
 }
 
-function devicectlEnv() {
+/** DEVELOPER_DIR when set, else the first of these Xcodes in /Applications that is installed. */
+function xcodeEnv(apps) {
   if (process.env.DEVELOPER_DIR) return process.env;
-  for (const app of ["/Applications/Xcode-beta.app", "/Applications/Xcode.app"]) {
-    const dir = path.join(app, "Contents", "Developer");
+  for (const app of apps) {
+    const dir = path.join("/Applications", app, "Contents", "Developer");
     if (existsSync(dir)) return { ...process.env, DEVELOPER_DIR: dir };
   }
   return process.env;
 }
+
+const devicectlEnv = () => xcodeEnv(["Xcode-beta.app", "Xcode.app"]);
 
 /** The useful part of a devicectl failure (its ERROR line and failure reason). */
 export function devicectlError(r) {
@@ -2048,11 +2518,17 @@ function startSync() {
 // ---------------------------------------------------------------------------------------------
 // HTTP routing
 
+// The page, and the Chapter logo and Inter fonts read in place from the web app's brand folder
+// (web/public/brand, generated by tools/brand): the only files served from outside the data folder
+// besides the cache's own floor plans and photos.
 const STATIC_FILES = {
-  "/": ["index.html", "text/html; charset=utf-8"],
-  "/index.html": ["index.html", "text/html; charset=utf-8"],
-  "/app.js": ["app.js", "text/javascript; charset=utf-8"],
-  "/styles.css": ["styles.css", "text/css; charset=utf-8"],
+  "/": [path.join(PUBLIC_DIR, "index.html"), "text/html; charset=utf-8"],
+  "/index.html": [path.join(PUBLIC_DIR, "index.html"), "text/html; charset=utf-8"],
+  "/app.js": [path.join(PUBLIC_DIR, "app.js"), "text/javascript; charset=utf-8"],
+  "/styles.css": [path.join(PUBLIC_DIR, "styles.css"), "text/css; charset=utf-8"],
+  "/brand/chapter-logo.svg": [path.join(BRAND_DIR, "chapter-logo.svg"), "image/svg+xml"],
+  "/brand/inter-400.woff2": [path.join(BRAND_DIR, "inter-400.woff2"), "font/woff2"],
+  "/brand/inter-600.woff2": [path.join(BRAND_DIR, "inter-600.woff2"), "font/woff2"],
 };
 
 const FILE_TYPES = {
@@ -2117,9 +2593,17 @@ async function servePhoto(req, res, url) {
 
 async function serveStatic(res, pathname) {
   const [file, type] = STATIC_FILES[pathname];
-  const body = await fsp.readFile(path.join(PUBLIC_DIR, file));
+  let body;
+  try {
+    body = await fsp.readFile(file);
+  } catch (err) {
+    if (err.code === "ENOENT") throw fail(404, `${pathname} is missing from this checkout.`);
+    throw err;
+  }
   const headers = { "Content-Type": type };
-  if (file === "index.html") headers["Content-Security-Policy"] = PAGE_CSP;
+  if (path.basename(file) === "index.html") headers["Content-Security-Policy"] = PAGE_CSP;
+  // The logo is shown with <img>; opened on its own it still cannot run anything.
+  if (type === "image/svg+xml") headers["Content-Security-Policy"] = FILE_CSP;
   send(res, 200, body, headers);
 }
 
@@ -2175,6 +2659,8 @@ async function handle(req, res) {
   if (pathname === "/api/photo") return servePhoto(req, res, url);
   if (pathname === "/api/sketch")
     return sendJson(res, 200, await sketch(url.searchParams.get("path")));
+  if (pathname === "/api/floorplan") return sendJson(res, 200, await floorplanStatus(url));
+  if (pathname === "/api/floorplan-file") return serveFloorplanFile(req, res, url);
   throw fail(404, "Not found.");
 }
 
@@ -2215,6 +2701,15 @@ async function main() {
   const dataMode = (await fsp.stat(DATA)).mode & 0o777;
   CACHE = cacheRoot();
   await fsp.mkdir(CACHE, { recursive: true, mode: 0o700 });
+  // Floor plans of real homes: an owner-only folder, made so again if it was opened up.
+  FLOORPLANS = path.join(CACHE, "floorplans");
+  await fsp.mkdir(FLOORPLANS, { recursive: true, mode: 0o700 });
+  const floorplansStat = await fsp.lstat(FLOORPLANS);
+  if (floorplansStat.isSymbolicLink() || !floorplansStat.isDirectory()) {
+    console.error(`${FLOORPLANS} is not a folder; remove it and start again.`);
+    process.exit(2);
+  }
+  if (floorplansStat.mode & 0o077) await fsp.chmod(FLOORPLANS, 0o700);
   PORT = config.port;
 
   const server = http.createServer((req, res) => {

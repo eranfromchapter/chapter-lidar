@@ -3,14 +3,18 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="light dark" />
+    <meta name="color-scheme" content="light" />
     <title>Scan browser</title>
+    <link rel="preload" href="/brand/inter-400.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="/styles.css" />
     <script type="module" src="/app.js"></script>
   </head>
   <body>
     <header class="topbar">
-      <a class="brand" href="#/">Scan browser</a>
+      <a class="brand" href="#/">
+        <img class="logo" src="/brand/chapter-logo.svg" alt="Chapter Renovation" />
+        <span class="brand-name">Scan browser</span>
+      </a>
       <span class="topbar-note">Chapter Capture field-test files · local only</span>
       <span id="data-dir" class="topbar-data mono"></span>
     </header>
