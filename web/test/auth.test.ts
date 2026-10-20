@@ -183,7 +183,8 @@ describe("capture role: status only", () => {
     expect(screen.getByText("Casey Capture · Capture operator")).toBeTruthy();
     expect(screen.getByRole("region", { name: /Verdict/ })).toBeTruthy();
     expect(screen.queryAllByRole("link", { name: /Download/ })).toHaveLength(0);
-    expect(container.querySelector("img")).toBeNull();
+    // No plan preview: the only image is the header logo, outside the main column.
+    expect(screen.getByRole("main").querySelector("img")).toBeNull();
     expect(container.innerHTML).not.toContain("/files/download");
     expect(container.innerHTML).not.toContain("/files/preview");
     expect(screen.queryByRole("link", { name: /modeling decision/i })).toBeNull();

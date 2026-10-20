@@ -18,9 +18,19 @@ export function PageFrame({ viewer, nav, selectedDealId, children }: PageFramePr
     <>
       <header className="app-header">
         <div className="app-header__brand">
-          <a className="wordmark" href="/" aria-label="Chapter Renovation, capture review home">
-            <span className="wordmark__name">chapter</span>
-            <span className="wordmark__tag">RENOVATION</span>
+          <a
+            className="app-header__home"
+            href="/"
+            aria-label="Chapter Renovation, capture review home"
+          >
+            {/* The Chapter logo (public/brand), 1756:635; CSS sets the height. */}
+            <img
+              className="app-header__logo"
+              src="/brand/chapter-logo.svg"
+              width={94}
+              height={34}
+              alt="Chapter Renovation"
+            />
           </a>
           <span className="app-header__title">Capture review</span>
         </div>
