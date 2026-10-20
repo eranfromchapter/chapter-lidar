@@ -122,7 +122,10 @@ first, as the phone's scan viewer does.
 - **Build**: on the first Floorplan request, and again whenever a Swift source of the tool or of
   those packages is newer than the binary, the server runs
   `swift build -c release --package-path tools/plan-render` (output in `tools/plan-render/.build`,
-  ignored by git). One build at a time, never while a render runs; the section shows
+  ignored by git). When a source changed without changing what it compiles to (a checkout, a
+  comment, a `touch`), `swift build` leaves the binary as it was; the server then sets the binary's
+  modified time just after the newest source, so the next start does not build again (the cached
+  pages then draw afresh once). One build at a time, never while a render runs; the section shows
   "Rendering floor plan…" meanwhile. A failed build shows the compiler's errors in the section;
   reload or Try again builds again.
 - **Cache**: pages are kept in `~/Library/Caches/ChapterScanBrowser/floorplans/<key>/`, owner-only

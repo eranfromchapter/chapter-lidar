@@ -1648,9 +1648,10 @@ async function photoJpeg(rel, widthParam) {
 // Floorplan: the one-page Chapter Floorplan of a capture (PlanExport's FloorplanWriter, the page
 // the phone shows), rendered now with the current app code by tools/plan-render. The renderer is
 // built with `swift build` on first need, and again when its Swift sources are newer than the
-// binary: one build at a time, never while a render runs. Pages are cached in
-// <cache>/floorplans/<key>/ (owner-only folders), keyed by the SHA-256 of the input bytes, the
-// options and the renderer version (the binary's mtime and size), so a new build draws afresh.
+// binary (a build that leaves the binary as it was dates it after them): one build at a time,
+// never while a render runs. Pages are cached in <cache>/floorplans/<key>/ (owner-only folders),
+// keyed by the SHA-256 of the input bytes, the options and the renderer version (the binary's
+// mtime and size), so a new build draws afresh.
 
 /** Folder of cached floor plans. Set by main(). */
 let FLOORPLANS = "";
@@ -1804,6 +1805,24 @@ function buildError(r) {
     .slice(0, 2000);
 }
 
+/**
+ * After a build: when `swift build` left the binary as it was (a source touched, checked out again
+ * or edited in a comment, so nothing compiled differently), dates it just after `sourcesMs`, the
+ * newest source it was built from. Otherwise every new server process would find it older than
+ * its sources and build again. Sources edited during the build stay newer and build once more.
+ * Changes the renderer version once, so those pages draw afresh.
+ */
+async function stampRenderer(sourcesMs) {
+  try {
+    if ((await fsp.stat(PLAN_RENDER_BIN)).mtimeMs >= sourcesMs) return;
+    // One millisecond later: the stamp goes through seconds as a float.
+    await fsp.utimes(PLAN_RENDER_BIN, new Date(), (Math.ceil(sourcesMs) + 1) / 1000);
+  } catch (err) {
+    // builtFrom still keeps this process from building again.
+    console.error(`[floorplan] could not date tools/plan-render after the build: ${err.message}`);
+  }
+}
+
 function startRendererBuild() {
   const r = planRenderer;
   if (r.status === "building") return;
@@ -1830,6 +1849,7 @@ function startRendererBuild() {
       throw new Error(`swift build did not finish within ${BUILD_TIMEOUT_MS / 60000} minutes.`);
     }
     if (b.code !== 0) throw new Error(`swift build of tools/plan-render failed:\n${buildError(b)}`);
+    await stampRenderer(sourcesMs);
     r.version = rendererVersion(await fsp.stat(PLAN_RENDER_BIN));
     r.builtFrom = sourcesMs;
   })()
