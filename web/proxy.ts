@@ -1,7 +1,9 @@
-// Runs before every page, server action and route handler except the Auth.js routes and static
-// assets (Next.js 16 "proxy", formerly middleware).
+// Runs before every page, server action and route handler except the Auth.js routes, the brand
+// assets (public/brand: logo and fonts) and static assets (Next.js 16 "proxy", formerly
+// middleware).
 //
 // - Missing or invalid settings: the configuration page (503), nothing else is served.
+// - The sign-in page (app/sign-in) is served without a session; it shows no data.
 // - No session: GET and HEAD are redirected to sign-in; anything else gets 401
 //   (lib/auth-redirect.ts).
 // - Through the Auth.js wrapper, so a station token close to expiry is refreshed here and the
@@ -9,7 +11,7 @@
 
 import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
 import { auth } from "@/auth";
-import { isAuthRoute, unauthenticatedResponse } from "@/lib/auth-redirect";
+import { isAuthRoute, isSignInPage, unauthenticatedResponse } from "@/lib/auth-redirect";
 import { configProblems, failClosed } from "@/lib/config";
 
 type SessionHandler = (request: NextRequest, event: NextFetchEvent) => Promise<Response | void>;
@@ -33,11 +35,15 @@ export async function proxy(request: NextRequest, event: NextFetchEvent): Promis
   if (problems.length > 0) {
     return failClosed(problems);
   }
+  if (isSignInPage(request.nextUrl.pathname)) {
+    // GET shows the page; POST is its server action, which starts the Entra sign-in.
+    return NextResponse.next();
+  }
   const handler = await withSession;
   const response = await handler(request, event);
   return response ?? unauthenticatedResponse(request);
 }
 
 export const config = {
-  matcher: ["/((?!api/auth|_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!api/auth|brand/|_next/static|_next/image|favicon.ico).*)"],
 };

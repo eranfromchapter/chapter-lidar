@@ -9,9 +9,12 @@
 //   and roles only, never a token.
 // - The profile is built from the ID token claims. The provider's default Graph photo request
 //   is replaced, so the station token is never sent to another API.
+// - Sign-in and sign-in errors use the review screen's own page (app/sign-in), not the Auth.js
+//   default page.
 
 import NextAuth, { type NextAuthConfig } from "next-auth";
 import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
+import { SIGN_IN_PATH } from "./lib/auth-redirect";
 import { readAuthConfig, type AuthConfig } from "./lib/config";
 import {
   needsRefresh,
@@ -33,6 +36,7 @@ export function buildAuthConfig(config: AuthConfig): NextAuthConfig {
   return {
     secret: config.secret,
     session: { strategy: "jwt", maxAge: SESSION_MAX_AGE_SECONDS },
+    pages: { signIn: SIGN_IN_PATH, error: SIGN_IN_PATH },
     providers: [
       MicrosoftEntraID({
         clientId: config.clientId,
@@ -103,4 +107,4 @@ export function buildAuthConfig(config: AuthConfig): NextAuthConfig {
   };
 }
 
-export const { handlers, auth } = NextAuth(() => buildAuthConfig(readAuthConfig()));
+export const { handlers, auth, signIn } = NextAuth(() => buildAuthConfig(readAuthConfig()));

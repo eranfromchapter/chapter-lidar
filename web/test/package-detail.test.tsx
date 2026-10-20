@@ -336,8 +336,9 @@ describe("package detail states", () => {
       return;
     }
     const station = stationFor(withPlan);
-    const { container } = await renderPackage(withPlan, station);
-    const images = [...container.querySelectorAll("img")];
+    await renderPackage(withPlan, station);
+    // Images of the Files section only; the header logo is not a plan.
+    const images = [...screen.getByRole("region", { name: "Files" }).querySelectorAll("img")];
     const plans = withPlan.pkg.files.filter((file) => file.role === "plan_png");
     expect(images).toHaveLength(plans.length);
     for (const image of images) {

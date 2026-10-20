@@ -12,6 +12,7 @@ import { getToken } from "next-auth/jwt";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
+import { safeReturnPath, SIGN_IN_PATH } from "./auth-redirect";
 import { readAuthConfig, readStationConfig } from "./config";
 import { canReview, type StationRole } from "./roles";
 import { createStationClient, type StationClient } from "./station";
@@ -80,8 +81,7 @@ export const getViewerSession = cache(async (): Promise<ViewerSession | null> =>
 
 /** Sign-in URL that returns to `returnTo` (a path on this site). */
 export function signInPath(returnTo: string): string {
-  const safe = returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "/";
-  return `/api/auth/signin?callbackUrl=${encodeURIComponent(safe)}`;
+  return `${SIGN_IN_PATH}?callbackUrl=${encodeURIComponent(safeReturnPath(returnTo))}`;
 }
 
 /** The signed-in user, or a redirect to sign-in. For server components. */

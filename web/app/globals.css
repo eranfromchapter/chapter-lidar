@@ -1,5 +1,25 @@
 /* Tokens and screen-review styles from the frozen design (docs/waves/design/snapshot.html
-   #tokens and #screen-review). System font stacks only; no remote fonts or assets. */
+   #tokens and #screen-review), in the Chapter brand: Times for titles, Inter for all other text
+   and the Chapter logo in the header. Fonts and logo are served from public/brand; no remote
+   fonts or assets. */
+
+/* Inter Regular and SemiBold, Latin subset (public/brand/NOTICE.md). There is no Inter Bold:
+   every bold or 600 weight on these pages renders in SemiBold. */
+@font-face {
+  font-family: Inter;
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/brand/inter-400.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: Inter;
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/brand/inter-600.woff2") format("woff2");
+}
 
 :root {
   --ink: #1f2429;
@@ -12,8 +32,8 @@
   --limited: #9a6a1e;
   --limited-text: #7a5214;
   --blocked: #8b2e2e;
-  --font-display: "Times New Roman", Times, serif;
-  --font-body: "Helvetica Neue", Helvetica, sans-serif;
+  --font-display: Times, "Times New Roman", serif;
+  --font-body: Inter, "Helvetica Neue", Helvetica, Arial, sans-serif;
   --font-mono: ui-monospace, Menlo, monospace;
   --space-1: 4px;
   --space-2: 8px;
@@ -38,6 +58,21 @@ body {
   color: var(--ink);
   font-family: var(--font-body);
   font-size: 15px;
+  accent-color: var(--ink);
+}
+
+/* Form controls take the page font instead of the browser's control font. */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+/* Bold text uses Inter SemiBold. */
+b,
+strong {
+  font-weight: 600;
 }
 
 a {
@@ -48,12 +83,27 @@ a:hover {
   color: var(--muted);
 }
 
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+::selection {
+  background: var(--nude);
+  color: var(--ink);
+}
+
 .visually-hidden {
   position: absolute;
   left: -9999px;
 }
 
-/* Header */
+/* Header: a light bar, because the Chapter logo is drawn in brand black only. */
 .app-header {
   display: flex;
   flex-wrap: wrap;
@@ -61,8 +111,9 @@ a:hover {
   justify-content: space-between;
   align-items: center;
   padding: var(--space-4) var(--space-6);
-  background: var(--ink);
-  color: var(--surface);
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
 }
 
 .app-header__brand {
@@ -71,33 +122,20 @@ a:hover {
   align-items: center;
 }
 
-.wordmark {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  line-height: 1;
-  color: var(--surface);
-  text-decoration: none;
+.app-header__home {
+  display: block;
 }
 
-.wordmark:hover {
-  color: var(--surface);
-}
-
-.wordmark__name {
-  font-family: var(--font-display);
-  font-size: 22px;
-}
-
-.wordmark__tag {
-  font-size: 7px;
-  letter-spacing: 3px;
-  margin-top: 3px;
+/* The wordmark's height; the width follows the logo's 1756:635 proportions. */
+.app-header__logo {
+  display: block;
+  width: auto;
+  height: 34px;
 }
 
 .app-header__title {
   font-size: 15px;
-  color: var(--line);
+  color: var(--muted);
 }
 
 .app-header__user {
