@@ -88,7 +88,8 @@ final class VisitModel {
           .appendingPathComponent("Original Exports", isDirectory: true)
           .appendingPathComponent(capture.areaKey, isDirectory: true)
           .appendingPathComponent(capture.captureId.rawValue, isDirectory: true),
-        title: capture.label, address: address, displayUnits: capture.units.display)
+        title: capture.label, address: address, displayUnits: capture.units.display,
+        capturedAt: capture.capturedAt.date)
     }
   }
 

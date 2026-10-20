@@ -60,8 +60,13 @@ public struct PlanExportContext: Hashable, Sendable {
   var captureDate: String { String(capturedAt.rawValue.prefix(10)) }
 
   /// PDF date string for the capture time.
-  var pdfDate: String {
-    let digits = capturedAt.rawValue.filter(\.isNumber)
-    return "D:\(digits)Z"
+  var pdfDate: String { PDFDate.string(capturedAt) }
+}
+
+/// PDF date strings (`D:YYYYMMDDHHmmSSZ`, UTC).
+enum PDFDate {
+  static func string(_ timestamp: UTCTimestamp) -> String {
+    // `YYYY-MM-DDTHH:MM:SSZ`: its fourteen digits in order.
+    "D:\(String(timestamp.rawValue.filter(\.isNumber).prefix(14)))Z"
   }
 }

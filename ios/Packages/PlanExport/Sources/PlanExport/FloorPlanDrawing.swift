@@ -467,6 +467,11 @@ public struct FloorPlanDrawing: Sendable {
   /// paper, but none larger than 1:`minimumDenominator` (a small plan is not blown up to fill
   /// the paper); `options.scaleDenominator` is replaced. `start` is a first guess of n (for
   /// example from `estimatedDenominator`), which saves drawings when it is close.
+  ///
+  /// Annotations keep their paper size whatever the scale, so when they alone cannot fit (no
+  /// `estimatedDenominator`), or a coarser scale stops bringing the drawing closer to fitting,
+  /// the scale is not made coarser still: the result is the closest drawing whose plan (walls
+  /// and rooms) fits, with only annotations running over, not a plan shrunk to a dot.
   public static func fitted(
     model: CaptureModel, widthMM: Double, heightMM: Double, options: Options = Options(),
     start: Double? = nil, minimumDenominator: Double = 1
@@ -484,6 +489,8 @@ public struct FloorPlanDrawing: Sendable {
     var options = options
     var fits: FloorPlanDrawing?
     var last: FloorPlanDrawing?
+    // The drawing that came closest to fitting, its plan on the paper.
+    var closest: (drawing: FloorPlanDrawing, needed: Double)?
     for _ in 0..<12 {
       options.scaleDenominator = denominator
       let candidate = try FloorPlanDrawing(model: model, options: options)
@@ -500,27 +507,45 @@ public struct FloorPlanDrawing: Sendable {
       } else {
         // Too big: the last scale that fitted, or a coarser one.
         if fits != nil { break }
+        let plan = candidate.planExtentMM
+        let planNeeded = max(
+          plan.width / denominator / widthMM, plan.height / denominator / heightMM)
+        if planNeeded <= 1 {
+          // A coarser scale only helps while the annotations could fit and it still gains.
+          let gains = closest.map { needed < $0.needed - 1e-6 } ?? true
+          if gains { closest = (candidate, needed) }
+          if !gains || candidate.estimatedDenominator(widthMM: widthMM, heightMM: heightMM) == nil
+          {
+            break
+          }
+        }
         denominator = max(denominator + 1, (denominator * needed).rounded(.up))
       }
     }
-    return fits ?? last!
+    return fits ?? closest?.drawing ?? last!
   }
 
-  /// Estimate of the whole-number scale (1:n) at which this drawing, redrawn, would just fit
-  /// `widthMM` by `heightMM` of paper: the plan (walls and rooms) scales with n, while the
-  /// annotations around it keep their paper size. Nil when the annotations alone do not fit.
-  public func estimatedDenominator(widthMM: Double, heightMM: Double) -> Double? {
+  /// Size of the plan itself (walls and rooms, without annotations), plan millimetres.
+  var planExtentMM: (width: Double, height: Double) {
     let points = walls.pieces.flatMap { $0 } + rooms.flatMap(\.polygon)
-    guard let first = points.first else { return nil }
+    guard let first = points.first else { return (0, 0) }
     var low = first
     var high = first
     for p in points {
       low = Point2(x: min(low.x, p.x), y: min(low.y, p.y))
       high = Point2(x: max(high.x, p.x), y: max(high.y, p.y))
     }
+    return ((high.x - low.x) * 1000, (high.y - low.y) * 1000)
+  }
+
+  /// Estimate of the whole-number scale (1:n) at which this drawing, redrawn, would just fit
+  /// `widthMM` by `heightMM` of paper: the plan (walls and rooms) scales with n, while the
+  /// annotations around it keep their paper size. Nil when the annotations alone do not fit.
+  public func estimatedDenominator(widthMM: Double, heightMM: Double) -> Double? {
+    let hasWalls = walls.pieces.contains { !$0.isEmpty }
+    guard hasWalls || rooms.contains(where: { !$0.polygon.isEmpty }) else { return nil }
     let n = options.scaleDenominator
-    let planWidth = (high.x - low.x) * 1000
-    let planHeight = (high.y - low.y) * 1000
+    let (planWidth, planHeight) = planExtentMM
     // Paper taken by the annotations at this scale, which stays the same at any scale.
     let extraWidth = (bounds.width - planWidth) / n
     let extraHeight = (bounds.height - planHeight) / n

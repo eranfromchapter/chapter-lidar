@@ -7,11 +7,11 @@ import Foundation
 /// - Bedrooms, bathrooms: rooms whose type is bedroom, bathroom.
 /// - Livable area: the sum of the rooms' floor areas.
 /// - Exterior area (estimate): the area inside the outline of all rooms together, pushed out by
-///   the assumed exterior wall thickness (`MeasurementSettings.exteriorWallThicknessM`) with
-///   square corners. RoomPlan does not measure wall thickness, so this is always an estimate.
-///   Gaps between rooms narrower than twice that thickness (interior walls) count as inside.
-///   Computed as the livable area plus the band that the push adds, measured on a raster of
-///   about 1 cm in the frame of the plan's dominant axis.
+///   the assumed exterior wall thickness (`MeasurementSettings.exteriorWallThicknessM`), each
+///   wall along its own normal, with mitred (square) corners. RoomPlan does not measure wall
+///   thickness, so this is always an estimate. Gaps between rooms narrower than twice that
+///   thickness (interior walls) count as inside. Computed as the livable area plus the band
+///   that the push adds (`exteriorBandArea`).
 /// - Wall area: the sum of the rooms' wall areas excluding openings, so a wall between two
 ///   rooms counts once per side.
 /// - Window area: width x height summed over every window of the capture, each once.
@@ -72,79 +72,120 @@ public struct PlanTotals: Hashable, Sendable {
 
   // MARK: Exterior band
 
-  /// Target raster cell of the exterior estimate, metres.
-  static let exteriorCellM = 0.01
-  /// Most raster cells the exterior estimate uses; a larger plan gets coarser cells.
-  static let exteriorMaximumCells = 16_000_000
+  /// Tallest strip the exterior band is summed over, metres.
+  static let exteriorStripM = 0.01
+
+  /// A mitre longer than this many thicknesses (a corner sharper than about 29 degrees) is
+  /// cut square across (bevelled), as a wall corner would be.
+  static let exteriorMitreLimit = 4.0
 
   /// Area that pushing the outline of all `polygons` together out by `thicknessM` adds, square
-  /// metres. On a raster in the frame of the polygons' dominant axis, with a whole number r of
-  /// cells per thickness: the cells whose centres lie in some polygon are grown by r cells in
-  /// each axis direction (a square grow, which gives the square corners of a wall); the result
-  /// is the number of cells added times the cell area. Along an edge of the outline the grow
-  /// adds exactly r cells per row, so the band does not depend on where the edge falls in a
-  /// cell.
+  /// metres: every room outline is offset by `thicknessM`, each edge along its own outward
+  /// normal with mitred (square) corners (`offsetPieces`), and the band is what the union of
+  /// those offsets adds to the union of the rooms. So a slanted wall is pushed out by the
+  /// thickness, not 1.41 thicknesses as a square grow along the plan's axes would at 45
+  /// degrees. Summed over horizontal strips between the corners' heights, at most
+  /// `exteriorStripM` tall, each the covered length across its middle (exact across, with no
+  /// raster) times its height: exact when every edge runs along the plan's axes, and within a
+  /// fraction of a square millimetre per corner otherwise.
   static func exteriorBandArea(_ polygons: [[Point2]], thicknessM: Double) -> Double {
-    guard thicknessM > 0, !polygons.isEmpty else { return 0 }
-    let frame = MetricsGeometry.Frame(angle: MetricsGeometry.dominantAngle(of: polygons))
-    let local = polygons.map { $0.map(frame.local) }
-    guard let bounds = MetricsGeometry.bounds(of: local.flatMap { $0 }) else { return 0 }
-
-    var r = max(1, Int((thicknessM / exteriorCellM).rounded()))
-    var cell = thicknessM / Double(r)
-    var columns = 0
-    var rows = 0
-    while true {
-      cell = thicknessM / Double(r)
-      columns = Int(((bounds.width + 2 * thicknessM) / cell).rounded(.up)) + 4
-      rows = Int(((bounds.height + 2 * thicknessM) / cell).rounded(.up)) + 4
-      let cells = Double(columns) * Double(rows)
-      if cells <= Double(exteriorMaximumCells) || r == 1 { break }
-      r = max(1, Int(Double(r) * (Double(exteriorMaximumCells) / cells).squareRoot()))
-    }
-    let originX = bounds.minX - thicknessM - 2 * cell
-    let originY = bounds.minY - thicknessM - 2 * cell
-
-    var grid = [UInt8](repeating: 0, count: columns * rows)
-    for row in 0..<rows {
-      let y = originY + (Double(row) + 0.5) * cell
-      for polygon in local {
-        for span in MetricsGeometry.rowSpans(
-          polygon, y: y, originX: originX, cell: cell, columns: columns)
-        {
-          for column in span { grid[row * columns + column] = 1 }
-        }
+    guard thicknessM > 0 else { return 0 }
+    let rooms = polygons.filter { $0.count >= 3 }
+    let grown = rooms + rooms.flatMap { offsetPieces($0, by: thicknessM) }
+    let heights = MetricsGeometry.distinctSorted(grown.flatMap { $0.map(\.y) })
+    var band = 0.0
+    for (low, high) in zip(heights, heights.dropFirst()) {
+      let steps = max(1, Int(((high - low) / exteriorStripM).rounded(.up)))
+      let step = (high - low) / Double(steps)
+      for index in 0..<steps {
+        let y = low + (Double(index) + 0.5) * step
+        band += (coveredLength(grown, at: y) - coveredLength(rooms, at: y)) * step
       }
     }
-    let inside = grid.reduce(0) { $0 + Int($1) }
-    // Grow along rows, then along columns.
-    grid = grow(grid, count: columns, lines: rows, step: 1, lineStep: columns, by: r)
-    grid = grow(grid, count: rows, lines: columns, step: columns, lineStep: 1, by: r)
-    let grown = grid.reduce(0) { $0 + Int($1) }
-    return Double(grown - inside) * cell * cell
+    return max(0, band)
   }
 
-  /// Sets every cell within `by` cells of a set cell along each line. Line `l` holds the cells
-  /// `l * lineStep + i * step` for `i` in `0..<count`.
-  private static func grow(
-    _ grid: [UInt8], count: Int, lines: Int, step: Int, lineStep: Int, by r: Int
-  ) -> [UInt8] {
-    var result = grid
-    for line in 0..<lines {
-      let base = line * lineStep
-      // Nearest set cell before and after each cell.
-      var last = -r - 1
-      for i in 0..<count {
-        if grid[base + i * step] == 1 { last = i }
-        if i - last <= r { result[base + i * step] = 1 }
+  /// Length of the horizontal line at height `y` that lies inside at least one of `polygons`
+  /// (each taken by the even-odd rule).
+  static func coveredLength(_ polygons: [[Point2]], at y: Double) -> Double {
+    var spans: [(Double, Double)] = []
+    for polygon in polygons {
+      var crossings: [Double] = []
+      for index in polygon.indices {
+        let a = polygon[index]
+        let b = polygon[(index + 1) % polygon.count]
+        guard (a.y > y) != (b.y > y) else { continue }
+        crossings.append(a.x + (y - a.y) / (b.y - a.y) * (b.x - a.x))
       }
-      var next = count + r
-      for i in stride(from: count - 1, through: 0, by: -1) {
-        if grid[base + i * step] == 1 { next = i }
-        if next - i <= r { result[base + i * step] = 1 }
+      crossings.sort()
+      var index = 0
+      while index + 1 < crossings.count {
+        spans.append((crossings[index], crossings[index + 1]))
+        index += 2
       }
     }
-    return result
+    spans.sort { $0.0 < $1.0 }
+    var length = 0.0
+    var current: (Double, Double)?
+    for span in spans {
+      if let open = current, span.0 <= open.1 {
+        current = (open.0, max(open.1, span.1))
+      } else {
+        if let open = current { length += open.1 - open.0 }
+        current = span
+      }
+    }
+    if let open = current { length += open.1 - open.0 }
+    return length
+  }
+
+  /// The pieces that, with `polygon`, make up its outward offset by `t` with mitred corners:
+  /// for each edge the strip it sweeps when pushed out along its outward normal, and for each
+  /// convex corner the mitre between the strips of its two edges (bevelled past
+  /// `exteriorMitreLimit`). At a reflex corner the two strips overlap, which is the offset
+  /// there.
+  static func offsetPieces(_ polygon: [Point2], by t: Double) -> [[Point2]] {
+    // Without repeated corners, which have no direction.
+    let tiny = MetricsGeometry.epsilon
+    var points: [Point2] = []
+    for p in polygon where points.last.map({ $0.distance(to: p) > tiny }) ?? true {
+      points.append(p)
+    }
+    if points.count > 1, points[0].distance(to: points[points.count - 1]) <= tiny {
+      points.removeLast()
+    }
+    guard points.count >= 3 else { return [] }
+    let area = Geo.signedArea(points)
+    guard abs(area) > tiny else { return [] }
+    // Counter-clockwise outlines have the outside on the right of each edge.
+    let sign = area > 0 ? 1.0 : -1.0
+    let count = points.count
+    let directions = (0..<count).map { (points[($0 + 1) % count] - points[$0]).unit }
+    let normals = directions.map { Point2(x: $0.y * sign, y: -$0.x * sign) }
+    var pieces: [[Point2]] = []
+    for index in 0..<count {
+      let a = points[index]
+      let b = points[(index + 1) % count]
+      let n = normals[index]
+      pieces.append([a, b, b + n * t, a + n * t])
+    }
+    for index in 0..<count {
+      let previous = (index + count - 1) % count
+      // Convex: the outline turns towards its inside.
+      guard directions[previous].cross(directions[index]) * sign > 1e-12 else { continue }
+      let v = points[index]
+      let n1 = normals[previous]
+      let n2 = normals[index]
+      let cosine = n1.dot(n2)
+      // The mitre point lies t / cos(half the turn) from the corner.
+      let mitre = (2 / (1 + cosine)).squareRoot()
+      if mitre <= exteriorMitreLimit {
+        pieces.append([v, v + n1 * t, v + (n1 + n2) * (t / (1 + cosine)), v + n2 * t])
+      } else {
+        pieces.append([v, v + n1 * t, v + n2 * t])
+      }
+    }
+    return pieces
   }
 }
 

@@ -18,15 +18,21 @@ private typealias Control = ChapterTokens.Control
 private typealias Radius = ChapterTokens.Radius
 
 /// One scanned floor or area on this phone: the folder that holds its `roomplan.json`
-/// (`<visit>/originals/Original Exports/<areaKey>/<captureId>/`), with the visit's address and
-/// the capture's display units when they are known.
+/// (`<visit>/originals/Original Exports/<areaKey>/<captureId>/`), with the visit's address,
+/// the capture's display units and the time it was captured when they are known.
 struct ScanItem: Identifiable, Hashable {
   var folder: URL
   var title: String
+  /// When `roomplan.json` was written.
   var date: Date
   var address: String? = nil
   var displayUnits: DisplayUnitSystem? = nil
+  /// The capture time in the capture record.
+  var capturedAt: Date? = nil
   var id: String { folder.path }
+
+  /// When the scan was made: the capture record's time, else the file's.
+  var scanDate: Date { capturedAt ?? date }
 }
 
 /// Every scan on the phone, newest first. Reads the visit folders; changes nothing.
@@ -40,12 +46,13 @@ enum ScanLibrary {
       let exports = visit.appendingPathComponent("originals/Original Exports", isDirectory: true)
       for area in children(of: exports) {
         for capture in children(of: area) {
-          let units = record?.captures.first {
+          let recorded = record?.captures.first {
             $0.captureId.rawValue == capture.lastPathComponent
-          }?.units.display
+          }
           if let item = item(
             folder: capture, title: title(areaKey: area.lastPathComponent),
-            address: record?.address.formatted, displayUnits: units)
+            address: record?.address.formatted, displayUnits: recorded?.units.display,
+            capturedAt: recorded?.capturedAt.date)
           {
             items.append(item)
           }
@@ -56,7 +63,8 @@ enum ScanLibrary {
   }
 
   static func item(
-    folder: URL, title: String, address: String? = nil, displayUnits: DisplayUnitSystem? = nil
+    folder: URL, title: String, address: String? = nil, displayUnits: DisplayUnitSystem? = nil,
+    capturedAt: Date? = nil
   ) -> ScanItem? {
     let file = folder.appendingPathComponent(roomPlanFile)
     guard
@@ -64,7 +72,8 @@ enum ScanLibrary {
       let date = values.contentModificationDate
     else { return nil }
     return ScanItem(
-      folder: folder, title: title, date: date, address: address, displayUnits: displayUnits)
+      folder: folder, title: title, date: date, address: address, displayUnits: displayUnits,
+      capturedAt: capturedAt)
   }
 
   /// The newest capture record written for a visit (by "Package ready", under
@@ -134,7 +143,7 @@ final class ScanViewerModel {
       counts = "\(result.3) \(result.3 == 1 ? "room" : "rooms") \u{00B7} \(result.2) walls"
       let floorplan = FloorplanModel(
         model: result.0, address: item.address, units: item.displayUnits ?? .imperial,
-        exportName: item.folder.lastPathComponent)
+        capturedAt: item.scanDate, exportName: item.folder.lastPathComponent)
       self.floorplan = floorplan
       isLoading = false
       await floorplan.write()

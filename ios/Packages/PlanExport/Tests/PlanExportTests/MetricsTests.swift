@@ -137,6 +137,122 @@ final class RoomMetricsTests: XCTestCase {
     XCTAssertEqual(raster.center.y, -2, accuracy: 0.011)
   }
 
+  /// The largest rectangle and the inscribed rectangle the engine finds for an outline in model
+  /// (x, z) metres: the engine's never larger than the room or the true one, and within 0.1 %
+  /// of the true one.
+  private func checkInscribed(
+    _ corners: [(Double, Double)], largest: Double, sides: (Double, Double)? = nil,
+    _ name: String
+  ) throws {
+    let model = Outlines.model([.init(id: "room-1", label: name, corners: corners)])
+    let room = try XCTUnwrap(try PlanMetrics(model).rooms.first, name)
+    XCTAssertEqual(room.frameAngleRadians, 0, name)
+    XCTAssertLessThanOrEqual(room.inscribed.areaM2, largest + 1e-6, name)
+    XCTAssertGreaterThanOrEqual(room.inscribed.areaM2, largest * 0.999, name)
+    XCTAssertLessThanOrEqual(room.inscribed.areaM2, room.floorAreaM2 + 1e-9, name)
+    if let sides {
+      XCTAssertEqual(room.inscribed.alongM, sides.0, accuracy: 1e-3, name)
+      XCTAssertEqual(room.inscribed.acrossM, sides.1, accuracy: 1e-3, name)
+    }
+    // Inside the room: corners on or within the outline, its middle inside.
+    let outline = corners.map { Point2(x: $0.0, y: -$0.1) }
+    for corner in room.inscribed.corners {
+      let point = Point2(x: corner.x, y: corner.y)
+      XCTAssertTrue(
+        PlanGeometry.contains(outline, point)
+          || PlanGeometry.distanceToBoundary(of: outline, from: point) < 1e-6, name)
+    }
+    let center = Point2(x: room.inscribed.center.x, y: room.inscribed.center.y)
+    XCTAssertTrue(PlanGeometry.contains(outline, center), name)
+    // As large as the 1 cm raster finds (which may poke half a cell past a slanted edge).
+    let raster = try XCTUnwrap(
+      MetricsGeometry.rasterInscribed(outline, cell: 0.01), name)
+    XCTAssertGreaterThanOrEqual(room.inscribed.areaM2, raster.area * 0.98, name)
+  }
+
+  func testInscribedRectangleOfSlantedOutlines() throws {
+    // A right triangle with 4 m legs: 2 x 2 m, not a sliver along a leg.
+    try checkInscribed([(0, 0), (4, 0), (0, 4)], largest: 4, sides: (2, 2), "triangle")
+    // A 4 x 3 m room split along its diagonal: 2 x 1.5 m in each half.
+    try checkInscribed([(0, 0), (4, 0), (4, 3)], largest: 3, sides: (2, 1.5), "half 1")
+    try checkInscribed([(0, 0), (4, 3), (0, 3)], largest: 3, sides: (2, 1.5), "half 2")
+    // A 4 x 4 m room with a 45 degree chamfer across a corner (2 m legs): 3 x 3 m.
+    try checkInscribed(
+      [(0, 0), (4, 0), (4, 2), (2, 4), (0, 4)], largest: 9, sides: (3, 3), "chamfer")
+    // A trapezoid 6 m at the base, 2 m at the top, 3 m high: 3 x 2.25 m.
+    try checkInscribed(
+      [(0, 0), (6, 0), (4, 3), (2, 3)], largest: 6.75, sides: (3, 2.25), "trapezoid")
+    // A bay: a 5 x 4 m room with a three-sided 45 degree bay on one long side.
+    try checkInscribed(
+      [(0, 0), (5, 0), (5, 4), (4, 4), (3.5, 4.5), (1.5, 4.5), (1, 4), (0, 4)],
+      largest: 20, sides: (5, 4), "bay")
+    // An orthogonal room is still found exactly by its corners.
+    let l = [(0.0, 0.0), (0.0, 4.0), (4.0, 4.0), (4.0, 2.0), (6.0, 2.0), (6.0, 0.0)]
+    try checkInscribed(l, largest: 16, sides: (4, 4), "L")
+  }
+
+  func testInscribedRectangleOfSlantedOutlinesMatchesTheRaster() throws {
+    // Star-shaped outlines with slanted edges round a centre, radii from a fixed sequence:
+    // the search is never smaller than 98 % of what a 1 cm raster finds.
+    var seed: UInt64 = 0x2545_F491_4F6C_DD1D
+    func next() -> Double {
+      seed = seed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+      return Double(seed >> 11) / Double(1 << 53)
+    }
+    for shape in 0..<6 {
+      let count = 5 + shape
+      var corners: [(Double, Double)] = []
+      for index in 0..<count {
+        let angle = 2 * Double.pi * (Double(index) + 0.3 * next()) / Double(count)
+        let radius = 1.5 + 1.5 * next()
+        corners.append((3 + radius * cos(angle), 3 + radius * sin(angle)))
+      }
+      let outline = corners.map { Point2(x: $0.0, y: -$0.1) }
+      let model = Outlines.model([.init(id: "room-1", label: "Star", corners: corners)])
+      let room = try XCTUnwrap(try PlanMetrics(model).rooms.first)
+      let frame = MetricsGeometry.Frame(angle: room.frameAngleRadians)
+      let raster = try XCTUnwrap(
+        MetricsGeometry.rasterInscribed(outline.map(frame.local), cell: 0.01))
+      XCTAssertGreaterThanOrEqual(room.inscribed.areaM2, raster.area * 0.98, "shape \(shape)")
+      XCTAssertLessThanOrEqual(room.inscribed.areaM2, room.floorAreaM2 + 1e-9, "shape \(shape)")
+    }
+  }
+
+  func testInscribedRectangleOfAnOutlineWithNoAreaIsEmpty() {
+    let line = [Point2(x: 0, y: 0), Point2(x: 2, y: 0), Point2(x: 4, y: 0)]
+    XCTAssertNil(MetricsGeometry.largestInscribedRectangle(line))
+    let tiny = [Point2(x: 0, y: 0), Point2(x: 1e-12, y: 0), Point2(x: 0, y: 1e-12)]
+    XCTAssertLessThanOrEqual(
+      MetricsGeometry.largestInscribedRectangle(tiny)?.area ?? 0, 1e-24)
+  }
+
+  func testPassagesCountAgainstWallAreaButHaveNoCasing() throws {
+    // A 4 x 3 m room with a 0.9 x 2.1 m door and a 1.0 x 2.0 m passage.
+    var model = Synthetic.room(width: 4, length: 3)
+    model.doors = [
+      CaptureModel.WallOpening(
+        id: "door-1", wallId: "wall-1", offsetM: 1.5, bottomM: 0, widthM: 0.9, heightM: 2.1)
+    ]
+    model.openings = [
+      CaptureModel.WallOpening(
+        id: "opening-1", wallId: "wall-2", offsetM: 2, bottomM: 0, widthM: 1.0, heightM: 2.0)
+    ]
+    let c = MeasurementSettings.defaultCasingWidthM
+    let door = 2 * 2.1 + 0.9 + 4 * c
+    let room = try XCTUnwrap(try PlanMetrics(model).rooms.first)
+    XCTAssertEqual(room.openings.map(\.id), ["door-1", "opening-1"])
+    XCTAssertEqual(room.doorCasingM, door, accuracy: 1e-12, "the door alone")
+    XCTAssertEqual(room.openings[1].casingLengthM, 0)
+    XCTAssertEqual(room.windowCasingM, 0)
+    XCTAssertEqual(
+      room.wallAreaExcludingOpeningsM2, 14 * 2.7 - 0.9 * 2.1 - 1.0 * 2.0, accuracy: 1e-9)
+    // Cased passages on request.
+    let cased = try XCTUnwrap(
+      try PlanMetrics(model, settings: MeasurementSettings(casesPassages: true)).rooms.first)
+    XCTAssertEqual(cased.doorCasingM, door + 2 * 2.0 + 1.0 + 4 * c, accuracy: 1e-12)
+    XCTAssertEqual(cased.wallAreaExcludingOpeningsM2, room.wallAreaExcludingOpeningsM2)
+  }
+
   func testWallAreaCountsOnlyEdgesWithWalls() throws {
     // 4 x 3 m; edges: x = 0 (3 m), z = 3 (4 m), x = 4 (3 m), z = 0 (4 m). No wall on z = 3.
     let corners = [(0.0, 0.0), (0.0, 3.0), (4.0, 3.0), (4.0, 0.0)]
@@ -220,9 +336,9 @@ final class RoomMetricsTests: XCTestCase {
 
     let c = MeasurementSettings.defaultCasingWidthM
     XCTAssertEqual(living.windowCasingM, 2 * (1.5 + 1.2) + 8 * c, accuracy: 1e-9)
-    // The door and the passage opening are cased like doors.
-    XCTAssertEqual(
-      living.doorCasingM, (2 * 2.1 + 0.9 + 4 * c) + (2 * 2.1 + 1.0 + 4 * c), accuracy: 1e-9)
+    // The door is cased; the passage counts against the wall area but has no casing.
+    XCTAssertEqual(living.doorCasingM, 2 * 2.1 + 0.9 + 4 * c, accuracy: 1e-9)
+    XCTAssertEqual(living.openings.first { $0.type == .opening }?.casingLengthM, 0)
 
     let totals = metrics.totals
     XCTAssertEqual(totals.roomCount, 2)
@@ -550,6 +666,72 @@ final class PlanTotalsTests: XCTestCase {
     XCTAssertEqual(none.exteriorAreaEstimateM2, 18, accuracy: 1e-9)
     let thick = try PlanTotals(model, settings: MeasurementSettings(exteriorWallThicknessM: 0.3))
     XCTAssertEqual(thick.exteriorAreaEstimateM2, 6.7 * 3.6, accuracy: 0.02)
+  }
+
+  /// Area of the outline of a convex room pushed out by t with mitred corners: its area, plus
+  /// t times its perimeter, plus t² tan(turn / 2) at each corner.
+  private func mitredOffsetArea(_ corners: [(Double, Double)], _ t: Double) -> Double {
+    let points = corners.map { Point2(x: $0.0, y: $0.1) }
+    var area = abs(Geo.signedArea(points))
+    for index in points.indices {
+      let a = points[(index + points.count - 1) % points.count]
+      let b = points[index]
+      let c = points[(index + 1) % points.count]
+      area += t * b.distance(to: c)
+      let turn = acos(max(-1, min(1, (b - a).unit.dot((c - b).unit))))
+      area += t * t * tan(turn / 2)
+    }
+    return area
+  }
+
+  func testExteriorEstimatePushesSlantedWallsOutAlongTheirOwnNormal() throws {
+    let t = MeasurementSettings.defaultExteriorWallThicknessM
+    // A 4 x 4 m room with a 2.83 m chamfer across one corner.
+    let chamfer = [(0.0, 0.0), (4.0, 0.0), (4.0, 2.0), (2.0, 4.0), (0.0, 4.0)]
+    let one = try PlanTotals(
+      Outlines.model([.init(id: "room-1", label: "Chamfer", corners: chamfer)]))
+    XCTAssertEqual(one.livableAreaM2, 14, accuracy: 1e-9)
+    XCTAssertEqual(mitredOffsetArea(chamfer, t), 16.349, accuracy: 0.001)
+    XCTAssertEqual(one.exteriorAreaEstimateM2, mitredOffsetArea(chamfer, t), accuracy: 1e-6)
+
+    // A wing turned 45 degrees from the main room (which sets the plan's axis), well apart:
+    // each pushed out along its own walls, not by 1.41 t along the plan's axes.
+    let main = [(0.0, 0.0), (0.0, 3.0), (5.0, 3.0), (5.0, 0.0)]
+    let s = 2.0.squareRoot()
+    let wing = [(10.0, 0.0), (10.0 + s, s), (10.0, 2 * s), (10.0 - s, s)]
+    let two = try PlanTotals(
+      Outlines.model([
+        .init(id: "room-1", label: "Main", corners: main),
+        .init(id: "room-2", label: "Wing", corners: wing),
+      ]))
+    XCTAssertEqual(two.livableAreaM2, 15 + 4, accuracy: 1e-9)
+    XCTAssertEqual(
+      two.exteriorAreaEstimateM2, mitredOffsetArea(main, t) + mitredOffsetArea(wing, t),
+      accuracy: 1e-6)
+  }
+
+  func testOffsetPiecesMitreConvexCornersAndBevelSharpOnes() {
+    let t = 0.1
+    // A square: four strips and four square corner pieces, whatever the winding.
+    let square = [
+      Point2(x: 0, y: 0), Point2(x: 1, y: 0), Point2(x: 1, y: 1), Point2(x: 0, y: 1),
+    ]
+    for outline in [square, square.reversed()] {
+      let pieces = PlanTotals.offsetPieces(outline, by: t)
+      XCTAssertEqual(pieces.count, 8)
+      let area = pieces.reduce(0) { $0 + abs(Geo.signedArea($1)) }
+      XCTAssertEqual(area, 4 * t + 4 * t * t, accuracy: 1e-12)
+      // Every piece lies outside the square.
+      for piece in pieces {
+        let middle = piece.reduce(Point2(x: 0, y: 0), +) * (1 / Double(piece.count))
+        XCTAssertFalse(PlanGeometry.contains(square, middle))
+      }
+    }
+    // A sharp corner (about 11 degrees) is bevelled, so its piece stays near the corner.
+    let sliver = [Point2(x: 0, y: 0), Point2(x: 5, y: 0), Point2(x: 0, y: 1)]
+    let reach = PlanTotals.offsetPieces(sliver, by: t).flatMap { $0 }
+      .map { max(-$0.x, $0.x - 5, -$0.y, $0.y - 1) }.max() ?? 0
+    XCTAssertLessThanOrEqual(reach, PlanTotals.exteriorMitreLimit * t + 1e-9)
   }
 }
 

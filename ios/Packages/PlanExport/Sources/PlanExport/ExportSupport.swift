@@ -113,6 +113,12 @@ enum Format {
     )
   }
 
+  /// `text` with each letter and its accents composed into one character where Unicode has one
+  /// (NFC), so a decomposed "e" + U+0301 is measured and written as the one character "é".
+  static func composed(_ text: String) -> String {
+    text.utf8.allSatisfy { $0 < 0x80 } ? text : text.precomposedStringWithCanonicalMapping
+  }
+
   /// Compact number for labels, for example `0.5` or `2`.
   static func compact(_ value: Double) -> String {
     let rounded = (value * 1000).rounded() / 1000

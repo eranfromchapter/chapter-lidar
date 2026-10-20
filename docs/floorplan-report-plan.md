@@ -40,7 +40,8 @@ Defaults until Eran says otherwise:
   (living room and kitchen, a closet) cannot be split from geometry, and RoomPlan never labels a
   closet. Hence the Rooms screen.
 - Totals check out against Polycam's own schedule: livable area, volume and perimeter are sums of
-  the per-room values; casing lengths are window 2(w+h)+8c and door 2h+w+4c with c = 1 9/16 in.
+  the per-room values; casing lengths are window 2(w+h)+8c and door 2h+w+4c with c = 1 9/16 in
+  (passages without a door get no casing).
   Polycam's per-room wall area rule is not yet reproduced; it also subtracts open passages that
   its Openings tables do not list.
 - The PDF engine is grayscale, Helvetica, no dashes and no images; the PNG is grayscale with a

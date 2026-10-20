@@ -26,16 +26,23 @@ enum FloorplanFiles {
     var errorDescription: String?
   }
 
-  /// The one-page Floorplan PDF.
-  static func pdf(model: CaptureModel, address: String?, units: DisplayUnitSystem) throws -> Data {
-    let options = FloorplanWriter.Options(address: address, units: UnitFormatter(system: units))
+  /// The one-page Floorplan PDF, dated `capturedAt` (when the scan was made).
+  static func pdf(
+    model: CaptureModel, address: String?, units: DisplayUnitSystem, capturedAt: Date
+  ) throws -> Data {
+    let options = FloorplanWriter.Options(
+      address: address, units: UnitFormatter(system: units),
+      creationDate: FloorplanWriter.pdfDate(capturedAt))
     return try FloorplanWriter.pdf(model: model, options: options)
   }
 
   /// The plan alone, laid out for a phone's width so its names and dimensions read at a glance
   /// (no title or footer: the screen has its own).
-  static func screenPDF(model: CaptureModel, units: DisplayUnitSystem) throws -> Data {
-    let options = FloorplanWriter.Options(units: UnitFormatter(system: units))
+  static func screenPDF(model: CaptureModel, units: DisplayUnitSystem, capturedAt: Date) throws
+    -> Data
+  {
+    let options = FloorplanWriter.Options(
+      units: UnitFormatter(system: units), creationDate: FloorplanWriter.pdfDate(capturedAt))
     return try FloorplanWriter.screenPDF(model: model, options: options)
   }
 
@@ -91,6 +98,8 @@ enum FloorplanFiles {
 final class FloorplanModel {
   let model: CaptureModel
   let address: String?
+  /// When the scan was made; the PDFs carry it as their creation date.
+  let capturedAt: Date
   /// Where the share files go: one folder per scan and unit system, under the temporary folder.
   @ObservationIgnored private let exportName: String
   private(set) var units: DisplayUnitSystem
@@ -103,10 +112,14 @@ final class FloorplanModel {
   private(set) var errorMessage: String?
   @ObservationIgnored private var generation = 0
 
-  init(model: CaptureModel, address: String?, units: DisplayUnitSystem, exportName: String) {
+  init(
+    model: CaptureModel, address: String?, units: DisplayUnitSystem, capturedAt: Date,
+    exportName: String
+  ) {
     self.model = model
     self.address = address
     self.units = units
+    self.capturedAt = capturedAt
     self.exportName = exportName
   }
 
@@ -120,6 +133,7 @@ final class FloorplanModel {
     let units = self.units
     let model = self.model
     let address = self.address
+    let capturedAt = self.capturedAt
     let folder = FileManager.default.temporaryDirectory
       .appendingPathComponent("floorplan-\(exportName)", isDirectory: true)
       .appendingPathComponent(units.rawValue, isDirectory: true)
@@ -128,12 +142,13 @@ final class FloorplanModel {
     errorMessage = nil
     do {
       let screen = try await Task.detached(priority: .userInitiated) {
-        try FloorplanFiles.screenPDF(model: model, units: units)
+        try FloorplanFiles.screenPDF(model: model, units: units, capturedAt: capturedAt)
       }.value
       guard current == generation else { return }
       self.screen = screen
       let pdf = try await Task.detached(priority: .userInitiated) {
-        try FloorplanFiles.pdf(model: model, address: address, units: units)
+        try FloorplanFiles.pdf(
+          model: model, address: address, units: units, capturedAt: capturedAt)
       }.value
       guard current == generation else { return }
       self.pdf = pdf

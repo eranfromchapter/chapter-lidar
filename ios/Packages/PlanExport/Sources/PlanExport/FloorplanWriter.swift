@@ -64,7 +64,9 @@ public enum FloorplanWriter {
     /// the total area estimate.
     public var interiorWallThicknessM: Double
     public var exteriorWallThicknessM: Double
-    /// PDF date string written into the document information.
+    /// PDF date string written into the document information. The default is a fixed date, so
+    /// the same input writes the same bytes; a real scan passes the time it was captured
+    /// (`FloorplanWriter.pdfDate`).
     public var creationDate: String
 
     public init(
@@ -142,6 +144,12 @@ public enum FloorplanWriter {
     return best!.pdf(title: title, creationDate: options.creationDate, marginMM: 4)
   }
 
+  /// PDF date string for `date` in UTC, to whole seconds, for `Options.creationDate`; for
+  /// example `D:20261017140211Z`.
+  public static func pdfDate(_ date: Date) -> String {
+    PDFDate.string(UTCTimestamp(date))
+  }
+
   /// Writes the page as PDF and SVG.
   public static func write(model: CaptureModel, options: Options = Options()) throws -> Floorplan {
     let sheet = try Sheet(model: model, options: options)
@@ -163,11 +171,23 @@ public enum FloorplanWriter {
 
   // MARK: Layout
 
+  /// The address as set in the header: one or two centred lines at `size`, paper millimetres.
+  struct AddressLayout: Hashable {
+    var lines: [String]
+    var size: Double
+    /// Baseline to baseline.
+    var lineStep: Double { size * 1.25 }
+  }
+
   /// Page layout, paper millimetres.
   enum Layout {
     static let margin = 12.0
     static let titleSize = 22.0 * 25.4 / 72
     static let addressSize = 12.0 * 25.4 / 72
+    /// A long address is set smaller, down to this, before it takes a second line.
+    static let addressMinimumSize = 9.0 * 25.4 / 72
+    /// Space kept between the address and the compass.
+    static let compassClearance = 3.0
     static let totalSize = 10.0 * 25.4 / 72
     static let noteSize = 6.5 * 25.4 / 72
     static let scaleBarTextSize = 8.0 * 25.4 / 72
@@ -181,16 +201,65 @@ public enum FloorplanWriter {
     /// A small plan is drawn at this scale (1:50) at the most, not blown up to fill the page.
     static let largestScaleDenominator = 50.0
 
-    /// Header height below the top margin: title, address (when given) and total.
-    static func headerHeight(hasAddress: Bool) -> Double { hasAddress ? 21.5 : 15.0 }
+    /// Header height below the top margin: title, address (when given, one or two lines) and
+    /// total.
+    static func headerHeight(address: AddressLayout?) -> Double {
+      guard let address else { return 15.0 }
+      return 21.5 + Double(max(0, address.lines.count - 1)) * address.lineStep
+    }
 
-    /// Where the drawing goes on a page: x, y (lower left), width, height.
-    static func drawingArea(width: Double, height: Double, hasAddress: Bool)
+    /// Where the drawing goes on a page with a header `headerHeight` tall: x, y (lower left),
+    /// width, height.
+    static func drawingArea(width: Double, height: Double, headerHeight: Double)
       -> (x: Double, y: Double, width: Double, height: Double)
     {
       let bottom = margin + footerHeight + gap
-      let top = height - margin - headerHeight(hasAddress: hasAddress) - gap
+      let top = height - margin - headerHeight - gap
       return (margin, bottom, width - 2 * margin, top - bottom)
+    }
+
+    /// The same, with no address (`hasAddress` false) or a one-line address.
+    static func drawingArea(width: Double, height: Double, hasAddress: Bool)
+      -> (x: Double, y: Double, width: Double, height: Double)
+    {
+      let oneLine = AddressLayout(lines: [""], size: addressSize)
+      let header = headerHeight(address: hasAddress ? oneLine : nil)
+      return drawingArea(width: width, height: height, headerHeight: header)
+    }
+
+    /// Width the address may take on a page `pageWidth` wide: between the margins and, when the
+    /// compass is drawn at the top right, clear of it (on both sides, as the line is centred).
+    static func addressWidth(pageWidth: Double, compass: Bool) -> Double {
+      var half = pageWidth / 2 - margin
+      if compass {
+        let compassLeft = pageWidth - margin - 2 * compassRadius - 2
+        half = min(half, compassLeft - compassClearance - pageWidth / 2)
+      }
+      return 2 * max(0, half)
+    }
+
+    /// The address set to fit `width`: one line, set smaller down to `addressMinimumSize` when
+    /// it is long; then two lines at that size, broken between words where both lines fit (the
+    /// most even such break); then as much as fits on the first line and the rest on the
+    /// second, cut short with an ellipsis.
+    static func address(_ text: String, width: Double) -> AddressLayout {
+      func measure(_ line: String, _ size: Double) -> Double {
+        FontMetrics.width(line, size: size)
+      }
+      let step = 0.25 * 25.4 / 72
+      var size = addressSize
+      while size >= addressMinimumSize - 1e-9 {
+        if measure(text, size) <= width { return AddressLayout(lines: [text], size: size) }
+        size -= step
+      }
+      let small = addressMinimumSize
+      if let split = AnnotationLayout.balancedSplit(text, size: small),
+        split.allSatisfy({ measure($0, small) <= width })
+      {
+        return AddressLayout(lines: split, size: small)
+      }
+      return AddressLayout(
+        lines: AnnotationLayout.wrapped(text, size: small, width: width), size: small)
     }
   }
 
@@ -205,12 +274,30 @@ public enum FloorplanWriter {
     let totalAreaM2: Double
     let totalText: String
     let address: String?
+    /// The address as set in the header on this page.
+    let addressLayout: AddressLayout?
+    /// Where the drawing goes on the page (see `Layout.drawingArea`).
+    let drawingArea: (x: Double, y: Double, width: Double, height: Double)
     let items: [DrawingItem]
 
     init(model: CaptureModel, options: Options) throws {
       let address = options.address
         .map { Format.singleLine($0).trimmingCharacters(in: .whitespaces) }
         .flatMap { $0.isEmpty ? nil : $0 }
+      let compass = options.compass && options.northDegrees != nil
+      // The address set for a page, and the drawing area its header leaves.
+      func header(_ page: Page) -> AddressLayout? {
+        address.map {
+          Layout.address(
+            $0, width: Layout.addressWidth(pageWidth: page.sizeMM!.width, compass: compass))
+        }
+      }
+      func area(_ page: Page) -> (x: Double, y: Double, width: Double, height: Double) {
+        let size = page.sizeMM!
+        return Layout.drawingArea(
+          width: size.width, height: size.height,
+          headerHeight: Layout.headerHeight(address: header(page)))
+      }
       // The compass and the scale bar are drawn on the page, not in the drawing.
       let drawingOptions = FloorPlanDrawing.Options(
         units: options.units, exteriorDimensions: options.exteriorDimensions,
@@ -234,9 +321,7 @@ public enum FloorplanWriter {
       }
       var best: (page: Page, turn: Int, estimate: Double?)?
       for page in pages {
-        let size = page.sizeMM!
-        let area = Layout.drawingArea(
-          width: size.width, height: size.height, hasAddress: address != nil)
+        let area = area(page)
         for turn in turns {
           let estimate = probes[turn]!.estimatedDenominator(
             widthMM: area.width, heightMM: area.height)
@@ -251,12 +336,11 @@ public enum FloorplanWriter {
       }
       let page = best!.page
       let size = page.sizeMM!
-      let area = Layout.drawingArea(
-        width: size.width, height: size.height, hasAddress: address != nil)
+      let drawingArea = area(page)
       var turned = drawingOptions
       turned.quarterTurns = best!.turn
       let drawing = try FloorPlanDrawing.fitted(
-        model: model, widthMM: area.width, heightMM: area.height, options: turned,
+        model: model, widthMM: drawingArea.width, heightMM: drawingArea.height, options: turned,
         start: best!.estimate, minimumDenominator: Layout.largestScaleDenominator)
 
       // Total: the exterior estimate, as the report states it; for one room, its floor area
@@ -279,14 +363,17 @@ public enum FloorplanWriter {
       self.totalAreaM2 = total
       self.totalText = totalText
       self.address = address
+      self.addressLayout = header(page)
+      self.drawingArea = drawingArea
       self.items = Sheet.items(
         width: size.width, height: size.height, page: page, drawing: drawing, options: options,
-        address: address, totalText: totalText)
+        address: header(page), area: drawingArea, totalText: totalText)
     }
 
     static func items(
       width: Double, height: Double, page: Page, drawing: FloorPlanDrawing, options: Options,
-      address: String?, totalText: String
+      address: AddressLayout?, area: (x: Double, y: Double, width: Double, height: Double),
+      totalText: String
     ) -> [DrawingItem] {
       let style = drawing.style
       let ink = style.ink
@@ -320,8 +407,10 @@ public enum FloorplanWriter {
         serif: true)
       var line = top - 6.5
       if let address {
-        line -= 7
-        text(address, width / 2, line, size: Layout.addressSize, anchor: .center, color: ink)
+        for (index, string) in address.lines.enumerated() {
+          line -= index == 0 ? 7 : address.lineStep
+          text(string, width / 2, line, size: address.size, anchor: .center, color: ink)
+        }
       }
       line -= 6
       text(totalText, width / 2, line, size: Layout.totalSize, anchor: .center, color: ink)
@@ -338,7 +427,6 @@ public enum FloorplanWriter {
       }
 
       // The plan, centred in its area at its own scale.
-      let area = Layout.drawingArea(width: width, height: height, hasAddress: address != nil)
       let denominator = drawing.options.scaleDenominator
       let bounds = drawing.bounds
       let x = area.x + (area.width - bounds.width / denominator) / 2

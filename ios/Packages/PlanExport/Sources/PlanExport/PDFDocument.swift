@@ -267,7 +267,7 @@ final class PDFPage {
     anchor: Anchor = .leading, rotation: Double = 0, serif: Bool = false,
     letterSpacing: Double = 0
   ) {
-    let clean = Format.singleLine(text)
+    let clean = Format.composed(Format.singleLine(text))
     guard !clean.isEmpty else { return }
     let width =
       FontMetrics.width(clean, size: size, bold: bold, serif: serif)
@@ -315,11 +315,12 @@ final class PDFPage {
     return winAnsiSpecials[value] ?? UInt8(ascii: "?")
   }
 
-  /// Bytes of a PDF literal string body: parentheses and backslash escaped, bytes above 0x7E
-  /// written as octal escapes so the stream stays 7-bit.
+  /// Bytes of a PDF literal string body in WinAnsi, for text drawn in the page fonts (composed
+  /// first, `Format.composed`): parentheses and backslash escaped, bytes above 0x7E written as
+  /// octal escapes so the stream stays 7-bit.
   static func encode(_ text: String) -> [UInt8] {
     var out: [UInt8] = []
-    for scalar in text.unicodeScalars {
+    for scalar in Format.composed(text).unicodeScalars {
       let byte = winAnsi(scalar)
       switch byte {
       case UInt8(ascii: "("), UInt8(ascii: ")"), UInt8(ascii: "\\"):
@@ -366,8 +367,19 @@ struct PDFDocument {
     // descriptor and its embedded program, Times-Roman (F3) as a standard font.
     var objects: [[UInt8]] = []
     func ascii(_ text: String) -> [UInt8] { Array(text.utf8) }
+    // A document information string: plain ASCII as a literal; anything else as UTF-16BE with
+    // a byte order mark, since readers decode these strings as PDFDocEncoding, not WinAnsi.
     func string(_ text: String) -> String {
-      "(" + String(decoding: PDFPage.encode(text), as: UTF8.self) + ")"
+      let composed = Format.composed(Format.singleLine(text))
+      if composed.unicodeScalars.allSatisfy({ $0.value >= 0x20 && $0.value <= 0x7E }) {
+        return "(" + String(decoding: PDFPage.encode(composed), as: UTF8.self) + ")"
+      }
+      let digits = Array("0123456789ABCDEF")
+      var hex = "<FEFF"
+      for unit in composed.utf16 {
+        for shift in [12, 8, 4, 0] { hex.append(digits[Int((unit >> UInt16(shift)) & 0xF)]) }
+      }
+      return hex + ">"
     }
     let pageCount = pages.count
     let used = pages.reduce(into: Set<Int>()) { $0.formUnion($1.fontsUsed) }

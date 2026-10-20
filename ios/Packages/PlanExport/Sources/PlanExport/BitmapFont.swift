@@ -88,15 +88,22 @@ struct GrayCanvas {
 
   /// Round-capped line from `a` to `b`, pixel coordinates with y down.
   mutating func stroke(from a: Point2, to b: Point2, width lineWidth: Double, gray: Double) {
+    guard [a.x, a.y, b.x, b.y, lineWidth].allSatisfy(\.isFinite) else { return }
     let radius = max(lineWidth, 1.4) / 2
     let minX = Int((min(a.x, b.x) - radius - 1).rounded(.down))
     let maxX = Int((max(a.x, b.x) + radius + 1).rounded(.up))
     let minY = Int((min(a.y, b.y) - radius - 1).rounded(.down))
     let maxY = Int((max(a.y, b.y) + radius + 1).rounded(.up))
+    // Clipped to the canvas; nothing to draw when the line lies wholly off it.
+    let x0 = max(0, minX)
+    let x1 = min(width - 1, maxX)
+    let y0 = max(0, minY)
+    let y1 = min(height - 1, maxY)
+    guard x0 <= x1, y0 <= y1 else { return }
     let ab = b - a
     let lengthSquared = ab.dot(ab)
-    for y in max(0, minY)...min(height - 1, max(0, maxY)) {
-      for x in max(0, minX)...min(width - 1, max(0, maxX)) {
+    for y in y0...y1 {
+      for x in x0...x1 {
         let p = Point2(x: Double(x) + 0.5, y: Double(y) + 0.5)
         let t = lengthSquared > 0 ? max(0, min(1, (p - a).dot(ab) / lengthSquared)) : 0
         let distance = p.distance(to: a + ab * t)
@@ -140,7 +147,7 @@ struct GrayCanvas {
     _ value: String, origin: Point2, emPixels: Double, rotation: Double, centered: Bool,
     bold: Bool, gray: Double
   ) {
-    let scalars = Array(Format.singleLine(value).unicodeScalars)
+    let scalars = Array(Format.composed(Format.singleLine(value)).unicodeScalars)
     guard !scalars.isEmpty else { return }
     let cell = emPixels * 0.72 / Double(BitmapFont.rows)  // pixels per font pixel
     let advance = Double(BitmapFont.columns + 1) * cell
@@ -161,11 +168,18 @@ struct GrayCanvas {
       minY = min(minY, p.y)
       maxY = max(maxY, p.y)
     }
+    // Clipped to the canvas; nothing to draw when the text lies wholly off it.
+    guard minX.isFinite, minY.isFinite, maxX.isFinite, maxY.isFinite else { return }
+    let x0 = max(0, Int(minX.rounded(.down)) - 1)
+    let x1 = min(width - 1, Int(maxX.rounded(.up)) + 1)
+    let y0 = max(0, Int(minY.rounded(.down)) - 1)
+    let y1 = min(height - 1, Int(maxY.rounded(.up)) + 1)
+    guard x0 <= x1, y0 <= y1 else { return }
     let glyphs = scalars.map { BitmapFont.glyph(for: $0) }
     let samples = 2
     let weight = bold ? 0.35 * cell : 0
-    for y in max(0, Int(minY.rounded(.down)) - 1)...min(height - 1, max(0, Int(maxY.rounded(.up)) + 1)) {
-      for x in max(0, Int(minX.rounded(.down)) - 1)...min(width - 1, max(0, Int(maxX.rounded(.up)) + 1)) {
+    for y in y0...y1 {
+      for x in x0...x1 {
         var lit = 0
         for sy in 0..<samples {
           for sx in 0..<samples {

@@ -36,6 +36,70 @@ final class ExportAllTests: XCTestCase {
     XCTAssertEqual(first, second)
   }
 
+  func testSmallCapturesExportWithoutCrashing() throws {
+    // Plans narrower than the 40 mm scale bar of plan.png: a 1 x 1 m closet, a capture with
+    // only one object, and a door placed past the end of its wall.
+    let capture = try XCTUnwrap(Fixtures.load("box-room").first)
+    func matched(_ model: CaptureModel) -> CaptureModel {
+      var model = model
+      model.visitId = capture.model.visitId
+      model.captureId = capture.model.captureId
+      return model
+    }
+    let closet = matched(Synthetic.room(width: 1, length: 1, label: "Closet"))
+    var object = matched(Synthetic.room(width: 1, length: 1))
+    object.rooms = []
+    object.walls = []
+    object.objects = [
+      CaptureModel.DetectedObject(
+        id: "object-1", category: .chair,
+        box: CaptureModel.OrientedBox(
+          center: Vec3(x: 0, y: 0.4, z: 0), sizeM: Vec3(x: 0.5, y: 0.8, z: 0.5)))
+    ]
+    var stray = matched(Synthetic.room(width: 1.2, length: 1))
+    stray.doors = [
+      CaptureModel.WallOpening(
+        id: "door-1", wallId: "wall-1", offsetM: 3, bottomM: 0, widthM: 0.8, heightM: 2)
+    ]
+    for (name, model) in [("closet", closet), ("one object", object), ("stray door", stray)] {
+      let files = try PlanExporter.exportAll(model: model, record: capture.record)
+      XCTAssertEqual(
+        files.filter { file in todaysFiles.contains { $0.name == file.fileName } }.count, 6, name)
+      let png = try XCTUnwrap(files.first { $0.fileName == PNGWriter.fileName }, name)
+      XCTAssertFalse(png.data.isEmpty, name)
+    }
+    // The scene of plan.png and plan.svg is wide enough for the scale bar and its last label.
+    let geometry = try PlanGeometry(model: closet)
+    let scene = try PlanScene.build(
+      geometry: geometry, scaleDenominator: 50, units: .metric, includeScaleBar: true)
+    XCTAssertGreaterThanOrEqual(
+      scene.widthMM,
+      PlanScene.margin + PlanScene.scaleBarPaperLength + PlanScene.scaleBarEndClearance)
+  }
+
+  func testCanvasClipsStrokesAndTextWhollyOffIt() {
+    var canvas = GrayCanvas(width: 20, height: 10)
+    // Past the right, the bottom, the left and the top.
+    canvas.stroke(
+      from: Point2(x: 40, y: 2), to: Point2(x: 60, y: 2), width: 1, gray: 0)
+    canvas.stroke(
+      from: Point2(x: 2, y: 40), to: Point2(x: 8, y: 50), width: 1, gray: 0)
+    canvas.stroke(
+      from: Point2(x: -40, y: 2), to: Point2(x: -30, y: 2), width: 1, gray: 0)
+    canvas.stroke(
+      from: Point2(x: 2, y: -40), to: Point2(x: 8, y: -30), width: 1, gray: 0)
+    canvas.text(
+      "2 M", origin: Point2(x: 60, y: 5), emPixels: 8, rotation: 0, centered: true,
+      bold: false, gray: 0)
+    canvas.text(
+      "2 M", origin: Point2(x: 5, y: 60), emPixels: 8, rotation: 0, centered: false,
+      bold: true, gray: 0)
+    XCTAssertTrue(canvas.pixels.allSatisfy { $0 == 255 }, "nothing drawn")
+    // A line that crosses the edge is drawn up to it.
+    canvas.stroke(from: Point2(x: 10, y: 5), to: Point2(x: 40, y: 5), width: 1, gray: 0)
+    XCTAssertTrue(canvas.pixels.contains { $0 < 128 })
+  }
+
   func testGeneratorNamesFitTheManifestSchema() {
     XCTAssertEqual(PlanExportInfo.generator, "chapter-capture-ios/PlanExport")
     XCTAssertLessThanOrEqual(PlanExportInfo.generator.count, 100)

@@ -409,6 +409,247 @@ final class FloorplanWriterTests: XCTestCase {
     XCTAssertEqual(try FloorplanWriter.svg(model: room, options: options), both.svg)
   }
 
+  // MARK: Long text
+
+  /// `count` characters of capitals and spaces, the widest a room name usually gets.
+  private func capitals(_ count: Int) -> String {
+    String(String(repeating: "WIDE ROOM NAME ", count: count / 15 + 1).prefix(count))
+      .trimmingCharacters(in: .whitespaces)
+  }
+
+  func testLongRoomNamesAreFittedToTheirRooms() throws {
+    // A 6 x 3 m plan of two rooms, named with 100 capitals (the longest label the capture
+    // model allows) and with 240.
+    let reference = Synthetic.twoRooms(widths: [4, 2], length: 3)
+    let referencePage = try write(reference)
+    let referenceScreen = try XCTUnwrap(
+      PDFFile(try FloorplanWriter.screenPDF(model: reference)).mediaBoxes.first)
+    for length in [75, 100, 240] {
+      var model = reference
+      for index in model.rooms.indices { model.rooms[index].label = capitals(length) }
+      // The page keeps its scale; the names stay inside their rooms.
+      let page = try write(model)
+      XCTAssertEqual(page.scaleDenominator, referencePage.scaleDenominator, "\(length)")
+      let sheet = try sheet(model)
+      let drawing = sheet.drawing
+      let labels = drawing.labels.filter { $0.kind == .room }
+      XCTAssertEqual(labels.count, 2)
+      for label in labels {
+        let room = try XCTUnwrap(drawing.rooms.first { $0.id == label.roomId })
+        XCTAssertTrue(label.box.isInside(room.polygon), "\(length) \(room.id)")
+        XCTAssertLessThanOrEqual(label.text.split(separator: "\n").count, 3, "two lines and area")
+        if length == 240 { XCTAssertTrue(label.text.contains("\u{2026}"), label.text) }
+      }
+      // Every item of the page is on it.
+      let extent = FloorPlanDrawing.extent(of: sheet.items)
+      XCTAssertLessThanOrEqual(extent.maxX, sheet.widthMM + 1e-6)
+      XCTAssertGreaterThanOrEqual(extent.minX, -1e-6)
+      // The screen version keeps its size and scale.
+      let screen = try XCTUnwrap(
+        PDFFile(try FloorplanWriter.screenPDF(model: model)).mediaBoxes.first)
+      XCTAssertEqual(screen[2], referenceScreen[2], accuracy: referenceScreen[2] * 0.05)
+      XCTAssertEqual(screen[3], referenceScreen[3], accuracy: referenceScreen[3] * 0.05)
+    }
+  }
+
+  func testNamesWrapThenShrinkBeforeTheyAreCut() throws {
+    // At 1:50 the 2 x 3 m room is 40 mm across.
+    let k = 0.05
+    let style = FloorPlanStyle()
+    let room = [
+      Point2(x: 0, y: 0), Point2(x: 2, y: 0), Point2(x: 2, y: 3), Point2(x: 0, y: 3),
+    ]
+    let layout = AnnotationLayout(
+      style: style, units: UnitFormatter(system: .imperial), scaleDenominator: 1000 * k,
+      symbols: [], building: [], wallPieces: [])
+    func fitted(_ name: String) -> [(text: String, size: Double)] {
+      layout.fittedRoomLabel(name: name, area: "64.6 ft\u{00B2}", polygon: room).block
+    }
+    let nameSize = style.roomNameSize * k
+    let areaSize = style.roomAreaSize * k
+    // The room's width less the space kept round a label.
+    let clear = 2 - 2 * 0.6 * k
+    // Fits: one line at the name size.
+    let short = fitted("Bedroom")
+    XCTAssertEqual(short.map(\.text), ["Bedroom", "64.6 ft\u{00B2}"])
+    XCTAssertEqual(short[0].size, nameSize, accuracy: 1e-12)
+    // Words too wide together: two lines at the name size.
+    let words = "Primary Bedroom With Ensuite"
+    XCTAssertGreaterThan(FontMetrics.width(words, size: nameSize), clear)
+    let two = fitted(words)
+    XCTAssertEqual(two.count, 3)
+    XCTAssertEqual(two[0].text + " " + two[1].text, words)
+    XCTAssertEqual(two[0].size, nameSize, accuracy: 1e-12)
+    // One word too wide: smaller, but no smaller than the area.
+    var word = "Pantry-"
+    while FontMetrics.width(word, size: nameSize) <= clear { word += "a" }
+    XCTAssertLessThanOrEqual(FontMetrics.width(word, size: areaSize), clear)
+    let small = fitted(word)
+    XCTAssertEqual(small.first?.text, word)
+    XCTAssertLessThan(small[0].size, nameSize)
+    XCTAssertGreaterThanOrEqual(small[0].size, areaSize - 1e-12)
+    // Too wide at the area size on two lines: cut short with an ellipsis, as wide as fits.
+    let cut = fitted(capitals(100))
+    XCTAssertEqual(cut.count, 3)
+    XCTAssertTrue(cut[1].text.hasSuffix("\u{2026}"))
+    for line in cut.prefix(2) {
+      XCTAssertEqual(line.size, areaSize, accuracy: 1e-12)
+      XCTAssertLessThanOrEqual(FontMetrics.width(line.text, size: line.size), clear)
+      XCTAssertGreaterThan(FontMetrics.width(line.text, size: line.size), 0.7 * clear)
+    }
+    // A room too small even for its area line: the name kept to a few characters, at the
+    // middle.
+    let closet = room.map { $0 * 0.1 }
+    let tiny = layout.fittedRoomLabel(
+      name: capitals(100), area: "0.6 ft\u{00B2}", polygon: closet)
+    XCTAssertNil(tiny.place)
+    XCTAssertEqual(
+      tiny.block.first?.text.count, AnnotationLayout.minimumNameCharacters + 1, "and …")
+  }
+
+  func testALongAddressIsFittedToTheHeader() throws {
+    // 300 characters, the longest address the capture record allows.
+    let long = String(
+      String(
+        repeating: "Unit 1204, The Residences at Harbour Point, 1500 South Harbour Boulevard, ",
+        count: 5
+      ).prefix(300))
+    // The 136-character address of the review.
+    let review =
+      "Unit 1204, The Residences at Harbour Point, 1500 South Harbour Boulevard North, "
+      + "Fort Lauderdale-by-the-Sea, FL 33308-1234, United States"
+    let model = Synthetic.room(width: 4, length: 3)
+    for address in [review, long] {
+      for page in [FloorplanWriter.Page.letterLandscape, .square] {
+        for north in [nil, 30.0] {
+          let sheet = try sheet(model) {
+            $0.address = address
+            $0.page = page
+            $0.northDegrees = north
+          }
+          let name = "\(address.count) \(page) \(north.map { "\($0)" } ?? "no north")"
+          let layout = try XCTUnwrap(sheet.addressLayout)
+          XCTAssertLessThanOrEqual(layout.lines.count, 2, name)
+          XCTAssertGreaterThanOrEqual(
+            layout.size, FloorplanWriter.Layout.addressMinimumSize - 1e-9, name)
+          if address == long {
+            // On two lines, cut short when they would not hold it all.
+            XCTAssertEqual(layout.lines.count, 2, name)
+            let whole = address.trimmingCharacters(in: .whitespaces)
+            XCTAssertTrue(
+              layout.lines.joined(separator: " ") == whole
+                || layout.lines[1].hasSuffix("\u{2026}"), name)
+          }
+          let width = FloorplanWriter.Layout.addressWidth(
+            pageWidth: sheet.widthMM, compass: north != nil)
+          for line in layout.lines {
+            XCTAssertLessThanOrEqual(
+              FontMetrics.width(line, size: layout.size), width + 1e-9, name)
+          }
+          // Every address line on the page and clear of the compass.
+          let texts = sheet.items.compactMap { item -> DrawingText? in
+            guard case .text(let text) = item, layout.lines.contains(text.string) else {
+              return nil
+            }
+            return text
+          }
+          XCTAssertEqual(texts.count, layout.lines.count, name)
+          let compass = sheet.items.filter {
+            if case .shape(let s) = $0 { return s.layer == .compass }
+            if case .text(let t) = $0 { return t.layer == .compass }
+            return false
+          }
+          for text in texts {
+            let xs = FloorPlanDrawing.textCorners(text).map(\.x)
+            XCTAssertGreaterThanOrEqual(xs.min()!, FloorplanWriter.Layout.margin - 1e-6, name)
+            XCTAssertLessThanOrEqual(
+              xs.max()!, sheet.widthMM - FloorplanWriter.Layout.margin + 1e-6, name)
+            if !compass.isEmpty {
+              XCTAssertLessThan(xs.max()!, FloorPlanDrawing.extent(of: compass).minX, name)
+            }
+          }
+          // The total stays below the address and above the drawing.
+          let total = try XCTUnwrap(
+            sheet.items.compactMap { item -> DrawingText? in
+              guard case .text(let text) = item, text.string == sheet.totalText else {
+                return nil
+              }
+              return text
+            }.first, name)
+          XCTAssertLessThan(total.position.y, texts.map(\.position.y).min()!, name)
+          XCTAssertGreaterThan(
+            total.position.y - 0.22 * total.size,
+            sheet.drawingArea.y + sheet.drawingArea.height, name)
+        }
+      }
+    }
+    // The review's address fits one line on Letter landscape, set smaller.
+    let letter = try sheet(model) {
+      $0.address = review
+      $0.page = .letterLandscape
+    }
+    XCTAssertEqual(letter.addressLayout?.lines, [review])
+    XCTAssertLessThan(letter.addressLayout!.size, FloorplanWriter.Layout.addressSize)
+  }
+
+  // MARK: Document information
+
+  /// The document information string `key`: a literal, or UTF-16BE hex with a byte order mark.
+  private func info(_ pdf: PDFFile, _ key: String) -> String? {
+    if let range = pdf.text.range(of: "/\(key) (") {
+      let rest = pdf.text[range.upperBound...]
+      guard let end = rest.range(of: ") /") else { return nil }
+      return PDFFile.unescape(String(rest[..<end.lowerBound]))
+    }
+    guard let range = pdf.text.range(of: "/\(key) <FEFF") else { return nil }
+    let rest = pdf.text[range.upperBound...]
+    guard let end = rest.firstIndex(of: ">") else { return nil }
+    let hex = Array(rest[..<end])
+    var units: [UInt16] = []
+    var index = 0
+    while index + 4 <= hex.count {
+      units.append(UInt16(String(hex[index..<index + 4]), radix: 16) ?? 0)
+      index += 4
+    }
+    return String(decoding: units, as: UTF16.self)
+  }
+
+  func testCreationDateIsTheCaptureTime() throws {
+    // 2026-10-17 14:02:11 UTC.
+    let captured = Date(timeIntervalSince1970: 1_792_245_731)
+    XCTAssertEqual(FloorplanWriter.pdfDate(captured), "D:20261017140211Z")
+    let model = Synthetic.room(width: 4, length: 3)
+    let plan = try write(model) { $0.creationDate = FloorplanWriter.pdfDate(captured) }
+    XCTAssertTrue(PDFFile(plan.pdf).text.contains("/CreationDate (D:20261017140211Z)"))
+    let screen = try FloorplanWriter.screenPDF(
+      model: model, options: .init(creationDate: FloorplanWriter.pdfDate(captured)))
+    XCTAssertTrue(PDFFile(screen).text.contains("/CreationDate (D:20261017140211Z)"))
+  }
+
+  func testDocumentTitleKeepsEveryCharacterOfTheAddress() throws {
+    // Brackets, a backslash, curly quotes, a decomposed e-acute, dashes, an ellipsis, a
+    // curly apostrophe and a no-break space.
+    let address =
+      "12 (Main) St \\ Apt <4> & \u{201C}Co\u{201D} Cafe\u{0301} \u{2014} \u{2026} "
+      + "O\u{2019}Connell\u{00A0}St"
+    let composed = address.precomposedStringWithCanonicalMapping
+    let plan = try write(Synthetic.room(width: 4, length: 3)) { $0.address = address }
+    let pdf = PDFFile(plan.pdf)
+    XCTAssertTrue(pdf.text.contains("/Title <FEFF"), "UTF-16 for text beyond ASCII")
+    XCTAssertEqual(info(pdf, "Title"), "Floorplan - \(composed)")
+    XCTAssertEqual(info(pdf, "Author"), "Chapter")
+    // Plain titles stay literal strings.
+    let plain = PDFFile(try write(Synthetic.room(width: 4, length: 3)).pdf)
+    XCTAssertEqual(info(plain, "Title"), "Floorplan - \(self.address)")
+    XCTAssertTrue(plain.text.contains("/Title (Floorplan - \(self.address))"))
+    // On the page the decomposed e-acute is drawn as the one WinAnsi character.
+    let line = try XCTUnwrap(pdf.shownText().first { $0.hasPrefix("12 (Main)") })
+    XCTAssertTrue(line.contains("Caf\u{00E9}"), line)
+    XCTAssertFalse(line.contains("?"), line)
+    XCTAssertEqual(
+      FontMetrics.width("Cafe\u{0301}", size: 10), FontMetrics.width("Caf\u{00E9}", size: 10))
+  }
+
   func testEveryFixtureCaptureWritesAFloorplan() throws {
     for capture in try Fixtures.all() {
       let plan = try write(capture.model)

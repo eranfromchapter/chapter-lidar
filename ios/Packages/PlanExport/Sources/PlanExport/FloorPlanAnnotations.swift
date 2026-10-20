@@ -236,17 +236,185 @@ struct AnnotationLayout {
   /// of furniture (on a patch of the room's colour) a little less, and one squeezed up against
   /// furniture or across its edge least, so a label sits either clear of the furniture or
   /// within it, at the middle, never hard against it.
+  ///
+  /// A name too wide for the room is fitted to it (`fittedRoomLabel`): wrapped onto two lines,
+  /// then set smaller, down to the size of the area, then cut short with an ellipsis. Where
+  /// even that finds no place (a room smaller than its area line), the label goes at the
+  /// middle with the name on one line at that smallest size, cut after
+  /// `minimumNameCharacters` characters; so a name never runs far past its room and never
+  /// grows the drawing.
   mutating func placeRoomLabel(
     roomId: String, name: String?, area: String?, polygon: [Point2], fill: DrawingColor
   ) {
-    var block: [(text: String, size: Double)] = []
-    if let name, !name.isEmpty { block.append((name, style.roomNameSize * k)) }
-    if let area, !area.isEmpty { block.append((area, style.roomAreaSize * k)) }
-    guard !block.isEmpty, polygon.count >= 3 else { return }
+    let name = name.map { Format.singleLine($0).trimmingCharacters(in: .whitespaces) }
+      .flatMap { $0.isEmpty ? nil : $0 }
+    let area = area.flatMap { $0.isEmpty ? nil : $0 }
+    guard name != nil || area != nil, polygon.count >= 3 else { return }
+    let (block, place) = fittedRoomLabel(name: name, area: area, polygon: polygon)
+    let center = place ?? PlanGeometry.labelPoint(of: polygon)
     // Each line spans its glyph box, descender to cap height (0.97 em).
     let lineGap = 0.15 * style.roomNameSize * k
-    let height = block.map(\.size).reduce(0, +) * 0.97 + lineGap * Double(block.count - 1)
-    let halfWidth = (block.map { FontMetrics.width($0.text, size: $0.size) }.max() ?? 0) / 2
+    let height = AnnotationLayout.blockHeight(block, lineGap: lineGap)
+    let u = Point2(x: 1, y: 0)
+    let label = OrientedBox(
+      center: center, u: u, halfWidth: AnnotationLayout.blockWidth(block) / 2,
+      halfHeight: height / 2)
+    // A patch of the room's colour behind the text, so furniture lines do not run through it;
+    // none over a fixture, which must stay whole.
+    var knockout = label
+    knockout.halfWidth += 0.4 * k
+    knockout.halfHeight += 0.2 * k
+    let knockoutCorners = knockout.corners
+    if !fixtures.contains(where: { Geo.convexOverlap(knockoutCorners, $0.polygon) }) {
+      var patch = PathBuilder()
+      patch.polygon(knockoutCorners)
+      add(.shape(DrawingShape(path: patch.path, fill: fill, layer: .roomLabel)), .roomLabel)
+    }
+    // Lines from the top: the name, then the area.
+    var top = center.y + height / 2
+    for line in block {
+      let baseline = top - line.size * 0.75
+      let lineCenter = Point2(x: center.x, y: baseline + line.size * 0.36)
+      add(
+        centredText(
+          line.text, center: lineCenter, u: u, size: line.size, color: style.ink,
+          layer: .roomLabel),
+        .roomLabel)
+      top -= line.size * 0.97 + lineGap
+    }
+    labels.append(
+      PlacedLabel(
+        kind: .room, text: block.map(\.text).joined(separator: "\n"), box: label,
+        roomId: roomId))
+  }
+
+  /// A room name always keeps at least this many characters when it is cut short.
+  static let minimumNameCharacters = 12
+
+  /// Height of a block of centred lines, `lineGap` apart.
+  static func blockHeight(_ block: [(text: String, size: Double)], lineGap: Double) -> Double {
+    block.map(\.size).reduce(0, +) * 0.97 + lineGap * Double(max(0, block.count - 1))
+  }
+
+  /// Width of the widest line of a block.
+  static func blockWidth(_ block: [(text: String, size: Double)]) -> Double {
+    block.map { FontMetrics.width($0.text, size: $0.size) }.max() ?? 0
+  }
+
+  /// The name split at the space that makes the longer of its two lines shortest; nil when it
+  /// has no space between words.
+  static func balancedSplit(_ name: String, size: Double) -> [String]? {
+    let characters = Array(name)
+    var best: (lines: [String], longer: Double)?
+    for index in characters.indices where characters[index] == " " {
+      let first = String(characters[..<index]).trimmingCharacters(in: .whitespaces)
+      let second = String(characters[(index + 1)...]).trimmingCharacters(in: .whitespaces)
+      guard !first.isEmpty, !second.isEmpty else { continue }
+      let longer = max(
+        FontMetrics.width(first, size: size), FontMetrics.width(second, size: size))
+      if best.map({ longer < $0.longer }) ?? true { best = ([first, second], longer) }
+    }
+    return best?.lines
+  }
+
+  /// `text` cut to fit `width` with an ellipsis, or whole when it fits.
+  static func cut(_ text: String, size: Double, width: Double) -> String {
+    guard FontMetrics.width(text, size: size) > width else { return text }
+    var characters = Array(text)
+    while !characters.isEmpty {
+      characters.removeLast()
+      let shorter =
+        String(characters).trimmingCharacters(in: .whitespaces) + "\u{2026}"
+      if FontMetrics.width(shorter, size: size) <= width { return shorter }
+    }
+    return "\u{2026}"
+  }
+
+  /// The name on lines no wider than `width`: whole on one line when it fits; otherwise as
+  /// much as fits on the first line (broken after a word where there is one), and the rest on
+  /// a second line, cut short with an ellipsis when it is still too long.
+  static func wrapped(_ name: String, size: Double, width: Double) -> [String] {
+    guard FontMetrics.width(name, size: size) > width else { return [name] }
+    let characters = Array(name)
+    var count = 0
+    while count < characters.count,
+      FontMetrics.width(String(characters[...count]), size: size) <= width
+    {
+      count += 1
+    }
+    count = max(1, count)
+    // Back to the end of the last whole word, unless the line already ends at one.
+    if count < characters.count, characters[count] != " ",
+      let space = characters[..<count].lastIndex(of: " "), space > 0
+    {
+      count = space
+    }
+    let first = String(characters[..<count]).trimmingCharacters(in: .whitespaces)
+    let rest = String(characters[count...]).trimmingCharacters(in: .whitespaces)
+    guard !rest.isEmpty else { return [first] }
+    return [first, cut(rest, size: size, width: width)]
+  }
+
+  /// The lines of a room label and where it goes (nil: nowhere fits; see `placeRoomLabel`).
+  /// Layouts are tried in order until one finds a place inside the room: the name on one
+  /// line, then on two, at the name size, between sizes, then the area size; then cut short
+  /// at the area size, as wide as still fits.
+  func fittedRoomLabel(name: String?, area: String?, polygon: [Point2])
+    -> (block: [(text: String, size: Double)], place: Point2?)
+  {
+    let nameSize = style.roomNameSize * k
+    let smallest = min(style.roomAreaSize * k, nameSize)
+    func block(_ lines: [String], _ size: Double) -> [(text: String, size: Double)] {
+      lines.map { ($0, size) } + (area.map { [($0, style.roomAreaSize * k)] } ?? [])
+    }
+    guard let name else {
+      let only = block([], nameSize)
+      return (only, roomLabelPlace(only, polygon: polygon))
+    }
+    var sizes = [nameSize]
+    if smallest < nameSize - 1e-12 { sizes += [(nameSize + smallest) / 2, smallest] }
+    for size in sizes {
+      var options = [[name]]
+      if let split = AnnotationLayout.balancedSplit(name, size: size) { options.append(split) }
+      for lines in options {
+        let candidate = block(lines, size)
+        if let place = roomLabelPlace(candidate, polygon: polygon) { return (candidate, place) }
+      }
+    }
+    // Cut short: the widest lines that still find a place, keeping at least
+    // `minimumNameCharacters` characters.
+    func cutShort(_ width: Double) -> [(text: String, size: Double)] {
+      block(AnnotationLayout.wrapped(name, size: smallest, width: width), smallest)
+    }
+    let kept = String(name.prefix(AnnotationLayout.minimumNameCharacters))
+    var low = FontMetrics.width(
+      kept + (kept.count < name.count ? "\u{2026}" : ""), size: smallest)
+    var high = FontMetrics.width(name, size: smallest)
+    guard let first = roomLabelPlace(cutShort(low), polygon: polygon) else {
+      // Nowhere fits: one line at the middle.
+      let line = AnnotationLayout.cut(name, size: smallest, width: low)
+      return (block([line], smallest), nil)
+    }
+    var found = (block: cutShort(low), place: first)
+    for _ in 0..<10 where high - low > 0.05 * k {
+      let width = (low + high) / 2
+      let candidate = cutShort(width)
+      if let place = roomLabelPlace(candidate, polygon: polygon) {
+        found = (candidate, place)
+        low = width
+      } else {
+        high = width
+      }
+    }
+    return (found.block, found.place)
+  }
+
+  /// The best place for `block` inside the room (see `placeRoomLabel`); nil when it fits
+  /// nowhere.
+  func roomLabelPlace(_ block: [(text: String, size: Double)], polygon: [Point2]) -> Point2? {
+    let lineGap = 0.15 * style.roomNameSize * k
+    let height = AnnotationLayout.blockHeight(block, lineGap: lineGap)
+    let halfWidth = AnnotationLayout.blockWidth(block) / 2
     let u = Point2(x: 1, y: 0)
     func box(at c: Point2) -> OrientedBox {
       OrientedBox(center: c, u: u, halfWidth: halfWidth, halfHeight: height / 2)
@@ -343,34 +511,7 @@ struct AnnotationLayout {
       lo = Point2(x: current.point.x - spanX, y: current.point.y - spanY)
       hi = Point2(x: current.point.x + spanX, y: current.point.y + spanY)
     }
-    let center = best?.point ?? centroid
-    // A patch of the room's colour behind the text, so furniture lines do not run through it;
-    // none over a fixture, which must stay whole.
-    var knockout = box(at: center)
-    knockout.halfWidth += 0.4 * k
-    knockout.halfHeight += 0.2 * k
-    let knockoutCorners = knockout.corners
-    if !fixtures.contains(where: { Geo.convexOverlap(knockoutCorners, $0.polygon) }) {
-      var patch = PathBuilder()
-      patch.polygon(knockoutCorners)
-      add(.shape(DrawingShape(path: patch.path, fill: fill, layer: .roomLabel)), .roomLabel)
-    }
-    // Lines from the top: the name, then the area.
-    var top = center.y + height / 2
-    for line in block {
-      let baseline = top - line.size * 0.75
-      let lineCenter = Point2(x: center.x, y: baseline + line.size * 0.36)
-      add(
-        centredText(
-          line.text, center: lineCenter, u: u, size: line.size, color: style.ink,
-          layer: .roomLabel),
-        .roomLabel)
-      top -= line.size * 0.97 + lineGap
-    }
-    labels.append(
-      PlacedLabel(
-        kind: .room, text: block.map(\.text).joined(separator: "\n"), box: box(at: center),
-        roomId: roomId))
+    return best?.point
   }
 
   // MARK: Exterior dimensions

@@ -16,10 +16,11 @@ enum FontMetrics {
   ]
 
   /// Width of `text` in points at `size` points: Inter SemiBold when `bold`, Times-Roman when
-  /// `serif`, Inter Regular otherwise.
+  /// `serif`, Inter Regular otherwise. Measured composed (`Format.composed`), as it is drawn.
   static func width(_ text: String, size: Double, bold: Bool = false, serif: Bool = false)
     -> Double
   {
+    let text = Format.composed(text)
     var total = 0
     if serif {
       for scalar in text.unicodeScalars {

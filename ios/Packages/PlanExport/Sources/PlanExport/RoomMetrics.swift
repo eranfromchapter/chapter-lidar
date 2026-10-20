@@ -8,16 +8,21 @@ public struct MeasurementSettings: Hashable, Sendable {
   /// Assumed thickness of the exterior walls, metres, for the exterior floor area estimate.
   /// RoomPlan does not measure wall thickness. Default 6 in.
   public var exteriorWallThicknessM: Double
+  /// Whether passages (openings without a door) are cased like doors. Default off: a passage
+  /// counts against the wall area but has no casing, as in Polycam's casing totals.
+  public var casesPassages: Bool
 
   public static let defaultCasingWidthM = 1.5625 * UnitFormatter.metresPerInch
   public static let defaultExteriorWallThicknessM = 6 * UnitFormatter.metresPerInch
 
   public init(
     casingWidthM: Double = MeasurementSettings.defaultCasingWidthM,
-    exteriorWallThicknessM: Double = MeasurementSettings.defaultExteriorWallThicknessM
+    exteriorWallThicknessM: Double = MeasurementSettings.defaultExteriorWallThicknessM,
+    casesPassages: Bool = false
   ) {
     self.casingWidthM = casingWidthM
     self.exteriorWallThicknessM = exteriorWallThicknessM
+    self.casesPassages = casesPassages
   }
 }
 
@@ -49,8 +54,9 @@ public struct OpeningMetrics: Hashable, Sendable {
   /// Width x height, square metres.
   public var areaM2: Double
   /// Length of casing (trim) around one face of the opening, metres, with casing width c:
-  /// a window 2(w + h) + 8c (four sides, mitred corners); a door or opening 2h + w + 4c (two
-  /// sides and the head, no casing on the floor).
+  /// a window 2(w + h) + 8c (four sides, mitred corners); a door 2h + w + 4c (two sides and
+  /// the head, no casing on the floor). A passage has none, unless
+  /// `MeasurementSettings.casesPassages` cases it like a door.
   public var casingLengthM: Double
 
   /// Casing length of a window `widthM` x `heightM` with casing `casingWidthM` wide.
@@ -60,7 +66,8 @@ public struct OpeningMetrics: Hashable, Sendable {
     2 * (widthM + heightM) + 8 * casingWidthM
   }
 
-  /// Casing length of a door or opening `widthM` x `heightM` with casing `casingWidthM` wide.
+  /// Casing length of a door (or a cased passage) `widthM` x `heightM` with casing
+  /// `casingWidthM` wide.
   public static func doorCasingLength(widthM: Double, heightM: Double, casingWidthM: Double)
     -> Double
   {
@@ -191,8 +198,9 @@ public struct CeilingHeight: Hashable, Sendable {
 /// - Bounding box (B): the smallest rectangle with sides along the frame that contains the
 ///   outline.
 /// - Inscribed rectangle (I): the largest rectangle with sides along the frame that fits inside
-///   the outline (`MetricsGeometry.largestInscribedRectangle`). Equal to B for a rectangular
-///   room.
+///   the outline (`MetricsGeometry.largestInscribedRectangle`), slanted edges included. Equal
+///   to B for a rectangular room; empty (zero by zero, at the middle of B) for an outline that
+///   holds none, so I is never larger than the floor area.
 /// - Walled edges: the parts of the outline that a wall of the capture runs along: a wall
 ///   within `wallMatchDistanceM` of the edge and within `wallMatchAngleDegrees` of its
 ///   direction, clipped to the edge. Where walls overlap, the tallest counts.
@@ -212,7 +220,9 @@ public struct CeilingHeight: Hashable, Sendable {
 /// - Objects: the model's objects in this room (the object's room, or the room that contains
 ///   its centre), grouped by `ObjectGroup`.
 /// - Casing: window and door casing lengths (`OpeningMetrics.casingLengthM`) summed over the
-///   room's openings; openings without a door are cased like doors.
+///   room's openings. Passages (openings without a door) count against the wall area but get
+///   no casing, as Polycam's casing totals leave them out; `MeasurementSettings.casesPassages`
+///   cases them like doors instead.
 public struct RoomMetrics: Hashable, Sendable {
   public var roomId: String
   public var label: String
@@ -236,7 +246,7 @@ public struct RoomMetrics: Hashable, Sendable {
   public var objects: [ObjectMetrics]
   /// Casing length of the room's windows.
   public var windowCasingM: Double
-  /// Casing length of the room's doors and openings.
+  /// Casing length of the room's doors (and passages when `MeasurementSettings.casesPassages`).
   public var doorCasingM: Double
 
   /// The room's objects in `group`, in model order.
@@ -281,7 +291,12 @@ public struct RoomMetrics: Hashable, Sendable {
       let frame = MetricsGeometry.Frame(angle: MetricsGeometry.dominantAngle(of: [polygon]))
       let local = polygon.map(frame.local)
       let box = MetricsGeometry.bounds(of: local)!
-      let inscribed = MetricsGeometry.largestInscribedRectangle(local) ?? box
+      // An outline with no room for a rectangle gets an empty one at its middle, never one
+      // larger than the room.
+      let middle = Point2(x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2)
+      let inscribed =
+        MetricsGeometry.largestInscribedRectangle(local)
+        ?? MetricsGeometry.Box(minX: middle.x, minY: middle.y, maxX: middle.x, maxY: middle.y)
 
       // Walled edges.
       var spans: [WalledSpan] = []
@@ -323,12 +338,17 @@ public struct RoomMetrics: Hashable, Sendable {
       for opening in geometry.openings
       where edges.contains(where: { isOpening(opening, onEdge: $0.a, $0.b, spans: $0.spans) }) {
         let type = OpeningType(opening.kind)
-        let casing =
-          type == .window
-          ? OpeningMetrics.windowCasingLength(
+        let casing: Double
+        switch type {
+        case .window:
+          casing = OpeningMetrics.windowCasingLength(
             widthM: opening.widthM, heightM: opening.heightM, casingWidthM: settings.casingWidthM)
-          : OpeningMetrics.doorCasingLength(
+        case .opening where !settings.casesPassages:
+          casing = 0
+        case .door, .opening:
+          casing = OpeningMetrics.doorCasingLength(
             widthM: opening.widthM, heightM: opening.heightM, casingWidthM: settings.casingWidthM)
+        }
         openings.append(
           OpeningMetrics(
             id: opening.id, type: type, widthM: opening.widthM, heightM: opening.heightM,

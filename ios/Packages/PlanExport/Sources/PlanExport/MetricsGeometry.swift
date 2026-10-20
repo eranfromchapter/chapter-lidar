@@ -173,15 +173,26 @@ enum MetricsGeometry {
 
   // MARK: Largest inscribed rectangle
 
+  /// Side positions per axis tried between the outermost corners, besides the corners
+  /// themselves, when an edge runs off the frame axes.
+  static let slantedSearchSteps = 96
+  /// Rounds of the local search round the best of those, each four times finer.
+  static let slantedSearchRounds = 8
+
   /// The largest axis-aligned rectangle inside `polygon` (frame coordinates); nil when the
   /// outline encloses no area.
   ///
-  /// Up to `exactSearchVertexLimit` corners: every pair of corner x coordinates bounds a
-  /// candidate, whose tallest free height is found exactly from the edges that cross that x
-  /// range; the same again with x and y swapped. This is exact when every edge runs along a
-  /// frame axis and never larger than the true rectangle otherwise. More corners: a raster of
-  /// `rasterCellM` cells, a cell counting as inside when its centre is. Equal areas are decided
-  /// by `Box.isBetter(than:)`.
+  /// Up to `exactSearchVertexLimit` corners, a slab search: for a pair of x positions, the
+  /// tallest rectangle spanning them is found exactly from the y ranges that the edges crossing
+  /// that x range block; the same again with x and y swapped. When every edge runs along a frame
+  /// axis, the sides of the largest rectangle lie on corner coordinates, so the pairs of corner
+  /// coordinates give it exactly. A slanted edge (a chamfer, a bay, a wedge) can hold a side
+  /// anywhere, so then `slantedSearchSteps` evenly spaced positions are tried as well and the
+  /// best pair is refined locally (`slantedSearchRounds`); every candidate lies inside the
+  /// outline (to rounding), so the result is never larger than the true rectangle and is
+  /// short of it by at most a few micrometres per side. More corners: a raster of
+  /// `rasterCellM` cells, a cell counting as inside when its centre is. Equal areas are
+  /// decided by `Box.isBetter(than:)`.
   static func largestInscribedRectangle(_ polygon: [Point2]) -> Box? {
     guard polygon.count >= 3 else { return nil }
     if polygon.count <= exactSearchVertexLimit {
@@ -198,39 +209,81 @@ enum MetricsGeometry {
     return b.isBetter(than: a) ? b : a
   }
 
-  /// Candidates bounded left and right by corner x coordinates; see
+  /// Whether the edge `a`-`b` runs along a frame axis (to rounding).
+  static func isAlongAxis(_ a: Point2, _ b: Point2) -> Bool {
+    let dx = abs(b.x - a.x)
+    let dy = abs(b.y - a.y)
+    return min(dx, dy) <= 1e-9 * max(dx, dy, 1)
+  }
+
+  /// The largest rectangle with its left and right sides at chosen x positions; see
   /// `largestInscribedRectangle`.
   static func sweepInscribed(_ polygon: [Point2]) -> Box? {
-    let xs = distinctSorted(polygon.map(\.x))
     let edges = polygon.indices.map { (polygon[$0], polygon[($0 + 1) % polygon.count]) }
+    let corners = distinctSorted(polygon.map(\.x))
+    guard let low = corners.first, let high = corners.last, high - low > epsilon,
+      let extent = bounds(of: polygon)
+    else { return nil }
     var best: Box?
+    // A slab can hold no more than its width times the outline's height.
+    func consider(_ left: Double, _ right: Double) {
+      guard right - left > epsilon else { return }
+      if let current = best, (right - left) * extent.height < current.area - 1e-9 { return }
+      best = better(best, slabInscribed(polygon, edges: edges, left: left, right: right))
+    }
+    for i in corners.indices {
+      for j in (i + 1)..<corners.count { consider(corners[i], corners[j]) }
+    }
+    guard edges.contains(where: { !isAlongAxis($0.0, $0.1) }) else { return best }
+
+    // Slanted edges: evenly spaced sides too, then a local search round the best pair.
+    var step = (high - low) / Double(slantedSearchSteps)
+    let xs = distinctSorted(
+      corners + (1..<slantedSearchSteps).map { low + step * Double($0) })
     for i in xs.indices {
-      for j in (i + 1)..<xs.count {
-        let left = xs[i]
-        let right = xs[j]
-        // Edges inside the open x range block the y values they pass through.
-        var blocked: [(Double, Double)] = []
-        for (a, b) in edges {
-          if let range = yRange(of: a, b, between: left + epsilon, and: right - epsilon) {
-            blocked.append(range)
-          }
-        }
-        blocked.sort { $0.0 < $1.0 || ($0.0 == $1.0 && $0.1 < $1.1) }
-        // Free gaps between the merged blocked ranges.
-        var top = -Double.infinity
-        for range in blocked {
-          if top.isFinite, range.0 > top + epsilon {
-            let candidate = Box(minX: left, minY: top, maxX: right, maxY: range.0)
-            let middle = Point2(x: (left + right) / 2, y: (top + range.0) / 2)
-            if best.map({ candidate.isBetter(than: $0) }) ?? true,
-              PlanGeometry.contains(polygon, middle)
-            {
-              best = candidate
-            }
-          }
-          top = max(top, range.1)
+      for j in (i + 1)..<xs.count { consider(xs[i], xs[j]) }
+    }
+    for _ in 0..<slantedSearchRounds {
+      guard let current = best else { break }
+      let offsets = (-4...4).map { step * Double($0) / 4 }
+      let lefts = offsets.map { min(high, max(low, current.minX + $0)) }
+      let rights = offsets.map { min(high, max(low, current.maxX + $0)) }
+      for left in lefts {
+        for right in rights { consider(left, right) }
+      }
+      step /= 4
+    }
+    return best
+  }
+
+  /// The best rectangle spanning `left`...`right` (frame x): the tallest gap between the y
+  /// ranges that the edges crossing the open x range block, whose middle lies inside; nil when
+  /// there is none.
+  static func slabInscribed(
+    _ polygon: [Point2], edges: [(Point2, Point2)], left: Double, right: Double
+  ) -> Box? {
+    // Edges inside the open x range block the y values they pass through.
+    var blocked: [(Double, Double)] = []
+    for (a, b) in edges {
+      if let range = yRange(of: a, b, between: left + epsilon, and: right - epsilon) {
+        blocked.append(range)
+      }
+    }
+    blocked.sort { $0.0 < $1.0 || ($0.0 == $1.0 && $0.1 < $1.1) }
+    // Free gaps between the merged blocked ranges.
+    var best: Box?
+    var top = -Double.infinity
+    for range in blocked {
+      if top.isFinite, range.0 > top + epsilon {
+        let candidate = Box(minX: left, minY: top, maxX: right, maxY: range.0)
+        let middle = Point2(x: (left + right) / 2, y: (top + range.0) / 2)
+        if best.map({ candidate.isBetter(than: $0) }) ?? true,
+          PlanGeometry.contains(polygon, middle)
+        {
+          best = candidate
         }
       }
+      top = max(top, range.1)
     }
     return best
   }

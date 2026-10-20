@@ -62,6 +62,11 @@ struct PlanScene: Sendable {
     var scene = PlanScene(
       widthMM: bounds.width * k + 2 * margin, heightMM: bounds.height * k + 2 * margin,
       scaleDenominator: scaleDenominator)
+    // A plan narrower than the scale bar still gets a scene wide enough to hold it and its
+    // last label.
+    if includeScaleBar {
+      scene.widthMM = max(scene.widthMM, margin + scaleBarPaperLength + scaleBarEndClearance)
+    }
     func polyline(
       _ points: [Point2], closed: Bool = false, fill: Double? = nil, stroke: Double? = 0,
       width: Double, layer: SceneLayer
@@ -216,6 +221,8 @@ struct PlanScene: Sendable {
   static let scaleBarPaperLength = 40.0
   /// Divisions of the scale bar.
   static let scaleBarDivisions = 4
+  /// Paper kept to the right of the scale bar's end for its last label, millimetres.
+  static let scaleBarEndClearance = 8.0
 
   /// Scale bar metres: 2 m at 1:50, 4 m at 1:100, 8 m at 1:200, 20 m at 1:500.
   static func scaleBarMetres(scaleDenominator: Int) -> Double {
