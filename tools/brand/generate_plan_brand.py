@@ -3,7 +3,7 @@
 
 - ios/Packages/PlanExport/Sources/PlanExport/ChapterBrandAssets.swift: the logo as vector paths
   and Inter Regular and SemiBold, cut down to the WinAnsi characters, that the floor plan, plan
-  and report PDFs embed;
+  and report PDFs embed and whose outlines draw the labels of plan.png;
 - web/public/brand/: chapter-logo.svg (the same paths, brand black) and inter-400.woff2 and
   inter-600.woff2 (Latin), used by the HUB web app and the scan browser.
 
@@ -92,7 +92,8 @@ def inter_instance(source, weight, codes):
     """Inter at `weight`, cut down to the WinAnsi characters, without hinting or layout tables,
     and its PDF metrics in 1/1000 em."""
     font = TTFont(source)
-    font = instancer.instantiateVariableFont(font, {"wght": weight, "slnt": 0})
+    font = instancer.instantiateVariableFont(
+        font, {"wght": weight, "slnt": 0}, updateFontNames=True)
     options = subset.Options()
     options.layout_features = []
     options.hinting = False
@@ -136,7 +137,8 @@ def inter_instance(source, weight, codes):
 def web_font(source, weight):
     """Inter at `weight` as WOFF2, cut down to `WEB_UNICODES`, with kerning kept."""
     font = TTFont(source)
-    font = instancer.instantiateVariableFont(font, {"wght": weight, "slnt": 0})
+    font = instancer.instantiateVariableFont(
+        font, {"wght": weight, "slnt": 0}, updateFontNames=True)
     options = subset.Options()
     options.layout_features = ["kern", "liga", "calt", "tnum", "case"]
     options.hinting = False

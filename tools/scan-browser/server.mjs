@@ -1716,13 +1716,24 @@ function roomplanSource(a, c) {
 }
 
 /**
- * What a capture's Floorplan can be drawn from, preferred first: the capture model of the latest
- * draft (it has the operator's room labels), then the raw scan, mapped with the current code as
- * the phone's scan viewer maps it. Needs readApps(a) first.
+ * What a capture's Floorplan can be drawn from, preferred first: the raw scan, mapped with the
+ * current code as the phone's scan viewer maps it (so it shows what the phone shows), then the
+ * capture model of the latest draft (the room split and labels the app made when the package was
+ * built, which an older build may have made differently). Needs readApps(a) first.
  */
 function floorplanSources(a, c) {
   const rel = (f) => `${a.visitRel}/${f.parts.join("/")}`;
   const out = [];
+  const raw = roomplanSource(a, c);
+  if (raw) {
+    const where = raw.packageId ? `sealed package ${shortId(raw.packageId)}` : "the originals";
+    out.push({
+      id: "roomplan",
+      label: "Raw scan (as on the phone)",
+      path: rel(raw.file),
+      detail: `roomplan.json of ${where}, mapped now with the current code (as the phone's scan viewer does)`,
+    });
+  }
   const model = captureModelSource(a, c);
   if (model) {
     const app = model.app;
@@ -1734,16 +1745,6 @@ function floorplanSources(a, c) {
       label: "Capture model (package)",
       path: rel(model.file),
       detail: `capture-model.json of ${where}${app ? `, mapped on the phone by ${appText(app)}` : ""}`,
-    });
-  }
-  const raw = roomplanSource(a, c);
-  if (raw) {
-    const where = raw.packageId ? `sealed package ${shortId(raw.packageId)}` : "the originals";
-    out.push({
-      id: "roomplan",
-      label: "Raw scan (as on the phone)",
-      path: rel(raw.file),
-      detail: `roomplan.json of ${where}, mapped now with the current code (as the phone's scan viewer does)`,
     });
   }
   return out;

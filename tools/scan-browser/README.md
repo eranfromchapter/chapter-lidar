@@ -112,11 +112,11 @@ It writes `floorplan.pdf`, `floorplan.svg` and `floorplan.png` (page 1 of the PD
 white) and prints a one-line JSON summary. A `roomplan.json` is mapped with `CaptureModelMapper`
 first, as the phone's scan viewer does.
 
-- **Source**: the `capture-model.json` of the latest draft that has the capture (it carries the
-  operator's room labels; else the newest sealed package's), else the raw `roomplan.json` from the
-  originals (else from a sealed package). When both exist, "Draw from" switches between them:
-  a capture model written by an older app build can differ from the raw scan mapped with today's
-  code, which is what the phone's scan viewer shows.
+- **Source**: the raw `roomplan.json` from the originals (else from a sealed package), mapped
+  with today's code, which is what the phone's scan viewer shows; else the `capture-model.json` of
+  the latest draft that has the capture (else the newest sealed package's). When both exist,
+  "Draw from" switches between them: a capture model written by an older app build can split and
+  label the rooms differently.
 - **Options**: the address and the display units come from the capture record (imperial when it
   has none); the title is "Floorplan".
 - **Build**: on the first Floorplan request, and again whenever a Swift source of the tool or of

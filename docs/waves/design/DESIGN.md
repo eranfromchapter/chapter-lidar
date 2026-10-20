@@ -22,6 +22,21 @@
 - Space 4·8·12·16·24·32·48. Radius chip 8, card 12, sheet 16. Phone touch targets ≥ 52 px for primary actions, ≥ 44 px for chips.
 - Wordmark: "chapter" serif with "RENOVATION" letter-spaced beneath. No other mark.
 
+### Brand update (2026-10-19, requested by Eran Polack)
+
+Every plan, report and web page now uses the Chapter brand of hellochapter.com. This replaces the
+type and wordmark lines above; the colour tokens are unchanged.
+
+- Type: Times for titles and headings, Inter for all other text (web: self-hosted
+  `web/public/brand/inter-400.woff2` and `inter-600.woff2`; PDFs embed Inter and use Times-Roman).
+  The iOS app's own screens keep SF.
+- Logo: the real Chapter logo (bold sans "chapter" over letter-spaced "RENOVATION"),
+  `web/public/brand/chapter-logo.svg`, never retyped. The HUB header is a light surface bar so the
+  brand-black logo shows (it was an ink bar).
+- Plans: brand black #231F20, warm charcoal walls #4D4744, bronze inside dimensions #7A6347 and
+  warm room tints by room type (`ChapterBrand.swift`). `tools/brand/generate_plan_brand.py`
+  regenerates the logo paths and fonts.
+
 ## Decisions the design fixes (contract must match)
 
 - Capture mode values shown to users: One room, Whole floor, Exterior → contract enum `room`, `floor`, `exterior`.
