@@ -5,7 +5,8 @@ import Foundation
 /// Colours come from hellochapter.com (the brand black #231F20, the warm sand, blush and stone
 /// tints) and the Chapter Capture design tokens (muted #6B6557, line #D9CCBC, surface #FAF5EE).
 /// Type is the brand pair: Times for titles and Inter for everything else. PDFs embed Inter
-/// (`ChapterBrandAssets`) and use the standard Times-Roman; SVGs name the fonts with fallbacks.
+/// (`ChapterBrandAssets`) and use the standard Times-Roman; SVGs name the fonts with fallbacks;
+/// the PNG preview draws the embedded Inter's outlines (`GlyphOutlines`).
 enum ChapterBrand {
   /// Brand black: logo, titles, outside dimensions.
   static let ink = DrawingColor(hex: 0x231F20)

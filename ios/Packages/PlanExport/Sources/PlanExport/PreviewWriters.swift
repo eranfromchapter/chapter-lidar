@@ -101,7 +101,7 @@ public enum SVGWriter {
 
 /// PNG plan preview at 300 dpi: the plan at its sheet scale (1:50, 1:100, ...) rasterised at
 /// 300 pixels per paper inch, 8-bit RGB in the Chapter tones of plan.pdf and plan.svg, with a
-/// `pHYs` chunk. Labels use a built-in 5 x 7 capital-letter font.
+/// `pHYs` chunk. Labels are drawn from the outlines of the Inter fonts plan.pdf embeds.
 public enum PNGWriter {
   public static let fileName = "plan.png"
   public static let dpi = 300
