@@ -150,13 +150,14 @@ export function readStationConfig(env: Env = process.env): StationConfig {
 }
 
 /**
- * Plain page shown when the configuration is incomplete. Names no variable and no value. Uses
- * the brand font stacks; nothing else is served in this state, so Inter shows only where it is
- * installed and Helvetica stands in elsewhere.
+ * Plain page shown when the configuration is incomplete. Names no variable and no value. Shows
+ * the Chapter logo and Inter from public/brand, which the proxy serves in every state.
  */
 export function configErrorResponse(): Response {
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Capture review is not configured</title></head>
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Capture review is not configured</title>
+<style>@font-face{font-family:Inter;font-weight:400;font-display:swap;src:url("/brand/inter-400.woff2") format("woff2")}</style></head>
 <body style="margin:0;padding:48px;background:#F5EFE6;color:#1F2429;font-family:Inter,'Helvetica Neue',Helvetica,Arial,sans-serif">
+<img src="/brand/chapter-logo.svg" width="94" height="34" alt="Chapter Renovation" style="display:block;margin:0 0 32px">
 <h1 style="margin:0 0 12px;font-family:Times,'Times New Roman',serif;font-size:34px;font-weight:400">Capture review is not configured</h1>
 <p style="margin:0;font-size:17px">Sign-in or the station connection is not set up for this deployment, so no data is shown. Ask a Chapter admin to complete the review screen settings.</p>
 </body></html>`;

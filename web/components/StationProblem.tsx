@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { SIGN_IN_PATH } from "@/lib/auth-redirect";
 import { StationError } from "@/lib/station";
 import { Notice } from "./Notice";
 
@@ -24,7 +25,7 @@ export function stationProblem(error: unknown) {
   if (error.status === 401) {
     return (
       <Notice role="alert" title="Sign in again">
-        The station did not accept your sign-in. <a href="/api/auth/signin">Sign in again</a>.
+        The station did not accept your sign-in. <a href={SIGN_IN_PATH}>Sign in again</a>.
       </Notice>
     );
   }

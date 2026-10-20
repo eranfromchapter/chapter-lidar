@@ -24,6 +24,7 @@ vi.mock("@/lib/viewer", () => ({
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 const { proxy, config: proxyConfig } = await import("@/proxy");
+const { handlers } = await import("@/auth");
 const { default: PackagePage } = await import("@/app/packages/[packageId]/page");
 const { default: DecisionsPage } = await import("@/app/packages/[packageId]/decisions/page");
 const { saveDecision } = await import("@/app/packages/[packageId]/decisions/actions");
@@ -83,7 +84,7 @@ describe("proxy: sign-in is required for every page", () => {
       const response = await proxy(request(path), event);
       expect(response.status).toBe(307);
       const location = new URL(response.headers.get("location") ?? "");
-      expect(location.pathname).toBe("/api/auth/signin");
+      expect(location.pathname).toBe("/sign-in");
       expect(location.searchParams.get("callbackUrl")).toBe(path);
     },
   );
@@ -117,7 +118,7 @@ describe("proxy: sign-in is required for every page", () => {
     const cookie = await sessionCookie({ roles: ["bim"], expiresInSeconds: -60 });
     const response = await proxy(request("/", { cookie: `${SESSION_COOKIE}=${cookie}` }), event);
     expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toContain("/api/auth/signin");
+    expect(new URL(response.headers.get("location") ?? "").pathname).toBe("/sign-in");
   });
 
   it("lets a request with a valid session through", async () => {
@@ -133,7 +134,22 @@ describe("proxy: sign-in is required for every page", () => {
     expect(response.headers.get("x-middleware-next")).toBe("1");
   });
 
-  it("covers every page and route handler, excluding only auth routes and static assets", () => {
+  it("serves the sign-in page and its sign-in action without a session", async () => {
+    for (const method of ["GET", "POST"]) {
+      const response = await proxy(request("/sign-in?callbackUrl=%2F", { method }), event);
+      expect(response.headers.get("location"), method).toBeNull();
+      expect(response.headers.get("x-middleware-next"), method).toBe("1");
+    }
+  });
+
+  it("does not open anything else that starts like the sign-in page", async () => {
+    for (const path of ["/sign-in/x", "/sign-inx", "/brand"]) {
+      const response = await proxy(request(path), event);
+      expect(response.status, path).toBe(307);
+    }
+  });
+
+  it("covers every page and route handler, excluding only auth routes and assets", () => {
     const matcher = new RegExp(`^${proxyConfig.matcher[0]}$`);
     for (const path of [
       "/",
@@ -142,13 +158,18 @@ describe("proxy: sign-in is required for every page", () => {
       `/packages/${packageId}/decisions`,
       `/packages/${packageId}/files/download`,
       `/packages/${packageId}/files/preview`,
+      "/sign-in",
     ]) {
       expect(matcher.test(path), path).toBe(true);
     }
+    // The brand assets (logo and fonts) load on the sign-in and configuration pages too.
     for (const path of [
       "/api/auth/signin",
       "/api/auth/callback/microsoft-entra-id",
       "/_next/static/x.js",
+      "/brand/chapter-logo.svg",
+      "/brand/inter-400.woff2",
+      "/brand/inter-600.woff2",
     ]) {
       expect(matcher.test(path), path).toBe(false);
     }
@@ -156,6 +177,15 @@ describe("proxy: sign-in is required for every page", () => {
 });
 
 describe("proxy: missing configuration fails closed", () => {
+  it("serves the configuration page instead of the sign-in page", async () => {
+    stubConfig();
+    vi.stubEnv("AUTH_SECRET", "");
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const response = await proxy(request("/sign-in"), event);
+    expect(response.status).toBe(503);
+    expect(await response.text()).toContain("Capture review is not configured");
+  });
+
   it("serves the configuration page and no data when settings are missing", async () => {
     stubConfig();
     vi.stubEnv("STATION_API_URL", "");
@@ -165,8 +195,30 @@ describe("proxy: missing configuration fails closed", () => {
     expect(response.status).toBe(503);
     const body = await response.text();
     expect(body).toContain("Capture review is not configured");
+    expect(body).toContain('src="/brand/chapter-logo.svg"');
+    expect(body).toContain('url("/brand/inter-400.woff2")');
     expect(body).not.toContain(TEST_ENV.AUTH_SECRET);
     expect(errors).toHaveBeenCalledWith(expect.stringContaining("STATION_API_URL"));
+  });
+});
+
+describe("Auth.js: the review screen's sign-in page replaces the default pages", () => {
+  beforeEach(stubConfig);
+
+  it("sends its sign-in page to /sign-in with the callbackUrl", async () => {
+    const response = await handlers.GET(request("/api/auth/signin?callbackUrl=%2Fprojects%2Fx"));
+    expect(response.status).toBe(302);
+    const location = new URL(response.headers.get("location") ?? "", "http://localhost:3000");
+    expect(location.pathname).toBe("/sign-in");
+    expect(new URL(location.searchParams.get("callbackUrl") ?? "").pathname).toBe("/projects/x");
+  });
+
+  it("sends its error page to /sign-in with the error", async () => {
+    const response = await handlers.GET(request("/api/auth/error?error=AccessDenied"));
+    expect(response.status).toBe(302);
+    const location = new URL(response.headers.get("location") ?? "", "http://localhost:3000");
+    expect(location.pathname).toBe("/sign-in");
+    expect(location.searchParams.get("error")).toBe("AccessDenied");
   });
 });
 

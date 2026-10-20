@@ -12,32 +12,41 @@ export interface PageFrameProps {
   readonly children: ReactNode;
 }
 
+/** The header bar: the Chapter logo linked home, the app title and, at the right, `children`. */
+export function AppHeader({ children }: { readonly children?: ReactNode }) {
+  return (
+    <header className="app-header">
+      <div className="app-header__brand">
+        <a
+          className="app-header__home"
+          href="/"
+          aria-label="Chapter Renovation, capture review home"
+        >
+          {/* The Chapter logo (public/brand), 1756:635; CSS sets the height. */}
+          <img
+            className="app-header__logo"
+            src="/brand/chapter-logo.svg"
+            width={94}
+            height={34}
+            alt="Chapter Renovation"
+          />
+        </a>
+        <span className="app-header__title">Capture review</span>
+      </div>
+      {children}
+    </header>
+  );
+}
+
 /** Header, project column and main column of every review page (screen-review). */
 export function PageFrame({ viewer, nav, selectedDealId, children }: PageFrameProps) {
   return (
     <>
-      <header className="app-header">
-        <div className="app-header__brand">
-          <a
-            className="app-header__home"
-            href="/"
-            aria-label="Chapter Renovation, capture review home"
-          >
-            {/* The Chapter logo (public/brand), 1756:635; CSS sets the height. */}
-            <img
-              className="app-header__logo"
-              src="/brand/chapter-logo.svg"
-              width={94}
-              height={34}
-              alt="Chapter Renovation"
-            />
-          </a>
-          <span className="app-header__title">Capture review</span>
-        </div>
+      <AppHeader>
         <span className="app-header__user">
           {viewer.name} · {roleLabel(viewer.roles)}
         </span>
-      </header>
+      </AppHeader>
       <div className="frame">
         {nav === null ? null : <ProjectNav data={nav} selectedDealId={selectedDealId} />}
         <main id="pkg" className="main">
