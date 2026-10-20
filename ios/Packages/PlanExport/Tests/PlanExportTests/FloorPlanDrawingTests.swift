@@ -91,7 +91,7 @@ final class FloorPlanDrawingTests: XCTestCase {
     let walls = shapes(drawing, .wall)
     XCTAssertEqual(walls.count, 1)
     XCTAssertFalse(walls[0].evenOdd)
-    XCTAssertEqual(walls[0].fill, DrawingColor(0.36, 0.37, 0.42))
+    XCTAssertEqual(walls[0].fill, ChapterBrand.wall)
   }
 
   func testDoorsAndWindowsCutTheirWall() throws {
@@ -351,8 +351,8 @@ final class FloorPlanDrawingTests: XCTestCase {
       model.rooms[0].typeSource = .operator
       let fill = try XCTUnwrap(shapes(try drawing(model), .roomFill).first?.fill)
       XCTAssertEqual(fill, FloorPlanStyle.roomFill(type))
-      // Subtle: every fill is light.
-      XCTAssertGreaterThan(min(fill.red, fill.green, fill.blue), 0.9)
+      // Subtle: every fill is a light Chapter tint.
+      XCTAssertGreaterThan(min(fill.red, fill.green, fill.blue), 0.85)
       fills.append(fill)
     }
     for (type, other) in [
@@ -480,11 +480,11 @@ final class FloorPlanDrawingTests: XCTestCase {
     XCTAssertTrue(shown.contains { $0.string == "13' 1.5\"" && $0.layer == .interiorDimension })
     XCTAssertTrue(shown.contains { $0.string == "Room" && $0.layer == .roomLabel })
     XCTAssertTrue(shown.contains { $0.string == "129 ft\u{00B2}" && $0.layer == .roomLabel })
-    // Inside dimensions in light purple, outside ones in ink.
+    // Inside dimensions in the Chapter bronze, outside ones in the brand black.
     let inside = try XCTUnwrap(shown.first { $0.layer == .interiorDimension })
-    XCTAssertGreaterThan(inside.color.blue, inside.color.red + 0.2)
+    XCTAssertEqual(inside.color, ChapterBrand.accent)
     let outside = try XCTUnwrap(shown.first { $0.layer == .exteriorDimension })
-    XCTAssertEqual(outside.color, DrawingColor(hex: 0x1F2429))
+    XCTAssertEqual(outside.color, ChapterBrand.ink)
   }
 
   func testLabelsUseTheSharedUnitFormatter() throws {
@@ -740,7 +740,8 @@ final class FloorPlanDrawingTests: XCTestCase {
       XCTAssertTrue(svg.contains("<g class=\"\(layer.rawValue)\">"), layer.rawValue)
     }
     XCTAssertTrue(svg.contains("Apartment &amp; plan"))
-    XCTAssertTrue(svg.contains("fill=\"#5c5e6b\""), "slate walls")
+    XCTAssertTrue(svg.contains("fill=\"\(ChapterBrand.wall.hexString)\""), "Chapter walls")
+    XCTAssertTrue(svg.contains("font-family=\"\(ChapterBrand.sansFamily)\""), "Inter")
     XCTAssertTrue(svg.contains(">Living Room</text>"))
     // Printed size: plan millimetres over the scale.
     XCTAssertTrue(svg.contains("width=\"\(Format.fixed(drawing.bounds.width / 50, 2))mm\""))

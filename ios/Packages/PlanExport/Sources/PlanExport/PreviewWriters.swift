@@ -45,11 +45,9 @@ public enum SVGWriter {
     return out
   }
 
+  /// The Chapter tone of a scene gray (`ChapterBrand.tone`).
   private static func hex(_ gray: Double) -> String {
-    let value = Int((max(0, min(1, gray)) * 255).rounded())
-    let digits = String(value, radix: 16)
-    let pair = digits.count == 1 ? "0" + digits : digits
-    return "#" + pair + pair + pair
+    ChapterBrand.tone(gray).hexString
   }
 
   private static func render(scene: PlanScene, model: CaptureModel) -> String {
@@ -89,9 +87,9 @@ public enum SVGWriter {
         let transform =
           rotation == 0 ? "" : " transform=\"rotate(\(n(-rotation)) \(x(at)) \(y(at)))\""
         out +=
-          "    <text x=\"\(x(at))\" y=\"\(y(at))\" font-family=\"Helvetica, Arial, sans-serif\" "
+          "    <text x=\"\(x(at))\" y=\"\(y(at))\" font-family=\"\(ChapterBrand.sansFamily)\" "
           + "font-size=\"\(n(sizeMM))\" text-anchor=\"\(anchor == .center ? "middle" : "start")\" "
-          + "fill=\"\(hex(gray))\"\(bold ? " font-weight=\"bold\"" : "")\(transform)>"
+          + "fill=\"\(hex(gray))\"\(bold ? " font-weight=\"\(ChapterBrand.boldWeight)\"" : "")\(transform)>"
           + "\(escape(value))</text>\n"
       }
     }

@@ -857,7 +857,7 @@ struct AnnotationLayout {
         continue
       }
       let stroke = DrawingStroke(
-        color: style.interiorDimension, width: style.interiorDimensionWidth * k * 1000)
+        color: style.interiorDimensionLine, width: style.interiorDimensionWidth * k * 1000)
       var path = PathBuilder()
       for (p, q) in pick.lines where p.distance(to: q) > 1e-6 { path.segment(p, q) }
       add(

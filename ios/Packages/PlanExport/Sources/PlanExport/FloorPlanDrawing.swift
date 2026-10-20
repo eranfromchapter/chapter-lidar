@@ -3,12 +3,15 @@ import Foundation
 
 /// Paper sizes (millimetres on paper) and colours of the floor plan drawing.
 struct FloorPlanStyle: Sendable {
-  // Colours: Chapter ink for text and outside dimensions, slate walls, quiet grey symbols.
-  var wall = DrawingColor(0.36, 0.37, 0.42)
-  var ink = DrawingColor(hex: 0x1F2429)
-  var symbol = DrawingColor(0.56, 0.57, 0.61)
-  var faintSymbol = DrawingColor(0.70, 0.71, 0.74)
-  var interiorDimension = DrawingColor(hex: 0x8A82E6)
+  // Colours (`ChapterBrand`): brand black for text and outside dimensions, warm charcoal
+  // walls, warm grey symbols, bronze inside dimensions.
+  var wall = ChapterBrand.wall
+  var ink = ChapterBrand.ink
+  var symbol = ChapterBrand.symbol
+  var faintSymbol = ChapterBrand.faintSymbol
+  var interiorDimension = ChapterBrand.accent
+  /// Inside dimension lines and their ends, paler than their text.
+  var interiorDimensionLine = ChapterBrand.accentLine
 
   // Line widths.
   var symbolWidth = 0.12
@@ -56,20 +59,21 @@ struct FloorPlanStyle: Sendable {
   var compassRadius = 7.0
   var scaleBarHeight = 0.9
 
-  /// Subtle fill of a room by what it is used for.
+  /// Subtle fill of a room by what it is used for, in Chapter's warm tints (the sand, blush
+  /// and stone of hellochapter.com, with a cool grey-blue for wet rooms).
   static func roomFill(_ type: RoomType?) -> DrawingColor {
     switch type {
-    case .bedroom: return DrawingColor(hex: 0xF3F4FB)  // pale lavender
-    case .livingRoom: return DrawingColor(hex: 0xF9F4ED)  // warm beige
-    case .diningRoom: return DrawingColor(hex: 0xF8F2EA)
-    case .kitchen: return DrawingColor(hex: 0xF6F3FB)  // pale lilac
-    case .bathroom: return DrawingColor(hex: 0xEFF6FC)  // pale blue
-    case .closet: return DrawingColor(hex: 0xECF5ED)  // pale green
-    case .hallway: return DrawingColor(hex: 0xF5F1E9)  // beige
-    case .laundry: return DrawingColor(hex: 0xEEF4F9)
-    case .office: return DrawingColor(hex: 0xF4F3F7)
-    case .utility: return DrawingColor(hex: 0xF1F1EF)
-    case .other, nil: return DrawingColor(hex: 0xF5F5F4)  // neutral
+    case .bedroom: return DrawingColor(hex: 0xEDEEE5)  // pale sage
+    case .livingRoom: return DrawingColor(hex: 0xF8F0E5)  // sand
+    case .diningRoom: return DrawingColor(hex: 0xF6ECE0)  // deeper sand
+    case .kitchen: return DrawingColor(hex: 0xF5E6DB)  // blush
+    case .bathroom: return DrawingColor(hex: 0xE8ECF1)  // grey-blue
+    case .closet: return DrawingColor(hex: 0xEFE9E1)  // stone
+    case .hallway: return DrawingColor(hex: 0xF6F1EA)  // warm grey
+    case .laundry: return DrawingColor(hex: 0xEBEEF2)  // pale grey-blue
+    case .office: return DrawingColor(hex: 0xF2ECE7)  // taupe
+    case .utility: return DrawingColor(hex: 0xEFEDEA)  // putty
+    case .other, nil: return DrawingColor(hex: 0xF5F2EE)  // neutral warm
     }
   }
 

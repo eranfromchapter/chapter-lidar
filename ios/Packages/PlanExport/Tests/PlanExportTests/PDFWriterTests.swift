@@ -47,7 +47,11 @@ final class PDFWriterTests: XCTestCase {
       let length = try XCTUnwrap(Int(after.prefix { $0.isNumber }))
       let streamStart = try XCTUnwrap(after.range(of: "stream\n")).upperBound
       let streamEnd = try XCTUnwrap(after[streamStart...].range(of: "endstream")).lowerBound
-      XCTAssertEqual(after[streamStart..<streamEnd].count, length, file: file, line: line)
+      // The data, then at most one end-of-line before `endstream`.
+      let body = after[streamStart..<streamEnd]
+      XCTAssertTrue(
+        body.count == length || (body.count == length + 1 && body.hasSuffix("\n")),
+        "stream of \(body.count) bytes declares /Length \(length)", file: file, line: line)
       rest = after[streamEnd...]
     }
   }
@@ -173,10 +177,38 @@ final class PDFWriterTests: XCTestCase {
     XCTAssertEqual(PDFFile.unescape("Caf\\351"), "Caf\u{00E9}")
   }
 
-  func testHelveticaWidths() {
-    // From the Adobe Helvetica AFM: "Hello" = 722 + 556 + 222 + 222 + 556.
-    XCTAssertEqual(FontMetrics.width("Hello", size: 1000), 2278, accuracy: 0.001)
-    XCTAssertEqual(FontMetrics.width("Hello", size: 10), 22.78, accuracy: 0.001)
+  func testInterWidths() {
+    // Inter Regular advances (1/1000 em): "Hello" = 740 + 582 + 237 + 237 + 597.
+    XCTAssertEqual(FontMetrics.width("Hello", size: 1000), 2393, accuracy: 0.001)
+    XCTAssertEqual(FontMetrics.width("Hello", size: 10), 23.93, accuracy: 0.001)
+    // SemiBold is wider; a character WinAnsi lacks counts as the "?" that replaces it.
+    XCTAssertGreaterThan(
+      FontMetrics.width("Hello", size: 10, bold: true), FontMetrics.width("Hello", size: 10))
+    XCTAssertEqual(
+      FontMetrics.width("\u{4E2D}", size: 10), FontMetrics.width("?", size: 10), accuracy: 1e-9)
+    // Times-Roman for titles: "Hello" = 722 + 444 + 278 + 278 + 500.
+    XCTAssertEqual(FontMetrics.width("Hello", size: 1000, serif: true), 2222, accuracy: 0.001)
+  }
+
+  func testPDFsEmbedInterAndDeclareOnlyTheFontsTheyUse() throws {
+    let capture = try XCTUnwrap(Fixtures.load("box-room").first)
+    let (plan, report) = try both(capture)
+    for (name, pdf) in [("plan", plan), ("report", report)] {
+      let fonts = pdf.baseFonts
+      XCTAssertFalse(fonts.contains { $0.hasPrefix("Helvetica") }, name)
+      XCTAssertTrue(fonts.contains("CHAPRA+Inter-Regular"), "\(name): \(fonts)")
+      XCTAssertTrue(fonts.contains("Times-Roman"), "\(name) title in Times: \(fonts)")
+      // Each embedded Inter has a TrueType program, compressed, with its uncompressed length.
+      XCTAssertEqual(
+        pdf.text.components(separatedBy: "/FontFile2 ").count - 1,
+        fonts.filter { $0.contains("+Inter-") }.count, name)
+      XCTAssertTrue(pdf.text.contains("/Length1 \(ChapterBrandAssets.interRegular.data.count)"))
+    }
+    // The program is a TrueType font (version 1.0 header) once inflated.
+    let font = ChapterBrandAssets.interRegular.data
+    XCTAssertEqual(Array(font.prefix(4)), [0, 1, 0, 0])
+    XCTAssertEqual(ChapterBrandAssets.interRegular.widths.count, 224)
+    XCTAssertEqual(ChapterBrandAssets.interSemiBold.widths.count, 224)
   }
 
   func testLongAddressIsShrunkOrCutToFit() {

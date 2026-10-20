@@ -131,15 +131,32 @@ struct PDFFile {
 
   var header: String { String(text.prefix(8)) }
 
-  /// Page content streams, in page order.
+  /// Page content streams, in page order (embedded font programs, which carry `/Length1`,
+  /// are left out).
   var contentStreams: [String] {
     var out: [String] = []
     var rest = Substring(text)
     while let start = rest.range(of: "stream\n") {
       let afterStart = start.upperBound
       guard let end = rest[afterStart...].range(of: "endstream") else { break }
-      out.append(String(rest[afterStart..<end.lowerBound]))
+      let dictionary = rest[..<start.lowerBound].range(of: "<<", options: .backwards)
+        .map { rest[$0.lowerBound..<start.lowerBound] } ?? ""
+      if !dictionary.contains("/Length1") {
+        out.append(String(rest[afterStart..<end.lowerBound]))
+      }
       rest = rest[end.upperBound...]
+    }
+    return out
+  }
+
+  /// BaseFont names of the fonts the document declares.
+  var baseFonts: [String] {
+    var out: [String] = []
+    var rest = Substring(text)
+    while let range = rest.range(of: "/BaseFont /") {
+      let name = rest[range.upperBound...].prefix { !$0.isWhitespace && $0 != "/" && $0 != ">" }
+      out.append(String(name))
+      rest = rest[range.upperBound...]
     }
     return out
   }

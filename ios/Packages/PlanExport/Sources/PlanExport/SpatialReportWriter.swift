@@ -2,7 +2,8 @@ import CaptureContract
 import Foundation
 
 /// Spatial Report PDF: capture metadata, a per-room table (dimensions, area, height, openings,
-/// recognized objects), an openings table and an objects table. Letter landscape, Helvetica text.
+/// recognized objects), an openings table and an objects table. Letter landscape, in the Chapter type
+/// (Times headings, Inter text) and colours, with the Chapter logo.
 /// The report says that it is not a photo survey and that reported areas are not verified
 /// construction quantities. Every page footer carries the address and the capture id.
 public enum SpatialReportWriter {
@@ -20,7 +21,8 @@ public enum SpatialReportWriter {
     let geometry = try PlanGeometry(model: model)
     let flow = PDFFlow(width: 792, height: 612, margin: 36)
 
-    flow.heading("Spatial Report", size: 20)
+    flow.heading("Spatial Report", size: 24)
+    flow.logo(height: 24)
     flow.paragraph(context.address, size: 11, bold: true)
     flow.space(4)
     flow.paragraph(statement, size: 8.5)
@@ -239,11 +241,18 @@ final class PDFFlow {
 
   func space(_ amount: Double) { y += amount }
 
+  /// The Chapter logo, `height` points tall, at the top right of the current page.
+  func logo(height logoHeight: Double) {
+    ChapterLogo.draw(
+      on: page, x: width - margin - ChapterLogo.width(height: logoHeight),
+      y: height - margin - logoHeight, height: logoHeight)
+  }
+
   func heading(_ text: String, size: Double) {
     // Keep a heading with the start of what follows it.
     ensure(size * 2.4 + 60)
-    page.setFillGray(0)
-    page.text(text, x: margin, y: baseline(y, size: size), size: size, bold: true)
+    page.setFill(ChapterBrand.ink)
+    page.text(text, x: margin, y: baseline(y, size: size), size: size, serif: true)
     y += size * 1.5
   }
 
@@ -251,7 +260,7 @@ final class PDFFlow {
     let lineHeight = size * 1.3
     for line in PlanPDFWriter.wrap(text, size: size, width: width - 2 * margin, bold: bold) {
       ensure(lineHeight)
-      page.setFillGray(0)
+      page.setFill(ChapterBrand.ink)
       page.text(line, x: margin, y: baseline(y, size: size), size: size, bold: bold)
       y += lineHeight
     }
@@ -273,16 +282,16 @@ final class PDFFlow {
     func rowHeightOf(_ cells: [[String]]) -> Double {
       Double(cells.map(\.count).max() ?? 1) * lineHeight + 2 * pad
     }
-    func draw(_ cells: [[String]], bold: Bool, fill: Double?) {
+    func draw(_ cells: [[String]], bold: Bool, fill: DrawingColor?) {
       let rowHeight = rowHeightOf(cells)
       let top = y
       if let fill {
-        page.setFillGray(fill)
+        page.setFill(fill)
         page.rect(
           x: margin, y: height - top - rowHeight, width: totalWidth, height: rowHeight,
           stroke: false, fill: true)
       }
-      page.setStrokeGray(0.6)
+      page.setStroke(ChapterBrand.line)
       page.setLineWidth(0.4)
       page.rect(
         x: margin, y: height - top - rowHeight, width: totalWidth, height: rowHeight,
@@ -292,7 +301,7 @@ final class PDFFlow {
         if index > 0 {
           page.line((x, height - top), (x, height - top - rowHeight))
         }
-        page.setFillGray(0)
+        page.setFill(ChapterBrand.ink)
         for (lineIndex, line) in cellLines.enumerated() {
           page.text(
             line, x: x + pad,
@@ -307,13 +316,13 @@ final class PDFFlow {
     let headerCells = lines(columns.map(\.title), bold: true)
     if header {
       ensure(rowHeightOf(headerCells) + lineHeight * 2 + 2 * pad)
-      draw(headerCells, bold: true, fill: 0.88)
+      draw(headerCells, bold: true, fill: ChapterBrand.nude)
     }
     for row in rows {
       let cells = lines(row)
       if y + rowHeightOf(cells) > bottom {
         newPage()
-        if header { draw(headerCells, bold: true, fill: 0.88) }
+        if header { draw(headerCells, bold: true, fill: ChapterBrand.nude) }
       }
       draw(cells, bold: false, fill: nil)
     }
@@ -323,10 +332,10 @@ final class PDFFlow {
   func footer(left: String, right: String) {
     let size = 7.0
     for (index, page) in pages.enumerated() {
-      page.setStrokeGray(0.6)
+      page.setStroke(ChapterBrand.line)
       page.setLineWidth(0.4)
       page.line((margin, margin + 8), (width - margin, margin + 8))
-      page.setFillGray(0.25)
+      page.setFill(ChapterBrand.muted)
       page.text(left, x: margin, y: margin - 2, size: size)
       page.text(
         "\(right) - page \(index + 1) of \(pages.count)", x: width - margin, y: margin - 2,

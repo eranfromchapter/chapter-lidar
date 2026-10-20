@@ -56,7 +56,7 @@ extension FloorPlanDrawing {
 }
 
 /// SVG elements for drawing primitives: one `<g class="layer">` per run of items on the same
-/// layer, paths with their fill and stroke, text in Helvetica (Times for serif text), and
+/// layer, paths with their fill and stroke, text in Inter (Times for serif text), and
 /// clipped groups. Coordinates are moved so `minX` is 0 and flipped so `maxY` is the top (SVG
 /// y runs down), two decimals.
 enum DrawingSVG {
@@ -112,9 +112,9 @@ enum DrawingSVG {
         let rotate =
           text.rotationDegrees == 0
           ? "" : " transform=\"rotate(\(n(-text.rotationDegrees)) \(x) \(y))\""
-        let family =
-          text.serif ? "Times New Roman, Times, serif" : "Helvetica, Arial, sans-serif"
-        let weight = text.bold && !text.serif ? " font-weight=\"bold\"" : ""
+        let family = text.serif ? ChapterBrand.serifFamily : ChapterBrand.sansFamily
+        let weight =
+          text.bold && !text.serif ? " font-weight=\"\(ChapterBrand.boldWeight)\"" : ""
         let spacing = text.letterSpacing == 0 ? "" : " letter-spacing=\"\(n(text.letterSpacing))\""
         out +=
           "\(indent)  <text x=\"\(x)\" y=\"\(y)\" font-family=\"\(family)\" "

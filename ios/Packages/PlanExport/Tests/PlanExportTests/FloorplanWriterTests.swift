@@ -61,7 +61,7 @@ final class FloorplanWriterTests: XCTestCase {
     XCTAssertTrue(pdf.text.contains("/Count 1 "))
     XCTAssertEqual(pdf.contentStreams.count, 1)
     let shown = pdf.shownText()
-    for expected in ["Floorplan", address, plan.totalText, "chapter", "RENOVATION", "N"] {
+    for expected in ["Floorplan", address, plan.totalText, "N"] {
       XCTAssertTrue(shown.contains(expected), expected)
     }
     XCTAssertTrue(plan.totalText.hasPrefix("Approximately "))
@@ -83,10 +83,15 @@ final class FloorplanWriterTests: XCTestCase {
     XCTAssertTrue(shown.contains { $0.hasSuffix(" ft") && $0.count <= 6 }, "scale bar")
     XCTAssertTrue(shown.contains("Measurements are approximate."))
     XCTAssertFalse(shown.contains { $0.contains("1:") }, "no print scale in words")
-    // Colour: slate walls, ink outside dimensions, purple inside dimensions.
+    // Chapter colours: warm charcoal walls, bronze inside dimensions, brand black text.
     let stream = try XCTUnwrap(pdf.contentStreams.first)
-    XCTAssertTrue(stream.contains("0.3600 0.3700 0.4200 rg"), "slate walls")
-    XCTAssertTrue(stream.contains("0.5412 0.5098 0.9020 RG"), "purple inside dimensions")
+    func rgb(_ color: DrawingColor, _ op: String) -> String {
+      [color.red, color.green, color.blue].map { Format.fixed($0, 4) }.joined(separator: " ")
+        + " \(op)"
+    }
+    XCTAssertTrue(stream.contains(rgb(ChapterBrand.wall, "rg")), "Chapter walls")
+    XCTAssertTrue(stream.contains(rgb(ChapterBrand.accentLine, "RG")), "bronze inside dimensions")
+    XCTAssertTrue(stream.contains(rgb(ChapterBrand.ink, "rg")), "brand black")
     XCTAssertTrue(stream.contains("1.0000 1.0000 1.0000 rg"), "white paper")
   }
 
@@ -300,28 +305,49 @@ final class FloorplanWriterTests: XCTestCase {
     for text in PDFFile(plan.pdf).shownText() {
       XCTAssertTrue(plan.svg.contains(">\(SVGWriter.escape(text))</text>"), text)
     }
-    XCTAssertTrue(plan.svg.contains("font-family=\"Times New Roman, Times, serif\""), "wordmark")
-    XCTAssertTrue(plan.svg.contains("letter-spacing=\""))
+    XCTAssertTrue(plan.svg.contains("font-family=\"\(ChapterBrand.serifFamily)\""), "title")
+    XCTAssertTrue(plan.svg.contains("font-family=\"\(ChapterBrand.sansFamily)\""), "Inter")
     for layer in [DrawingLayer.sheet, .wall, .roomLabel, .compass, .scaleBar] {
       XCTAssertTrue(plan.svg.contains("<g class=\"\(layer.rawValue)\">"), layer.rawValue)
     }
   }
 
-  func testWordmarkUsesTimesOnlyInThisDocument() throws {
-    let pdf = PDFFile(try write(WalkthroughFixture.model).pdf)
-    XCTAssertTrue(pdf.text.contains("/BaseFont /Times-Roman"))
-    XCTAssertTrue(pdf.text.contains("/F1 3 0 R /F2 4 0 R /F3 8 0 R >>"))
+  func testTitleIsTimesTextIsInterAndTheLogoIsDrawn() throws {
+    let model = WalkthroughFixture.model
+    let pdf = PDFFile(try write(model).pdf)
+    XCTAssertEqual(
+      pdf.baseFonts.sorted(), ["CHAPRA+Inter-Regular", "Times-Roman"], "only the fonts used")
     let stream = try XCTUnwrap(pdf.contentStreams.first)
     XCTAssertTrue(stream.contains("BT /F3 "))
-    // Letter spacing is set inside a saved state so it ends with the word.
-    XCTAssertTrue(stream.contains("q\nBT /F1 "))
-    XCTAssertTrue(stream.contains(" Tc "))
-    XCTAssertTrue(stream.contains("(RENOVATION) Tj ET\nQ\n"))
-    // Today's plan PDF declares no third font.
+    XCTAssertTrue(pdf.shownText().contains("Floorplan"))
+    // The logo: one filled path per logo path, in the brand black, at the bottom right.
+    let sheet = try FloorplanWriter.Sheet(model: model, options: .init(address: address))
+    let logo = sheet.items.compactMap { item -> DrawingShape? in
+      guard case .shape(let shape) = item, shape.layer == .sheet, shape.fill == ChapterBrand.ink
+      else { return nil }
+      return shape
+    }
+    XCTAssertEqual(logo.count, ChapterLogo.paths.count)
+    let xs = logo.flatMap { $0.path.points.map(\.x) }
+    let ys = logo.flatMap { $0.path.points.map(\.y) }
+    let margin = FloorplanWriter.Layout.margin
+    XCTAssertEqual(xs.max()!, sheet.widthMM - margin, accuracy: 0.05)
+    XCTAssertEqual(
+      xs.max()! - xs.min()!, ChapterLogo.width(height: FloorplanWriter.Layout.logoHeight),
+      accuracy: 0.05)
+    XCTAssertEqual(ys.min()!, margin + 0.6, accuracy: 0.05)
+    // Every PDF the app exports carries the Chapter type and logo too.
     let capture = try XCTUnwrap(Fixtures.load("box-room").first)
     let today = try PlanExporter.exportAll(model: capture.model, record: capture.record)
     for file in today where file.fileName.hasSuffix(".pdf") {
-      XCTAssertFalse(PDFFile(file.data).text.contains("Times-Roman"), file.fileName)
+      let exported = PDFFile(file.data)
+      XCTAssertTrue(exported.baseFonts.contains("CHAPRA+Inter-Regular"), file.fileName)
+      XCTAssertTrue(exported.baseFonts.contains("Times-Roman"), file.fileName)
+      XCTAssertFalse(exported.baseFonts.contains { $0.hasPrefix("Helvetica") }, file.fileName)
+      let first = try XCTUnwrap(exported.contentStreams.first)
+      XCTAssertGreaterThanOrEqual(
+        first.components(separatedBy: " f\n").count - 1, ChapterLogo.paths.count,
+        "logo in \(file.fileName)")
     }
   }
 

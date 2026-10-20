@@ -3,10 +3,11 @@ import Foundation
 
 /// The floor plan as one page: "Floorplan", the address and the approximate total area at the
 /// top, a compass at the top right when true north is known, the fully dimensioned colour plan
-/// (`FloorPlanDrawing`: outside dimensions in ink, inside dimensions in purple, room names and
+/// (`FloorPlanDrawing`: outside dimensions in ink, inside dimensions in bronze, room names and
 /// areas, furniture, fixture and appliance symbols) fitted to the page, a scale bar at the
-/// bottom left, "Measurements are approximate." in the middle, and the Chapter wordmark at
-/// the bottom right.
+/// bottom left, "Measurements are approximate." in the middle, and the Chapter logo at the
+/// bottom right. Chapter type and colours (`ChapterBrand`): the title in Times, the rest in
+/// Inter.
 ///
 /// One layout feeds both writers, so the PDF and the SVG show the same page. The page is Letter
 /// landscape or a 10 in square, whichever prints the plan larger (`Page.automatic`). The total
@@ -133,13 +134,14 @@ public enum FloorplanWriter {
   /// Page layout, paper millimetres.
   enum Layout {
     static let margin = 12.0
-    static let titleSize = 20.0 * 25.4 / 72
+    static let titleSize = 22.0 * 25.4 / 72
     static let addressSize = 12.0 * 25.4 / 72
     static let totalSize = 10.0 * 25.4 / 72
     static let noteSize = 6.5 * 25.4 / 72
     static let scaleBarTextSize = 8.0 * 25.4 / 72
     static let scaleBarHeight = 0.9
-    static let wordmarkSize = 14.0 * 25.4 / 72
+    /// Height of the Chapter logo in the footer.
+    static let logoHeight = 7.0
     /// Space between the header and the drawing, and between the drawing and the footer.
     static let gap = 4.0
     static let footerHeight = 8.0
@@ -250,7 +252,7 @@ public enum FloorplanWriter {
     ) -> [DrawingItem] {
       let style = drawing.style
       let ink = style.ink
-      let muted = DrawingColor(hex: 0x6B6557)
+      let muted = ChapterBrand.muted
       let margin = Layout.margin
       let top = height - margin
       var items: [DrawingItem] = []
@@ -273,9 +275,11 @@ public enum FloorplanWriter {
       ])
       items.append(.shape(DrawingShape(path: paper.path, fill: .white, layer: .sheet)))
 
-      // Header.
+      // Header: the title in the Chapter serif.
       let title = Format.singleLine(options.title)
-      text(title, width / 2, top - 6.5, size: Layout.titleSize, anchor: .center, color: ink)
+      text(
+        title, width / 2, top - 6.5, size: Layout.titleSize, anchor: .center, color: ink,
+        serif: true)
       var line = top - 6.5
       if let address {
         line -= 7
@@ -306,7 +310,7 @@ public enum FloorplanWriter {
         dy: y - bounds.minY / denominator)
       items += drawing.items.map(transform.apply)
 
-      // Footer: scale bar at the left, note in the middle, wordmark at the right.
+      // Footer: scale bar at the left, note in the middle, logo at the right.
       if options.scaleBar {
         let bar = options.units.scaleBar(scaleDenominator: denominator)
         let length = bar.metres * 1000 / denominator
@@ -331,23 +335,10 @@ public enum FloorplanWriter {
         "Measurements are approximate.", width / 2, margin + 0.6, size: Layout.noteSize,
         anchor: .center, color: muted)
 
-      // Wordmark: "chapter" in the serif, "RENOVATION" letter-spaced beneath, centred on each
-      // other and set against the right margin.
-      let word = DrawingText(
-        "chapter", position: DrawingPoint(x: 0, y: 0), size: Layout.wordmarkSize, serif: true,
-        color: ink, layer: .sheet)
-      let lineSize = Layout.wordmarkSize * 0.3
-      let line2 = DrawingText(
-        "RENOVATION", position: DrawingPoint(x: 0, y: 0), size: lineSize,
-        letterSpacing: lineSize * 0.5, color: ink, layer: .sheet)
-      let blockWidth = max(word.width, line2.width)
-      let middle = width - margin - blockWidth / 2
-      text(
-        word.string, middle - word.width / 2, margin + 3.4, size: word.size, anchor: .leading,
-        color: ink, serif: true)
-      text(
-        line2.string, middle - line2.width / 2, margin + 0.6, size: lineSize, anchor: .leading,
-        color: ink, spacing: line2.letterSpacing)
+      // The Chapter logo, set against the right margin, its foot on the note's baseline.
+      items += ChapterLogo.items(
+        x: width - margin - ChapterLogo.width(height: Layout.logoHeight), y: margin + 0.6,
+        height: Layout.logoHeight)
       return items
     }
 

@@ -124,14 +124,19 @@ final class PDFDrawingTests: XCTestCase {
     XCTAssertTrue(text.contains("(12' 6.6\") Tj ET"))
   }
 
-  func testGrayPagesWriteTheSameBytesAsBefore() throws {
-    // The plan PDF uses only the grayscale operators; none of the new ones appear in it.
+  func testPlanPDFDrawsInChapterTones() throws {
+    // The plan PDF's grays are drawn as Chapter tones: no gray operators, the brand black.
     let capture = try XCTUnwrap(Fixtures.load("two-room-apartment").first)
     let context = try PlanExportContext(record: capture.record, captureId: capture.model.captureId)
     let plan = PDFFile(try PlanPDFWriter.write(model: capture.model, context: context).file.data)
     let stream = try XCTUnwrap(plan.contentStreams.first)
-    for op in [" rg\n", " RG\n", " d\n", " J\n", " j\n", " c ", "q\n", " W n"] {
-      XCTAssertFalse(stream.contains(op), "plan.pdf now uses \(op)")
+    for op in [" g\n", " G\n", " d\n", " W n"] {
+      XCTAssertFalse(stream.contains(op), "plan.pdf uses \(op)")
     }
+    XCTAssertTrue(stream.contains("0.1373 0.1216 0.1255 rg"), "brand black")
+    XCTAssertEqual(ChapterBrand.tone(0), ChapterBrand.ink)
+    XCTAssertEqual(ChapterBrand.tone(1), .white)
+    let mid = ChapterBrand.tone(0.5)
+    XCTAssertGreaterThan(mid.red, mid.blue, "warm")
   }
 }

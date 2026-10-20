@@ -127,7 +127,7 @@ public enum DrawingLayer: String, Hashable, Sendable, CaseIterable {
   case roomLabel = "room-label"
   case compass = "compass"
   case scaleBar = "scale-bar"
-  /// Title, address, notes and the wordmark around a drawing on a page.
+  /// Title, address, notes and the logo around a drawing on a page.
   case sheet = "sheet"
 }
 
@@ -158,7 +158,7 @@ public enum DrawingTextAnchor: String, Hashable, Sendable {
   case trailing
 }
 
-/// One line of text in Helvetica, or in Times when `serif` is true (the Chapter wordmark).
+/// One line of text in Inter (the Chapter sans), or in Times when `serif` is true (titles).
 public struct DrawingText: Hashable, Sendable {
   public var string: String
   /// Baseline point at the anchor, plan millimetres.
@@ -169,7 +169,7 @@ public struct DrawingText: Hashable, Sendable {
   public var rotationDegrees: Double
   public var anchor: DrawingTextAnchor
   public var bold: Bool
-  /// Times Roman instead of Helvetica; `bold` is ignored.
+  /// Times instead of Inter; `bold` is ignored.
   public var serif: Bool
   /// Extra space after each character, plan millimetres.
   public var letterSpacing: Double

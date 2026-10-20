@@ -45,11 +45,11 @@ public enum PlanPDFWriter {
 
     // Header.
     let top = sheet.heightMM - PlanSheet.pageMargin
-    page.setFillGray(0)
+    page.setFill(ChapterBrand.tone(0))
     page.text(
       "Floor plan - \(context.floorLabel)", x: pt(PlanSheet.pageMargin), y: pt(top - 6),
-      size: 14, bold: true)
-    page.setFillGray(0.3)
+      size: 16, serif: true)
+    page.setFill(ChapterBrand.tone(0.3))
     page.text(
       "Reported areas are not verified construction quantities.",
       x: pt(sheet.widthMM - PlanSheet.pageMargin), y: pt(top - 6), size: 7,
@@ -60,7 +60,7 @@ public enum PlanPDFWriter {
     let blockY = PlanSheet.pageMargin
     let blockW = sheet.widthMM - 2 * PlanSheet.pageMargin
     let blockH = PlanSheet.titleBlockHeight
-    page.setStrokeGray(0)
+    page.setStroke(ChapterBrand.tone(0))
     page.setLineWidth(0.7)
     page.rect(x: pt(blockX), y: pt(blockY), width: pt(blockW), height: pt(blockH), stroke: true, fill: false)
     let leftW = blockW * 0.62
@@ -72,9 +72,9 @@ public enum PlanPDFWriter {
 
     func cell(_ caption: String, _ value: String, x: Double, row: Int, width: Double) {
       let top = blockY + blockH - Double(row) * rowH
-      page.setFillGray(0.4)
+      page.setFill(ChapterBrand.tone(0.4))
       page.text(caption, x: pt(x + 1.5), y: pt(top - 3.2), size: 5)
-      page.setFillGray(0)
+      page.setFill(ChapterBrand.tone(0))
       let available = pt(width - 3)
       var size = 9.0
       while size > 5, FontMetrics.width(value, size: size) > available { size -= 0.5 }
@@ -88,19 +88,23 @@ public enum PlanPDFWriter {
     cell("DATE (UTC)", context.captureDate, x: blockX + leftW * 0.5, row: 2, width: leftW * 0.2)
     cell("OPERATOR", context.operatorName, x: blockX + leftW * 0.7, row: 2, width: leftW * 0.3)
     page.setLineWidth(0.4)
-    page.setStrokeGray(0)
+    page.setStroke(ChapterBrand.tone(0))
     page.line(
       (pt(blockX + leftW * 0.62), pt(blockY + 2 * rowH)),
       (pt(blockX + leftW * 0.62), pt(blockY + rowH)))
     page.line((pt(blockX + leftW * 0.5), pt(blockY)), (pt(blockX + leftW * 0.5), pt(blockY + rowH)))
     page.line((pt(blockX + leftW * 0.7), pt(blockY)), (pt(blockX + leftW * 0.7), pt(blockY + rowH)))
 
-    // Right panel: scale, scale bar, orientation.
+    // Right panel: scale, scale bar, orientation, and the Chapter logo at its top right.
     let rightX = blockX + leftW
     let rightW = blockW - leftW
-    page.setFillGray(0.4)
+    let logoHeight = 8.0
+    ChapterLogo.draw(
+      on: page, x: pt(blockX + blockW - 2 - ChapterLogo.width(height: logoHeight)),
+      y: pt(blockY + blockH - 2.5 - logoHeight), height: pt(logoHeight))
+    page.setFill(ChapterBrand.tone(0.4))
     page.text("SCALE", x: pt(rightX + 1.5), y: pt(blockY + blockH - 3.2), size: 5)
-    page.setFillGray(0)
+    page.setFill(ChapterBrand.tone(0))
     page.text(
       "1:\(sheet.scaleDenominator)", x: pt(rightX + 1.5), y: pt(blockY + blockH - 9.5), size: 12,
       bold: true)
@@ -112,11 +116,11 @@ public enum PlanPDFWriter {
       items: PlanScene.scaleBarItems(scaleDenominator: sheet.scaleDenominator, origin: .init(x: 0, y: 0)),
       widthMM: 0, heightMM: 0, scaleDenominator: sheet.scaleDenominator)
     render(barScene, on: page, originX: barOrigin.x, originY: barOrigin.y)
-    page.setFillGray(0.4)
+    page.setFill(ChapterBrand.tone(0.4))
     page.text("ORIENTATION", x: pt(rightX + 1.5), y: pt(blockY + 13.5), size: 5)
     // Arrow pointing up the sheet.
-    page.setStrokeGray(0)
-    page.setFillGray(0)
+    page.setStroke(ChapterBrand.tone(0))
+    page.setFill(ChapterBrand.tone(0))
     page.setLineWidth(0.8)
     let arrowX = rightX + 6
     page.line((pt(arrowX), pt(blockY + 3)), (pt(arrowX), pt(blockY + 11)))
@@ -125,7 +129,7 @@ public enum PlanPDFWriter {
         (pt(arrowX), pt(blockY + 12)), (pt(arrowX - 1.5), pt(blockY + 9)),
         (pt(arrowX + 1.5), pt(blockY + 9)),
       ], closed: true, stroke: false, fill: true)
-    page.setFillGray(0)
+    page.setFill(ChapterBrand.tone(0))
     page.text("UP", x: pt(arrowX + 3), y: pt(blockY + 6), size: 6, bold: true)
     let note = "True north was not captured. Sheet up is the -Z axis of the capture frame."
     var noteY = blockY + 9.0
@@ -159,9 +163,9 @@ public enum PlanPDFWriter {
     for item in scene.items {
       switch item {
       case .polyline(let points, let closed, let fillGray, let strokeGray, let widthMM, _):
-        if let fillGray { page.setFillGray(fillGray) }
+        if let fillGray { page.setFill(ChapterBrand.tone(fillGray)) }
         if let strokeGray {
-          page.setStrokeGray(strokeGray)
+          page.setStroke(ChapterBrand.tone(strokeGray))
           page.setLineWidth(widthMM * mmToPoints)
         }
         let coordinates = points.map(pt)
@@ -172,7 +176,7 @@ public enum PlanPDFWriter {
             coordinates, closed: closed, stroke: strokeGray != nil, fill: fillGray != nil)
         }
       case .text(let value, let at, let sizeMM, let rotation, let anchor, let bold, let gray, _):
-        page.setFillGray(gray)
+        page.setFill(ChapterBrand.tone(gray))
         let position = pt(at)
         page.text(
           value, x: position.0, y: position.1, size: sizeMM * mmToPoints, bold: bold,
