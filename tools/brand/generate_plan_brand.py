@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
-"""Writes ios/Packages/PlanExport/Sources/PlanExport/ChapterBrandAssets.swift: the Chapter logo
-as vector paths and the Inter fonts (Regular and SemiBold, cut down to the WinAnsi characters)
-that the floor plan, plan and report PDFs embed.
+"""Writes the Chapter brand assets from the logo SVG and the Inter variable font:
+
+- ios/Packages/PlanExport/Sources/PlanExport/ChapterBrandAssets.swift: the logo as vector paths
+  and Inter Regular and SemiBold, cut down to the WinAnsi characters, that the floor plan, plan
+  and report PDFs embed;
+- web/public/brand/: chapter-logo.svg (the same paths, brand black) and inter-400.woff2 and
+  inter-600.woff2 (Latin), used by the HUB web app and the scan browser.
 
     python3 -I tools/brand/generate_plan_brand.py \
         --logo tools/brand/chapter-logo.svg \
@@ -26,6 +30,15 @@ from fontTools.varLib import instancer
 
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / "ios/Packages/PlanExport/Sources/PlanExport/ChapterBrandAssets.swift"
+WEB_OUTPUT = ROOT / "web/public/brand"
+
+# Latin text, the typographic punctuation, primes for feet and inches, superscripts for ft² and
+# m², arrows, the euro and the minus sign.
+WEB_UNICODES = (
+    list(range(0x20, 0x7F)) + list(range(0xA0, 0x100))
+    + [0x131, 0x152, 0x153, 0x2C6, 0x2DA, 0x2DC, 0x2074, 0x20AC, 0x2122, 0x2212, 0x2215]
+    + list(range(0x2000, 0x2070)) + list(range(0x2190, 0x219A))
+)
 
 
 def winansi_characters():
@@ -120,6 +133,49 @@ def inter_instance(source, weight, codes):
     return data, widths, metrics
 
 
+def web_font(source, weight):
+    """Inter at `weight` as WOFF2, cut down to `WEB_UNICODES`, with kerning kept."""
+    font = TTFont(source)
+    font = instancer.instantiateVariableFont(font, {"wght": weight, "slnt": 0})
+    options = subset.Options()
+    options.layout_features = ["kern", "liga", "calt", "tnum", "case"]
+    options.hinting = False
+    options.name_IDs = [0, 1, 2, 3, 4, 5, 6, 13, 14]
+    options.flavor = "woff2"
+    subsetter = subset.Subsetter(options)
+    subsetter.populate(unicodes=WEB_UNICODES)
+    subsetter.subset(font)
+    font.flavor = "woff2"
+    font.recalcTimestamp = False
+    buffer = io.BytesIO()
+    font.save(buffer)
+    return buffer.getvalue()
+
+
+def logo_svg(paths, width, height):
+    """The logo as an SVG in the brand black: the generated paths, y flipped back to down."""
+    elements = []
+    for path in paths:
+        tokens = path.split()
+        out = []
+        i = 0
+        while i < len(tokens):
+            token = tokens[i]
+            if token in ("M", "C", "Z"):
+                out.append(token)
+                i += 1
+                continue
+            out.append(f"{token} {height - int(tokens[i + 1])}")
+            i += 2
+        elements.append(f'<path d="{" ".join(out)}"/>')
+    body = "\n".join(elements)
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" '
+        f'role="img" aria-label="Chapter Renovation" fill="#231F20">\n'
+        f"<title>Chapter Renovation</title>\n{body}\n</svg>\n"
+    )
+
+
 def swift_ints(values, indent):
     lines = textwrap.wrap(", ".join(str(v) for v in values), 96 - len(indent))
     return "\n".join(indent + line for line in lines)
@@ -194,6 +250,11 @@ enum ChapterBrandAssets {{
 {swift_font("interSemiBold", "Inter-SemiBold", *semibold)}}}
 """
     OUTPUT.write_text(swift)
+
+    WEB_OUTPUT.mkdir(parents=True, exist_ok=True)
+    (WEB_OUTPUT / "chapter-logo.svg").write_text(logo_svg(paths, width, height))
+    for weight in (400, 600):
+        (WEB_OUTPUT / f"inter-{weight}.woff2").write_bytes(web_font(args.inter, weight))
     print(f"wrote {OUTPUT.relative_to(ROOT)}: logo {len(paths)} paths {width}x{height}, "
           f"Inter Regular {len(regular[0])} bytes, SemiBold {len(semibold[0])} bytes")
 
