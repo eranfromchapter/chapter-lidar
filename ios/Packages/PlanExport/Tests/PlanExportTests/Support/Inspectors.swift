@@ -338,7 +338,8 @@ enum TestInflate {
   }
 }
 
-/// PNG structure reader: chunk list with CRC checks and the decoded pixel rows.
+/// PNG structure reader: chunk list with CRC checks and the decoded pixel rows, for unfiltered
+/// 8-bit grayscale and RGB.
 struct PNGFile {
   struct Chunk {
     var type: String
@@ -346,8 +347,20 @@ struct PNGFile {
   }
   var width = 0
   var height = 0
+  /// IHDR colour type: 0 grayscale, 2 RGB.
+  var colorType = 0
   var chunks: [Chunk] = []
+  /// Samples, row-major: one byte per pixel for grayscale, three (R, G, B) for RGB.
   var pixels: [UInt8] = []
+
+  var channels: Int { colorType == 2 ? 3 : 1 }
+
+  /// The pixel at column `x`, row `y` (from the top) as R, G, B (a gray level three times).
+  func rgb(_ x: Int, _ y: Int) -> [UInt8] {
+    let index = (y * width + x) * channels
+    return channels == 3
+      ? Array(pixels[index..<(index + 3)]) : Array(repeating: pixels[index], count: 3)
+  }
 
   struct Failure: Error, CustomStringConvertible {
     var description: String
@@ -378,16 +391,21 @@ struct PNGFile {
       if type == "IHDR" {
         width = be32(index + 8)
         height = be32(index + 12)
+        guard body[8] == 8, body[9] == 0 || body[9] == 2, body[10...12] == [0, 0, 0] else {
+          throw Failure(description: "unsupported IHDR \(Array(body[8...12]))")
+        }
+        colorType = Int(body[9])
       }
       if type == "IDAT" { idat += body }
       index += 12 + length
     }
     guard index == bytes.count else { throw Failure(description: "trailing bytes") }
     let raw = try TestInflate.zlib(idat)
-    guard raw.count == (width + 1) * height else { throw Failure(description: "raw size") }
+    let rowBytes = width * channels
+    guard raw.count == (rowBytes + 1) * height else { throw Failure(description: "raw size") }
     for row in 0..<height {
-      guard raw[row * (width + 1)] == 0 else { throw Failure(description: "filter") }
-      pixels += raw[(row * (width + 1) + 1)..<((row + 1) * (width + 1))]
+      guard raw[row * (rowBytes + 1)] == 0 else { throw Failure(description: "filter") }
+      pixels += raw[(row * (rowBytes + 1) + 1)..<((row + 1) * (rowBytes + 1))]
     }
   }
 

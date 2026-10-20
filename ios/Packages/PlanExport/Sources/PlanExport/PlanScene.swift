@@ -47,6 +47,8 @@ struct PlanScene: Sendable {
   static let wallWidth = 0.5
   static let scaleBarWidth = 0.4
   static let dimensionOffset = 7.0
+  /// Gray of the room fills: the lightest gray in the scene below white (paper and wall gaps).
+  static let roomFillGray = 0.95
 
   // MARK: Building
 
@@ -90,7 +92,8 @@ struct PlanScene: Sendable {
 
     for room in geometry.rooms {
       polyline(
-        room.polygon.map(paper), closed: true, fill: 0.95, stroke: nil, width: 0, layer: .area)
+        room.polygon.map(paper), closed: true, fill: roomFillGray, stroke: nil, width: 0,
+        layer: .area)
     }
     for object in geometry.objects {
       polyline(

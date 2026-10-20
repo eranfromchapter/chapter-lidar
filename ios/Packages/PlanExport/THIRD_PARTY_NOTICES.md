@@ -4,7 +4,7 @@
 
 `Sources/PlanExport/ChapterBrandAssets.swift` embeds Inter Regular and Inter SemiBold, cut down
 to the WinAnsi characters by `tools/brand/generate_plan_brand.py`, and the PDFs this package
-writes embed them in turn.
+writes embed them in turn. The PNG plan preview draws its labels from their outlines.
 
 Copyright 2020 The Inter Project Authors (https://github.com/rsms/inter)
 

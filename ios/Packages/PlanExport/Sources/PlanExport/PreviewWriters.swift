@@ -100,11 +100,25 @@ public enum SVGWriter {
 }
 
 /// PNG plan preview at 300 dpi: the plan at its sheet scale (1:50, 1:100, ...) rasterised at
-/// 300 pixels per paper inch, 8-bit grayscale, with a `pHYs` chunk. Labels use a built-in
-/// 5 x 7 capital-letter font.
+/// 300 pixels per paper inch, 8-bit RGB in the Chapter tones of plan.pdf and plan.svg, with a
+/// `pHYs` chunk. Labels are drawn from the outlines of the Inter fonts plan.pdf embeds.
 public enum PNGWriter {
   public static let fileName = "plan.png"
   public static let dpi = 300
+
+  /// The colour of each gray level of the raster: `ChapterBrand.tone` of the level, as the PDF
+  /// and SVG paint the scene grays. `tone` steps from the warm surface colour to white at
+  /// paper, so the levels lighter than the room fill (which only anti-aliased edges against
+  /// paper or a wall gap produce) run straight from the room fill tone to white instead.
+  static let colors: [DrawingColor] = (0...255).map { level in
+    let gray = Double(level) / 255
+    let knee = PlanScene.roomFillGray
+    guard gray > knee else { return ChapterBrand.tone(gray) }
+    let from = ChapterBrand.tone(knee)
+    let t = (gray - knee) / (1 - knee)
+    func mix(_ a: Double) -> Double { a + (1 - a) * t }
+    return DrawingColor(mix(from.red), mix(from.green), mix(from.blue))
+  }
 
   public static func write(model: CaptureModel, displayUnits: DisplayUnitSystem = .metric) throws
     -> ExportedFile
@@ -141,8 +155,8 @@ public enum PNGWriter {
           centered: anchor == .center, bold: bold, gray: gray)
       }
     }
-    let data = PNGEncoder.encodeGrayscale(
-      width: width, height: height, pixels: canvas.pixels, dpi: dpi)
+    let data = PNGEncoder.encodeRGB(
+      width: width, height: height, pixels: canvas.pixels, colors: colors, dpi: dpi)
     return ExportedFile(fileName: fileName, role: .planPNG, mime: "image/png", data: data)
   }
 }
