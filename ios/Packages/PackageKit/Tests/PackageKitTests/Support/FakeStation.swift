@@ -41,6 +41,8 @@ final class FakeWorld: @unchecked Sendable {
     var actualSha256: String?
     var actualBytes: Int64?
     var checkedAt: UTCTimestamp?
+    /// Set when the file was verified by carry-over from the superseded revision.
+    var carriedOverFrom: LowercaseUUID?
   }
 
   struct StoredPackage {
@@ -60,6 +62,8 @@ final class FakeWorld: @unchecked Sendable {
   private var faults: [Fault] = []
   private var corruptUploads: [String: Int] = [:]
   private var checkOverride: (@Sendable (FileCheckResult) -> FileCheckResult)?
+  /// False simulates a station before 1.1.0: no `createdAt` in session answers.
+  private var sendsCreatedAt = true
   private(set) var calls: [FakeCall] = []
   /// Manifest bodies received by seal, byte for byte.
   private(set) var sealBodies: [Data] = []
@@ -94,6 +98,19 @@ final class FakeWorld: @unchecked Sendable {
   /// Rewrites every completeFile answer (to simulate an inconsistent station).
   func overrideChecks(_ transform: @escaping @Sendable (FileCheckResult) -> FileCheckResult) {
     locked { checkOverride = transform }
+  }
+
+  /// Session answers without `createdAt`, as a station before 1.1.0 sends them.
+  func omitCreatedAt() {
+    locked { sendsCreatedAt = false }
+  }
+
+  func createdAt(_ packageId: LowercaseUUID) -> UTCTimestamp? {
+    locked { packages[packageId]?.createdAt }
+  }
+
+  func carriedOverFrom(_ packageId: LowercaseUUID, path: String) -> LowercaseUUID? {
+    locked { packages[packageId]?.files[path]?.carriedOverFrom }
   }
 
   /// Invalidates every issued target (as if refused by the blob service).
@@ -159,9 +176,22 @@ final class FakeWorld: @unchecked Sendable {
         }
       } else {
         var files: [String: StoredFile] = [:]
+        // Carry-over (station 1.1.0): a file equal to a verified file of the superseded
+        // revision is verified at once from the stored blob.
+        let previous = request.supersedesPackageId.flatMap { packages[$0] }
         for declaration in request.files {
-          files[declaration.path] = StoredFile(
-            declaration: declaration, blobName: "\(request.packageId.rawValue)/\(declaration.path)")
+          if let previous, previous.status != .uploading,
+            let earlier = previous.files[declaration.path], earlier.status == .verified,
+            earlier.declaration == declaration
+          {
+            var file = earlier
+            file.carriedOverFrom = request.supersedesPackageId
+            files[declaration.path] = file
+          } else {
+            files[declaration.path] = StoredFile(
+              declaration: declaration,
+              blobName: "\(request.packageId.rawValue)/\(declaration.path)")
+          }
         }
         package = StoredPackage(request: request, files: files, createdAt: now)
       }
@@ -170,7 +200,8 @@ final class FakeWorld: @unchecked Sendable {
       let sessionFiles = request.files.map { declaration -> UploadSessionFile in
         let file = package.files[declaration.path]!
         guard uploading, file.status != .verified else {
-          return UploadSessionFile(path: declaration.path, status: file.status)
+          return UploadSessionFile(
+            path: declaration.path, status: file.status, carriedOverFrom: file.carriedOverFrom)
         }
         return UploadSessionFile(
           path: declaration.path, status: file.status,
@@ -178,7 +209,8 @@ final class FakeWorld: @unchecked Sendable {
       }
       return UploadSession(
         packageId: request.packageId, visitId: request.visitId, dealId: request.dealId,
-        revision: request.revision, status: package.status, files: sessionFiles)
+        revision: request.revision, status: package.status,
+        createdAt: sendsCreatedAt ? package.createdAt : nil, files: sessionFiles)
     }
   }
 

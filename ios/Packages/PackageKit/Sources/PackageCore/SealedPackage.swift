@@ -4,6 +4,9 @@ import Foundation
 /// A sealed package on disk: the package folder with `Source Register/{visitId}/manifest.json`.
 /// Read-only: nothing in PackageKit writes into or deletes from a sealed package. A change is a
 /// new revision (`PackageDraft.nextRevision(of:)`) in a new folder.
+///
+/// Opens manifests 1.0.0 (sealed by app builds before v2, possibly with the retired phone report)
+/// and 1.1.0, so a package sealed before an app update still uploads after it.
 public struct SealedPackage: Sendable {
   /// The package root folder.
   public let root: URL

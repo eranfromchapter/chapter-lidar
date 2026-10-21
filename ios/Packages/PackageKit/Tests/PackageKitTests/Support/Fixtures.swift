@@ -171,6 +171,33 @@ enum FixtureDraft {
   }
 }
 
+/// A package sealed by an app build before v2: `fixtures/generated/legacy-1.0.0` (manifest 1.0.0
+/// with the retired phone report `spatial-report.pdf`). A new draft cannot hold that role, so the
+/// legacy package is copied as it is, the way it sits on a phone after the app update.
+enum LegacyFixture {
+  static let name = "legacy-1.0.0"
+
+  /// A read-only copy of the legacy package under `folder`, opened as a sealed package.
+  static func sealedCopy(in folder: URL, named folderName: String = "legacy") throws -> SealedPackage {
+    let fixture = try FixturePackage(name)
+    let root = folder.appendingPathComponent(folderName, isDirectory: true)
+    try FileManager.default.copyItem(at: fixture.root, to: root)
+    let fileManager = FileManager.default
+    var items: [URL] = [root]
+    if let enumerator = fileManager.enumerator(at: root, includingPropertiesForKeys: nil) {
+      while let url = enumerator.nextObject() as? URL { items.append(url) }
+    }
+    for item in items.reversed() {
+      var isDirectory: ObjCBool = false
+      fileManager.fileExists(atPath: item.path, isDirectory: &isDirectory)
+      try fileManager.setAttributes(
+        [.posixPermissions: NSNumber(value: isDirectory.boolValue ? 0o555 : 0o444)],
+        ofItemAtPath: item.path)
+    }
+    return try SealedPackage.open(at: root)
+  }
+}
+
 /// A temporary folder per test. Sealed packages are read-only, so cleanup makes them writable
 /// first (test scaffolding only; PackageKit itself never deletes).
 final class TemporaryFolder {

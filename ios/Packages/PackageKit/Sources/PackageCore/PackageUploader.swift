@@ -54,6 +54,10 @@ public enum PackageUploadError: Error, Hashable, Sendable, CustomStringConvertib
 ///   may point to different blobs: targets are used exactly as issued and staged blocks are kept
 ///   only while the blob (URL without its query) stays the same.
 /// - When every file is verified the manifest bytes are sent to seal, exactly as on disk.
+/// - The first session answer gives `registeredAt` (the station's `createdAt`, else the phone's
+///   time). Files the station answers as carried over from the superseded revision
+///   (`carriedOverFrom`) are recorded in `carriedOver` and confirmed through `completeFile` like
+///   any file the station already holds; they are never uploaded.
 /// - Nothing is ever deleted: not the package, not the state file.
 public actor PackageUploader {
   public let package: SealedPackage
@@ -166,6 +170,13 @@ public actor PackageUploader {
     else {
       throw PackageUploadError.sessionMismatch("file list differs")
     }
+    if state.registeredAt == nil {
+      // The station's own time when it sends one; the phone's otherwise (critique R-16).
+      state.registeredAt = session.createdAt ?? UTCTimestamp(now())
+    }
+    for file in session.files where file.carriedOverFrom != nil && file.status == .verified {
+      state.carriedOver.insert(file.path)
+    }
     if session.status != .uploading {
       // Already sealed at the station: sealing again with the same manifest is idempotent and
       // returns the package with every file's status.
@@ -177,7 +188,9 @@ public actor PackageUploader {
         continue
       }
       if remote.status == .verified {
-        // The station verified it (its answer was lost); confirm through completeFile.
+        // The station verified it (its answer was lost, or it carried the file over from the
+        // superseded revision); confirm through completeFile, which answers from the station's
+        // stored check.
         state.files[index].target = nil
         state.files[index].phase = .uploaded
         continue
@@ -418,6 +431,9 @@ public actor PackageUploader {
     }
     guard remote.count == state.files.count else {
       throw PackageUploadError.sealNotConfirmed("the station lists other files")
+    }
+    if state.registeredAt == nil {
+      state.registeredAt = result.createdAt
     }
     state.sealResult = result
     try save()

@@ -8,7 +8,8 @@ import Foundation
 ///   must match its source's SHA-256 and size, or assembly fails.
 /// - The manifest lists every file with role, capture, SHA-256, size, mime, generator and
 ///   `derivedFrom`, in the order of the draft, and is written last at
-///   `Source Register/{visitId}/manifest.json` with sorted keys.
+///   `Source Register/{visitId}/manifest.json` with sorted keys, as `schemaVersion` 1.1.0
+///   (`ManifestSchemaVersion.current`: a draft never holds a retired role).
 /// - The package is built in a hidden staging folder next to `root` and moved to `root` only once
 ///   complete, so `root` is either a whole sealed package or absent. Then every file and folder is
 ///   made read-only. `root` must not exist: packages are never written over.
