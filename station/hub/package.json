@@ -28,7 +28,7 @@
     "test": "node --import tsx --test \"test/**/*.test.ts\""
   },
   "dependencies": {
-    "@chapter/capture-contract": "1.0.0",
+    "@chapter/capture-contract": "1.1.0",
     "pdfkit": "0.20.2"
   },
   "devDependencies": {

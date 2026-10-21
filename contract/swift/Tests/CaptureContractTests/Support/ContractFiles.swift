@@ -16,6 +16,8 @@ enum ContractFiles {
   static let schemaDirectory = contractDirectory.appendingPathComponent("schema", isDirectory: true)
   static let examplesDirectory = contractDirectory.appendingPathComponent(
     "examples", isDirectory: true)
+  static let testVectorsDirectory = contractDirectory.appendingPathComponent(
+    "test-vectors", isDirectory: true)
 
   static func schemaURL(_ fileName: String) -> URL {
     schemaDirectory.appendingPathComponent(fileName)

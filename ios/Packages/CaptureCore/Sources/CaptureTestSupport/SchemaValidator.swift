@@ -4,7 +4,8 @@ import Foundation
 /// Swift has no JSON Schema library in the standard toolchain. Supported keywords: `$ref` (local
 /// `#/...` pointers), `type`, `const`, `enum`, `required`, `dependentRequired`, `properties`,
 /// `additionalProperties` (false or a schema), `items`, `minItems`, `maxItems`, `minLength`,
-/// `maxLength`, `pattern`, `minimum`, `maximum`, `exclusiveMinimum`, `if`/`then`/`else`, `not`,
+/// `maxLength`, `pattern`, `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`,
+/// `if`/`then`/`else`, `not`,
 /// and the boolean schemas `true` and `false`. Any other keyword that would change
 /// validation fails loudly (`unsupported keyword`), so a schema change cannot pass silently.
 /// `format` and the annotation keywords (`description`, `title`, `$schema`, `$id`, `$defs`) are ignored.
@@ -21,7 +22,7 @@ public struct SchemaValidator {
   private static let supported: Set<String> = [
     "$ref", "type", "const", "enum", "required", "dependentRequired", "properties",
     "additionalProperties", "items", "minItems", "maxItems", "minLength", "maxLength", "pattern",
-    "minimum", "maximum", "exclusiveMinimum", "if", "then", "else", "not",
+    "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "if", "then", "else", "not",
   ]
 
   /// Problems found in `instance`, as `<json pointer>: <problem>`. Empty when the instance is valid.
@@ -158,6 +159,9 @@ public struct SchemaValidator {
       }
       if case .number(let minimum)? = keywords["exclusiveMinimum"], value <= minimum {
         fail("\(value) is not above \(minimum)")
+      }
+      if case .number(let maximum)? = keywords["exclusiveMaximum"], value >= maximum {
+        fail("\(value) is not below \(maximum)")
       }
     default:
       break

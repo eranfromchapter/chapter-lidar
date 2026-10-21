@@ -31,6 +31,13 @@ import { writeSvg } from "./writers/svg.js";
 
 export const GENERATOR_VERSION = "1.0.0";
 export const SEALED_AT = "2026-10-17T15:10:00Z";
+/** File name of the plan sheet (role plan_pdf) in a v2 package. */
+export const PLAN_SHEET_NAME = "plan-sheet.pdf";
+
+/** File name of the n-th site photo of a capture (0-based). */
+export function photoName(index: number): string {
+  return `photo-${String(index + 1).padStart(4, "0")}.jpg`;
+}
 
 export interface PackageFile {
   path: string;
@@ -53,6 +60,8 @@ export interface GeneratedPackage {
   /** Every file except manifest.json. */
   files: PackageFile[];
   manifest: PackageManifest;
+  /** schemaVersion of the manifest (1.0.0 for a legacy package). */
+  manifestVersion: PackageManifest["schemaVersion"];
   /** Package-relative path of manifest.json. */
   manifestPath: string;
   /** Per capture: the generated source objects (kept for tests and mutations). */
@@ -105,13 +114,18 @@ export function entryOf(file: PackageFile): FileEntry {
   return entry;
 }
 
+/**
+ * The manifest of a package: schema 1.1.0, or 1.0.0 for a legacy package (sealed by an app
+ * before v2), the only version that allows its spatial_report_pdf file.
+ */
 export function buildManifest(
   visitId: string,
   packageId: string,
   files: readonly PackageFile[],
+  schemaVersion: PackageManifest["schemaVersion"] = "1.1.0",
 ): PackageManifest {
   return {
-    schemaVersion: "1.0.0",
+    schemaVersion,
     layoutVersion: "1.0.0",
     packageId,
     visitId,
@@ -151,7 +165,7 @@ export async function buildPackage(fixture: FixtureSpec): Promise<GeneratedPacka
     return { spec, captureId, dir, photoDir };
   });
   for (const { spec, photoDir } of per) {
-    photoPaths.set(spec.areaKey, `${photoDir}photo-0001.jpg`);
+    photoPaths.set(spec.areaKey, `${photoDir}${photoName(0)}`);
   }
   const controls = buildFieldControls(fixture, visitId, ids, photoPaths);
 
@@ -197,7 +211,6 @@ export async function buildPackage(fixture: FixtureSpec): Promise<GeneratedPacka
       operator: OPERATOR_NAME,
       date: (captureRecord?.capturedAt ?? "").slice(0, 10),
     };
-    const pdfs = { plan: writePlanPdf(model, meta), report: writeReportPdf(model, meta) };
     const own = { captureId, areaKey };
     const make = (
       name: string,
@@ -246,15 +259,37 @@ export async function buildPackage(fixture: FixtureSpec): Promise<GeneratedPacka
         modelPath,
       ]),
       make("rooms.csv", "rooms_csv", utf8(writeCsv(model)), "text/csv", "PlanExport", [modelPath]),
-      make("plan.pdf", "plan_pdf", pdfs.plan, "application/pdf", "PlanExport", [modelPath]),
-      make(
-        "spatial-report.pdf",
-        "spatial_report_pdf",
-        pdfs.report,
-        "application/pdf",
-        "PlanExport",
-        [modelPath],
-      ),
+      // v2 writes the plan sheet as plan-sheet.pdf; an app before v2 wrote plan.pdf and the
+      // phone's spatial report next to it.
+      ...(fixture.legacy === true
+        ? [
+            make(
+              "plan.pdf",
+              "plan_pdf",
+              writePlanPdf(model, meta),
+              "application/pdf",
+              "PlanExport",
+              [modelPath],
+            ),
+            make(
+              "spatial-report.pdf",
+              "spatial_report_pdf",
+              writeReportPdf(model, meta),
+              "application/pdf",
+              "PlanExport",
+              [modelPath],
+            ),
+          ]
+        : [
+            make(
+              PLAN_SHEET_NAME,
+              "plan_pdf",
+              writePlanPdf(model, meta),
+              "application/pdf",
+              "PlanExport",
+              [modelPath],
+            ),
+          ]),
       make("plan.png", "plan_png", writePlanPng(model), "image/png", "PlanExport", [modelPath]),
       make("plan.svg", "plan_svg", utf8(writeSvg(model)), "image/svg+xml", "PlanExport", [
         modelPath,
@@ -281,25 +316,38 @@ export async function buildPackage(fixture: FixtureSpec): Promise<GeneratedPacka
         [path("depth-samples.bin")],
       ),
     );
-    spec.rooms.forEach((room, index) => {
-      const photoName = `photo-${String(index + 1).padStart(4, "0")}.jpg`;
-      files.push({
-        path: `${photoDir}${photoName}`,
-        role: "photo",
-        ...own,
-        bytes: generatePhoto(seedFrom(`${fixture.name}:${areaKey}:photo:${room.id}`)),
-        mime: "image/jpeg",
-        generator: "chapter-fixtures/FieldKit",
-        generatorVersion: GENERATOR_VERSION,
-        derivedFrom: [],
-        photo: {
-          room: room.label,
-          direction: "N",
-          subject: "general",
-          takenAt: minutesAfter(captureRecord?.capturedAt ?? "2026-10-17T14:02:11Z", 5 + index),
-        },
+    // Photos in room order, numbered across the capture, one minute apart.
+    let sequence = 0;
+    for (const room of spec.rooms) {
+      const labels = spec.photos?.[room.id] ?? [{ direction: "N", subject: "general" }];
+      labels.forEach((label, index) => {
+        // The first photo of a room keeps the seed it always had, so its bytes do not change.
+        const seed = `${fixture.name}:${areaKey}:photo:${room.id}${index === 0 ? "" : `:${index + 1}`}`;
+        files.push({
+          path: `${photoDir}${photoName(sequence)}`,
+          role: "photo",
+          ...own,
+          bytes: generatePhoto(seedFrom(seed)),
+          mime: "image/jpeg",
+          generator: "chapter-fixtures/FieldKit",
+          generatorVersion: GENERATOR_VERSION,
+          derivedFrom: [],
+          photo: {
+            room: room.label,
+            direction: label.direction,
+            subject: label.subject,
+            takenAt: minutesAfter(
+              captureRecord?.capturedAt ?? "2026-10-17T14:02:11Z",
+              5 + sequence,
+            ),
+            ...(label.directionSource === undefined
+              ? {}
+              : { directionSource: label.directionSource }),
+          },
+        });
+        sequence += 1;
       });
-    });
+    }
     captures.push({ spec, captureId, model, samples });
   }
 
@@ -308,13 +356,15 @@ export async function buildPackage(fixture: FixtureSpec): Promise<GeneratedPacka
     visitId,
     new Map(per.map((entry) => [entry.spec.areaKey, entry.captureId])),
   );
+  const manifestVersion = fixture.legacy === true ? "1.0.0" : "1.1.0";
   return {
     fixture,
     visitId,
     packageId,
     truth,
     files,
-    manifest: buildManifest(visitId, packageId, files),
+    manifest: buildManifest(visitId, packageId, files, manifestVersion),
+    manifestVersion,
     manifestPath: manifestPathOf(visitId),
     captures,
     record,

@@ -8,7 +8,8 @@ import Foundation
 /// Swift has no JSON Schema library in the standard toolchain. Supported keywords: `$ref` (local
 /// `#/...` pointers), `type`, `const`, `enum`, `required`, `properties`, `additionalProperties`
 /// (false), `items`, `minItems`, `maxItems`, `uniqueItems`, `minLength`, `maxLength`, `pattern`,
-/// `minimum`, `maximum`, `exclusiveMinimum`, `if`/`then`/`else`, `not`, `allOf`, `anyOf`. Any other
+/// `minimum`, `maximum`, `exclusiveMinimum`, `if`/`then`/`else`, `not`, `allOf`, `anyOf`, and the
+/// boolean schemas `true` and `false` (manifest 1.1.0 refuses fields in 1.0.0 with `false`). Any other
 /// keyword that would change validation fails loudly (`unsupported keyword`), so a schema change
 /// cannot pass silently. `format` and the annotation keywords (`description`, `title`, `$schema`,
 /// `$id`, `$defs`) are ignored.
@@ -55,8 +56,12 @@ struct SchemaValidator {
   }
 
   private func check(_ instance: JSON, against schema: JSON, at path: String, into errors: inout [String]) {
-    guard case .object(let keywords) = schema else { return }
     func fail(_ message: String) { errors.append("\(path.isEmpty ? "/" : path): \(message)") }
+    if case .bool(let allowed) = schema {
+      if !allowed { fail("no value is allowed here") }
+      return
+    }
+    guard case .object(let keywords) = schema else { return }
 
     for key in keywords.keys.sorted()
     where !Self.supported.contains(key) && !Self.annotations.contains(key) {

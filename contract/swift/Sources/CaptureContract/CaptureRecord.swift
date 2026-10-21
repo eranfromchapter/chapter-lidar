@@ -2,8 +2,13 @@
 /// site visit at one property. A visit holds one or more captures; each capture is one floor or
 /// area scanned in one mode, registered separately with its own `captureId`. Written as
 /// `Source Register/{visitId}/capture-record.json`.
+///
+/// Reads schema 1.0.0 and 1.1.0 and always writes `CaptureRecordSchemaVersion.current`: 1.1.0
+/// only adds optional fields (the compass reading of each capture), so every record is a valid
+/// 1.1.0 document, while a 1.0.0 document may not carry the 1.1.0 fields.
 public struct CaptureRecord: Hashable, Sendable, Codable {
-  public var schemaVersion: SchemaVersion
+  /// The version this record was read as; `.current` for a new record. Not written: see the type.
+  public var schemaVersion: CaptureRecordSchemaVersion
   public var visitId: LowercaseUUID
   public var hub: HubProject
   public var address: Address
@@ -16,7 +21,7 @@ public struct CaptureRecord: Hashable, Sendable, Codable {
   public var captures: [Capture]
 
   public init(
-    schemaVersion: SchemaVersion = .current,
+    schemaVersion: CaptureRecordSchemaVersion = .current,
     visitId: LowercaseUUID,
     hub: HubProject,
     address: Address,
@@ -35,6 +40,25 @@ public struct CaptureRecord: Hashable, Sendable, Codable {
     self.app = app
     self.visitedAt = visitedAt
     self.captures = captures
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case schemaVersion, visitId, hub, address, `operator`, device, app, visitedAt, captures
+  }
+
+  // Decoding is synthesized: `schemaVersion` accepts every `CaptureRecordSchemaVersion`.
+
+  public func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(CaptureRecordSchemaVersion.current, forKey: .schemaVersion)
+    try container.encode(visitId, forKey: .visitId)
+    try container.encode(hub, forKey: .hub)
+    try container.encode(address, forKey: .address)
+    try container.encode(`operator`, forKey: .operator)
+    try container.encode(device, forKey: .device)
+    try container.encode(app, forKey: .app)
+    try container.encode(visitedAt, forKey: .visitedAt)
+    try container.encode(captures, forKey: .captures)
   }
 
   /// The HUB project this visit belongs to.
@@ -126,6 +150,17 @@ public struct CaptureRecord: Hashable, Sendable, Codable {
     public var omittedRooms: [RoomNote]
     /// Rooms or spaces that could not be entered. Empty when none.
     public var inaccessibleRooms: [RoomNote]
+    /// Compass bearing of this capture's −Z axis (plan up), degrees clockwise from north,
+    /// `0 ..< 360`, one decimal (1.1.0). Nil when there is no reading.
+    public var heading: Double?
+    /// Accuracy of the reading in whole degrees, `1 ... 180` (1.1.0). Present exactly with `heading`.
+    public var headingAccuracy: Int?
+    /// True or magnetic north (1.1.0). Present exactly with `heading`.
+    public var headingSource: HeadingSource?
+    /// When the reading was taken (1.1.0). Present exactly with `heading`.
+    public var headingRecordedAt: UTCTimestamp?
+    /// Why there is no heading although the app tried (1.1.0). Never together with `heading`.
+    public var headingIssue: HeadingIssue?
 
     public init(
       captureId: LowercaseUUID,
@@ -137,7 +172,12 @@ public struct CaptureRecord: Hashable, Sendable, Codable {
       finishedAt: UTCTimestamp? = nil,
       coverageNotes: String = "",
       omittedRooms: [RoomNote] = [],
-      inaccessibleRooms: [RoomNote] = []
+      inaccessibleRooms: [RoomNote] = [],
+      heading: Double? = nil,
+      headingAccuracy: Int? = nil,
+      headingSource: HeadingSource? = nil,
+      headingRecordedAt: UTCTimestamp? = nil,
+      headingIssue: HeadingIssue? = nil
     ) {
       self.captureId = captureId
       self.areaKey = areaKey
@@ -149,6 +189,32 @@ public struct CaptureRecord: Hashable, Sendable, Codable {
       self.coverageNotes = coverageNotes
       self.omittedRooms = omittedRooms
       self.inaccessibleRooms = inaccessibleRooms
+      self.heading = heading
+      self.headingAccuracy = headingAccuracy
+      self.headingSource = headingSource
+      self.headingRecordedAt = headingRecordedAt
+      self.headingIssue = headingIssue
+    }
+
+    /// Records the result of the floor's compass reading: the four reading fields, or the issue
+    /// (nil when the app could not tell why there is no reading), and clears the others. The
+    /// heading is rounded to one decimal and kept in `0 ..< 360`; the accuracy is kept in
+    /// `1 ... 180`, so the record stays valid against the schema.
+    public mutating func setCompass(_ result: CompassResultValue) {
+      switch result {
+      case .reading(let heading, let accuracy, let source, let recordedAt):
+        self.heading = CompassMath.storedHeading(heading)
+        headingAccuracy = min(max(accuracy, 1), 180)
+        headingSource = source
+        headingRecordedAt = recordedAt
+        headingIssue = nil
+      case .none(let issue):
+        heading = nil
+        headingAccuracy = nil
+        headingSource = nil
+        headingRecordedAt = nil
+        headingIssue = issue
+      }
     }
   }
 

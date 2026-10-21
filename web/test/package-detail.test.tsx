@@ -103,7 +103,7 @@ describe("fixture verdicts", () => {
   it("covers all three outcomes", () => {
     const outcomes = new Set(cases.map((fixture) => fixture.verdict.outcome));
     expect([...outcomes].sort()).toEqual(["blocked", "limited", "ready"]);
-    expect(cases.length).toBe(12);
+    expect(cases.length).toBe(13);
   });
 });
 

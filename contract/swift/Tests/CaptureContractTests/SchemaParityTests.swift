@@ -130,10 +130,10 @@ final class SchemaParityTests: XCTestCase {
   /// one version, an `enum` for several.
   func testEachDocumentsSchemaVersionsMatchItsSchema() throws {
     let versions: [String: [String]] = [
-      "capture-record": SchemaVersion.allCases.map(\.rawValue),
+      "capture-record": CaptureRecordSchemaVersion.allCases.map(\.rawValue),
       "capture-model": CaptureModelSchemaVersion.allCases.map(\.rawValue),
       "field-controls": SchemaVersion.allCases.map(\.rawValue),
-      "manifest": SchemaVersion.allCases.map(\.rawValue),
+      "manifest": ManifestSchemaVersion.allCases.map(\.rawValue),
       "verdict": SchemaVersion.allCases.map(\.rawValue),
     ]
     XCTAssertEqual(
@@ -166,11 +166,66 @@ final class SchemaParityTests: XCTestCase {
       "the version capture-model.schema.json refuses the 1.1.0 fields in")
   }
 
+  func testCaptureRecordWritesTheNewestVersionAndLimitsTheOldest() throws {
+    let schema = try SchemaReader(fileName: "capture-record.schema.json")
+    XCTAssertEqual(
+      CaptureRecordSchemaVersion.current.rawValue,
+      try schema.strings(at: ["properties", "schemaVersion", "enum"]).last,
+      "CaptureRecordSchemaVersion.current vs the newest capture-record.schema.json schemaVersion")
+    XCTAssertEqual(
+      CaptureRecordSchemaVersion.v1.rawValue,
+      try schema.string(at: ["if", "properties", "schemaVersion", "const"]),
+      "the version capture-record.schema.json refuses the compass fields in")
+    let refused = try XCTUnwrap(
+      try schema.value(at: ["then", "properties", "captures", "items", "properties"])
+        as? [String: Any])
+    try assertSameValues(
+      Array(refused.keys),
+      ["heading", "headingAccuracy", "headingSource", "headingRecordedAt", "headingIssue"],
+      "fields refused in a 1.0.0 capture record")
+  }
+
+  func testManifestWritesTheNewestVersionAndRetiresTheRetiredRoles() throws {
+    let schema = try SchemaReader(fileName: "manifest.schema.json")
+    let versions = try schema.strings(at: ["properties", "schemaVersion", "enum"])
+    XCTAssertEqual(ManifestSchemaVersion.current.rawValue, versions.last)
+    let rules = try XCTUnwrap(try schema.value(at: ["allOf"]) as? [[String: Any]])
+    func rule(for version: ManifestSchemaVersion) throws -> [String: Any] {
+      let found = rules.first { rule in
+        let condition = (rule["if"] as? [String: Any])?["properties"] as? [String: Any]
+        return (condition?["schemaVersion"] as? [String: Any])?["const"] as? String
+          == version.rawValue
+      }
+      return try XCTUnwrap(found?["then"] as? [String: Any], "no rule for \(version.rawValue)")
+    }
+    func value(_ object: [String: Any], _ path: [String]) -> Any? {
+      path.reduce(object as Any?) { ($0 as? [String: Any])?[$1] }
+    }
+    let retired = try XCTUnwrap(
+      value(
+        try rule(for: .current),
+        ["properties", "files", "items", "properties", "role", "not", "enum"]) as? [String])
+    try assertSameValues(
+      FileRole.retiredRoles.map(\.rawValue), retired,
+      "FileRole.retiredRoles vs the roles manifest 1.1.0 refuses")
+    for role in FileRole.allCases {
+      XCTAssertEqual(role.isRetired, FileRole.retiredRoles.contains(role), "\(role).isRetired")
+    }
+    let photo = try XCTUnwrap(
+      value(try rule(for: .v1), ["properties", "files", "items", "properties", "photo", "properties"])
+        as? [String: Any])
+    XCTAssertEqual(Array(photo.keys), ["directionSource"], "fields refused in a 1.0.0 manifest")
+  }
+
   // MARK: Other closed enums and constants
 
   func testCaptureRecordEnumsMatchSchema() throws {
     let schema = try SchemaReader(fileName: "capture-record.schema.json")
     try assertEnum(CaptureMode.self, schema, ["$defs", "captureMode", "enum"])
+    try assertEnum(
+      HeadingSource.self, schema, ["$defs", "capture", "properties", "headingSource", "enum"])
+    try assertEnum(
+      HeadingIssue.self, schema, ["$defs", "capture", "properties", "headingIssue", "enum"])
     try assertEnum(
       DeviceOSName.self, schema, ["properties", "device", "properties", "osName", "enum"])
     try assertEnum(
@@ -206,6 +261,9 @@ final class SchemaParityTests: XCTestCase {
     let schema = try SchemaReader(fileName: "manifest.schema.json")
     try assertEnum(PhotoDirection.self, schema, ["$defs", "photoDirection", "enum"])
     try assertEnum(PhotoSubject.self, schema, ["$defs", "photoSubject", "enum"])
+    try assertEnum(
+      PhotoDirectionSource.self, schema,
+      ["$defs", "photo", "properties", "directionSource", "enum"])
   }
 
   func testVerdictEnumsMatchSchema() throws {

@@ -15,7 +15,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@chapter/capture-contract": "1.0.0",
+    "@chapter/capture-contract": "1.1.0",
     "next": "16.4.2",
     "next-auth": "5.0.0-beta.32",
     "react": "19.3.1",

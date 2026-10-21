@@ -16,7 +16,7 @@ export type DateTime = string;
  */
 export type RelativePath = string;
 /**
- * Closed set of file roles from the intake guide, plus capture_model (the normalized CaptureModel JSON of one capture). Each role belongs to exactly one folder in layout.json.
+ * Closed set of file roles from the intake guide, plus capture_model (the normalized CaptureModel JSON of one capture). Each role belongs to exactly one folder in layout.json. spatial_report_pdf is retired: written only in manifest 1.0.0 by app builds before v2; never in 1.1.0. The spatial report is a station output, not a package file.
  */
 export type Role =
   | "capture_record"
@@ -51,7 +51,10 @@ export type PhotoSubject =
  * Inventory of one sealed intake package for one site visit: one entry per file with its role, SHA-256 fingerprint, size, type and provenance. Written at sealing as Source Register/{visitId}/manifest.json (see layout.json); the manifest does not list itself. Paths are unique within the manifest. Files that belong to one capture carry its captureId and areaKey; visit-wide files (capture_record, field_controls) carry neither. A changed package is a new revision with a new packageId. Optional fields are omitted, never null.
  */
 export interface PackageManifest {
-  schemaVersion: "1.0.0";
+  /**
+   * 1.1.0 adds the optional photo.directionSource and retires the role spatial_report_pdf; a 1.0.0 document does not carry directionSource, a 1.1.0 document lists no spatial_report_pdf file. Readers accept both versions; writers write 1.1.0.
+   */
+  schemaVersion: "1.0.0" | "1.1.0";
   /**
    * Version of contract/schema/layout.json the paths follow.
    */
@@ -102,4 +105,8 @@ export interface Photo {
   direction: PhotoDirection;
   subject: PhotoSubject;
   takenAt: DateTime;
+  /**
+   * How direction was set. compass: pre-filled from the phone's compass when the photo was taken and kept by the operator. manual: chosen or changed by the operator. Absent in 1.0.0 documents.
+   */
+  directionSource?: "compass" | "manual";
 }

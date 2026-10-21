@@ -2,10 +2,10 @@
 // from contract/schema. Browser-safe; Node-only helpers are in
 // "@chapter/capture-contract/node".
 
-import { LAYOUT, ROLES, VISIT_ROLES } from "./generated/constants.js";
-import type { Role } from "./generated/manifest.js";
+import { LAYOUT, RETIRED_ROLES, ROLES, VISIT_ROLES } from "./generated/constants.js";
+import type { Photo, Role } from "./generated/manifest.js";
 
-export { LAYOUT, ROLES, VISIT_ROLES };
+export { LAYOUT, RETIRED_ROLES, ROLES, VISIT_ROLES };
 
 export type {
   CaptureModel,
@@ -60,8 +60,68 @@ export {
 } from "./validators.js";
 export type { ContractError, SchemaName, SchemaTypes, ValidationResult } from "./validators.js";
 
+export {
+  COMPASS_APPROXIMATE_MAX,
+  COMPASS_VERIFIED_MAX,
+  NOT_VERIFIED_BOX,
+  compassDetail,
+  compassState,
+  compassWord,
+  formatAccuracy,
+  formatHeading,
+  isUsable,
+  northSymbol,
+  reasonCaption,
+} from "./compass.js";
+export type {
+  CompassFields,
+  CompassReason,
+  CompassState,
+  CompassWord,
+  HeadingIssue,
+  HeadingSource,
+  NorthSymbol,
+} from "./compass.js";
+
+export {
+  NO_NEXT_ACTION,
+  OUTCOME_WORD,
+  RESULT_GLYPH,
+  RESULT_TONE,
+  RESULT_WORD,
+  checkCounts,
+  checkRows,
+  countsLine,
+  lowerFirst,
+  notScannedRoomText,
+  notScannedRooms,
+  notScannedText,
+  ruleResult,
+  ruleSetLabel,
+  sortCheckRows,
+  verdictHeadline,
+} from "./review-text.js";
+export type {
+  CheckCounts,
+  CheckRow,
+  FoundBlock,
+  NotScannedRoom,
+  RuleResult,
+} from "./review-text.js";
+
+/** How a photo's direction was set (manifest 1.1.0 `photo.directionSource`). */
+export type PhotoDirectionSource = NonNullable<Photo["directionSource"]>;
+
 /** Roles of visit-wide files: they carry no captureId or areaKey. */
 export type VisitRole = (typeof VISIT_ROLES)[number];
+
+/** Retired roles: listed only by manifest 1.0.0 packages from app builds before v2. */
+export type RetiredRole = (typeof RETIRED_ROLES)[number];
+
+/** True for a retired role (a 1.1.0 manifest never lists one). */
+export function isRetiredRole(role: Role): role is RetiredRole {
+  return (RETIRED_ROLES as readonly Role[]).includes(role);
+}
 
 /** One folder of the package layout. */
 export type LayoutFolder = (typeof LAYOUT.folders)[number];

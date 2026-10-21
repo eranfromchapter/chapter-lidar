@@ -1,0 +1,184 @@
+{
+  "schemaVersion": "1.1.0",
+  "layoutVersion": "1.0.0",
+  "packageId": "9b2e4d71-5a3c-4f08-b6e9-1c7d2a8f4e60",
+  "visitId": "7c4e1b9a-2d3f-4a68-9b5c-e0f1a2b3c4d5",
+  "revision": 1,
+  "sealedAt": "2026-10-17T15:05:00Z",
+  "files": [
+    {
+      "path": "Source Register/7c4e1b9a-2d3f-4a68-9b5c-e0f1a2b3c4d5/capture-record.json",
+      "role": "capture_record",
+      "sha256": "6245a9c175e051f5cbc7a4180f560b3d71d28284118e35c47e600b0cbf526573",
+      "bytes": 2140,
+      "mime": "application/json",
+      "generator": "chapter-capture-ios/App",
+      "generatorVersion": "1.0.0 (42)",
+      "derivedFrom": []
+    },
+    {
+      "path": "Field Measurements/7c4e1b9a-2d3f-4a68-9b5c-e0f1a2b3c4d5/field-controls.json",
+      "role": "field_controls",
+      "sha256": "c0bdd41fbf19ce39931b83696795b988e9193ff9a039e39c4b15cc6563908412",
+      "bytes": 2650,
+      "mime": "application/json",
+      "generator": "chapter-capture-ios/FieldKit",
+      "generatorVersion": "1.0.0 (42)",
+      "derivedFrom": []
+    },
+    {
+      "path": "Original Exports/floor-1/3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35/roomplan.json",
+      "role": "raw_roomplan_json",
+      "captureId": "3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35",
+      "areaKey": "floor-1",
+      "sha256": "9ee694434870bd073f00d509c0b89a620b50fd4dd3ae87b3f98c92183a81b62c",
+      "bytes": 412883,
+      "mime": "application/json",
+      "generator": "chapter-capture-ios/CaptureCore",
+      "generatorVersion": "1.0.0 (42)",
+      "derivedFrom": []
+    },
+    {
+      "path": "Original Exports/floor-1/3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35/depth-samples.bin",
+      "role": "raw_depth",
+      "captureId": "3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35",
+      "areaKey": "floor-1",
+      "sha256": "36801b4f22612ce54de706212dff19d9980e91ad8293fe4291d28d96ab4f029d",
+      "bytes": 52428800,
+      "mime": "application/octet-stream",
+      "generator": "chapter-capture-ios/CaptureCore",
+      "generatorVersion": "1.0.0 (42)",
+      "derivedFrom": []
+    },
+    {
+      "path": "Original Exports/floor-1/3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35/capture-model.json",
+      "role": "capture_model",
+      "captureId": "3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35",
+      "areaKey": "floor-1",
+      "sha256": "ba281c8451ae97ab287cbc1b8233b87a31cb70bca30177259c70ccc7d842c0a1",
+      "bytes": 18342,
+      "mime": "application/json",
+      "generator": "chapter-capture-ios/CaptureCore",
+      "generatorVersion": "1.0.0 (42)",
+      "derivedFrom": ["Original Exports/floor-1/3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35/roomplan.json"]
+    },
+    {
+      "path": "Original Exports/floor-1/3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35/plan.dxf",
+      "role": "plan_dxf",
+      "captureId": "3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35",
+      "areaKey": "floor-1",
+      "sha256": "2503b19c26ff845d3fa3b0c0988436a8abe944c056ca1247ab6ff391043779ab",
+      "bytes": 1258291,
+      "mime": "image/vnd.dxf",
+      "generator": "chapter-capture-ios/PlanExport",
+      "generatorVersion": "1.0.0 (42)",
+      "derivedFrom": [
+        "Original Exports/floor-1/3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35/capture-model.json"
+      ]
+    },
+    {
+      "path": "Original Exports/floor-1/3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35/rooms.csv",
+      "role": "rooms_csv",
+      "captureId": "3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35",
+      "areaKey": "floor-1",
+      "sha256": "db5471fa85e39a9bbcf98537e360446811dbee4af7a2fbc4857c320f3b65397b",
+      "bytes": 912,
+      "mime": "text/csv",
+      "generator": "chapter-capture-ios/PlanExport",
+      "generatorVersion": "1.0.0 (42)",
+      "derivedFrom": [
+        "Original Exports/floor-1/3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35/capture-model.json"
+      ]
+    },
+    {
+      "path": "Original Exports/floor-1/3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35/mesh.glb",
+      "role": "mesh_glb",
+      "captureId": "3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35",
+      "areaKey": "floor-1",
+      "sha256": "0174ef487865965edb56dfbc8467eea9c1655a8db01381fc7e3bd2388f6ab99e",
+      "bytes": 100663296,
+      "mime": "model/gltf-binary",
+      "generator": "chapter-capture-ios/MeshExport",
+      "generatorVersion": "1.0.0 (42)",
+      "derivedFrom": [
+        "Original Exports/floor-1/3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35/depth-samples.bin"
+      ]
+    },
+    {
+      "path": "Original Exports/floor-1/3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35/points.las",
+      "role": "point_cloud_las",
+      "captureId": "3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35",
+      "areaKey": "floor-1",
+      "sha256": "d2283405541ea03827d6f31e18d2832142f3c292e77735f332867edc440ac436",
+      "bytes": 188743680,
+      "mime": "application/vnd.las",
+      "generator": "chapter-capture-ios/MeshExport",
+      "generatorVersion": "1.0.0 (42)",
+      "derivedFrom": [
+        "Original Exports/floor-1/3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35/depth-samples.bin"
+      ]
+    },
+    {
+      "path": "Site Photos/floor-1/3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35/photo-0014.jpg",
+      "role": "photo",
+      "captureId": "3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35",
+      "areaKey": "floor-1",
+      "sha256": "2f650dc9275baa923fb6457b653f99e35a2f629a3b9436b718baa3d35ceda34a",
+      "bytes": 3145728,
+      "mime": "image/jpeg",
+      "generator": "chapter-capture-ios/FieldKit",
+      "generatorVersion": "1.0.0 (42)",
+      "derivedFrom": [],
+      "photo": {
+        "room": "Kitchen",
+        "direction": "N",
+        "subject": "cabinetry",
+        "takenAt": "2026-10-17T14:47:31Z",
+        "directionSource": "compass"
+      }
+    },
+    {
+      "path": "Site Photos/floor-1/3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35/photo-0015.jpg",
+      "role": "photo",
+      "captureId": "3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35",
+      "areaKey": "floor-1",
+      "sha256": "7d1f0c2b9e4a6d3c5b8a1f0e2d4c6b8a0f1e3d5c7b9a1f2e4d6c8b0a2f4e6d81",
+      "bytes": 2981133,
+      "mime": "image/jpeg",
+      "generator": "chapter-capture-ios/FieldKit",
+      "generatorVersion": "1.0.0 (42)",
+      "derivedFrom": [],
+      "photo": {
+        "room": "Kitchen",
+        "direction": "E",
+        "subject": "fixture",
+        "takenAt": "2026-10-17T14:48:02Z",
+        "directionSource": "manual"
+      }
+    },
+    {
+      "path": "Original Exports/floor-2/a81d5f03-6c2e-4b97-8d14-2f9e7b3c5a60/roomplan.json",
+      "role": "raw_roomplan_json",
+      "captureId": "a81d5f03-6c2e-4b97-8d14-2f9e7b3c5a60",
+      "areaKey": "floor-2",
+      "sha256": "8cdbd17b52dbab02f999cb300e15b7a1a93501385fe9448ad085affd7106dd5f",
+      "bytes": 298114,
+      "mime": "application/json",
+      "generator": "chapter-capture-ios/CaptureCore",
+      "generatorVersion": "1.0.0 (42)",
+      "derivedFrom": []
+    },
+    {
+      "path": "Original Exports/floor-2/a81d5f03-6c2e-4b97-8d14-2f9e7b3c5a60/capture-model.json",
+      "role": "capture_model",
+      "captureId": "a81d5f03-6c2e-4b97-8d14-2f9e7b3c5a60",
+      "areaKey": "floor-2",
+      "sha256": "d3505ebad4addf074a3d3d6a9eb8252894174fb903ac2e5c9b358e30cdcf29ea",
+      "bytes": 9120,
+      "mime": "application/json",
+      "generator": "chapter-capture-ios/CaptureCore",
+      "generatorVersion": "1.0.0 (42)",
+      "derivedFrom": ["Original Exports/floor-2/a81d5f03-6c2e-4b97-8d14-2f9e7b3c5a60/roomplan.json"]
+    }
+  ]
+}

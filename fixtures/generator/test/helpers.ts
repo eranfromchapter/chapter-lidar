@@ -41,14 +41,21 @@ export function readTree(dir: string): Map<string, Buffer> {
   return new Map(listFiles(dir).map((path) => [path, readFileSync(join(dir, path))]));
 }
 
+export interface IndexFixture {
+  name: string;
+  description: string;
+  legacy?: boolean;
+  truth: string;
+  packageRoot: string;
+  manifest: string;
+  visitId: string;
+}
+
 export interface GeneratedIndex {
-  fixtures: Array<{
-    name: string;
-    truth: string;
-    packageRoot: string;
-    manifest: string;
-    visitId: string;
-  }>;
+  generatedFormatVersion: string;
+  fixtures: IndexFixture[];
+  legacy: IndexFixture[];
+  samples: IndexFixture[];
   broken: Array<{
     defectId: string;
     baseFixture: string;
@@ -119,14 +126,28 @@ export function loadPackage(
   };
 }
 
-export function loadGood(name: string): LoadedFixture {
-  const entry = readIndex().fixtures.find((fixture) => fixture.name === name);
+function loadListed(list: "fixtures" | "legacy" | "samples", name: string): LoadedFixture {
+  const entry = readIndex()[list].find((fixture) => fixture.name === name);
   if (entry === undefined) {
-    throw new Error(`Unknown fixture ${name}`);
+    throw new Error(`Unknown fixture ${name} in index ${list}`);
   }
   const loaded = loadPackage(name, entry.packageRoot, entry.manifest);
   loaded.truth = readJson<TruthJson>(join(generatedDir, entry.truth));
   return loaded;
+}
+
+export function loadGood(name: string): LoadedFixture {
+  return loadListed("fixtures", name);
+}
+
+/** A package sealed by an app before v2 (index.json `legacy`). */
+export function loadLegacy(name: string): LoadedFixture {
+  return loadListed("legacy", name);
+}
+
+/** A design sample (index.json `samples`). */
+export function loadSample(name: string): LoadedFixture {
+  return loadListed("samples", name);
 }
 
 export function loadBroken(defectId: string): LoadedFixture {

@@ -101,14 +101,31 @@ final class OpenAPIParityTests: XCTestCase {
     return Document(serverURL: serverURL, operations: operations)
   }
 
+  /// Operations of station.yaml (1.1.0) that the phone client does not call: the review
+  /// screen's lists, archive and report link, and the next-revision notice until the phone
+  /// sends it. The parity checks below cover every other operation.
+  static let notInClient: Set<String> = [
+    "putNextRevisionNotice",
+    "getSpatialReportLink",
+    "requestPackageArchive",
+    "getPackageArchive",
+    "listReviewProjects",
+    "listReviewPackages",
+    "listAllModelingDecisions",
+  ]
+
   func loadDocument() throws -> Document {
     let text = String(
       decoding: try RepoFiles.data("contract/openapi/station.yaml"), as: UTF8.self)
-    let document = Self.parse(text)
+    var document = Self.parse(text)
     XCTAssertFalse(document.operations.isEmpty, "no operations read from station.yaml")
     for operation in document.operations {
       XCTAssertFalse(operation.operationId.isEmpty, "\(operation) has no operationId")
     }
+    XCTAssertEqual(
+      Self.notInClient.subtracting(document.operations.map(\.operationId)), [],
+      "operations listed as not in the client that station.yaml does not have")
+    document.operations.removeAll { Self.notInClient.contains($0.operationId) }
     return document
   }
 

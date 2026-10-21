@@ -23,7 +23,11 @@ export const captureRecordSchema: Record<string, unknown> = {
     "captures",
   ],
   properties: {
-    schemaVersion: { const: "1.0.0" },
+    schemaVersion: {
+      description:
+        "1.1.0 adds the optional compass reading of each capture (heading, headingAccuracy, headingSource, headingRecordedAt) and headingIssue; a 1.0.0 document does not carry them. Readers accept both versions; writers write 1.1.0.",
+      enum: ["1.0.0", "1.1.0"],
+    },
     visitId: { $ref: "#/$defs/uuid" },
     hub: {
       description: "The HUB project this visit belongs to.",
@@ -133,6 +137,25 @@ export const captureRecordSchema: Record<string, unknown> = {
       items: { $ref: "#/$defs/capture" },
     },
   },
+  if: { properties: { schemaVersion: { const: "1.0.0" } } },
+  then: {
+    description: "A 1.0.0 document carries none of the fields added in 1.1.0.",
+    properties: {
+      captures: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            heading: false,
+            headingAccuracy: false,
+            headingSource: false,
+            headingRecordedAt: false,
+            headingIssue: false,
+          },
+        },
+      },
+    },
+  },
   $defs: {
     uuid: {
       description: "Lowercase RFC 9562 UUID.",
@@ -220,6 +243,47 @@ export const captureRecordSchema: Record<string, unknown> = {
           type: "array",
           items: { $ref: "#/$defs/roomNote" },
         },
+        heading: {
+          description:
+            "Compass bearing of this capture's -Z axis (plan up: plan y is -Z), in degrees clockwise from north, 0 <= heading < 360, one decimal. True north when headingSource is true, magnetic north when magnetic. Read by the phone compass at the start of the scan and matched to the scan frame; never typed. Omitted when there is no reading: the orientation is then not verified.",
+          type: "number",
+          minimum: 0,
+          exclusiveMaximum: 360,
+        },
+        headingAccuracy: {
+          description:
+            "Compass accuracy reported by the phone for the reading, whole degrees rounded up: the heading is within plus or minus this value. Verified at 10 or less with a true heading; approximate up to 30; not verified above 30.",
+          type: "integer",
+          minimum: 1,
+          maximum: 180,
+        },
+        headingSource: {
+          description:
+            "true: corrected to true north with the phone's location. magnetic: magnetic north only (Location off).",
+          enum: ["true", "magnetic"],
+        },
+        headingRecordedAt: {
+          description: "When the compass reading was taken.",
+          $ref: "#/$defs/dateTime",
+        },
+        headingIssue: {
+          description:
+            "Why there is no heading although the app tried: rejected (readings disagreed or could not be matched to the scan), not_calibrated (the compass reported no valid accuracy), unavailable (no usable compass on the device). Never present together with heading.",
+          enum: ["rejected", "not_calibrated", "unavailable"],
+        },
+      },
+      dependentRequired: {
+        heading: ["headingAccuracy", "headingSource", "headingRecordedAt"],
+        headingAccuracy: ["heading"],
+        headingSource: ["heading"],
+        headingRecordedAt: ["heading"],
+      },
+      not: {
+        properties: {
+          heading: { $ref: "#/$defs/capture/properties/heading" },
+          headingIssue: { $ref: "#/$defs/capture/properties/headingIssue" },
+        },
+        required: ["heading", "headingIssue"],
       },
     },
   },
@@ -756,7 +820,11 @@ export const manifestSchema: Record<string, unknown> = {
     "files",
   ],
   properties: {
-    schemaVersion: { const: "1.0.0" },
+    schemaVersion: {
+      description:
+        "1.1.0 adds the optional photo.directionSource and retires the role spatial_report_pdf; a 1.0.0 document does not carry directionSource, a 1.1.0 document lists no spatial_report_pdf file. Readers accept both versions; writers write 1.1.0.",
+      enum: ["1.0.0", "1.1.0"],
+    },
     layoutVersion: {
       description: "Version of contract/schema/layout.json the paths follow.",
       const: "1.0.0",
@@ -787,6 +855,38 @@ export const manifestSchema: Record<string, unknown> = {
     properties: { supersedesPackageId: { $ref: "#/$defs/uuid" } },
     required: ["supersedesPackageId"],
   },
+  allOf: [
+    {
+      if: { properties: { schemaVersion: { const: "1.0.0" } } },
+      then: {
+        description: "A 1.0.0 document carries none of the fields added in 1.1.0.",
+        properties: {
+          files: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: { photo: { type: "object", properties: { directionSource: false } } },
+            },
+          },
+        },
+      },
+    },
+    {
+      if: { properties: { schemaVersion: { const: "1.1.0" } } },
+      then: {
+        description: "A 1.1.0 document lists no file with a retired role.",
+        properties: {
+          files: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: { role: { not: { enum: ["spatial_report_pdf"] } } },
+            },
+          },
+        },
+      },
+    },
+  ],
   $defs: {
     uuid: {
       description: "Lowercase RFC 9562 UUID.",
@@ -815,7 +915,7 @@ export const manifestSchema: Record<string, unknown> = {
     },
     role: {
       description:
-        "Closed set of file roles from the intake guide, plus capture_model (the normalized CaptureModel JSON of one capture). Each role belongs to exactly one folder in layout.json.",
+        "Closed set of file roles from the intake guide, plus capture_model (the normalized CaptureModel JSON of one capture). Each role belongs to exactly one folder in layout.json. spatial_report_pdf is retired: written only in manifest 1.0.0 by app builds before v2; never in 1.1.0. The spatial report is a station output, not a package file.",
       enum: [
         "capture_record",
         "raw_roomplan_json",
@@ -862,6 +962,11 @@ export const manifestSchema: Record<string, unknown> = {
         direction: { $ref: "#/$defs/photoDirection" },
         subject: { $ref: "#/$defs/photoSubject" },
         takenAt: { $ref: "#/$defs/dateTime" },
+        directionSource: {
+          description:
+            "How direction was set. compass: pre-filled from the phone's compass when the photo was taken and kept by the operator. manual: chosen or changed by the operator. Absent in 1.0.0 documents.",
+          enum: ["compass", "manual"],
+        },
       },
     },
     fileEntry: {

@@ -6,7 +6,8 @@ import type { P2, V3 } from "./util.js";
 
 export type OpeningKind = "door" | "window" | "opening";
 export type CaptureModeName = "room" | "floor" | "exterior";
-export type ObjectCategory = "bed" | "sofa" | "stairs" | "table";
+export type ObjectCategory =
+  "bathtub" | "bed" | "sink" | "sofa" | "stairs" | "storage" | "stove" | "table" | "toilet";
 
 export interface RoomSpec {
   id: string;
@@ -61,6 +62,22 @@ export interface FrameSpec {
   translate: V3;
 }
 
+/**
+ * The compass reading recorded at the start of the capture's scan (capture record 1.1.0):
+ * a reading taken `offsetSeconds` after capturedAt, or the issue that left none.
+ */
+export type CompassSpec =
+  | { heading: number; accuracy: number; source: "true" | "magnetic"; offsetSeconds: number }
+  | { issue: "rejected" | "not_calibrated" | "unavailable" };
+
+/** Labels of one site photo; the room and the file come from the capture. */
+export interface PhotoSpec {
+  direction: "N" | "E" | "S" | "W";
+  subject: "opening" | "cabinetry" | "ceiling" | "fixture" | "equipment" | "defect" | "general";
+  /** How the direction was set (manifest 1.1.0); omitted when absent. */
+  directionSource?: "compass" | "manual";
+}
+
 export interface CaptureSpec {
   areaKey: string;
   label: string;
@@ -72,6 +89,19 @@ export interface CaptureSpec {
   objects: ObjectSpec[];
   distances: DistanceSpec[];
   coverageNotes: string;
+  /** Units shown to the operator; metric when absent. */
+  display?: "metric" | "imperial";
+  /** Compass reading of the scan; a capture without one records no compass fields. */
+  compass?: CompassSpec;
+  /** Rooms the operator chose not to scan. */
+  omittedRooms?: Array<{ name: string; reason?: string }>;
+  /** Rooms that could not be entered. */
+  inaccessibleRooms?: Array<{ name: string; reason?: string }>;
+  /**
+   * Site photos per room id, in order. A room not listed gets one photo looking north, subject
+   * general.
+   */
+  photos?: Record<string, PhotoSpec[]>;
 }
 
 export interface LandmarkSpec {
@@ -88,6 +118,11 @@ export interface FixtureSpec {
   /** Folder name under fixtures/generated. */
   name: string;
   description: string;
+  /**
+   * A package as an app build before v2 sealed it: manifest 1.0.0, the plan PDF named plan.pdf
+   * and the phone's spatial report (role spatial_report_pdf, retired in manifest 1.1.0).
+   */
+  legacy?: boolean;
   captures: CaptureSpec[];
   /** Floor-to-floor level between two captures. */
   floorToFloor?: { lowerAreaKey: string; upperAreaKey: string; location: string; valueM: number };

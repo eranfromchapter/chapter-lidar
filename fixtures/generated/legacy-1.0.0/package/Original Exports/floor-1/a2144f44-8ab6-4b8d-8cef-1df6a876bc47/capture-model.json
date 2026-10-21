@@ -1,0 +1,111 @@
+{
+  "schemaVersion": "1.0.0",
+  "visitId": "11acffc6-9ff2-43ae-aefd-ed16d21a3b9c",
+  "captureId": "a2144f44-8ab6-4b8d-8cef-1df6a876bc47",
+  "areaKey": "floor-1",
+  "label": "Floor 1",
+  "coordinateSystem": { "units": "m", "handedness": "right", "up": "+Y" },
+  "rooms": [
+    {
+      "id": "room-1",
+      "label": "Test Room",
+      "polygon": [
+        [0, 0, 0],
+        [0, 0, 3],
+        [4, 0, 3],
+        [4, 0, 0]
+      ],
+      "heightM": 2.7
+    }
+  ],
+  "walls": [
+    {
+      "id": "wall-1",
+      "start": [0, 0, 0],
+      "end": [0, 0, 3],
+      "heightM": 2.7,
+      "thicknessM": 0,
+      "roomIds": ["room-1"],
+      "confidence": "high"
+    },
+    {
+      "id": "wall-2",
+      "start": [0, 0, 3],
+      "end": [4, 0, 3],
+      "heightM": 2.7,
+      "thicknessM": 0,
+      "roomIds": ["room-1"],
+      "confidence": "high"
+    },
+    {
+      "id": "wall-3",
+      "start": [4, 0, 3],
+      "end": [4, 0, 0],
+      "heightM": 2.7,
+      "thicknessM": 0,
+      "roomIds": ["room-1"],
+      "confidence": "high"
+    },
+    {
+      "id": "wall-4",
+      "start": [4, 0, 0],
+      "end": [0, 0, 0],
+      "heightM": 2.7,
+      "thicknessM": 0,
+      "roomIds": ["room-1"],
+      "confidence": "high"
+    }
+  ],
+  "doors": [
+    {
+      "id": "door-1",
+      "wallId": "wall-4",
+      "offsetM": 3,
+      "bottomM": 0,
+      "widthM": 0.9,
+      "heightM": 2.1
+    }
+  ],
+  "windows": [
+    {
+      "id": "window-1",
+      "wallId": "wall-2",
+      "offsetM": 2,
+      "bottomM": 0.9,
+      "widthM": 1.2,
+      "heightM": 1.2
+    }
+  ],
+  "openings": [],
+  "objects": [
+    {
+      "id": "object-1",
+      "category": "table",
+      "roomId": "room-1",
+      "box": { "center": [2, 0.375, 1.5], "sizeM": [1.2, 0.75, 0.8], "rotation": [0, 0, 0, 1] },
+      "confidence": "high"
+    }
+  ],
+  "refs": [
+    {
+      "role": "raw_roomplan_json",
+      "path": "Original Exports/floor-1/a2144f44-8ab6-4b8d-8cef-1df6a876bc47/roomplan.json"
+    },
+    {
+      "role": "raw_depth",
+      "path": "Original Exports/floor-1/a2144f44-8ab6-4b8d-8cef-1df6a876bc47/depth-samples.bin"
+    },
+    {
+      "role": "mesh_glb",
+      "path": "Original Exports/floor-1/a2144f44-8ab6-4b8d-8cef-1df6a876bc47/mesh.glb"
+    },
+    {
+      "role": "mesh_obj",
+      "path": "Original Exports/floor-1/a2144f44-8ab6-4b8d-8cef-1df6a876bc47/mesh.obj"
+    },
+    {
+      "role": "point_cloud_las",
+      "path": "Original Exports/floor-1/a2144f44-8ab6-4b8d-8cef-1df6a876bc47/points.las"
+    }
+  ]
+}

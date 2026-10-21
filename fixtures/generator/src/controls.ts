@@ -115,14 +115,43 @@ export function buildFieldControls(
   };
 }
 
-/** Builds the capture record of a visit. */
+/** A UTC timestamp `seconds` after another, whole seconds. */
+export function secondsAfter(timestamp: string, seconds: number): string {
+  return new Date(Date.parse(timestamp) + seconds * 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
+/** The capture-record compass fields of a capture spec (none without a compass reading). */
+function compassFields(
+  capture: CaptureSpec,
+  capturedAt: string,
+): Partial<CaptureRecord["captures"][0]> {
+  const compass = capture.compass;
+  if (compass === undefined) {
+    return {};
+  }
+  if ("issue" in compass) {
+    return { headingIssue: compass.issue };
+  }
+  return {
+    heading: compass.heading,
+    headingAccuracy: compass.accuracy,
+    headingSource: compass.source,
+    headingRecordedAt: secondsAfter(capturedAt, compass.offsetSeconds),
+  };
+}
+
+/**
+ * Builds the capture record of a visit. It is written as 1.1.0 when a capture has a compass
+ * reading or issue, else as 1.0.0, so both versions stay covered.
+ */
 export function buildCaptureRecord(
   fixture: FixtureSpec,
   visitId: string,
   ids: Map<string, CaptureIds>,
 ): CaptureRecord {
+  const compass = fixture.captures.some((capture) => capture.compass !== undefined);
   return {
-    schemaVersion: "1.0.0",
+    schemaVersion: compass ? "1.1.0" : "1.0.0",
     visitId,
     hub: { dealId: DEAL_ID, projectName: `Fixture ${fixture.name}` },
     address: { formatted: PLACEHOLDER_ADDRESS, confirmedOnSite: true, confirmedAt: CONFIRMED_AT },
@@ -140,17 +169,19 @@ export function buildCaptureRecord(
       fixture.captures.map((capture, index) => {
         const minute = String(2 + index * 30).padStart(2, "0");
         const end = String(20 + index * 30).padStart(2, "0");
+        const capturedAt = `2026-10-17T14:${minute}:11Z`;
         return {
           captureId: (ids.get(capture.areaKey) as CaptureIds).captureId,
           areaKey: capture.areaKey,
           label: capture.label,
           mode: capture.mode,
-          units: { length: "m" as const, display: "metric" as const },
-          capturedAt: `2026-10-17T14:${minute}:11Z`,
+          units: { length: "m" as const, display: capture.display ?? ("metric" as const) },
+          capturedAt,
           finishedAt: `2026-10-17T14:${end}:40Z`,
           coverageNotes: capture.coverageNotes,
-          omittedRooms: [],
-          inaccessibleRooms: [],
+          omittedRooms: capture.omittedRooms ?? [],
+          inaccessibleRooms: capture.inaccessibleRooms ?? [],
+          ...compassFields(capture, capturedAt),
         };
       }),
       1,

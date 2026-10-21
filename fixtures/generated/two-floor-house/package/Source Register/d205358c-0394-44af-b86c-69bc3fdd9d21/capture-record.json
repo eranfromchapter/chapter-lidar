@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "1.1.0",
   "visitId": "d205358c-0394-44af-b86c-69bc3fdd9d21",
   "hub": { "dealId": "fixture-deal-0001", "projectName": "Fixture two-floor-house" },
   "address": {
@@ -28,7 +28,11 @@
       "finishedAt": "2026-10-17T14:20:40Z",
       "coverageNotes": "",
       "omittedRooms": [],
-      "inaccessibleRooms": []
+      "inaccessibleRooms": [],
+      "heading": 212.4,
+      "headingAccuracy": 8,
+      "headingSource": "true",
+      "headingRecordedAt": "2026-10-17T14:02:20Z"
     },
     {
       "captureId": "e236b82f-337b-45f5-ab4b-6a8f3eb64ffc",

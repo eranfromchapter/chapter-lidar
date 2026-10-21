@@ -3,8 +3,16 @@
 /// the manifest does not list itself. Files of one capture carry its `captureId` and `areaKey`;
 /// visit-wide files (`FileRole.visitRoles`) carry neither. A changed package is a new revision
 /// with a new `packageId`.
+///
+/// Reads schema 1.0.0 and 1.1.0 and writes `ManifestSchemaVersion.current`, with one exception:
+/// a manifest that lists a retired role is written as 1.0.0, the only version that allows it
+/// (`writtenSchemaVersion`). That is a package sealed by an app before v2, or one sealed while
+/// PlanExport still writes the phone report. A manifest that lists a retired role and a field
+/// added in 1.1.0 (`photo.directionSource`) fits neither version and does not encode.
 public struct PackageManifest: Hashable, Sendable, Codable {
-  public var schemaVersion: SchemaVersion
+  /// The version this manifest was read as; `.current` for a new manifest. What is written is
+  /// `writtenSchemaVersion`.
+  public var schemaVersion: ManifestSchemaVersion
   public var layoutVersion: LayoutVersion
   public var packageId: LowercaseUUID
   public var visitId: LowercaseUUID
@@ -16,7 +24,7 @@ public struct PackageManifest: Hashable, Sendable, Codable {
   public var files: [FileEntry]
 
   public init(
-    schemaVersion: SchemaVersion = .current,
+    schemaVersion: ManifestSchemaVersion = .current,
     layoutVersion: LayoutVersion = .current,
     packageId: LowercaseUUID,
     visitId: LowercaseUUID,
@@ -33,6 +41,48 @@ public struct PackageManifest: Hashable, Sendable, Codable {
     self.supersedesPackageId = supersedesPackageId
     self.sealedAt = sealedAt
     self.files = files
+  }
+
+  /// The `schemaVersion` this manifest is written with: 1.0.0 when it lists a retired role (1.1.0
+  /// does not allow those files), else `current`. It does not depend on the version read, so a
+  /// new manifest that still lists the phone report is valid too.
+  public var writtenSchemaVersion: ManifestSchemaVersion {
+    files.contains(where: { $0.role.isRetired }) ? .v1 : .current
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case schemaVersion, layoutVersion, packageId, visitId, revision, supersedesPackageId
+    case sealedAt, files
+  }
+
+  // Decoding is synthesized: `schemaVersion` accepts every `ManifestSchemaVersion`.
+
+  /// Throws `EncodingError.invalidValue` for a manifest that fits no schema version: a retired
+  /// role (1.0.0 only) next to `photo.directionSource` (1.1.0 only).
+  public func encode(to encoder: Encoder) throws {
+    let version = writtenSchemaVersion
+    if version == .v1,
+      let retired = files.first(where: { $0.role.isRetired }),
+      let photo = files.first(where: { $0.photo?.directionSource != nil })
+    {
+      throw EncodingError.invalidValue(
+        self,
+        EncodingError.Context(
+          codingPath: [CodingKeys.files],
+          debugDescription:
+            "\(retired.path) has the retired role \(retired.role.rawValue), which only manifest "
+            + "1.0.0 allows, and \(photo.path) has photo.directionSource, which only 1.1.0 "
+            + "allows; leave the retired file out of the package"))
+    }
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(version, forKey: .schemaVersion)
+    try container.encode(layoutVersion, forKey: .layoutVersion)
+    try container.encode(packageId, forKey: .packageId)
+    try container.encode(visitId, forKey: .visitId)
+    try container.encode(revision, forKey: .revision)
+    try container.encodeIfPresent(supersedesPackageId, forKey: .supersedesPackageId)
+    try container.encode(sealedAt, forKey: .sealedAt)
+    try container.encode(files, forKey: .files)
   }
 
   public struct FileEntry: Hashable, Sendable, Codable {
@@ -89,14 +139,19 @@ public struct PackageManifest: Hashable, Sendable, Codable {
     public var direction: PhotoDirection
     public var subject: PhotoSubject
     public var takenAt: UTCTimestamp
+    /// How `direction` was set (1.1.0). Nil in 1.0.0 documents and for labels written before it
+    /// existed.
+    public var directionSource: PhotoDirectionSource?
 
     public init(
-      room: String, direction: PhotoDirection, subject: PhotoSubject, takenAt: UTCTimestamp
+      room: String, direction: PhotoDirection, subject: PhotoSubject, takenAt: UTCTimestamp,
+      directionSource: PhotoDirectionSource? = nil
     ) {
       self.room = room
       self.direction = direction
       self.subject = subject
       self.takenAt = takenAt
+      self.directionSource = directionSource
     }
   }
 }

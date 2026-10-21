@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "1.1.0",
   "visitId": "4b9c4ede-de5e-47e9-a9cc-fcdf050df74f",
   "hub": { "dealId": "fixture-deal-0001", "projectName": "Fixture two-room-apartment" },
   "address": {
@@ -28,7 +28,11 @@
       "finishedAt": "2026-10-17T14:20:40Z",
       "coverageNotes": "",
       "omittedRooms": [],
-      "inaccessibleRooms": []
+      "inaccessibleRooms": [],
+      "heading": 87.5,
+      "headingAccuracy": 12,
+      "headingSource": "magnetic",
+      "headingRecordedAt": "2026-10-17T14:02:23Z"
     }
   ]
 }

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "1.1.0",
   "layoutVersion": "1.0.0",
   "packageId": "694e39c7-1171-43cc-96f5-65c9a9fdac46",
   "visitId": "c1b6d1fb-17af-4f4a-877c-2565ef9bdb86",
@@ -91,26 +91,12 @@
       ]
     },
     {
-      "path": "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/plan.pdf",
+      "path": "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/plan-sheet.pdf",
       "role": "plan_pdf",
       "captureId": "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
       "areaKey": "floor-1",
       "sha256": "c4e47199807a2cc3d1505df6fcca981ee4b9455aba409a0f51f210009b82604b",
       "bytes": 1919,
-      "mime": "application/pdf",
-      "generator": "chapter-fixtures/PlanExport",
-      "generatorVersion": "1.0.0",
-      "derivedFrom": [
-        "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/capture-model.json"
-      ]
-    },
-    {
-      "path": "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/spatial-report.pdf",
-      "role": "spatial_report_pdf",
-      "captureId": "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
-      "areaKey": "floor-1",
-      "sha256": "4b92803b99bebc1fb6c034f8e4574ffb662cdca329f9a4e3a4f061e992c00073",
-      "bytes": 1372,
       "mime": "application/pdf",
       "generator": "chapter-fixtures/PlanExport",
       "generatorVersion": "1.0.0",

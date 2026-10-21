@@ -138,6 +138,36 @@ function enumOf(schema: { [key: string]: Json }, def: string): string[] {
   return values as string[];
 }
 
+/**
+ * Roles a manifest of the newest schemaVersion must not list: the `not.enum` of the role in the
+ * root `allOf` member whose `if` names that version.
+ */
+function retiredRolesOf(schema: { [key: string]: Json }): string[] {
+  const properties = schema["properties"];
+  const version = isObject(properties) ? properties["schemaVersion"] : undefined;
+  const versions = isObject(version) ? version["enum"] : undefined;
+  const newest = Array.isArray(versions) ? versions[versions.length - 1] : undefined;
+  const members = schema["allOf"];
+  for (const member of Array.isArray(members) ? members : []) {
+    if (!isObject(member) || !isObject(member["if"]) || !isObject(member["then"])) {
+      continue;
+    }
+    const condition = member["if"]["properties"];
+    const named = isObject(condition) ? condition["schemaVersion"] : undefined;
+    if (!isObject(named) || named["const"] !== newest) {
+      continue;
+    }
+    let node: Json | undefined = member["then"];
+    for (const key of ["properties", "files", "items", "properties", "role", "not", "enum"]) {
+      node = isObject(node) ? node[key] : undefined;
+    }
+    if (Array.isArray(node) && node.every((value) => typeof value === "string")) {
+      return node as string[];
+    }
+  }
+  throw new Error(`manifest.schema.json has no retired-role rule for ${String(newest)}`);
+}
+
 /** Generates every file of src/generated, keyed by file name. Writes nothing. */
 export async function generate(): Promise<Map<string, string>> {
   const files = new Map<string, string>();
@@ -187,6 +217,9 @@ export async function generate(): Promise<Map<string, string>> {
     "",
     "/** Roles of visit-wide files (manifest.schema.json $defs/visitRole). Every other role belongs to one capture. */",
     `export const VISIT_ROLES = ${JSON.stringify(enumOf(manifest, "visitRole"))} as const;`,
+    "",
+    "/** Retired roles: valid in manifest 1.0.0 only, never written by a current app (manifest.schema.json allOf). */",
+    `export const RETIRED_ROLES = ${JSON.stringify(retiredRolesOf(manifest))} as const;`,
     "",
   ];
   files.set("constants.ts", await pretty("constants.ts", constants.join("\n")));

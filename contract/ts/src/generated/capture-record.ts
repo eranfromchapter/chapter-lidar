@@ -24,7 +24,10 @@ export type CaptureMode = "room" | "floor" | "exterior";
  * Who captured what, where, when and how, for one site visit at one property. A visit holds one or more captures; each capture is one floor or area scanned in one mode, registered separately with its own captureId. Written by the app as Source Register/{visitId}/capture-record.json. Optional fields are omitted, never null.
  */
 export interface CaptureRecord {
-  schemaVersion: "1.0.0";
+  /**
+   * 1.1.0 adds the optional compass reading of each capture (heading, headingAccuracy, headingSource, headingRecordedAt) and headingIssue; a 1.0.0 document does not carry them. Readers accept both versions; writers write 1.1.0.
+   */
+  schemaVersion: "1.0.0" | "1.1.0";
   visitId: Uuid;
   /**
    * The HUB project this visit belongs to.
@@ -120,6 +123,23 @@ export interface Capture {
    * Rooms or spaces that could not be entered. Empty when none.
    */
   inaccessibleRooms: RoomNote[];
+  /**
+   * Compass bearing of this capture's -Z axis (plan up: plan y is -Z), in degrees clockwise from north, 0 <= heading < 360, one decimal. True north when headingSource is true, magnetic north when magnetic. Read by the phone compass at the start of the scan and matched to the scan frame; never typed. Omitted when there is no reading: the orientation is then not verified.
+   */
+  heading?: number;
+  /**
+   * Compass accuracy reported by the phone for the reading, whole degrees rounded up: the heading is within plus or minus this value. Verified at 10 or less with a true heading; approximate up to 30; not verified above 30.
+   */
+  headingAccuracy?: number;
+  /**
+   * true: corrected to true north with the phone's location. magnetic: magnetic north only (Location off).
+   */
+  headingSource?: "true" | "magnetic";
+  headingRecordedAt?: DateTime;
+  /**
+   * Why there is no heading although the app tried: rejected (readings disagreed or could not be matched to the scan), not_calibrated (the compass reported no valid accuracy), unavailable (no usable compass on the device). Never present together with heading.
+   */
+  headingIssue?: "rejected" | "not_calibrated" | "unavailable";
 }
 export interface RoomNote {
   name: string;

@@ -73,17 +73,38 @@ const EXPECTED: Record<string, Expectation> = {
   },
 };
 
+/**
+ * Broken fixtures whose rule the station does not run yet (contract v1.1 ships the fixture
+ * first), with that rule. Until then the defect goes unnoticed: the package is otherwise the
+ * good box room. Each moves to EXPECTED with its rule.
+ */
+const AWAITING_RULE: Record<string, string> = {
+  "compass-time-outside-scan": "orientation.compass",
+};
+
 const index = readIndex();
 
 describe("broken fixtures", () => {
   it("every broken fixture has an expectation and every expectation a fixture", () => {
     assert.deepEqual(
       index.broken.map((item) => item.defectId).sort(),
-      Object.keys(EXPECTED).sort(),
+      [...Object.keys(EXPECTED), ...Object.keys(AWAITING_RULE)].sort(),
     );
   });
 
-  for (const broken of index.broken) {
+  for (const broken of index.broken.filter((item) => item.defectId in AWAITING_RULE)) {
+    it(`${broken.defectId}: ready until ${AWAITING_RULE[broken.defectId]} runs`, () => {
+      const hubAddress = readTruth(broken.baseFixture).hub.address;
+      const verdict = runChecks(loadBroken(broken.defectId), hubAddress);
+      assert.ok(!verdict.checks.some((check) => check.ruleId === AWAITING_RULE[broken.defectId]));
+      assert.deepEqual(nonInfo(verdict), []);
+      assert.equal(verdict.outcome, "ready");
+      const result = validateVerdict(verdict);
+      assert.ok(result.ok, result.ok ? "" : formatErrors(result.errors));
+    });
+  }
+
+  for (const broken of index.broken.filter((item) => !(item.defectId in AWAITING_RULE))) {
     const expected = EXPECTED[broken.defectId] as Expectation;
     describe(broken.defectId, () => {
       const defect = readDefect(broken.defectId);

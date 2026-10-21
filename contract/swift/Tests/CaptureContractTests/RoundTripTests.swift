@@ -5,8 +5,9 @@ import XCTest
 /// AC2: every valid example decodes and re-encodes to JSON equal to the original.
 /// "Equal" is semantic: same keys, same values, numbers compared numerically, key order and
 /// whitespace ignored. A dropped field, an added field or a `null` fails the test. The one
-/// expected change: a capture model is always written as the current version, so a 1.0.0
-/// example comes back as 1.1.0.
+/// expected change: a capture model, a capture record and a manifest are written as the current
+/// version, so a 1.0.0 example comes back as 1.1.0 (except a manifest that lists a retired role,
+/// which 1.1.0 does not allow and is written as 1.0.0).
 final class RoundTripTests: XCTestCase {
   /// One entry per schema in contract/schema, keyed by the schema name (file name without
   /// `.schema.json`, which is also the example folder name).
@@ -23,11 +24,31 @@ final class RoundTripTests: XCTestCase {
     return try CaptureContractJSON.makeEncoder().encode(value)
   }
 
-  /// The JSON a valid example re-encodes to: the example itself, with a capture model's
-  /// `schemaVersion` set to the version `CaptureModel` writes.
+  /// The JSON a valid example re-encodes to: the example itself, with the `schemaVersion` the
+  /// Swift type writes.
   static func expectedAfterRoundTrip(schema: String, _ original: JSONValue) -> JSONValue {
-    guard schema == "capture-model", case .object(var members) = original else { return original }
-    members["schemaVersion"] = .string(CaptureModelSchemaVersion.current.rawValue)
+    guard case .object(var members) = original else { return original }
+    switch schema {
+    case "capture-model":
+      members["schemaVersion"] = .string(CaptureModelSchemaVersion.current.rawValue)
+    case "capture-record":
+      members["schemaVersion"] = .string(CaptureRecordSchemaVersion.current.rawValue)
+    case "manifest":
+      let roles: [String] = {
+        guard case .array(let files)? = members["files"] else { return [] }
+        return files.compactMap { file in
+          guard case .object(let entry) = file, case .string(let role)? = entry["role"] else {
+            return nil
+          }
+          return role
+        }
+      }()
+      let listsRetiredRole = roles.contains { FileRole(rawValue: $0)?.isRetired == true }
+      members["schemaVersion"] = .string(
+        (listsRetiredRole ? ManifestSchemaVersion.v1 : .current).rawValue)
+    default:
+      break
+    }
     return .object(members)
   }
 
@@ -153,6 +174,148 @@ final class RoundTripTests: XCTestCase {
       .replacingOccurrences(of: "\"1.0.0\"", with: "\"1.2.0\"")
     XCTAssertThrowsError(
       try CaptureContractJSON.makeDecoder().decode(CaptureModel.self, from: Data(text.utf8)))
+  }
+
+  // MARK: Capture record versions
+
+  private func example(_ path: String) throws -> Data {
+    try Data(contentsOf: ContractFiles.examplesDirectory.appendingPathComponent(path))
+  }
+
+  private func writtenVersion<T: Encodable>(_ value: T) throws -> JSONValue? {
+    guard case .object(let members) = try JSONValue.parse(
+      CaptureContractJSON.makeEncoder().encode(value))
+    else { return nil }
+    return members["schemaVersion"]
+  }
+
+  func testCaptureRecordReadsBothVersionsAndWritesTheCurrentOne() throws {
+    let decoder = CaptureContractJSON.makeDecoder()
+    let old = try decoder.decode(
+      CaptureRecord.self, from: example("capture-record/valid/two-captures.json"))
+    XCTAssertEqual(old.schemaVersion, .v1)
+    XCTAssertNil(old.captures[0].heading)
+    let new = try decoder.decode(
+      CaptureRecord.self, from: example("capture-record/valid/compass-two-captures.json"))
+    XCTAssertEqual(new.schemaVersion, .v1_1)
+    for record in [old, new] {
+      XCTAssertEqual(try writtenVersion(record), .string("1.1.0"))
+    }
+    XCTAssertEqual(CaptureRecordSchemaVersion.current, .v1_1)
+  }
+
+  func testCaptureRecordCompassFieldsDecode() throws {
+    let record = try CaptureContractJSON.makeDecoder().decode(
+      CaptureRecord.self, from: example("capture-record/valid/compass-two-captures.json"))
+    let floor1 = record.captures[0]
+    XCTAssertEqual(floor1.heading, 212.4)
+    XCTAssertEqual(floor1.headingAccuracy, 8)
+    XCTAssertEqual(floor1.headingSource, .trueNorth)
+    XCTAssertEqual(floor1.headingRecordedAt?.rawValue, "2026-10-17T14:02:20Z")
+    XCTAssertNil(floor1.headingIssue)
+    XCTAssertNil(record.captures[1].heading)
+    XCTAssertEqual(record.captures[1].headingIssue, .rejected)
+  }
+
+  func testCaptureRecordRejectsAnUnknownVersionOrSource() throws {
+    let text = String(
+      decoding: try example("capture-record/valid/compass-two-captures.json"), as: UTF8.self)
+    for (from, to) in [("\"1.1.0\"", "\"1.2.0\""), ("\"headingSource\": \"true\"", "\"headingSource\": \"grid\"")] {
+      XCTAssertThrowsError(
+        try CaptureContractJSON.makeDecoder().decode(
+          CaptureRecord.self, from: Data(text.replacingOccurrences(of: from, with: to).utf8)),
+        to)
+    }
+  }
+
+  func testSetCompassWritesTheReadingOrTheIssueAndClearsTheRest() throws {
+    var capture = try CaptureContractJSON.makeDecoder().decode(
+      CaptureRecord.self, from: example("capture-record/valid/two-captures.json")
+    ).captures[0]
+    let readAt = UTCTimestamp(rawValue: "2026-10-17T14:02:20Z")!
+    capture.setCompass(.reading(heading: 212.44, accuracy: 8, source: .trueNorth, recordedAt: readAt))
+    XCTAssertEqual(capture.heading, 212.4)
+    XCTAssertEqual(capture.headingAccuracy, 8)
+    XCTAssertEqual(capture.headingSource, .trueNorth)
+    XCTAssertEqual(capture.headingRecordedAt, readAt)
+    XCTAssertNil(capture.headingIssue)
+    XCTAssertEqual(CompassState(capture), .verified(heading: 212.4, accuracy: 8))
+
+    capture.setCompass(.none(issue: .rejected))
+    XCTAssertNil(capture.heading)
+    XCTAssertNil(capture.headingAccuracy)
+    XCTAssertNil(capture.headingSource)
+    XCTAssertNil(capture.headingRecordedAt)
+    XCTAssertEqual(capture.headingIssue, .rejected)
+
+    capture.setCompass(.reading(heading: 359.97, accuracy: 0, source: .magnetic, recordedAt: readAt))
+    XCTAssertEqual(capture.heading, 0)
+    XCTAssertEqual(capture.headingAccuracy, 1)
+    XCTAssertNil(capture.headingIssue)
+    capture.setCompass(.reading(heading: -0.04, accuracy: 400, source: .magnetic, recordedAt: readAt))
+    XCTAssertEqual(capture.heading, 0)
+    XCTAssertEqual(capture.headingAccuracy, 180)
+
+    capture.setCompass(.none(issue: nil))
+    XCTAssertEqual(capture, try CaptureContractJSON.makeDecoder().decode(
+      CaptureRecord.self, from: example("capture-record/valid/two-captures.json")
+    ).captures[0])
+  }
+
+  func testACaptureWithoutCompassFieldsWritesNone() throws {
+    let record = try CaptureContractJSON.makeDecoder().decode(
+      CaptureRecord.self, from: example("capture-record/valid/two-captures.json"))
+    let text = String(decoding: try CaptureContractJSON.makeEncoder().encode(record), as: UTF8.self)
+    XCTAssertFalse(text.contains("heading"))
+  }
+
+  // MARK: Manifest versions
+
+  func testManifestReadsBothVersionsAndWritesTheCurrentOne() throws {
+    let decoder = CaptureContractJSON.makeDecoder()
+    let old = try decoder.decode(
+      PackageManifest.self, from: example("manifest/valid/two-captures.json"))
+    XCTAssertEqual(old.schemaVersion, .v1)
+    XCTAssertEqual(old.writtenSchemaVersion, .v1_1)
+    XCTAssertEqual(try writtenVersion(old), .string("1.1.0"))
+    let new = try decoder.decode(
+      PackageManifest.self, from: example("manifest/valid/photo-direction-source.json"))
+    XCTAssertEqual(new.schemaVersion, .v1_1)
+    XCTAssertEqual(try writtenVersion(new), .string("1.1.0"))
+    XCTAssertEqual(ManifestSchemaVersion.current, .v1_1)
+  }
+
+  func testAManifestWithARetiredRoleIsWrittenAs1_0_0() throws {
+    let legacy = try CaptureContractJSON.makeDecoder().decode(
+      PackageManifest.self, from: example("manifest/valid/legacy-spatial-report-1.0.0.json"))
+    XCTAssertTrue(legacy.files.contains { $0.role == .spatialReportPDF })
+    XCTAssertEqual(legacy.writtenSchemaVersion, .v1)
+    XCTAssertEqual(try writtenVersion(legacy), .string("1.0.0"))
+
+    var dropped = legacy
+    dropped.files.removeAll { $0.role.isRetired }
+    XCTAssertEqual(dropped.writtenSchemaVersion, .v1_1)
+
+    // Built new (as PackageAssembler does) while PlanExport still writes the phone report:
+    // 1.1.0 would not allow the file, so it is written as 1.0.0 too.
+    var created = legacy
+    created.schemaVersion = .current
+    XCTAssertEqual(created.writtenSchemaVersion, .v1)
+    XCTAssertEqual(try writtenVersion(created), .string("1.0.0"))
+    created.files.removeAll { $0.role.isRetired }
+    XCTAssertEqual(try writtenVersion(created), .string("1.1.0"))
+  }
+
+  func testPhotoDirectionSourceDecodesAndIsOmittedWhenNil() throws {
+    let manifest = try CaptureContractJSON.makeDecoder().decode(
+      PackageManifest.self, from: example("manifest/valid/photo-direction-source.json"))
+    XCTAssertEqual(manifest.files.compactMap { $0.photo?.directionSource }, [.compass, .manual])
+
+    let old = try CaptureContractJSON.makeDecoder().decode(
+      PackageManifest.self, from: example("manifest/valid/two-captures.json"))
+    XCTAssertEqual(old.files.compactMap(\.photo).map(\.directionSource), [nil])
+    let text = String(decoding: try CaptureContractJSON.makeEncoder().encode(old), as: UTF8.self)
+    XCTAssertFalse(text.contains("directionSource"))
   }
 
   func testEncoderDoesNotEscapeSlashesInPaths() throws {

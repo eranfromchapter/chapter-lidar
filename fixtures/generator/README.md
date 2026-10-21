@@ -5,7 +5,8 @@ every export writer and every station check is tested against these fixtures. Ev
 generated from fixed seeds, fixed UUIDs and fixed timestamps: two runs give byte-identical output.
 
 ```
-npm run generate --workspace @chapter/fixtures   # rewrites fixtures/generated
+npm run generate --workspace @chapter/fixtures        # rewrites fixtures/generated
+npm run record-report --workspace @chapter/fixtures   # rewrites fixtures/report/424-west-end
 npm test --workspace @chapter/fixtures
 node fixtures/generator/scripts/scan-pii.mjs fixtures
 ```
@@ -15,39 +16,60 @@ Placeholder data only: address `100 Example Street, Testville, NY 00000`, deal i
 
 ## What is generated
 
-`fixtures/generated/index.json` lists everything below except the RoomPlan-only fixtures.
+`fixtures/generated/index.json` (`generatedFormatVersion` 1.1.0) lists everything below except
+the RoomPlan-only fixtures: `fixtures` (the good ones), `broken`, `legacy` and `samples`.
 
-| Fixture              | Visit and captures  | Shape                                                                                                                              |
-| -------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `box-room`           | 1 visit, 1 capture  | 4.000 x 3.000 m, ceiling 2.700 m, 1 door, 1 window, 1 table                                                                        |
-| `l-shaped-room`      | 1 visit, 1 capture  | 6.000 x 4.000 m outline minus a 3.000 x 2.000 m corner (18 m2), ceiling 2.700 m                                                    |
-| `two-room-apartment` | 1 visit, 1 capture  | Living Room 5.000 x 4.000 m + Bedroom 3.000 x 4.000 m, 1 door, 2 windows, 1 passage                                                |
-| `two-floor-house`    | 1 visit, 2 captures | Floor 1 6.000 x 5.000 m (2.700 m); Floor 2 with a 1.000 x 3.000 m stair void (2.500 m); floor-to-floor 2.950 m; 2 shared landmarks |
+| Fixture              | Visit and captures  | Shape                                                                                                                              | Compass (capture record)                                  |
+| -------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `box-room`           | 1 visit, 1 capture  | 4.000 x 3.000 m, ceiling 2.700 m, 1 door, 1 window, 1 table                                                                        | none (record 1.0.0)                                       |
+| `l-shaped-room`      | 1 visit, 1 capture  | 6.000 x 4.000 m outline minus a 3.000 x 2.000 m corner (18 m2), ceiling 2.700 m                                                    | none (record 1.0.0)                                       |
+| `two-room-apartment` | 1 visit, 1 capture  | Living Room 5.000 x 4.000 m + Bedroom 3.000 x 4.000 m, 1 door, 2 windows, 1 passage                                                | approximate: 87.5°, ±12°, magnetic (record 1.1.0)         |
+| `two-floor-house`    | 1 visit, 2 captures | Floor 1 6.000 x 5.000 m (2.700 m); Floor 2 with a 1.000 x 3.000 m stair void (2.500 m); floor-to-floor 2.950 m; 2 shared landmarks | Floor 1 verified: 212.4°, ±8°, true; Floor 2 none (1.1.0) |
 
 Each good fixture folder holds:
 
 - `truth.json`: exact dimensions, areas, opening sizes, bounds, control distances (and for the
   house: floor-to-floor, stair void, landmark positions in each capture's own frame).
-- `package/`: a complete intake package laid out exactly per `contract/schema/layout.json`, with
-  `manifest.json` (sha256 and bytes of every file), `capture-record.json`, `field-controls.json`,
-  and per capture: `roomplan.json`, `depth-samples.bin`, `capture-model.json`, `plan.dxf`,
-  `rooms.csv`, `plan.pdf`, `spatial-report.pdf`, `plan.png`, `plan.svg`, `mesh.glb`, `mesh.obj`,
-  `mesh.mtl`, `mesh-texture.png`, `points.las` and one site photo JPEG per captured room.
+- `package/`: a complete v2 intake package laid out exactly per `contract/schema/layout.json`,
+  with `manifest.json` (schema 1.1.0; sha256 and bytes of every file), `capture-record.json`
+  (1.1.0 when a capture has a compass reading, else 1.0.0, so both versions stay covered),
+  `field-controls.json`, and per capture: `roomplan.json`, `depth-samples.bin`,
+  `capture-model.json`, `plan.dxf`, `rooms.csv`, `plan-sheet.pdf` (role `plan_pdf`), `plan.png`,
+  `plan.svg`, `mesh.glb`, `mesh.obj`, `mesh.mtl`, `mesh-texture.png`, `points.las` and one site
+  photo JPEG per captured room. No `spatial-report.pdf`: the spatial report is a station output
+  and the role `spatial_report_pdf` is retired in manifest 1.1.0.
+
+`legacy`: `legacy-1.0.0` is the box room as an app before v2 sealed it: manifest 1.0.0 with
+`plan.pdf` and the phone's `spatial-report.pdf` (role `spatial_report_pdf`), capture record
+1.0.0. Its index entry carries `"legacy": true`. Such packages must still upload, seal and get a
+verdict.
+
+`samples`: `sample-424` is the apartment of the design artboards (plan sheet 1b, spatial report
+1f–1aa), traced from the design bundle's `apartment-424.js` (19.4 trace units per foot; close to
+the sample, not exact): one floor, 12 rooms with the sample's names (5 unlabeled `Room N`), walls
+from the room outlines at thickness 0, 8 doors (traced thresholds narrower than 0.7 m are widened
+about their centre), 4 passages, 2 windows, 14 objects, Room 4 with one lower wall (approximate
+ceiling), Primary closet not scanned (locked), Storage room not entered, 7 photos of the Living
+Room (with `directionSource`) and one of every other room, compass verified (212.4°, ±8°, true
+north), units shown imperial. Text data stays placeholder data. Its station verdicts, one per
+outcome, are in `fixtures/report/424-west-end/`, recorded from the station checks by
+`src/report.ts` (`npm run record-report`; see the README there).
 
 Broken fixtures are in `fixtures/generated/broken/<defect-id>/`, each with `defect.json` and a
 `package/`. Each is the `box-room` package with exactly one file changed; the manifest is rebuilt
 so it matches the bytes (none of them is a fingerprint mismatch). `defect.json` names the defect
 id, the affected file and role, the mutation and its details.
 
-| Defect id             | The one change                                                                                        |
-| --------------------- | ----------------------------------------------------------------------------------------------------- |
-| `empty-file`          | `plan.dxf` is zero bytes                                                                              |
-| `wrong-address`       | `capture-record.json` address differs from the HUB address (`details.hubAddress`, also in truth.json) |
-| `inches-as-metres`    | `capture-model.json`: every length multiplied by 39.37007874 (inch numbers in metre fields)           |
-| `z-up-mesh`           | `mesh.glb` has height along +Z: (x, y, z) -> (x, -z, y)                                               |
-| `missing-gltf-bin`    | `mesh.glb` has no BIN chunk; its buffer is the external `mesh.bin`, which is not in the package       |
-| `las-bad-header`      | `points.las` header point count is 1000 more than the points in the file                              |
-| `dimensions-3pct-off` | `field-controls.json` long distances are 0.97 x truth (3% short), entered in mm                       |
+| Defect id                   | The one change                                                                                        |
+| --------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `empty-file`                | `plan.dxf` is zero bytes                                                                              |
+| `wrong-address`             | `capture-record.json` address differs from the HUB address (`details.hubAddress`, also in truth.json) |
+| `inches-as-metres`          | `capture-model.json`: every length multiplied by 39.37007874 (inch numbers in metre fields)           |
+| `z-up-mesh`                 | `mesh.glb` has height along +Z: (x, y, z) -> (x, -z, y)                                               |
+| `missing-gltf-bin`          | `mesh.glb` has no BIN chunk; its buffer is the external `mesh.bin`, which is not in the package       |
+| `las-bad-header`            | `points.las` header point count is 1000 more than the points in the file                              |
+| `dimensions-3pct-off`       | `field-controls.json` long distances are 0.97 x truth (3% short), entered in mm                       |
+| `compass-time-outside-scan` | `capture-record.json` 1.1.0 with a true-north reading (212.4°, ±8°) recorded 2 h before `capturedAt`  |
 
 ## RoomPlan-only fixtures
 

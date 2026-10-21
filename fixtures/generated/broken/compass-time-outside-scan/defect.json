@@ -1,0 +1,16 @@
+{
+  "defectId": "compass-time-outside-scan",
+  "title": "Compass reading taken outside the scan",
+  "baseFixture": "box-room",
+  "affectedFile": "Source Register/c1b6d1fb-17af-4f4a-877c-2565ef9bdb86/capture-record.json",
+  "role": "capture_record",
+  "mutation": "capture-record.json written as 1.1.0 with a true-north compass reading (212.4°, ±8°) whose headingRecordedAt is 2 h before the capture's capturedAt, so it cannot belong to the scan.",
+  "details": {
+    "capturedAt": "2026-10-17T14:02:11Z",
+    "finishedAt": "2026-10-17T14:20:40Z",
+    "heading": 212.4,
+    "headingAccuracy": 8,
+    "headingSource": "true",
+    "headingRecordedAt": "2026-10-17T12:02:11Z"
+  }
+}

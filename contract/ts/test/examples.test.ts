@@ -17,6 +17,13 @@ import { examplesDir, readJson } from "./paths.js";
 const DEFECT_AT: Record<string, string> = {
   "capture-record/capture-without-capture-id.json": "/captures/1",
   "capture-record/unknown-mode.json": "/captures/0/mode",
+  // schemaVersion (root) decides which fields are allowed; capture-record-versions.test.ts
+  // checks the exact pointers.
+  "capture-record/heading-in-1.0.0.json": "",
+  "capture-record/heading-without-accuracy.json": "/captures/0",
+  "capture-record/heading-and-issue.json": "/captures/0",
+  "capture-record/heading-360.json": "/captures/0/heading",
+  "capture-record/unknown-heading-source.json": "/captures/0/headingSource",
   "capture-model/z-up.json": "/coordinateSystem/up",
   "capture-model/unknown-room-type.json": "/rooms/0/type",
   // schemaVersion (root) decides which fields are allowed, so Ajv also reports at the root;
@@ -27,6 +34,12 @@ const DEFECT_AT: Record<string, string> = {
   "manifest/capture-model-without-capture-id.json": "/files/4",
   "manifest/unknown-role.json": "/files/5/role",
   "manifest/visit-file-with-capture-id.json": "/files/0",
+  "manifest/unknown-direction-source.json": "/files/9",
+  "manifest/direction-source-wrong-type.json": "/files/9",
+  // schemaVersion (root) decides which fields and roles are allowed; manifest-versions.test.ts
+  // checks the exact pointers.
+  "manifest/direction-source-in-1.0.0.json": "",
+  "manifest/retired-spatial-report-role-1.1.0.json": "",
   // outcome (root) contradicts findings, so Ajv reports at the root and /findings.
   "verdict/ready-with-blocker.json": "",
 };

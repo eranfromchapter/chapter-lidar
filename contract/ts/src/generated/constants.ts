@@ -7,7 +7,7 @@
 export const LAYOUT = {
   layoutVersion: "1.0.0",
   description:
-    "Intake package folder layout from the Chapter intake guide. One package is one site visit; each floor or area scan in it is a separate capture. Every manifest path starts with one folder name below. pathTemplate is the folder for a file of that folder's roles; the file name (which may contain subfolders, for mesh companions) follows it. {areaKey} and {captureId} identify one capture from the capture record; {visitId} is the visit. Per-capture folders group by areaKey then captureId; visit-wide folders group by visitId. Each manifest role belongs to exactly one folder. Folders produced downstream are never written by the capture app.",
+    "Intake package folder layout from the Chapter intake guide. One package is one site visit; each floor or area scan in it is a separate capture. Every manifest path starts with one folder name below. pathTemplate is the folder for a file of that folder's roles; the file name (which may contain subfolders, for mesh companions) follows it. {areaKey} and {captureId} identify one capture from the capture record; {visitId} is the visit. Per-capture folders group by areaKey then captureId; visit-wide folders group by visitId. Each manifest role belongs to exactly one folder. Folders produced downstream are never written by the capture app. spatial_report_pdf: legacy, manifest 1.0.0 only.",
   manifestPath: "Source Register/{visitId}/manifest.json",
   fileNames: {
     capture_record: "capture-record.json",
@@ -111,3 +111,6 @@ export const ROLES = [
 
 /** Roles of visit-wide files (manifest.schema.json $defs/visitRole). Every other role belongs to one capture. */
 export const VISIT_ROLES = ["capture_record", "field_controls"] as const;
+
+/** Retired roles: valid in manifest 1.0.0 only, never written by a current app (manifest.schema.json allOf). */
+export const RETIRED_ROLES = ["spatial_report_pdf"] as const;

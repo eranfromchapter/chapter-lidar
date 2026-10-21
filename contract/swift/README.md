@@ -13,10 +13,32 @@ of truth.
 | `verdict.schema.json`        | `Verdict`                                    |
 | `layout.json`                | `PackageFolder`, `PackageLayout`, `FileRole` |
 
-Each document has its own schema version. The capture record, field controls, manifest and
-verdict use `SchemaVersion` (1.0.0). The capture model uses `CaptureModelSchemaVersion`: it
-reads 1.0.0 and 1.1.0 and always writes 1.1.0, which only adds optional fields (room type and
-its source, door `isOpen`, object attributes and parent).
+Each document has its own schema version. Field controls and verdict use `SchemaVersion`
+(1.0.0). The others read 1.0.0 and 1.1.0 and write 1.1.0:
+
+| Document       | Version type                 | 1.1.0 adds                                                                                                                 |
+| -------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| capture model  | `CaptureModelSchemaVersion`  | room type and its source, door `isOpen`, object attributes and parent                                                      |
+| capture record | `CaptureRecordSchemaVersion` | the compass reading of each capture (`heading`, `headingAccuracy`, `headingSource`, `headingRecordedAt`) or `headingIssue` |
+| manifest       | `ManifestSchemaVersion`      | `photo.directionSource` (`PhotoDirectionSource`); retires `spatial_report_pdf`                                             |
+
+A manifest that lists a retired role (`FileRole.retiredRoles`, `isRetired`) is written as 1.0.0
+(`PackageManifest.writtenSchemaVersion`), the only version that allows it, whether it was read
+as 1.0.0 (a package sealed by an app before v2) or built new while PlanExport still writes the
+phone report. A manifest that lists a retired role and `photo.directionSource` (1.1.0 only)
+fits no version: encoding it throws `EncodingError.invalidValue`.
+
+## Compass
+
+`Compass.swift` holds the one evaluator of a capture's reading, shared with
+`contract/ts/src/compass.ts`: `CompassState(capture)` (verified: true north ±10° or better;
+approximate: true ±11–30° or magnetic ±30°; not verified with a `CompassReason`), `NorthSymbol`
+(arrow angle and caption lines, or the `Orientation: not verified` box, for a drawing turned by
+ρ), `CompassText` (captions, station details, `{AGO}`) and `Capture.setCompass(_:)`.
+`CompassMath.swift` holds the frame conventions (Core Motion, ARKit, capture and plan frames),
+the heading of the capture frame from one paired sample, camera and photo bearings, the gravity
+checks and the angle helpers. `HeadingSource` (`true`/`magnetic`) and `HeadingIssue` are the
+only types of their kind in the app.
 
 Wire formats: `UTCTimestamp` (UTC, whole seconds, `Z`), `LowercaseUUID`, `Vec3` and
 `Quaternion` (fixed-length number arrays). Optional fields are omitted when nil, never `null`.
@@ -34,10 +56,21 @@ swift test --package-path contract/swift --filter SchemaParityTests
 ```
 
 - `RoundTripTests`: every `contract/examples/<schema>/valid/*.json` decodes and re-encodes to
-  semantically equal JSON (a 1.0.0 capture model comes back as 1.1.0, nothing else changes).
+  semantically equal JSON (a 1.0.0 capture model, capture record or manifest comes back as
+  1.1.0, except the legacy manifest with a retired role; nothing else changes).
+- `SchemaValidityTests`: what the types write validates against the schemas
+  (`Support/SchemaValidator.swift`, the subset of JSON Schema the contract uses; it accepts
+  every valid example and rejects every invalid one): every re-encoded valid example, and new
+  manifests with and without the phone report.
+- `CompassTests`: every vector of `contract/test-vectors/compass-states.json` (the TypeScript
+  tests run the same file), plus `{AGO}` and the tokens.
+- `CompassMathTests`: synthetic Core Motion attitudes and ARKit poses (upright, flat, pitched,
+  rolled, random world yaw) give back the constructed heading; transposed matrices fail the
+  gravity checks; camera and photo bearings; the drawing angles; wrap and circular mean.
 - `SchemaParityTests`: each document's schema versions, every closed enum, the role list, the
   visit roles and the folder layout match the schema files exactly (missing or extra values
   fail).
 - `PrimitiveTests`: timestamp, UUID and vector wire formats.
 
-The tests read `contract/schema` and `contract/examples` in place; nothing is copied.
+The tests read `contract/schema`, `contract/examples` and `contract/test-vectors` in place;
+nothing is copied.

@@ -1,12 +1,35 @@
 // Closed value sets from contract/schema. SchemaParityTests reads the schema files and fails
 // when a case here is missing from, or extra to, the schema.
 
-/// `schemaVersion` of the capture record, field controls, manifest and verdict. The capture model
-/// has its own version, `CaptureModelSchemaVersion`.
+/// `schemaVersion` of the field controls and the verdict. The capture model, the capture record
+/// and the manifest have their own versions (`CaptureModelSchemaVersion`,
+/// `CaptureRecordSchemaVersion`, `ManifestSchemaVersion`).
 public enum SchemaVersion: String, CaseIterable, Codable, Sendable {
   case v1 = "1.0.0"
 
   public static let current: SchemaVersion = .v1
+}
+
+/// `schemaVersion` of the capture record. 1.1.0 adds the optional compass reading of each capture
+/// (`heading`, `headingAccuracy`, `headingSource`, `headingRecordedAt`) and `headingIssue`, so
+/// every 1.0.0 document is also a valid 1.1.0 document. Both are read; `CaptureRecord` always
+/// writes `current`.
+public enum CaptureRecordSchemaVersion: String, CaseIterable, Codable, Sendable {
+  case v1 = "1.0.0"
+  case v1_1 = "1.1.0"
+
+  public static let current: CaptureRecordSchemaVersion = .v1_1
+}
+
+/// `schemaVersion` of the manifest. 1.1.0 adds the optional `photo.directionSource` and retires
+/// the role `spatial_report_pdf` (`FileRole.retiredRoles`). Both are read; `PackageManifest`
+/// writes `current` except for a manifest that lists a retired role, which is written as 1.0.0
+/// (see `PackageManifest.writtenSchemaVersion`).
+public enum ManifestSchemaVersion: String, CaseIterable, Codable, Sendable {
+  case v1 = "1.0.0"
+  case v1_1 = "1.1.0"
+
+  public static let current: ManifestSchemaVersion = .v1_1
 }
 
 /// `schemaVersion` of the capture model. 1.1.0 adds optional fields (room type and its source,
@@ -49,6 +72,24 @@ public enum DisplayUnitSystem: String, CaseIterable, Codable, Sendable {
 public enum DeviceOSName: String, CaseIterable, Codable, Sendable {
   case iOS
   case iPadOS
+}
+
+/// North of a compass reading (capture record 1.1.0 `headingSource`): true north, corrected with
+/// the phone's location, or magnetic north only (Location off). The one heading source type of
+/// the app; photo headings use it too.
+public enum HeadingSource: String, CaseIterable, Codable, Sendable {
+  case trueNorth = "true"
+  case magnetic
+}
+
+/// Why a capture has no heading although the app tried (capture record 1.1.0 `headingIssue`).
+public enum HeadingIssue: String, CaseIterable, Codable, Sendable {
+  /// Readings disagreed or could not be matched to the scan.
+  case rejected
+  /// The compass reported no valid accuracy.
+  case notCalibrated = "not_calibrated"
+  /// No usable compass on the device.
+  case unavailable
 }
 
 // MARK: Capture model
@@ -170,6 +211,14 @@ public enum PhotoSubject: String, CaseIterable, Codable, Sendable {
   case equipment
   case defect
   case general
+}
+
+/// How a photo's direction was set (manifest 1.1.0 `photo.directionSource`).
+public enum PhotoDirectionSource: String, CaseIterable, Codable, Sendable {
+  /// Pre-filled from the phone's compass when the photo was taken and kept by the operator.
+  case compass
+  /// Chosen or changed by the operator.
+  case manual
 }
 
 // MARK: Verdict

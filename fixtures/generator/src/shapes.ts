@@ -259,6 +259,8 @@ function twoRoomApartment(): FixtureSpec {
       { axis: "B", from: "Living Room north wall", to: "Living Room south wall", lengthM: 4 },
     ],
     coverageNotes: "",
+    // Location off: magnetic north only, so the orientation is approximate.
+    compass: { heading: 87.5, accuracy: 12, source: "magnetic", offsetSeconds: 12 },
   };
   return {
     name: "two-room-apartment",
@@ -331,6 +333,8 @@ function twoFloorHouse(): FixtureSpec {
       { axis: "B", from: "Living Room north wall", to: "Living Room south wall", lengthM: 5 },
     ],
     coverageNotes: "",
+    // Verified: true north, accuracy ±8°, read 9 s into the scan. Floor 2 has no reading.
+    compass: { heading: 212.4, accuracy: 8, source: "true", offsetSeconds: 9 },
   };
   // Floor 2 is captured in its own frame: turned 90 degrees about Y and moved. Nothing in the
   // capture model relates it to floor 1; only the landmarks and the floor-to-floor level do.
@@ -395,4 +399,23 @@ function twoFloorHouse(): FixtureSpec {
 /** The four good fixtures in a fixed order. */
 export function fixtureSpecs(): FixtureSpec[] {
   return [boxRoom(), lShapedRoom(), twoRoomApartment(), twoFloorHouse()];
+}
+
+/** The legacy fixture name: the box room as an app before v2 sealed it. */
+export const LEGACY_NAME = "legacy-1.0.0";
+
+/**
+ * Packages from app builds before v2 (manifest 1.0.0 with the phone's spatial report and
+ * plan.pdf; capture record 1.0.0). They must keep uploading, sealing and getting a verdict.
+ */
+export function legacySpecs(): FixtureSpec[] {
+  return [
+    {
+      ...boxRoom(),
+      name: LEGACY_NAME,
+      description:
+        "The box room sealed by an app before v2: manifest 1.0.0 with plan.pdf and spatial-report.pdf (role spatial_report_pdf, retired in manifest 1.1.0), capture record 1.0.0.",
+      legacy: true,
+    },
+  ];
 }
