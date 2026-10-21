@@ -242,8 +242,16 @@ private struct PackageSubtitle: View {
 }
 
 /// A title and its detail side by side; at accessibility text sizes the detail goes under the
-/// title (as ChapterUI's `ValueRow`), so nothing is clipped.
+/// title (as ChapterUI's `ValueRow`), so nothing is clipped. Side by side, `keeps` gets its
+/// width first and the other side wraps: the detail by default ("13 files · 268 MB" stays on
+/// one line, a long floor title wraps), the title for Package ready's second card.
 private struct TitleDetail<Title: View, Detail: View>: View {
+  enum Keeps {
+    case title
+    case detail
+  }
+
+  var keeps: Keeps = .detail
   @ViewBuilder let title: Title
   @ViewBuilder let detail: Detail
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -258,8 +266,13 @@ private struct TitleDetail<Title: View, Detail: View>: View {
       .frame(maxWidth: .infinity, alignment: .leading)
     } else {
       HStack(spacing: ChapterTheme.Metric.rowGap) {
-        title.frame(maxWidth: .infinity, alignment: .leading)
-        detail.multilineTextAlignment(.trailing)
+        title
+          .frame(maxWidth: keeps == .detail ? .infinity : nil, alignment: .leading)
+          .layoutPriority(keeps == .title ? 1 : 0)
+        detail
+          .multilineTextAlignment(.trailing)
+          .frame(maxWidth: keeps == .title ? .infinity : nil, alignment: .trailing)
+          .layoutPriority(keeps == .detail ? 1 : 0)
       }
     }
   }
@@ -271,7 +284,7 @@ private struct SummaryRow: View {
   let detail: String
 
   var body: some View {
-    TitleDetail {
+    TitleDetail(keeps: .title) {
       Text(title)
         .chapterTextStyle(.bodyEmphasis)
         .foregroundStyle(ChapterTheme.Color.ink)

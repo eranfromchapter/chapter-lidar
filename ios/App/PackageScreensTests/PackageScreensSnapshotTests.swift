@@ -72,6 +72,7 @@
       state.review?.captureCountText = "1 floor"
       state.review?.manifestEntries = 37
       state.review?.totalBytes = 500_000_000
+      state.review?.compassText = "compass: not recorded"
       state.sealError = SealFailureText.make(reason: "no space left on the phone")
       assertChapterSnapshot(
         of: Pushed { PackageReadyView(state: state) }, named: "package-ready-seal-failed")
