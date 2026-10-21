@@ -179,6 +179,7 @@ describe("LiveHubClient mapping", () => {
               sales: { dealId: "S-9" },
               title: "Loft",
               property: { formatted: "9 Loft Street", confirmed: true },
+              owner: { fullName: "Pat Owner", mobile: "+1 917 555 0199" },
             },
           ],
         },
@@ -193,9 +194,15 @@ describe("LiveHubClient mapping", () => {
         addressConfirmed: "property.confirmed",
         updatedAt: "modified",
       },
+      projectManager: { name: "owner.fullName", phone: "owner.mobile" },
     });
     assert.deepEqual(await hub.listProjects(), [
-      { dealId: "S-9", projectName: "Loft", address: { formatted: "9 Loft Street" } },
+      {
+        dealId: "S-9",
+        projectName: "Loft",
+        address: { formatted: "9 Loft Street" },
+        projectManager: { name: "Pat Owner", phone: "+1 917 555 0199" },
+      },
     ]);
     assert.equal(stub.calls[0]?.url, "https://hub.example.test/base/v2/deals");
   });

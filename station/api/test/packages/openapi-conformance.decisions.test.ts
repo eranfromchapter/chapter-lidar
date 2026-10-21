@@ -1,8 +1,10 @@
-// F7 AC6 (modeling decisions area): listModelingDecisions and createModelingDecision match
-// contract/openapi/station.yaml: the routes exist with the documented roles, request bodies
-// are accepted or rejected exactly as the document's schema says, and every response
-// validates against the document. Also covers the cross-field rules (422), the recorded
-// author and time, the audit row and the append-only log. Runs against a throwaway Postgres.
+// F7 AC6 (modeling decisions area): listModelingDecisions, createModelingDecision and (1.1.0)
+// listAllModelingDecisions match contract/openapi/station.yaml: the routes exist with the
+// documented roles, request bodies and query strings are accepted or rejected exactly as the
+// document says, and every response validates against the document. Also covers the
+// cross-field rules (422), the recorded author and time, the audit row, the append-only log
+// and the review screen's list across packages (newest first, deal filter, limit).
+// Runs against a throwaway Postgres.
 
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
@@ -10,7 +12,11 @@ import { OpenApi } from "./openapi.js";
 import {
   BIM_NAME,
   BIM_OID,
+  BROKEN_VERDICT_ID,
   CAPTURE_MODEL_PATH,
+  DEAL_ID,
+  MANIFEST,
+  OTHER_DEAL_ID,
   FIELD_CONTROLS_PATH,
   FLOOR_1,
   FLOOR_2,
@@ -19,6 +25,8 @@ import {
   QUEUED_ID,
   REVISION_2_ID,
   UNKNOWN_ID,
+  filesOf,
+  insertFile,
   seedRegistry,
   startStation,
   type TestStation,
@@ -79,7 +87,11 @@ const full = {
 };
 
 describe("modeling decisions area implements its OpenAPI operations", () => {
-  for (const operationId of ["listModelingDecisions", "createModelingDecision"]) {
+  for (const operationId of [
+    "listModelingDecisions",
+    "createModelingDecision",
+    "listAllModelingDecisions",
+  ]) {
     it(`${operationId} is routed with the documented roles`, () => {
       const op = openapi.operation(operationId);
       const route = station.app.routeAccess.find(
@@ -313,4 +325,113 @@ describe("listModelingDecisions", () => {
     );
     await assert.rejects(station.db.query("DELETE FROM modeling_decisions"), /append-only/);
   });
+});
+
+describe("listAllModelingDecisions", () => {
+  type Decision = Record<string, unknown> & { decisionId: string; decidedAt: string };
+
+  async function listAll(query = "", roles: Roles = ["bim"]) {
+    const response = await station.app.inject({
+      method: "GET",
+      url: `/v1/modeling-decisions${query}`,
+      headers: await station.auth(roles),
+    });
+    assert.deepEqual(
+      openapi.responseErrors("listAllModelingDecisions", response),
+      [],
+      response.body,
+    );
+    return response;
+  }
+
+  let otherDeal: Decision;
+
+  before(async () => {
+    await insertFile(station.db, BROKEN_VERDICT_ID, filesOf(MANIFEST)[0]!, "verified");
+    const created = await create(BROKEN_VERDICT_ID, {
+      element: "Other deal hall",
+      decision: "Taken from the plan.",
+      sources: [{ path: MANIFEST.files[0]!.path }],
+    });
+    assert.equal(created.statusCode, 201, created.body);
+    otherDeal = created.json() as Decision;
+  });
+
+  it("lists decisions of every package newest first, with each package's deal and revision", async () => {
+    const response = await listAll();
+    assert.equal(response.statusCode, 200);
+    const { decisions, truncated } = response.json() as {
+      decisions: Decision[];
+      truncated: boolean;
+    };
+    assert.equal(truncated, false);
+    const all = await station.db.query<{ n: number }>(
+      "SELECT count(*) AS n FROM modeling_decisions",
+    );
+    assert.equal(decisions.length, all.rows[0]?.n);
+    const times = decisions.map((decision) => Date.parse(decision.decidedAt));
+    assert.deepEqual(
+      times,
+      [...times].sort((a, b) => b - a),
+    );
+    const { decisionId, packageId, ...rest } = otherDeal;
+    assert.deepEqual(decisions[0], {
+      decisionId,
+      packageId,
+      dealId: OTHER_DEAL_ID,
+      revision: 1,
+      ...rest,
+    });
+    assert.equal(
+      JSON.stringify(Object.keys(decisions[0]!).slice(0, 4)),
+      JSON.stringify(["decisionId", "packageId", "dealId", "revision"]),
+    );
+  });
+
+  it("filters by dealId", async () => {
+    const response = await listAll(`?dealId=${DEAL_ID}`, ["admin"]);
+    const { decisions } = response.json() as { decisions: Decision[] };
+    assert.ok(decisions.length > 0);
+    assert.ok(decisions.every((decision) => decision.dealId === DEAL_ID));
+    assert.ok(!decisions.some((decision) => decision.decisionId === otherDeal.decisionId));
+    const none = await listAll("?dealId=HUB-none");
+    assert.deepEqual(none.json(), { decisions: [], truncated: false });
+  });
+
+  it("stops at limit and says the list is truncated", async () => {
+    const page = (await listAll("?limit=1")).json() as {
+      decisions: Decision[];
+      truncated: boolean;
+    };
+    assert.equal(page.truncated, true);
+    assert.deepEqual(
+      page.decisions.map((decision) => decision.decisionId),
+      [otherDeal.decisionId],
+    );
+  });
+
+  it("answers 403 for the capture role", async () => {
+    const response = await listAll("", ["capture"]);
+    assert.equal(response.statusCode, 403);
+  });
+
+  const queries: [string, Record<string, string>][] = [
+    ["no parameters", {}],
+    ["a deal", { dealId: DEAL_ID }],
+    ["limit 200", { limit: "200" }],
+    ["limit 0", { limit: "0" }],
+    ["limit 201", { limit: "201" }],
+    ["a limit that is not a number", { limit: "ten" }],
+    ["an empty dealId", { dealId: "" }],
+    ["a 65-character dealId", { dealId: "D".repeat(65) }],
+    ["an unknown parameter", { packageId: PACKAGE_ID }],
+  ];
+  for (const [label, query] of queries) {
+    it(`accepts or rejects ${label} as the document does`, async () => {
+      const response = await listAll(`?${new URLSearchParams(query).toString()}`);
+      const expected =
+        openapi.queryErrors("listAllModelingDecisions", query).length === 0 ? 200 : 400;
+      assert.equal(response.statusCode, expected, response.body);
+    });
+  }
 });

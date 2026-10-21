@@ -14,6 +14,8 @@ import {
   BROKEN_VERDICT_ID,
   CAPTURE_RECORD,
   DEAL_ID,
+  FLOOR_1,
+  FLOOR_2,
   MANIFEST,
   OTHER_DEAL_ID,
   OTHER_DEAL_PACKAGE_ID,
@@ -98,7 +100,9 @@ describe("listPackages", () => {
       [REVISION_2_ID, PACKAGE_ID, QUEUED_ID],
     );
     const [rev2, rev1, queued] = packages;
-    assert.deepEqual(rev1, {
+    const { updatedAt, ...rest } = rev1 ?? {};
+    assert.ok(Date.parse(String(updatedAt)) >= Date.parse("2026-10-17T15:06:10Z"));
+    assert.deepEqual(rest, {
       packageId: PACKAGE_ID,
       visitId: VISIT_ID,
       dealId: DEAL_ID,
@@ -106,6 +110,21 @@ describe("listPackages", () => {
       status: "verdict_ready",
       createdAt: "2026-10-17T15:06:10Z",
       sealedAt: MANIFEST.sealedAt,
+      createdBy: { name: "Dana Field" },
+      visitedAt: "2026-10-17T13:55:00Z",
+      operatorName: "Test Operator",
+      captures: [
+        { ...FLOOR_1, label: "Floor 1", mode: "floor" },
+        { ...FLOOR_2, label: "Floor 2", mode: "floor" },
+      ],
+      totals: {
+        files: MANIFEST.files.length,
+        bytes: MANIFEST.files.reduce((sum, file) => sum + file.bytes, 0),
+        filesVerified: MANIFEST.files.length,
+        bytesVerified: MANIFEST.files.reduce((sum, file) => sum + file.bytes, 0),
+      },
+      checks: { status: "completed", finishedAt: VERDICT.evaluatedAt },
+      report: { status: "pending" },
       verdict: {
         verdictId: VERDICT.verdictId,
         outcome: VERDICT.outcome,
@@ -190,6 +209,8 @@ describe("getPackage", () => {
       bytes: 1258291,
       status: "verified",
       checkedAt: "2026-10-17T15:10:30Z",
+      generator: "chapter-capture-ios/PlanExport",
+      generatorVersion: "1.0.0 (42)",
     });
     assert.ok(!JSON.stringify(body).includes("blob"), "storage names are not exposed");
   });

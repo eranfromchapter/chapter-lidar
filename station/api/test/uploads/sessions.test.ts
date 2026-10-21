@@ -135,15 +135,34 @@ describe("opening an upload session", () => {
     assert.equal(problemOf(response).code, "revision_exists");
   });
 
-  it("accepts revision 2 of the visit when it names the package it supersedes", async () => {
+  it("refuses revision 2 while the package it supersedes is still uploading (422)", async () => {
     const next = makePackage({
       visitId: pkg.visitId,
       revision: 2,
       supersedesPackageId: pkg.packageId,
     });
     const response = await station.openSession(next);
+    assert.equal(response.statusCode, 422, response.body);
+    assert.equal(problemOf(response).code, "supersedes_mismatch");
+    assert.deepEqual(
+      problemOf(response).errors?.map((error) => error.pointer),
+      ["/supersedesPackageId"],
+    );
+  });
+
+  it("accepts revision 2 of the visit when the station never received the package it supersedes", async () => {
+    const next = makePackage({
+      visitId: pkg.visitId,
+      revision: 2,
+      supersedesPackageId: randomUUID(),
+    });
+    const response = await station.openSession(next);
     assert.equal(response.statusCode, 201, response.body);
-    assert.equal((response.json() as UploadSessionView).revision, 2);
+    const session = response.json() as UploadSessionView;
+    assert.equal(session.revision, 2);
+    assert.ok(
+      session.files.every((file) => file.upload !== undefined && file.status === "pending"),
+    );
   });
 
   it("accepts the admin role and refuses bim (403)", async () => {

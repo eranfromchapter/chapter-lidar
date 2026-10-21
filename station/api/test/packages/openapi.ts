@@ -146,7 +146,8 @@ export class OpenApi {
 
   /**
    * Errors of a query string (name -> value or values) against the operation's query
-   * parameters: required ones present, no undeclared ones, each value valid.
+   * parameters: required ones present, no undeclared ones, each value valid. A value of an
+   * integer parameter is read as a number when it is one ("5"), as a server parses it.
    */
   queryErrors(operationId: string, query: Record<string, string | string[]>): string[] {
     const op = this.operation(operationId);
@@ -171,7 +172,10 @@ export class OpenApi {
         errors.push(`${name} is repeated`);
         return;
       }
-      for (const message of this.errorsAt(`${op.pointer}/parameters/${index}/schema`, value)) {
+      const schema = param.schema as JsonObject | undefined;
+      const numeric = schema?.type === "integer" && /^-?\d+$/.test(value);
+      const parsed = numeric ? Number(value) : value;
+      for (const message of this.errorsAt(`${op.pointer}/parameters/${index}/schema`, parsed)) {
         errors.push(`${name}: ${message}`);
       }
     });

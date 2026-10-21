@@ -30,6 +30,14 @@ export interface HubApiMapping {
     /** Last update time (ISO 8601 string or epoch ms), for ordering. */
     readonly updatedAt: string;
   };
+  /**
+   * Dotted field paths of the deal's project manager (optional in the HUB answer; the project
+   * has none when the name is absent). Kept apart from `fields`, which station-hub mirrors.
+   */
+  readonly projectManager: {
+    readonly name: string;
+    readonly phone: string;
+  };
   /** How the service credential is sent. */
   readonly auth: {
     /** Request header that carries the credential. */
@@ -49,6 +57,7 @@ export const HUB_API_MAPPING: HubApiMapping = Object.freeze({
     addressConfirmed: "addressConfirmed",
     updatedAt: "updatedAt",
   }),
+  projectManager: Object.freeze({ name: "projectManager.name", phone: "projectManager.phone" }),
   auth: Object.freeze({ header: "authorization", scheme: "Bearer" }),
 });
 

@@ -13,6 +13,11 @@ export interface HubProject {
     /** Single-line address exactly as shown by the HUB, 1 to 300 characters. */
     readonly formatted: string;
   };
+  /** The deal's project manager, when the HUB provides one (name 1-200, phone 1-50 characters). */
+  readonly projectManager?: {
+    readonly name: string;
+    readonly phone?: string;
+  };
   /** Last update time reported by the HUB (epoch ms), used for "most recently updated first". */
   readonly updatedAtMs?: number;
 }

@@ -37,13 +37,23 @@ export interface HubProjectBody {
   dealId: string;
   projectName?: string;
   address: { formatted: string };
+  projectManager?: { name: string; phone?: string };
 }
 
 export function toProjectBody(project: HubProject): HubProjectBody {
+  const manager = project.projectManager;
   return {
     dealId: project.dealId,
     ...(project.projectName === undefined ? {} : { projectName: project.projectName }),
     address: { formatted: project.address.formatted },
+    ...(manager === undefined
+      ? {}
+      : {
+          projectManager: {
+            name: manager.name,
+            ...(manager.phone === undefined ? {} : { phone: manager.phone }),
+          },
+        }),
   };
 }
 

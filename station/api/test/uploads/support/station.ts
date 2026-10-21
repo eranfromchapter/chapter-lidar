@@ -23,6 +23,7 @@ export interface SessionFileView {
   path: string;
   status: string;
   upload?: UploadTargetView;
+  carriedOverFrom?: string;
 }
 
 export interface UploadSessionView {
@@ -31,6 +32,7 @@ export interface UploadSessionView {
   dealId: string;
   revision: number;
   status: string;
+  createdAt?: string;
   files: SessionFileView[];
 }
 

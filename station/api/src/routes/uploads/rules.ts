@@ -80,6 +80,69 @@ export function sessionRequestErrors(body: UploadSessionRequest): ProblemFieldEr
   return errors;
 }
 
+/** The superseded package as the station holds it, for the carry-over rule. */
+export interface SupersededIdentity {
+  readonly visitId: string;
+  readonly dealId: string;
+  readonly revision: number;
+  /** False while it is still uploading. */
+  readonly sealed: boolean;
+}
+
+/**
+ * Why the package named by supersedesPackageId cannot be the previous revision of this
+ * session (all at /supersedesPackageId): another visit or deal, not revision - 1, or not sealed.
+ */
+export function supersedesMismatchErrors(
+  body: UploadSessionRequest,
+  superseded: SupersededIdentity,
+): ProblemFieldError[] {
+  const pointer = "/supersedesPackageId";
+  const errors: ProblemFieldError[] = [];
+  if (superseded.visitId !== body.visitId) {
+    errors.push({ pointer, message: "names a package of another visit" });
+  }
+  if (superseded.dealId !== body.dealId) {
+    errors.push({ pointer, message: "names a package of another deal" });
+  }
+  if (superseded.revision !== body.revision - 1) {
+    errors.push({
+      pointer,
+      message: `names revision ${superseded.revision}, not revision ${body.revision - 1}`,
+    });
+  }
+  if (!superseded.sealed) {
+    errors.push({ pointer, message: "names a package that is still uploading" });
+  }
+  return errors;
+}
+
+/** A verified file of the superseded package, as the registry holds it. */
+export interface VerifiedFileRef {
+  readonly role: string;
+  readonly capture_id: string | null;
+  readonly area_key: string | null;
+  readonly sha256: string;
+  readonly bytes: number;
+}
+
+/**
+ * True when a declared file is the same file as a verified file of the superseded package at
+ * the same path: same role, capture, area, SHA-256 and size (carry-over).
+ */
+export function carryOverMatch(
+  declared: UploadFileDeclaration,
+  verified: VerifiedFileRef,
+): boolean {
+  return (
+    declared.role === verified.role &&
+    (declared.captureId ?? null) === verified.capture_id &&
+    (declared.areaKey ?? null) === verified.area_key &&
+    declared.sha256 === verified.sha256 &&
+    declared.bytes === verified.bytes
+  );
+}
+
 /** The package's session, as registered by POST /packages. */
 export interface SessionIdentity {
   readonly packageId: string;

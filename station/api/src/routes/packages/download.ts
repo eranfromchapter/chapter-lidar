@@ -11,10 +11,15 @@
 // - Only bim and admin may get a link; only verified files with a stored blob; every link
 //   handed out is audited (the URL itself never is).
 // - The link signs package_files.blob_name, the blob the file was verified in. It is never
-//   rebuilt from the path: a re-uploaded file lives in `<packageId>.retry-<n>/<path>`.
+//   rebuilt from the path: a re-uploaded file lives in `<packageId>.retry-<n>/<path>`, and a
+//   file carried over from revision n-1 is that revision's blob.
+// - Once the package is sealed, the path may also be the sealed manifest
+//   (`Source Register/<visitId>/manifest.json`, stored as `<packageId>/<that path>`); the audit
+//   entry records its role as `manifest`.
 //
 // Exposed as GET /v1/packages/{packageId}/files/download?path= (OpenAPI getFileDownloadLink)
-// in index.ts.
+// in index.ts. The same signer, on the reports container, serves the spatial report link
+// (report.ts).
 //
 // DUPLICATION: the uploads area builds its own storage client (write SAS) in parallel. Merge
 // the credential and endpoint handling here with that module once both have landed.
@@ -34,6 +39,7 @@ import type { Role } from "../../core/auth.js";
 import type { StationConfig } from "../../core/config.js";
 import { ProblemError } from "../../core/problem.js";
 import { toApiDateTime } from "../../core/time.js";
+import { manifestBlobName, manifestPath } from "../../storage/originals.js";
 import { isContractUuid } from "./schemas.js";
 
 /** How long a download link is valid. */
@@ -185,14 +191,15 @@ export function accountNameFromUrl(accountUrl: string): string {
 /**
  * The signer for the configured storage: managed identity (user delegation key) when
  * AZURE_STORAGE_ACCOUNT_URL is set, else the account key of AZURE_STORAGE_CONNECTION_STRING.
- * Throws when neither is configured or the connection string carries no account key.
+ * Signs blobs of the originals container unless another container is named. Throws when
+ * neither is configured or the connection string carries no account key.
  */
 export function readLinkSignerFromConfig(
   config: StationConfig,
   credential?: TokenCredential,
+  containerName: string = config.storage.originalsContainer,
 ): ReadLinkSigner {
   const storage = config.storage;
-  const containerName = storage.originalsContainer;
   const publicEndpoint =
     storage.publicBlobEndpoint === undefined
       ? {}
@@ -262,16 +269,50 @@ export interface IssuedDownloadLink {
 }
 
 interface DownloadFileRow {
+  role: string;
   status: string;
   sha256: string;
   bytes: number;
   blob_name: string | null;
 }
 
+interface SealedManifestRow {
+  visit_id: string;
+  manifest_sha256: string;
+  manifest_bytes: number | null;
+}
+
+/** The sealed manifest as a download target, when path is its path and its size is known. */
+async function sealedManifest(
+  request: FastifyRequest,
+  packageId: string,
+  path: string,
+): Promise<DownloadFileRow | undefined> {
+  const result = await request.server.db.query<SealedManifestRow>(
+    `SELECT visit_id, manifest_sha256, manifest_bytes FROM packages
+      WHERE package_id = $1 AND manifest IS NOT NULL`,
+    [packageId],
+  );
+  const row = result.rows[0];
+  // manifest_bytes is NULL only for a package sealed before the review read model until
+  // scripts/backfill-review-read-model.ts fills it.
+  if (row === undefined || path !== manifestPath(row.visit_id) || row.manifest_bytes === null) {
+    return undefined;
+  }
+  return {
+    role: "manifest",
+    status: "verified",
+    sha256: row.manifest_sha256,
+    bytes: row.manifest_bytes,
+    blob_name: manifestBlobName(packageId, row.visit_id),
+  };
+}
+
 /**
- * Hands the signed-in bim/admin caller a read-only link to one verified file and audits it.
- * 404 when the package or file does not exist, 409 file_not_verified when the file has no
- * verified blob, 403 for any other role (also enforced by the route's roles).
+ * Hands the signed-in bim/admin caller a read-only link to one verified file (or the sealed
+ * manifest) and audits it. 404 when the package or file does not exist (the manifest path
+ * before the seal), 409 file_not_verified when the file has no verified blob, 403 for any
+ * other role (also enforced by the route's roles).
  */
 export async function issueDownloadLink(
   request: FastifyRequest,
@@ -289,11 +330,11 @@ export async function issueDownloadLink(
   }
   const db = request.server.db;
   const result = await db.query<DownloadFileRow>(
-    `SELECT status, sha256, bytes, blob_name FROM package_files
+    `SELECT role, status, sha256, bytes, blob_name FROM package_files
       WHERE package_id = $1 AND path = $2`,
     [packageId, path],
   );
-  const row = result.rows[0];
+  const row = result.rows[0] ?? (await sealedManifest(request, packageId, path));
   if (row === undefined) {
     throw new ProblemError(404, "not_found", { detail: "No file with this path in the package." });
   }
@@ -311,6 +352,7 @@ export async function issueDownloadLink(
     { type: "package", id: packageId },
     {
       path,
+      role: row.role,
       expiresAt,
     },
   );

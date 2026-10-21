@@ -6,6 +6,8 @@ import type { HubProject } from "./types.js";
 export const DEAL_ID_MAX_LENGTH = 64;
 export const PROJECT_NAME_MAX_LENGTH = 200;
 export const ADDRESS_MAX_LENGTH = 300;
+export const PROJECT_MANAGER_NAME_MAX_LENGTH = 200;
+export const PROJECT_MANAGER_PHONE_MAX_LENGTH = 50;
 
 /** The deal fields the station needs, as read from the HUB (types not yet checked). */
 export interface RawHubDeal {
@@ -15,6 +17,9 @@ export interface RawHubDeal {
   /** The HUB's "address confirmed" marker; only the boolean true counts as confirmed. */
   readonly addressConfirmed: unknown;
   readonly updatedAt: unknown;
+  /** The deal's project manager, when the HUB gives one (optional fields). */
+  readonly projectManagerName?: unknown;
+  readonly projectManagerPhone?: unknown;
 }
 
 /** Why a raw deal is not a project for capture. */
@@ -46,12 +51,27 @@ function normalizeAddress(value: unknown): string | undefined {
   return value;
 }
 
-function normalizeName(value: unknown): string | undefined {
+function normalizeName(value: unknown, maxLength = PROJECT_NAME_MAX_LENGTH): string | undefined {
   if (typeof value !== "string") {
     return undefined;
   }
-  const name = value.trim().slice(0, PROJECT_NAME_MAX_LENGTH);
+  const name = value.trim().slice(0, maxLength);
   return name === "" ? undefined : name;
+}
+
+/** The project manager when the HUB names one; a phone without a name is dropped. */
+function normalizeProjectManager(raw: RawHubDeal): HubProject["projectManager"] {
+  const name = normalizeName(raw.projectManagerName, PROJECT_MANAGER_NAME_MAX_LENGTH);
+  if (name === undefined) {
+    return undefined;
+  }
+  const phone =
+    typeof raw.projectManagerPhone === "string" &&
+    !/[\r\n]/.test(raw.projectManagerPhone) &&
+    raw.projectManagerPhone.trim().length <= PROJECT_MANAGER_PHONE_MAX_LENGTH
+      ? normalizeName(raw.projectManagerPhone, PROJECT_MANAGER_PHONE_MAX_LENGTH)
+      : undefined;
+  return phone === undefined ? { name } : { name, phone };
 }
 
 function normalizeUpdatedAt(value: unknown): number | undefined {
@@ -82,6 +102,7 @@ export function normalizeDeal(raw: RawHubDeal): NormalizeResult {
     return { ok: false, reason: "invalid_address" };
   }
   const projectName = normalizeName(raw.projectName);
+  const projectManager = normalizeProjectManager(raw);
   const updatedAtMs = normalizeUpdatedAt(raw.updatedAt);
   return {
     ok: true,
@@ -89,6 +110,7 @@ export function normalizeDeal(raw: RawHubDeal): NormalizeResult {
       dealId,
       ...(projectName === undefined ? {} : { projectName }),
       address: { formatted },
+      ...(projectManager === undefined ? {} : { projectManager }),
       ...(updatedAtMs === undefined ? {} : { updatedAtMs }),
     },
   };

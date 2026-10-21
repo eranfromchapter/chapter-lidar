@@ -107,6 +107,46 @@ describe("normalizeDeal", () => {
     assert.ok(result.ok);
     assert.equal(result.project.projectName?.length, 200);
   });
+
+  it("keeps the project manager when the HUB names one (critique R-15)", () => {
+    const named = normalizeDeal(
+      raw({ projectManagerName: "  Pat Manager ", projectManagerPhone: " +1 212 555 0100 " }),
+    );
+    assert.ok(named.ok);
+    assert.deepEqual(named.project.projectManager, {
+      name: "Pat Manager",
+      phone: "+1 212 555 0100",
+    });
+
+    const cases: [string, Partial<RawHubDeal>, unknown][] = [
+      ["no project manager", {}, undefined],
+      ["a phone without a name", { projectManagerPhone: "+1 212 555 0100" }, undefined],
+      ["a blank name", { projectManagerName: "  " }, undefined],
+      ["a name only", { projectManagerName: "Pat" }, { name: "Pat" }],
+      [
+        "a phone longer than 50 characters",
+        { projectManagerName: "Pat", projectManagerPhone: "1".repeat(51) },
+        { name: "Pat" },
+      ],
+      [
+        "a phone over two lines",
+        { projectManagerName: "Pat", projectManagerPhone: "212\n555" },
+        { name: "Pat" },
+      ],
+      ["a name that is not text", { projectManagerName: 7 }, undefined],
+    ];
+    for (const [label, overrides, expected] of cases) {
+      const result = normalizeDeal(raw(overrides));
+      assert.ok(result.ok, label);
+      assert.deepEqual(result.project.projectManager, expected, label);
+      assert.equal("projectManager" in result.project, expected !== undefined, label);
+    }
+  });
+
+  it("names the project manager of the fake's second deal", async () => {
+    const project = await new FakeHubClient().getProject("fixture-deal-0002");
+    assert.deepEqual(project?.projectManager, { name: "Pat Fixture", phone: "+1 212 555 0100" });
+  });
 });
 
 describe("normalizeDeals", () => {

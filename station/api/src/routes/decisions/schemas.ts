@@ -2,7 +2,12 @@
 // components.schemas.ModelingDecisionInput), built from the contract value rules.
 // test/packages/openapi-conformance.decisions.test.ts checks it against the document.
 
-import { areaKeySchema, relativePathSchema, uuidSchema } from "../packages/schemas.js";
+import {
+  areaKeySchema,
+  dealIdSchema,
+  relativePathSchema,
+  uuidSchema,
+} from "../packages/schemas.js";
 
 const shortId = { type: "string", minLength: 1, maxLength: 128 } as const;
 
@@ -53,4 +58,27 @@ export interface ModelingDecision extends ModelingDecisionInput {
   packageId: string;
   decidedBy: { name: string; userId: string };
   decidedAt: string;
+}
+
+/** OpenAPI ModelingDecisionWithContext: a decision with its package's deal and revision. */
+export interface ModelingDecisionWithContext extends ModelingDecision {
+  dealId: string;
+  revision: number;
+}
+
+export const LIST_ALL_DECISIONS_DEFAULT_LIMIT = 100;
+
+/** GET /modeling-decisions query string. Unknown parameters are rejected (400). */
+export const listAllDecisionsQuerySchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    dealId: dealIdSchema,
+    limit: { type: "integer", minimum: 1, maximum: 200, default: LIST_ALL_DECISIONS_DEFAULT_LIMIT },
+  },
+} as const;
+
+export interface ListAllDecisionsQuery {
+  dealId?: string;
+  limit?: number;
 }
