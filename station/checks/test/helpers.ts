@@ -56,6 +56,37 @@ export function loadBroken(id: string): LoadedPackage {
 /** HUB address of the good fixtures (truth.json hub.address). */
 export const HUB_ADDRESS = readTruth("box-room").hub.address;
 
+/** A limitation finding a good fixture has by design. */
+export interface GoodLimitation {
+  ruleId: string;
+  /** Label of the capture the finding names. */
+  label: string;
+  /** The line of verdict.limitations. */
+  limitation: string;
+}
+
+/**
+ * Limitations of the good fixtures; none has a blocker. Every good fixture is ready except the
+ * two-floor house: its capture record is 1.1.0 and Floor 2 was scanned with the compass but got no
+ * reading (headingIssue not_calibrated; compass spec 4.5), so that floor's orientation is not
+ * verified. (A floor with no compass field at all would be one scanned before the compass, which
+ * orientation.compass does not grade.)
+ */
+export const GOOD_LIMITATIONS: Readonly<Record<string, readonly GoodLimitation[]>> = {
+  "two-floor-house": [
+    {
+      ruleId: "orientation.compass",
+      label: "Floor 2",
+      limitation: "Floor 2: Plan orientation is not verified; north is not shown.",
+    },
+  ],
+};
+
+/** The outcome of a good fixture: ready, or limited by its GOOD_LIMITATIONS. */
+export function goodOutcome(name: string): "ready" | "limited" {
+  return (GOOD_LIMITATIONS[name] ?? []).length === 0 ? "ready" : "limited";
+}
+
 function sha256(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }

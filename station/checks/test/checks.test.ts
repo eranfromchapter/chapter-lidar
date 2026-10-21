@@ -54,7 +54,11 @@ const EXPECTED: Record<string, Array<[string, "blocker" | "limitation"]>> = {
     ["geometry.plausibility", "limitation"],
     ["geometry.plausibility", "limitation"],
   ],
-  "house with one shared landmark": [["floors.registration", "limitation"]],
+  // Plus the two-floor house's own limitation: Floor 2's compass was not calibrated.
+  "house with one shared landmark": [
+    ["orientation.compass", "limitation"],
+    ["floors.registration", "limitation"],
+  ],
   "field controls derived from the scan": [["evidence.independence", "limitation"]],
 };
 

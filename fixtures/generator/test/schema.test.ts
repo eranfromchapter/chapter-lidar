@@ -239,7 +239,8 @@ describe("every good fixture is a complete intake package", () => {
             headingSource: "true",
             headingRecordedAt: "2026-10-17T14:02:20Z",
           },
-          {},
+          // Scanned with the compass, no reading: the app says why.
+          { headingIssue: "not_calibrated" },
         ],
       ],
     };

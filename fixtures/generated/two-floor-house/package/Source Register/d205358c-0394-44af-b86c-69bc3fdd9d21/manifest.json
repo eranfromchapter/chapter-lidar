@@ -9,8 +9,8 @@
     {
       "path": "Source Register/d205358c-0394-44af-b86c-69bc3fdd9d21/capture-record.json",
       "role": "capture_record",
-      "sha256": "1cc10f0b11a8310c8e0dede540e28faf7863cdd5421c39d5b672660e5673f6a9",
-      "bytes": 1631,
+      "sha256": "311999735e92d8636565a228a9b16aea00d09a7d4ac6992a5eb51178f7519880",
+      "bytes": 1671,
       "mime": "application/json",
       "generator": "chapter-fixtures/CaptureRecord",
       "generatorVersion": "1.0.0",
