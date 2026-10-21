@@ -1,7 +1,7 @@
 // swift-tools-version: 6.0
 // PlanExport: plan files written from a CaptureModel on the phone, with no network:
-// DXF, room CSV, plan PDF, Spatial Report PDF, PNG and SVG previews, and the one-page colour
-// Floorplan (PDF and SVG).
+// DXF, room CSV, the plan sheet PDF, PNG and SVG previews, and the one-page colour Floorplan
+// (PDF and SVG). The spatial report is made by the station.
 // Pure Swift + Foundation (no CoreGraphics, PDFKit or UIKit) so every writer builds and tests on Linux.
 import PackageDescription
 
@@ -29,7 +29,9 @@ let package = Package(
       dependencies: [
         "PlanExport", .product(name: "CaptureContract", package: "swift"),
         .product(name: "CaptureModelMapping", package: "CaptureCore"),
-      ]
+      ],
+      // SVG references of the visual checks (NorthSymbolSnapshotTests), read by path.
+      exclude: ["__Snapshots__"]
     ),
   ]
 )

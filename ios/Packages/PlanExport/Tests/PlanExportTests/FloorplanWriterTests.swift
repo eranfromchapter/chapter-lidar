@@ -73,7 +73,7 @@ final class FloorplanWriterTests: XCTestCase {
       XCTAssertTrue(shown.contains(room.label), room.label)
     }
     let drawing = try FloorplanWriter.Sheet(
-      model: model, options: .init(address: address, northDegrees: 0)
+      model: model, options: .init(address: address, north: .verified(heading: 0, accuracy: 8))
     ).drawing
     for room in drawing.rooms {
       XCTAssertTrue(shown.contains(units.roomArea(room.areaM2)), "area of \(room.label)")
@@ -182,41 +182,115 @@ final class FloorplanWriterTests: XCTestCase {
     XCTAssertTrue(PDFFile(addressed.pdf).text.contains("/Title (Floorplan - \(address))"))
   }
 
-  func testCompassOnlyWhenNorthIsKnownAndTurnsWithThePlan() throws {
-    let model = WalkthroughFixture.model
-    XCTAssertFalse(layers(try sheet(model)).contains(.compass))
-    let sheet = try sheet(model) { $0.northDegrees = 0 }
-    XCTAssertTrue(layers(sheet).contains(.compass))
-    // The compass sits in the header, above the drawing.
-    let compass = sheet.items.filter {
-      if case .shape(let s) = $0 { return s.layer == .compass }
-      if case .text(let t) = $0 { return t.layer == .compass }
-      return false
+  /// The items of the north symbol on a page.
+  private func north(_ items: [DrawingItem]) -> (shapes: [DrawingShape], texts: [DrawingText]) {
+    var shapes: [DrawingShape] = []
+    var texts: [DrawingText] = []
+    for item in items {
+      if case .shape(let shape) = item, shape.layer == .compass { shapes.append(shape) }
+      if case .text(let text) = item, text.layer == .compass { texts.append(text) }
     }
-    let extent = FloorPlanDrawing.extent(of: compass)
-    let area = FloorplanWriter.Layout.drawingArea(
-      width: sheet.widthMM, height: sheet.heightMM, hasAddress: true)
-    XCTAssertGreaterThan(extent.minY, area.y + area.height)
-    XCTAssertLessThan(extent.maxY, sheet.heightMM)
-    XCTAssertGreaterThan(extent.minX, sheet.widthMM / 2)
-    // N points where north is on the turned plan.
-    let letter = try XCTUnwrap(
-      compass.compactMap { item -> DrawingText? in
-        if case .text(let t) = item { return t }
-        return nil
-      }.first)
-    // The rose's ring is the first compass shape.
-    let ring = try XCTUnwrap(
-      compass.compactMap { item -> DrawingShape? in
-        if case .shape(let s) = item { return s }
-        return nil
-      }.first)
-    let xs = ring.path.points.map(\.x)
-    let ys = ring.path.points.map(\.y)
+    return (shapes, texts)
+  }
+
+  func testNorthSymbolOnlyWhenNorthIsGivenAndTurnsWithThePlan() throws {
+    let model = WalkthroughFixture.model
+    XCTAssertFalse(layers(try sheet(model)).contains(.compass), "no north: nothing")
+    let hidden = try sheet(model) {
+      $0.north = .verified(heading: 0, accuracy: 8)
+      $0.compass = false
+    }
+    XCTAssertFalse(layers(hidden).contains(.compass), "compass false hides it")
+    XCTAssertNil(hidden.northBlock)
+    let sheet = try sheet(model) { $0.north = .verified(heading: 0, accuracy: 8) }
+    let (shapes, texts) = north(sheet.items)
+    // The block sits in the header, above the drawing, its right edge on the margin.
+    let extent = FloorPlanDrawing.extent(
+      of: shapes.map(DrawingItem.shape) + texts.map(DrawingItem.text))
+    XCTAssertGreaterThan(extent.minY, sheet.drawingArea.y + sheet.drawingArea.height)
+    XCTAssertLessThan(extent.maxY, sheet.heightMM - FloorplanWriter.Layout.margin)
+    XCTAssertEqual(extent.maxX, sheet.widthMM - FloorplanWriter.Layout.margin, accuracy: 0.01)
+    // The arrow's caption gives the bearing of up on the turned plan (compass §2.5): the plan
+    // is turned by rotationDegrees, so up is north turned back by it.
+    let symbol = NorthSymbol(
+      state: .verified(heading: 0, accuracy: 8),
+      drawingRotationCCW: -sheet.drawing.rotationDegrees)
+    guard case .arrow(let angle, false, let line1, let line2) = symbol else {
+      return XCTFail("verified draws an arrow")
+    }
+    XCTAssertEqual(texts.map(\.string), ["N", line1, line2])
+    XCTAssertEqual(line2, "\u{00B1}8\u{00B0} \u{00B7} \(CompassMath.wholeDegrees(angle))\u{00B0}")
+    // N points where north is on the turned plan: from the ring's centre (the first shape)
+    // through the letter.
+    let xs = shapes[0].path.points.map(\.x)
+    let ys = shapes[0].path.points.map(\.y)
     let center = Point2(x: (xs.min()! + xs.max()!) / 2, y: (ys.min()! + ys.max()!) / 2)
-    let direction = (Point2(x: letter.position.x, y: letter.position.y) - center).unit
+    let direction = (Point2(x: texts[0].position.x, y: texts[0].position.y) - center).unit
     let expected = Point2(x: 0, y: 1).rotated(by: -sheet.drawing.rotationDegrees * .pi / 180)
-    XCTAssertGreaterThan(direction.dot(expected), 0.9)
+    XCTAssertGreaterThan(direction.dot(expected), 0.999)
+    XCTAssertEqual(texts[0].rotationDegrees, angle, accuracy: 1e-9)
+  }
+
+  func testNotVerifiedNorthIsTheBoxOnThePageAndNothingOnScreen() throws {
+    let model = WalkthroughFixture.model
+    let unread = CompassState.notVerified(.noReading, accuracy: nil)
+    let sheet = try sheet(model) { $0.north = unread }
+    let (shapes, texts) = north(sheet.items)
+    XCTAssertEqual(texts.map(\.string), ["Orientation: not verified", "No compass reading"])
+    // One shape, the box's border: no ring, no arrow.
+    XCTAssertEqual(shapes.count, 1)
+    XCTAssertNil(shapes[0].fill)
+    XCTAssertEqual(shapes[0].stroke?.color, ChapterBrand.muted)
+    let shown = PDFFile(try write(model) { $0.north = unread }.pdf).shownText()
+    XCTAssertTrue(shown.contains("Orientation: not verified"))
+    XCTAssertTrue(shown.contains("No compass reading"))
+    // On screen a capture that is not verified draws nothing: the bytes of no north at all.
+    XCTAssertEqual(
+      try FloorplanWriter.screenPDF(model: model, options: .init(north: unread)),
+      try FloorplanWriter.screenPDF(model: model))
+    // A usable reading draws the arrow without its caption.
+    let approximate = CompassState.approximate(heading: 87.5, accuracy: 12, source: .magnetic)
+    let screen = PDFFile(
+      try FloorplanWriter.screenPDF(model: model, options: .init(north: approximate))
+    ).shownText()
+    XCTAssertTrue(screen.contains("N"))
+    XCTAssertFalse(screen.contains { $0.contains("compass") || $0.contains("magnetic") })
+  }
+
+  func testHeaderMakesRoomForTheNorthBlock() throws {
+    // Without an address the header is shallower than the north block with its caption: it
+    // grows so the block stays above the drawing.
+    let room = Synthetic.room(width: 4, length: 3)
+    for state in [
+      CompassState.verified(heading: 212.4, accuracy: 8),
+      .approximate(heading: 87.5, accuracy: 12, source: .magnetic),
+      .notVerified(.inaccurate, accuracy: 42),
+    ] {
+      for line in [nil, address] {
+        let sheet = try sheet(room) {
+          $0.address = line
+          $0.north = state
+        }
+        let block = try XCTUnwrap(sheet.northBlock)
+        let (shapes, texts) = north(sheet.items)
+        let extent = FloorPlanDrawing.extent(
+          of: shapes.map(DrawingItem.shape) + texts.map(DrawingItem.text))
+        let name = "\(state) \(line ?? "no address")"
+        XCTAssertGreaterThan(extent.minY, sheet.drawingArea.y + sheet.drawingArea.height, name)
+        // As wide as the block (the not-verified box's border reaches half its 0.75 pt out).
+        XCTAssertEqual(
+          extent.maxX - extent.minX, block.width, accuracy: 0.3, "block width \(name)")
+        let top = sheet.heightMM - FloorplanWriter.Layout.margin
+        XCTAssertLessThanOrEqual(top - extent.minY, block.depth + 0.05, name)
+      }
+      // No north: the header and the drawing area are as before.
+      let plain = try sheet(room) { $0.address = nil }
+      XCTAssertEqual(
+        plain.drawingArea.height,
+        FloorplanWriter.Layout.drawingArea(
+          width: plain.widthMM, height: plain.heightMM, hasAddress: false
+        ).height, accuracy: 1e-9)
+    }
   }
 
   // MARK: Fitting
@@ -324,9 +398,9 @@ final class FloorplanWriterTests: XCTestCase {
 
   func testQuarterTurnsTurnTheDrawing() throws {
     let model = Synthetic.room(width: 6, length: 3)
-    let flat = try FloorPlanDrawing(model: model, options: .init(northDegrees: 0))
-    let turned = try FloorPlanDrawing(
-      model: model, options: .init(northDegrees: 0, quarterTurns: 1))
+    let north = CompassState.verified(heading: 0, accuracy: 8)
+    let flat = try FloorPlanDrawing(model: model, options: .init(north: north))
+    let turned = try FloorPlanDrawing(model: model, options: .init(north: north, quarterTurns: 1))
     XCTAssertEqual(turned.rotationDegrees, flat.rotationDegrees - 90, accuracy: 1e-9)
     let room = try XCTUnwrap(turned.rooms.first)
     let xs = room.polygon.map(\.x)
@@ -540,8 +614,9 @@ final class FloorplanWriterTests: XCTestCase {
               layout.lines.joined(separator: " ") == whole
                 || layout.lines[1].hasSuffix("\u{2026}"), name)
           }
+          XCTAssertEqual(sheet.northBlock == nil, north == nil, name)
           let width = FloorplanWriter.Layout.addressWidth(
-            pageWidth: sheet.widthMM, compass: north != nil)
+            pageWidth: sheet.widthMM, northBlockWidthMM: sheet.northBlock?.width)
           for line in layout.lines {
             XCTAssertLessThanOrEqual(
               FontMetrics.width(line, size: layout.size), width + 1e-9, name)
@@ -648,6 +723,97 @@ final class FloorplanWriterTests: XCTestCase {
     XCTAssertFalse(line.contains("?"), line)
     XCTAssertEqual(
       FontMetrics.width("Cafe\u{0301}", size: 10), FontMetrics.width("Caf\u{00E9}", size: 10))
+  }
+
+  func testEveryFixtureCaptureDrawsItsOwnCompassState() throws {
+    // As the app draws it: `north` from the capture record, so a capture without a reading
+    // shows the not-verified box. Written for scripts/verify-exports.sh and visual checks.
+    for capture in try Fixtures.all() {
+      let context = try PlanExportContext(
+        record: capture.record, captureId: capture.model.captureId)
+      let plan = try write(capture.model) { $0.north = context.compass }
+      let shown = PDFFile(plan.pdf).shownText()
+      switch NorthSymbol(state: context.compass) {
+      case .arrow(_, _, let line1, _):
+        XCTAssertTrue(shown.contains("N"), capture.outputFolder)
+        XCTAssertTrue(shown.contains(line1), capture.outputFolder)
+      case .notVerified(let box, let caption):
+        XCTAssertTrue(shown.contains(box), capture.outputFolder)
+        XCTAssertTrue(shown.contains(caption), capture.outputFolder)
+      }
+      try Repo.write(
+        ExportedFile(
+          fileName: "floorplan.pdf", role: .planPDF, mime: "application/pdf", data: plan.pdf),
+        folder: "floorplan-north/\(capture.outputFolder)")
+      try Repo.write(
+        ExportedFile(
+          fileName: "floorplan-screen.pdf", role: .planPDF, mime: "application/pdf",
+          data: try FloorplanWriter.screenPDF(
+            model: capture.model, options: .init(north: context.compass))),
+        folder: "floorplan-north/\(capture.outputFolder)")
+    }
+  }
+
+  // MARK: Golden bytes
+
+  /// SHA-256 of the colour Floorplan without a north symbol (`north` nil, the default), recorded
+  /// before the north symbol of compass §6.3 replaced the compass rose. `tools/plan-render` and
+  /// the scan browser draw with `north` nil, so their pages must stay byte for byte the same.
+  private static let goldenWithoutNorth: [String: String] = [
+    "box-room/floor-1 pdf": "f3e94b9f45a74d4b4b6af360dd011dba172a710d60ec7d93b0a57a8f2bfc8c05",
+    "box-room/floor-1 svg": "1a9d53d6272b2590bb93b69b4442178034c3dfff6d4f0dd6ceec13147f003dfa",
+    "l-shaped-room/floor-1 pdf": "482922835ce7ab77fe556861f8ba068f0fa34fe6c229b68cf18b1f210ec559dd",
+    "l-shaped-room/floor-1 svg": "c16881c2d362cfed4c4d5420b44c9c0d5c5439db47292ffa76a32708d3c52031",
+    "two-floor-house/floor-1 pdf":
+      "d750555e226b6bb5e40c1ce32c4fa067e0425dc3c1814c91315992d53d134f84",
+    "two-floor-house/floor-1 svg":
+      "1b5e686dfe282979eca165a60579bf7b18ee53e2f4ee7a2afbed53d77f595960",
+    "two-floor-house/floor-2 pdf":
+      "39105e0adc285e4ef1b2397727df2198f8f57e9ebabacdcc8270cd3706ddf596",
+    "two-floor-house/floor-2 svg":
+      "b099d33a8949e56be8d7f80bba12128bce22f20cca038271cdedabbb9537fd1e",
+    "two-room-apartment/floor-1 pdf":
+      "1883d760a4f1500783ce875a91531c3e102499c28c91cd8255dbc903810aef05",
+    "two-room-apartment/floor-1 svg":
+      "528686c4044acec0d83aecda9fcb9d87b23b0f100812534e12d9472b29b48407",
+    "walkthrough automatic pdf": "fa31fbf7e437ba0821272e4d0849f30b9f82480928f258a4e033642404eebb73",
+    "walkthrough automatic svg": "aba9635d43c1b3b0cb48aae617f4c1e0817f2c0e79c5ad50f2c4bb0bff7ef07e",
+    "walkthrough letterLandscape pdf":
+      "365b977abdc1715abc275ef01ce51404bd8d61899f3b96696b87d5c53020a4e3",
+    "walkthrough letterLandscape svg":
+      "a14bd5243697337d35a23584c325ac8c79bbd6a6fd2dae83401125a725e5e710",
+    "walkthrough square pdf": "fa31fbf7e437ba0821272e4d0849f30b9f82480928f258a4e033642404eebb73",
+    "walkthrough square svg": "aba9635d43c1b3b0cb48aae617f4c1e0817f2c0e79c5ad50f2c4bb0bff7ef07e",
+    "walkthrough screen": "db216f1fb63ddfabb869c11c87bdb0bf323a96745a874c832d731ffe7bdbde30",
+    "walkthrough drawing svg": "623933d4243a0ee82bbf1d1069bce984870c04c9131e549761f38be29135200f",
+    "walkthrough drawing pdf": "732bd6f82f7742b176d83c0c2309cd5e5d04a0e07336ffc032efc9b8683c0df3",
+  ]
+
+  func testColourFloorplanUnchangedWithoutNorth() throws {
+    var outputs: [(name: String, data: Data)] = []
+    for capture in try Fixtures.all() {
+      let plan = try FloorplanWriter.write(
+        model: capture.model,
+        options: .init(address: capture.record.address.formatted))
+      outputs.append(("\(capture.outputFolder) pdf", plan.pdf))
+      outputs.append(("\(capture.outputFolder) svg", Data(plan.svg.utf8)))
+    }
+    let walkthrough = WalkthroughFixture.model
+    for page in FloorplanWriter.Page.allCases {
+      let plan = try write(walkthrough) { $0.page = page }
+      outputs.append(("walkthrough \(page.rawValue) pdf", plan.pdf))
+      outputs.append(("walkthrough \(page.rawValue) svg", Data(plan.svg.utf8)))
+    }
+    outputs.append(("walkthrough screen", try FloorplanWriter.screenPDF(model: walkthrough)))
+    let drawing = try FloorPlanDrawing(model: walkthrough)
+    outputs.append(("walkthrough drawing svg", Data(drawing.svg(title: "Apartment").utf8)))
+    outputs.append(("walkthrough drawing pdf", drawing.pdf(title: "Apartment")))
+    var actual: [String: String] = [:]
+    for output in outputs { actual[output.name] = SHA256.hexDigest(of: output.data) }
+    for name in actual.keys.sorted() {
+      XCTAssertEqual(actual[name], Self.goldenWithoutNorth[name], name)
+    }
+    XCTAssertEqual(Set(actual.keys), Set(Self.goldenWithoutNorth.keys))
   }
 
   func testEveryFixtureCaptureWritesAFloorplan() throws {

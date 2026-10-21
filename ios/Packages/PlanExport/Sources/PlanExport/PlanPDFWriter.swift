@@ -14,15 +14,23 @@ public struct PlanPDFOutput: Sendable {
 }
 
 /// Scaled vector plan PDF: walls, openings, room labels, object footprints, dimension strings,
-/// scale bar, an orientation note and a title block (address, project, floor, capture id, date,
-/// operator). Scale 1:50 or 1:100 on Letter or A3, whichever fits (see `PlanSheet`).
+/// scale bar, the north symbol of the capture's compass reading and a title block (address,
+/// project, floor, capture id, date, operator). Scale 1:50 or 1:100 on Letter or A3, whichever
+/// fits (see `PlanSheet`).
+///
+/// It is written as the package's plan sheet, `plan-sheet.pdf` (role `plan_pdf`), until the
+/// Tabloid plan sheet of the plan-sheet spec replaces this writer.
 ///
 /// Wall centrelines are stroked 0.5 mm wide as straight `m`/`l`/`S` segments, so a 4.000 m wall
 /// at 1:50 is exactly 80.0 mm long in the content stream.
 public enum PlanPDFWriter {
-  public static let fileName = "plan.pdf"
+  public static let fileName = "plan-sheet.pdf"
 
   private static let mmToPoints = 72.0 / 25.4
+  /// The north symbol's box (28 pt) and the height of its block's foot above the title
+  /// block's bottom, millimetres: the block fits under the scale bar.
+  static let northBoxSize = 28 / mmToPoints
+  static let northBottom = 1.5
 
   public static func write(model: CaptureModel, context: PlanExportContext) throws
     -> PlanPDFOutput
@@ -95,9 +103,8 @@ public enum PlanPDFWriter {
     page.line((pt(blockX + leftW * 0.5), pt(blockY)), (pt(blockX + leftW * 0.5), pt(blockY + rowH)))
     page.line((pt(blockX + leftW * 0.7), pt(blockY)), (pt(blockX + leftW * 0.7), pt(blockY + rowH)))
 
-    // Right panel: scale, scale bar, orientation, and the Chapter logo at its top right.
+    // Right panel: scale, scale bar, north, and the Chapter logo at its top right.
     let rightX = blockX + leftW
-    let rightW = blockW - leftW
     let logoHeight = 8.0
     ChapterLogo.draw(
       on: page, x: pt(blockX + blockW - 2 - ChapterLogo.width(height: logoHeight)),
@@ -116,27 +123,19 @@ public enum PlanPDFWriter {
       items: PlanScene.scaleBarItems(scaleDenominator: sheet.scaleDenominator, origin: .init(x: 0, y: 0)),
       widthMM: 0, heightMM: 0, scaleDenominator: sheet.scaleDenominator)
     render(barScene, on: page, originX: barOrigin.x, originY: barOrigin.y)
-    page.setFill(ChapterBrand.tone(0.4))
-    page.text("ORIENTATION", x: pt(rightX + 1.5), y: pt(blockY + 13.5), size: 5)
-    // Arrow pointing up the sheet.
-    page.setStroke(ChapterBrand.tone(0))
-    page.setFill(ChapterBrand.tone(0))
-    page.setLineWidth(0.8)
-    let arrowX = rightX + 6
-    page.line((pt(arrowX), pt(blockY + 3)), (pt(arrowX), pt(blockY + 11)))
-    page.polyline(
-      [
-        (pt(arrowX), pt(blockY + 12)), (pt(arrowX - 1.5), pt(blockY + 9)),
-        (pt(arrowX + 1.5), pt(blockY + 9)),
-      ], closed: true, stroke: false, fill: true)
-    page.setFill(ChapterBrand.tone(0))
-    page.text("UP", x: pt(arrowX + 3), y: pt(blockY + 6), size: 6, bold: true)
-    let note = "True north was not captured. Sheet up is the -Z axis of the capture frame."
-    var noteY = blockY + 9.0
-    for line in wrap(note, size: 5.5, width: pt(rightW - 18)) {
-      page.text(line, x: pt(rightX + 14), y: pt(noteY), size: 5.5)
-      noteY -= 2.6
-    }
+    // North under the scale bar, at the panel's left (compass §1.4, §6.1): the arrow turned to
+    // north on this plan, which is drawn as captured (not turned), with its caption; or the
+    // box "Orientation: not verified" with the reason.
+    let north = NorthSymbol(state: context.compass)
+    let block = NorthArrow.blockSizeMM(symbol: north, boxMM: northBoxSize, caption: true)
+    let extent = NorthArrow.blockExtentMM(symbol: north, boxMM: northBoxSize, caption: true)
+    var renderer = PDFDrawingRenderer(page: page, scale: mmToPoints, offsetX: 0, offsetY: 0)
+    renderer.draw(
+      NorthArrow.items(
+        symbol: north,
+        centerMM: DrawingPoint(
+          x: rightX + 1.5 + block.width / 2, y: blockY + northBottom - extent.bottom),
+        boxMM: northBoxSize, page: .white, caption: true))
 
     var document = PDFDocument(
       title: "Floor plan - \(context.floorLabel) - \(context.address)",

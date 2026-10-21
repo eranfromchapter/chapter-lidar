@@ -31,7 +31,6 @@ struct FloorPlanStyle: Sendable {
   var exteriorDimensionSize = 2.3
   var interiorDimensionSize = 2.0
   var scaleBarTextSize = 2.3
-  var compassTextSize = 2.6
 
   // Spacing.
   /// Space between a label and the line it breaks.
@@ -62,7 +61,8 @@ struct FloorPlanStyle: Sendable {
   var interiorMinimumM = 0.25
   /// Door and passage jamb lines run this far past the wall faces (window frames stop at them).
   var jambOverhang = 0.6
-  var compassRadius = 7.0
+  /// The north arrow's box: 32 pt (compass §6.2).
+  var northBoxSize = 32 * 25.4 / 72
   var scaleBarHeight = 0.9
 
   /// Subtle fill of a room by what it is used for, in Chapter's warm tints (the sand, blush
@@ -102,8 +102,9 @@ struct FloorPlanStyle: Sendable {
 
 /// A floor plan drawn as vector primitives in plan millimetres: thick walls along the room
 /// outlines, doors with leaf and swing, windows, room fills by room type, furniture, fixture
-/// and appliance symbols, outside and inside dimension strings, room names and areas, a compass
-/// when true north is known, and a scale bar. The PDF and SVG writers draw the same primitives.
+/// and appliance symbols, outside and inside dimension strings, room names and areas, the north
+/// arrow when the compass reading is usable, and a scale bar. The PDF and SVG writers draw the
+/// same primitives.
 ///
 /// The plan is turned so that its walls run along the sheet axes (`rotationDegrees`) and then
 /// squared: walls a few degrees off the axes are put on them and small steps between wall
@@ -123,9 +124,18 @@ public struct FloorPlanDrawing: Sendable {
     public var roomAreas: Bool
     public var symbols: Bool
     public var scaleBar: Bool
+    /// The capture's orientation (`CompassState(capture)`). A verified or approximate reading
+    /// draws the north arrow (`NorthArrow`, 32 pt at paper scale, no caption) in a free corner,
+    /// turned with the plan; a drawing shows nothing for a capture that is not verified, nor
+    /// when this is nil.
+    public var north: CompassState?
     /// True north in the capture's plan frame, degrees counter-clockwise from the plan's +y
-    /// axis (the capture's -Z). Nil when north was not captured: no compass is drawn.
-    public var northDegrees: Double?
+    /// axis (the capture's -Z), which is the compass heading: setting it sets `north` to that
+    /// heading verified at ±1°; reading it gives the heading of a usable `north`.
+    public var northDegrees: Double? {
+      get { north?.heading }
+      set { north = newValue.map { .verified(heading: $0, accuracy: 1) } }
+    }
     /// Turn the plan so its walls run along the sheet axes.
     public var alignToWalls: Bool
     /// Assumed wall thicknesses, metres (RoomPlan measures none).
@@ -139,7 +149,7 @@ public struct FloorPlanDrawing: Sendable {
       scaleDenominator: Double = 50, units: UnitFormatter = UnitFormatter(system: .imperial),
       exteriorDimensions: Bool = true, interiorDimensions: Bool = true, roomNames: Bool = true,
       roomAreas: Bool = true, symbols: Bool = true, scaleBar: Bool = true,
-      northDegrees: Double? = nil, alignToWalls: Bool = true,
+      north: CompassState? = nil, alignToWalls: Bool = true,
       interiorWallThicknessM: Double = 0.1143, exteriorWallThicknessM: Double = 0.1524,
       quarterTurns: Int = 0
     ) {
@@ -151,7 +161,7 @@ public struct FloorPlanDrawing: Sendable {
       self.roomAreas = roomAreas
       self.symbols = symbols
       self.scaleBar = scaleBar
-      self.northDegrees = northDegrees
+      self.north = north
       self.alignToWalls = alignToWalls
       self.interiorWallThicknessM = interiorWallThicknessM
       self.exteriorWallThicknessM = exteriorWallThicknessM
@@ -190,8 +200,8 @@ public struct FloorPlanDrawing: Sendable {
   public let grossAreaM2: Double
   /// Sum of the rooms' floor areas.
   public let roomAreaM2: Double
-  /// True when a compass was drawn (true north is known).
-  public var hasCompass: Bool { options.northDegrees != nil }
+  /// True when the north arrow was drawn (the reading is verified or approximate).
+  public var hasCompass: Bool { options.north?.isUsable == true }
 
   let style: FloorPlanStyle
   let rooms: [DrawnRoom]
@@ -387,11 +397,13 @@ public struct FloorPlanDrawing: Sendable {
       items += layout.items[layer] ?? []
     }
 
-    // Compass (only when north is known) and scale bar, in free corners of the drawing.
+    // North arrow (only for a verified or approximate reading) and scale bar, in free corners
+    // of the drawing.
     var extent = FloorPlanDrawing.extent(of: items)
-    if let north = options.northDegrees {
-      let direction = Point2(x: 0, y: 1).rotated(by: north * .pi / 180 - theta)
-      let radius = style.compassRadius * k
+    if let north = options.north, north.isUsable {
+      // Turned with the plan: the drawing shows it turned by -theta.
+      let symbol = NorthSymbol(state: north, drawingRotationCCW: -theta * 180 / .pi)
+      let radius = style.northBoxSize / 2 * k
       let corner = Point2(x: extent.maxX / 1000 - radius, y: extent.maxY / 1000 - radius)
       var center = corner
       let box = OrientedBox(
@@ -400,8 +412,13 @@ public struct FloorPlanDrawing: Sendable {
       if layout.conflicts(box, padding: 0, outside: true) > 0 {
         center = Point2(x: corner.x, y: extent.maxY / 1000 + radius * 1.4)
       }
-      items += FloorPlanDrawing.compassItems(
-        center: center, radius: radius, north: direction, style: style, k: k)
+      // Built on paper, then moved onto the plan millimetres of this scale.
+      let place = SheetTransform(
+        scale: options.scaleDenominator, dx: center.x * 1000, dy: center.y * 1000)
+      items += NorthArrow.items(
+        symbol: symbol, centerMM: DrawingPoint(x: 0, y: 0), boxMM: style.northBoxSize,
+        page: .white, caption: false
+      ).map(place.apply)
       layout.labels.append(
         PlacedLabel(
           kind: .compass, text: "N",
@@ -892,51 +909,6 @@ public struct FloorPlanDrawing: Sendable {
     let rb = rank(b)
     if ra != rb { return ra < rb }
     return a.areaM2 <= b.areaM2
-  }
-
-  /// Compass rose turned to `north` (a unit vector on the sheet), with an N past its tip.
-  static func compassItems(
-    center: Point2, radius: Double, north: Point2, style: FloorPlanStyle, k: Double
-  ) -> [DrawingItem] {
-    let frame = DrawingFrame(origin: center, u: north.rightNormal, v: north)
-    var filled = PathBuilder()
-    var outline = PathBuilder()
-    let inner = radius * 0.13
-    // Four long points and four short ones, each split along its axis into a filled and an
-    // open half; the north point longer than the rest and filled whole.
-    let northLength = radius * 1.3
-    for index in 0..<8 {
-      let angle = Double(index) * Double.pi / 4
-      let length = index == 0 ? northLength : (index % 2 == 0 ? radius : radius * 0.5)
-      let tip = Point2(x: sin(angle) * length, y: cos(angle) * length)
-      let left = Point2(x: sin(angle - .pi / 4) * inner, y: cos(angle - .pi / 4) * inner)
-      let right = Point2(x: sin(angle + .pi / 4) * inner, y: cos(angle + .pi / 4) * inner)
-      filled.polygon([frame.map(0, 0), frame.map(left), frame.map(tip)])
-      if index == 0 {
-        filled.polygon([frame.map(0, 0), frame.map(tip), frame.map(right)])
-      } else {
-        outline.polygon([frame.map(0, 0), frame.map(tip), frame.map(right)])
-      }
-    }
-    var ring = PathBuilder()
-    ring.circle(center: center, radius: radius * 0.6)
-    var dot = PathBuilder()
-    dot.circle(center: center, radius: inner * 0.6)
-    let mm = k * 1000
-    let line = DrawingStroke(color: style.ink, width: 0.14 * mm, join: .round)
-    let textSize = style.compassTextSize * k
-    // The N just past the north tip, centred on the line of the north point.
-    let letter = center + north * (northLength + textSize * 0.7)
-    return [
-      .shape(DrawingShape(path: ring.path, stroke: line, layer: .compass)),
-      .shape(DrawingShape(path: outline.path, fill: .white, stroke: line, layer: .compass)),
-      .shape(DrawingShape(path: filled.path, fill: style.ink, stroke: line, layer: .compass)),
-      .shape(DrawingShape(path: dot.path, fill: .white, stroke: line, layer: .compass)),
-      .text(
-        DrawingText(
-          "N", position: PathBuilder.mm(letter - Point2(x: 0, y: textSize * 0.36)),
-          size: textSize * 1000, anchor: .center, bold: true, color: style.ink, layer: .compass)),
-    ]
   }
 
   /// Extent of `items` in plan millimetres, counting stroke widths and text boxes.

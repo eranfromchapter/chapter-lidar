@@ -794,30 +794,54 @@ final class FloorPlanDrawingTests: XCTestCase {
     XCTAssertEqual(xs.max()! - xs.min()!, 914.4, accuracy: 1e-6)
   }
 
-  func testCompassOnlyWhenNorthIsKnown() throws {
+  func testNorthArrowOnlyForAUsableReading() throws {
     let model = Synthetic.room(width: 4, length: 3)
-    let unknown = try drawing(model)
-    XCTAssertFalse(unknown.hasCompass)
-    XCTAssertTrue(
-      unknown.items.allSatisfy {
+    func hasNoCompassItem(_ drawing: FloorPlanDrawing) -> Bool {
+      drawing.items.allSatisfy {
         if case .shape(let s) = $0 { return s.layer != .compass }
         if case .text(let t) = $0 { return t.layer != .compass }
         return true
-      })
+      }
+    }
+    let unknown = try drawing(model)
+    XCTAssertFalse(unknown.hasCompass)
+    XCTAssertTrue(hasNoCompassItem(unknown))
+    // A capture that is not verified draws nothing in a drawing, whatever the reason.
+    for reason in CompassReason.allCases {
+      let unread = try drawing(model) { $0.north = .notVerified(reason, accuracy: 42) }
+      XCTAssertFalse(unread.hasCompass, reason.rawValue)
+      XCTAssertTrue(hasNoCompassItem(unread), reason.rawValue)
+      XCTAssertEqual(unread.items, unknown.items, reason.rawValue)
+    }
     for north in [0.0, 90.0] {
       let known = try drawing(model) { $0.northDegrees = north }
+      XCTAssertEqual(known.options.north, .verified(heading: north, accuracy: 1))
+      XCTAssertEqual(known.options.northDegrees, north)
       XCTAssertTrue(known.hasCompass)
+      // The arrow without its caption: ring, arrow and N only.
+      XCTAssertEqual(texts(known).filter { $0.layer == .compass }.map(\.string), ["N"])
+      XCTAssertEqual(shapes(known, .compass).count, 2)
       let letter = try XCTUnwrap(texts(known).first { $0.layer == .compass })
-      XCTAssertEqual(letter.string, "N")
-      // The N is past the rose's tip in the north direction (counter-clockwise from up).
+      // The N is beyond the ring's centre in the north direction (counter-clockwise from up).
       let ring = try XCTUnwrap(shapes(known, .compass).first)
       let xs = ring.path.points.map(\.x)
       let ys = ring.path.points.map(\.y)
       let center = Point2(x: (xs.min()! + xs.max()!) / 2, y: (ys.min()! + ys.max()!) / 2)
       let direction = (Point2(x: letter.position.x, y: letter.position.y) - center).unit
       let expected = Point2(x: 0, y: 1).rotated(by: north * .pi / 180)
-      XCTAssertGreaterThan(direction.dot(expected), 0.95, "north \(north)")
+      XCTAssertGreaterThan(direction.dot(expected), 0.999, "north \(north)")
+      // 32 pt at paper scale: the ring's radius is 10.5 / 32 of the box, in plan millimetres.
+      let box = 32 * 25.4 / 72 * known.options.scaleDenominator
+      XCTAssertEqual((xs.max()! - xs.min()!) / 2, 10.5 / 32 * box, accuracy: 0.01 * box)
     }
+    // An approximate reading: dashed ring, arrow filled with the paper colour.
+    let approximate = try drawing(model) {
+      $0.north = .approximate(heading: 30, accuracy: 20, source: .trueNorth)
+    }
+    let pieces = shapes(approximate, .compass)
+    XCTAssertEqual(pieces.count, 2)
+    XCTAssertFalse(pieces[0].stroke?.dash.isEmpty ?? true)
+    XCTAssertEqual(pieces[1].fill, .white)
   }
 
   func testWalkThroughApartment() throws {

@@ -2,7 +2,8 @@ import CaptureContract
 import Foundation
 
 /// The floor plan as one page: "Floorplan", the address and the approximate total area at the
-/// top, a compass at the top right when true north is known, the fully dimensioned colour plan
+/// top, the north symbol at the top right when the capture's orientation is given (`north`),
+/// the fully dimensioned colour plan
 /// (`FloorPlanDrawing`: outside dimensions in ink, inside dimensions in bronze, room names and
 /// areas, furniture, fixture and appliance symbols) fitted to the page but never drawn larger
 /// than 1:50, a scale bar and the print scale at the bottom left, "Measurements are
@@ -50,11 +51,22 @@ public enum FloorplanWriter {
     public var interiorDimensions: Bool
     /// Furniture, fixture and appliance symbols.
     public var furniture: Bool
-    /// Draws a compass when `northDegrees` is known.
+    /// Draws the north symbol when `north` is set; false hides it.
     public var compass: Bool
+    /// The capture's orientation (`CompassState(capture)` from the capture record). The page
+    /// draws the north symbol of compass §6 at its top right, turned with the plan: the arrow
+    /// and its caption for a verified or approximate reading, the box `Orientation: not
+    /// verified` and the reason otherwise. The screen version draws the arrow only, and
+    /// nothing for a capture that is not verified. Nil draws nothing at all (a plan drawn from
+    /// a capture model alone, as tools/plan-render and the scan browser draw it).
+    public var north: CompassState?
     /// True north in the capture's plan frame, degrees counter-clockwise from the plan's +y
-    /// axis (the capture's -Z). Nil when north was not captured.
-    public var northDegrees: Double?
+    /// axis (the capture's -Z), which is the compass heading: setting it sets `north` to that
+    /// heading verified at ±1°; reading it gives the heading of a usable `north`.
+    public var northDegrees: Double? {
+      get { north?.heading }
+      set { north = newValue.map { .verified(heading: $0, accuracy: 1) } }
+    }
     public var scaleBar: Bool
     public var page: Page
     /// Lets the plan be laid on the page a quarter turn round when it then prints larger (a
@@ -73,7 +85,7 @@ public enum FloorplanWriter {
       title: String = "Floorplan", address: String? = nil,
       units: UnitFormatter = UnitFormatter(system: .imperial), roomNames: Bool = true,
       roomAreas: Bool = true, exteriorDimensions: Bool = true, interiorDimensions: Bool = true,
-      furniture: Bool = true, compass: Bool = true, northDegrees: Double? = nil,
+      furniture: Bool = true, compass: Bool = true, north: CompassState? = nil,
       scaleBar: Bool = true, page: Page = .automatic, turnToFit: Bool = true,
       interiorWallThicknessM: Double = 0.1143,
       exteriorWallThicknessM: Double = MeasurementSettings.defaultExteriorWallThicknessM,
@@ -88,7 +100,7 @@ public enum FloorplanWriter {
       self.interiorDimensions = interiorDimensions
       self.furniture = furniture
       self.compass = compass
-      self.northDegrees = northDegrees
+      self.north = north
       self.scaleBar = scaleBar
       self.page = page
       self.turnToFit = turnToFit
@@ -117,7 +129,7 @@ public enum FloorplanWriter {
   /// The plan alone, for a phone screen: no title, total or footer, the drawing cropped to its
   /// own extent with a 4 mm margin and fitted to `widthMM` by `heightMM` of "paper" (about a
   /// phone's width), so that shown across a screen its names and dimensions are several times
-  /// larger than on the page. A compass is drawn when north is known.
+  /// larger than on the page. The north arrow is drawn for a verified or approximate reading.
   public static func screenPDF(
     model: CaptureModel, options: Options = Options(), widthMM: Double = 110,
     heightMM: Double = 150
@@ -126,7 +138,7 @@ public enum FloorplanWriter {
       units: options.units, exteriorDimensions: options.exteriorDimensions,
       interiorDimensions: options.interiorDimensions, roomNames: options.roomNames,
       roomAreas: options.roomAreas, symbols: options.furniture, scaleBar: false,
-      northDegrees: options.compass ? options.northDegrees : nil, alignToWalls: true,
+      north: options.compass ? options.north : nil, alignToWalls: true,
       interiorWallThicknessM: options.interiorWallThicknessM,
       exteriorWallThicknessM: options.exteriorWallThicknessM)
     var best: FloorPlanDrawing?
@@ -186,8 +198,12 @@ public enum FloorplanWriter {
     static let addressSize = 12.0 * 25.4 / 72
     /// A long address is set smaller, down to this, before it takes a second line.
     static let addressMinimumSize = 9.0 * 25.4 / 72
-    /// Space kept between the address and the compass.
-    static let compassClearance = 3.0
+    /// Space kept between the address and the north symbol.
+    static let northClearance = 3.0
+    /// The north symbol's box, 32 pt (compass §6.2), and how far its centre sits below the
+    /// top margin.
+    static let northBoxSize = 32 * 25.4 / 72
+    static let northCenterDrop = 10.0
     static let totalSize = 10.0 * 25.4 / 72
     static let noteSize = 6.5 * 25.4 / 72
     static let scaleBarTextSize = 8.0 * 25.4 / 72
@@ -197,15 +213,20 @@ public enum FloorplanWriter {
     /// Space between the header and the drawing, and between the drawing and the footer.
     static let gap = 4.0
     static let footerHeight = 8.0
-    static let compassRadius = 6.5
     /// A small plan is drawn at this scale (1:50) at the most, not blown up to fill the page.
     static let largestScaleDenominator = 50.0
 
     /// Header height below the top margin: title, address (when given, one or two lines) and
-    /// total.
-    static func headerHeight(address: AddressLayout?) -> Double {
-      guard let address else { return 15.0 }
-      return 21.5 + Double(max(0, address.lines.count - 1)) * address.lineStep
+    /// total, and at least `northDepth`, how far below the top margin the north symbol's
+    /// block reaches when it is drawn.
+    static func headerHeight(address: AddressLayout?, northDepth: Double? = nil) -> Double {
+      let text: Double
+      if let address {
+        text = 21.5 + Double(max(0, address.lines.count - 1)) * address.lineStep
+      } else {
+        text = 15.0
+      }
+      return max(text, northDepth ?? 0)
     }
 
     /// Where the drawing goes on a page with a header `headerHeight` tall: x, y (lower left),
@@ -228,12 +249,13 @@ public enum FloorplanWriter {
     }
 
     /// Width the address may take on a page `pageWidth` wide: between the margins and, when the
-    /// compass is drawn at the top right, clear of it (on both sides, as the line is centred).
-    static func addressWidth(pageWidth: Double, compass: Bool) -> Double {
+    /// north symbol's block (`northBlockWidthMM` wide) is drawn at the top right, clear of it
+    /// (on both sides, as the line is centred).
+    static func addressWidth(pageWidth: Double, northBlockWidthMM: Double?) -> Double {
       var half = pageWidth / 2 - margin
-      if compass {
-        let compassLeft = pageWidth - margin - 2 * compassRadius - 2
-        half = min(half, compassLeft - compassClearance - pageWidth / 2)
+      if let northBlockWidthMM {
+        let northLeft = pageWidth - margin - northBlockWidthMM
+        half = min(half, northLeft - northClearance - pageWidth / 2)
       }
       return 2 * max(0, half)
     }
@@ -276,6 +298,9 @@ public enum FloorplanWriter {
     let address: String?
     /// The address as set in the header on this page.
     let addressLayout: AddressLayout?
+    /// The room the header keeps for the north symbol's block: its width at the top right and
+    /// how far below the top margin it reaches. Nil when no symbol is drawn.
+    let northBlock: (width: Double, depth: Double)?
     /// Where the drawing goes on the page (see `Layout.drawingArea`).
     let drawingArea: (x: Double, y: Double, width: Double, height: Double)
     let items: [DrawingItem]
@@ -284,34 +309,16 @@ public enum FloorplanWriter {
       let address = options.address
         .map { Format.singleLine($0).trimmingCharacters(in: .whitespaces) }
         .flatMap { $0.isEmpty ? nil : $0 }
-      let compass = options.compass && options.northDegrees != nil
-      // The address set for a page, and the drawing area its header leaves.
-      func header(_ page: Page) -> AddressLayout? {
-        address.map {
-          Layout.address(
-            $0, width: Layout.addressWidth(pageWidth: page.sizeMM!.width, compass: compass))
-        }
-      }
-      func area(_ page: Page) -> (x: Double, y: Double, width: Double, height: Double) {
-        let size = page.sizeMM!
-        return Layout.drawingArea(
-          width: size.width, height: size.height,
-          headerHeight: Layout.headerHeight(address: header(page)))
-      }
-      // The compass and the scale bar are drawn on the page, not in the drawing.
+      // The north symbol and the scale bar are drawn on the page, not in the drawing.
       let drawingOptions = FloorPlanDrawing.Options(
         units: options.units, exteriorDimensions: options.exteriorDimensions,
         interiorDimensions: options.interiorDimensions, roomNames: options.roomNames,
         roomAreas: options.roomAreas, symbols: options.furniture, scaleBar: false,
-        northDegrees: nil, alignToWalls: true,
+        north: nil, alignToWalls: true,
         interiorWallThicknessM: options.interiorWallThicknessM,
         exteriorWallThicknessM: options.exteriorWallThicknessM)
 
-      // The page and quarter turn (none, or one clockwise) that print the plan largest, judged
-      // from one drawing per turn; on a tie Letter landscape, then the plan as squared. Only
-      // that choice is then fitted.
-      let pages: [Page] =
-        options.page == .automatic ? [.letterLandscape, .square] : [options.page]
+      // One drawing per quarter turn (none, or one clockwise) the page may use.
       let turns = options.turnToFit ? [0, 3] : [0]
       var probes: [Int: FloorPlanDrawing] = [:]
       for turn in turns {
@@ -319,6 +326,43 @@ public enum FloorplanWriter {
         turned.quarterTurns = turn
         probes[turn] = try FloorPlanDrawing(model: model, options: turned)
       }
+      // The north symbol's block: as wide and as deep as it gets on any of those turns (its
+      // caption gives the bearing of the turned plan).
+      let northBlock = (options.compass ? options.north : nil).map { north in
+        var block = (width: 0.0, depth: 0.0)
+        for turn in turns {
+          let symbol = NorthSymbol(
+            state: north, drawingRotationCCW: -probes[turn]!.rotationDegrees)
+          let size = NorthArrow.blockSizeMM(
+            symbol: symbol, boxMM: Layout.northBoxSize, caption: true)
+          let extent = NorthArrow.blockExtentMM(
+            symbol: symbol, boxMM: Layout.northBoxSize, caption: true)
+          block.width = max(block.width, size.width)
+          block.depth = max(block.depth, Layout.northCenterDrop - extent.bottom)
+        }
+        return block
+      }
+      // The address set for a page, and the drawing area its header leaves.
+      func header(_ page: Page) -> AddressLayout? {
+        address.map {
+          Layout.address(
+            $0,
+            width: Layout.addressWidth(
+              pageWidth: page.sizeMM!.width, northBlockWidthMM: northBlock?.width))
+        }
+      }
+      func area(_ page: Page) -> (x: Double, y: Double, width: Double, height: Double) {
+        let size = page.sizeMM!
+        return Layout.drawingArea(
+          width: size.width, height: size.height,
+          headerHeight: Layout.headerHeight(address: header(page), northDepth: northBlock?.depth))
+      }
+
+      // The page and quarter turn that print the plan largest, judged from the drawing of each
+      // turn; on a tie Letter landscape, then the plan as squared. Only that choice is then
+      // fitted.
+      let pages: [Page] =
+        options.page == .automatic ? [.letterLandscape, .square] : [options.page]
       var best: (page: Page, turn: Int, estimate: Double?)?
       for page in pages {
         let area = area(page)
@@ -364,6 +408,7 @@ public enum FloorplanWriter {
       self.totalText = totalText
       self.address = address
       self.addressLayout = header(page)
+      self.northBlock = northBlock
       self.drawingArea = drawingArea
       self.items = Sheet.items(
         width: size.width, height: size.height, page: page, drawing: drawing, options: options,
@@ -415,15 +460,17 @@ public enum FloorplanWriter {
       line -= 6
       text(totalText, width / 2, line, size: Layout.totalSize, anchor: .center, color: ink)
 
-      // Compass at the top right, turned with the plan.
-      if options.compass, let north = options.northDegrees {
-        let direction = Point2(x: 0, y: 1).rotated(
-          by: north * .pi / 180 - drawing.rotationDegrees * .pi / 180)
-        let radius = Layout.compassRadius
-        let center = Point2(x: (width - margin - radius - 2) / 1000, y: (top - 10) / 1000)
-        // Built as a 1:1 drawing: plan metres are paper metres, k is 1/1000.
-        items += FloorPlanDrawing.compassItems(
-          center: center, radius: radius / 1000, north: direction, style: style, k: 0.001)
+      // North symbol at the top right (compass §6.2), turned with the plan: the block's right
+      // edge on the margin, the symbol's box centred `northCenterDrop` below the top margin.
+      if options.compass, let north = options.north {
+        let symbol = NorthSymbol(state: north, drawingRotationCCW: -drawing.rotationDegrees)
+        let block = NorthArrow.blockSizeMM(
+          symbol: symbol, boxMM: Layout.northBoxSize, caption: true)
+        items += NorthArrow.items(
+          symbol: symbol,
+          centerMM: DrawingPoint(
+            x: width - margin - block.width / 2, y: top - Layout.northCenterDrop),
+          boxMM: Layout.northBoxSize, page: .white, caption: true)
       }
 
       // The plan, centred in its area at its own scale.

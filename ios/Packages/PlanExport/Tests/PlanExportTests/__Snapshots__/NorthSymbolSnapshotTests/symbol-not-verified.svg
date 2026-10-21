@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="36.64mm" height="11.99mm" viewBox="0 0 36.64 11.99">
+  <title>North symbol, not-verified</title>
+  <rect x="0" y="0" width="36.64" height="11.99" fill="#faf5ee"/>
+  <g class="compass">
+    <path d="M2.47 6.70 L34.17 6.70 L34.17 6.70 C34.75 6.70 35.23 6.23 35.23 5.64 L35.23 2.47 L35.23 2.47 C35.23 1.88 34.75 1.41 34.17 1.41 L2.47 1.41 L2.47 1.41 C1.88 1.41 1.41 1.88 1.41 2.47 L1.41 5.64 L1.41 5.64 C1.41 6.23 1.88 6.70 2.47 6.70 Z" fill="none" stroke="#6b6557" stroke-width="0.26" stroke-linecap="butt" stroke-linejoin="miter"/>
+    <text x="18.32" y="5.02" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="2.65" text-anchor="middle" fill="#1f2429">Orientation: not verified</text>
+    <text x="18.32" y="9.96" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="2.65" text-anchor="middle" fill="#6b6557">No compass reading</text>
+  </g>
+</svg>

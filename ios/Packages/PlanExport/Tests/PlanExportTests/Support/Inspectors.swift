@@ -1,5 +1,7 @@
 import Foundation
 
+@testable import PlanExport
+
 /// Reads the DXF tag pairs written by DXFWriter, without using DXFWriter code.
 struct DXFFile {
   struct Entity {
@@ -221,6 +223,156 @@ struct PDFFile {
       index += 1
     }
     chars.removeAll()
+    return out
+  }
+
+  /// A painted path or a shown string of a page, in drawing order, with the extent of its ink
+  /// in points (y up).
+  struct Mark {
+    enum Kind: Equatable {
+      /// A path and its painting operator (`S`, `f`, `B`, ...); `points` are its vertices,
+      /// curves sampled, and `curves` how many `c` segments it has.
+      case path(paint: String, curves: Int)
+      /// A string shown with `Tj`, unescaped.
+      case text(String)
+    }
+    var kind: Kind
+    var points: [(x: Double, y: Double)]
+    /// The path's construction operators in order (`m`, `l`, `c`, `re`, `h`); empty for text.
+    var operators: [String] = []
+    /// Fill and stroke colours in force, as written (`0.1373 0.1216 0.1255`, or a gray level).
+    var fill: String
+    var stroke: String
+    var lineWidth: Double
+    var minX: Double
+    var minY: Double
+    var maxX: Double
+    var maxY: Double
+
+    var string: String? {
+      if case .text(let value) = kind { return value }
+      return nil
+    }
+    var isStroked: Bool {
+      if case .path(let paint, _) = kind {
+        return ["S", "s", "B", "B*", "b", "b*"].contains(paint)
+      }
+      return false
+    }
+  }
+
+  /// The marks of a page's content stream: every painted path (clipping paths left out) with
+  /// the stroke's half width added to its extent, and every shown string with the extent of its
+  /// font's ascent and descent along its advance (`FontMetrics`, Inter or Times as the font
+  /// resource says), turned as its text matrix turns it.
+  func marks(page: Int = 0) -> [Mark] {
+    struct State {
+      var fill = "0"
+      var stroke = "0"
+      var lineWidth = 1.0
+      var spacing = 0.0
+    }
+    var state = State()
+    var saved: [State] = []
+    var out: [Mark] = []
+    let paints: Set<Substring> = ["S", "s", "f", "f*", "F", "B", "B*", "b", "b*", "n"]
+    for line in contentStreams[page].split(separator: "\n") {
+      let tokens = line.split(separator: " ")
+      guard let last = tokens.last else { continue }
+      if line.hasPrefix("BT "), let open = line.firstIndex(of: "("), line.hasSuffix(") Tj ET") {
+        let head = line[..<open].split(separator: " ")
+        guard let tf = head.firstIndex(of: "Tf"), let tm = head.firstIndex(of: "Tm"), tm >= 6,
+          let size = Double(head[tf - 1])
+        else { continue }
+        let font = head[tf - 2]
+        let matrix = head[(tm - 6)..<tm].compactMap { Double($0) }
+        var spacing = state.spacing
+        if let tc = head.firstIndex(of: "Tc"), let value = Double(head[tc - 1]) { spacing = value }
+        let body = line[line.index(after: open)..<line.index(line.endIndex, offsetBy: -7)]
+        let string = PDFFile.unescape(String(body))
+        let width =
+          FontMetrics.width(string, size: size, bold: font == "/F2", serif: font == "/F3")
+          + spacing * Double(max(0, string.count - 1))
+        let metrics =
+          font == "/F2" ? ChapterBrandAssets.interSemiBold : ChapterBrandAssets.interRegular
+        let low = Double(metrics.descent) / 1000 * size
+        let high = Double(metrics.ascent) / 1000 * size
+        let (a, b, c, d, x, y) = (matrix[0], matrix[1], matrix[2], matrix[3], matrix[4], matrix[5])
+        let corners = [(0, low), (width, low), (width, high), (0, high)].map { u, v in
+          (x: x + a * u + c * v, y: y + b * u + d * v)
+        }
+        out.append(
+          Mark(
+            kind: .text(string), points: corners, fill: state.fill, stroke: state.stroke,
+            lineWidth: state.lineWidth, minX: corners.map(\.x).min()!,
+            minY: corners.map(\.y).min()!, maxX: corners.map(\.x).max()!,
+            maxY: corners.map(\.y).max()!))
+        continue
+      }
+      switch last {
+      case "q": saved.append(state)
+      case "Q": state = saved.popLast() ?? State()
+      case "w": state.lineWidth = Double(tokens[0]) ?? state.lineWidth
+      case "rg", "g": state.fill = tokens.dropLast().joined(separator: " ")
+      case "RG", "G": state.stroke = tokens.dropLast().joined(separator: " ")
+      case "Tc": state.spacing = Double(tokens[0]) ?? 0
+      default:
+        guard paints.contains(last), !tokens.contains("W"), !tokens.contains("W*") else {
+          continue
+        }
+        var numbers: [Double] = []
+        var points: [(x: Double, y: Double)] = []
+        var curves = 0
+        var operators: [String] = []
+        for token in tokens.dropLast() {
+          if let value = Double(token) {
+            numbers.append(value)
+            continue
+          }
+          operators.append(String(token))
+          switch token {
+          case "m", "l":
+            points.append((numbers[0], numbers[1]))
+          case "c":
+            curves += 1
+            let start = points.last ?? (numbers[4], numbers[5])
+            for step in 1...8 {
+              let t = Double(step) / 8
+              let u = 1 - t
+              func bezier(_ p0: Double, _ p1: Double, _ p2: Double, _ p3: Double) -> Double {
+                u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3
+              }
+              points.append(
+                (
+                  bezier(start.x, numbers[0], numbers[2], numbers[4]),
+                  bezier(start.y, numbers[1], numbers[3], numbers[5])
+                ))
+            }
+          case "re":
+            let (x, y, w, h) = (numbers[0], numbers[1], numbers[2], numbers[3])
+            points += [(x, y), (x + w, y), (x + w, y + h), (x, y + h)]
+          default:
+            break
+          }
+          numbers.removeAll()
+        }
+        guard !points.isEmpty else { continue }
+        var mark = Mark(
+          kind: .path(paint: String(last), curves: curves), points: points,
+          operators: operators, fill: state.fill, stroke: state.stroke,
+          lineWidth: state.lineWidth, minX: points.map(\.x).min()!,
+          minY: points.map(\.y).min()!, maxX: points.map(\.x).max()!,
+          maxY: points.map(\.y).max()!)
+        if mark.isStroked {
+          let half = state.lineWidth / 2
+          mark.minX -= half
+          mark.minY -= half
+          mark.maxX += half
+          mark.maxY += half
+        }
+        out.append(mark)
+      }
+    }
     return out
   }
 
