@@ -6,26 +6,35 @@
   import UIKit
   import XCTest
 
-  /// The accessibility identifiers of the Field controls entry sheet's bar, read from the
-  /// accessibility tree SwiftUI gives UIKit (the tree XCUITest queries): Cancel (`entry.cancel`),
-  /// Save (`entry.save`) and the title are three distinct elements, and `entry.sheet` names one
-  /// node only, the sheet's container, so it no longer covers the bar's buttons (it did when the
-  /// identifier was set on the sheet's stack, which hands it to every element inside).
+  /// The accessibility identifiers of the Field controls entry sheet, read from the accessibility
+  /// tree SwiftUI gives UIKit (the tree XCUITest queries): Cancel (`entry.cancel`), Save
+  /// (`entry.save`) and the title are three distinct elements, and `entry.sheet` names one node
+  /// only, the sheet's container, which holds the bar and the form under it. Set on the sheet's
+  /// stack without making it a container, the identifier went to every element inside it at the
+  /// default text size (the bar's buttons lost their own), and at accessibility text sizes, where
+  /// the bar is a container of its own, it named that bar and left the form outside.
   @MainActor
   final class EntrySheetAccessibilityTests: XCTestCase {
     private typealias F = SnapshotFixtures
 
-    /// One node of the accessibility tree: an element, or a container that has an identifier.
+    /// One node of the accessibility tree: an element, a container that has an identifier, or
+    /// the outermost scroll view (the sheet's form; SwiftUI exposes no node for its content in a
+    /// bare test host, so the scroll view stands for it).
     struct Node: Equatable, CustomStringConvertible {
       var identifier: String
       var label: String
       var isElement: Bool
       var isButton = false
       var isHeader = false
+      var isScrollView = false
+      /// The identifiers of the identified nodes around this one, outermost first.
+      var containers: [String] = []
 
       var description: String {
-        "\(isElement ? "element" : "container") \(identifier.isEmpty ? "-" : identifier) "
+        let kind = isElement ? "element" : isScrollView ? "scroll view" : "container"
+        return "\(kind) \(identifier.isEmpty ? "-" : identifier) "
           + "\"\(label)\"\(isButton ? " button" : "")\(isHeader ? " header" : "")"
+          + (containers.isEmpty ? "" : " in \(containers.joined(separator: " > "))")
       }
     }
 
@@ -72,20 +81,22 @@
       let identifierSelector = NSSelectorFromString("accessibilityIdentifier")
       var found: [Node] = []
       var seen = Set<ObjectIdentifier>()
-      func visit(_ object: NSObject, depth: Int) {
+      func visit(_ object: NSObject, depth: Int, containers: [String], inScrollView: Bool) {
         guard depth < 60, seen.insert(ObjectIdentifier(object)).inserted else { return }
         // SwiftUI's nodes answer accessibilityIdentifier without declaring
         // UIAccessibilityIdentification.
         let identifier =
           object.responds(to: identifierSelector)
           ? (object.perform(identifierSelector)?.takeUnretainedValue() as? String) ?? "" : ""
-        if object.isAccessibilityElement || !identifier.isEmpty {
+        let isScrollView = !inScrollView && object is UIScrollView
+        if object.isAccessibilityElement || !identifier.isEmpty || isScrollView {
           let traits = object.accessibilityTraits
           found.append(
             Node(
               identifier: identifier, label: object.accessibilityLabel ?? "",
               isElement: object.isAccessibilityElement, isButton: traits.contains(.button),
-              isHeader: traits.contains(.header)))
+              isHeader: traits.contains(.header), isScrollView: isScrollView,
+              containers: containers))
         }
         var children: [NSObject] = []
         if let list = object.accessibilityElements as? [NSObject], !list.isEmpty {
@@ -93,9 +104,14 @@
         } else if let view = object as? UIView {
           children = view.subviews
         }
-        for child in children { visit(child, depth: depth + 1) }
+        let inner = identifier.isEmpty ? containers : containers + [identifier]
+        for child in children {
+          visit(
+            child, depth: depth + 1, containers: inner,
+            inScrollView: inScrollView || isScrollView)
+        }
       }
-      visit(window, depth: 0)
+      visit(window, depth: 0, containers: [], inScrollView: false)
       return found
     }
 
@@ -106,21 +122,28 @@
       return ControlEntrySheet(entry: entry, onCancel: {}, onSave: {}, onEditRecorded: { _ in })
     }
 
-    /// The bar's elements and the nodes named `entry.sheet`.
-    private func assertBar(
+    /// The bar's elements, the form, and the nodes named `entry.sheet`.
+    private func assertSheet(
       _ found: [Node], cancelTitle: String, hasSave: Bool, title: String,
       file: StaticString = #filePath, line: UInt = #line
     ) {
       let description = found.map(\.description).joined(separator: "\n")
+      let sheet = ["entry.sheet"]
       XCTAssertEqual(
         found.filter { $0.identifier == "entry.sheet" },
         [Node(identifier: "entry.sheet", label: "", isElement: false)],
         "entry.sheet names the sheet's container only:\n\(description)", file: file, line: line)
       XCTAssertEqual(
         found.filter { $0.label == cancelTitle },
-        [Node(identifier: "entry.cancel", label: cancelTitle, isElement: true, isButton: true)],
+        [
+          Node(
+            identifier: "entry.cancel", label: cancelTitle, isElement: true, isButton: true,
+            containers: sheet)
+        ],
         description, file: file, line: line)
-      let save = Node(identifier: "entry.save", label: "Save", isElement: true, isButton: true)
+      let save = Node(
+        identifier: "entry.save", label: "Save", isElement: true, isButton: true,
+        containers: sheet)
       XCTAssertEqual(
         found.filter { $0.label == "Save" }, hasSave ? [save] : [], description, file: file,
         line: line)
@@ -129,23 +152,31 @@
       XCTAssertEqual(
         titles.first.map { ["entry.sheet", "entry.cancel", "entry.save"].contains($0.identifier) },
         false, "the title is its own element:\n\(description)", file: file, line: line)
+      XCTAssertEqual(titles.first?.containers, sheet, description, file: file, line: line)
+      XCTAssertEqual(
+        found.filter(\.isScrollView),
+        [Node(identifier: "", label: "", isElement: false, isScrollView: true, containers: sheet)],
+        "entry.sheet holds the form under the bar too:\n\(description)", file: file, line: line)
     }
 
     func testCancelSaveAndTheTitleAreDistinct() throws {
-      assertBar(
+      assertSheet(
         nodes(of: try sheet()), cancelTitle: "Cancel", hasSave: true, title: "Long distance A")
     }
 
-    /// At accessibility text sizes the title takes a row of its own under the buttons.
+    /// At accessibility text sizes the title takes a row of its own under the buttons, and the
+    /// bar is an accessibility container of its own (`SheetBar`). The bar keeps its identifiers
+    /// there even with the identifier on a plain stack; what that would break is the sheet:
+    /// `entry.sheet` would name the bar alone and leave the form outside it.
     func testCancelSaveAndTheTitleAreDistinctAtAX3() throws {
-      assertBar(
+      assertSheet(
         nodes(of: try sheet(), dynamicTypeSize: .accessibility3), cancelTitle: "Cancel",
         hasSave: true, title: "Long distance A")
     }
 
     /// Sealed: Close and no Save.
     func testTheReadOnlySheetHasCloseAndNoSave() throws {
-      assertBar(
+      assertSheet(
         nodes(of: try sheet(isReadOnly: true)), cancelTitle: "Close", hasSave: false,
         title: "Long distance A")
     }
