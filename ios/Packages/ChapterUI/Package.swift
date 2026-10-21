@@ -10,6 +10,10 @@
 // - ChapterUISnapshotTesting: the one snapshot harness of every phone snapshot test (a UIWindow of
 //   402 x 874 pt at scale 3, `drawHierarchy`, > 8/255 on more than 0.5 % of pixels fails).
 //
+// Outside the package: SnapshotHost/ (an empty app) and HostedTests/ are the app-hosted snapshot
+// tests of the boards with system chrome, built from ios/project.yml (scheme ChapterUISnapshots),
+// because `drawHierarchy` needs a UIApplication that Swift package tests do not have.
+//
 // Every source is wrapped in `#if canImport(SwiftUI) && os(iOS)` (the harness also needs XCTest),
 // so both targets compile to empty modules on Linux and macOS and dependants still build there.
 // There is deliberately no `.apple-only` marker at the package root: scripts/swift-test.sh then

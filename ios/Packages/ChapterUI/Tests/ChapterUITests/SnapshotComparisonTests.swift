@@ -83,6 +83,17 @@
         url.path, "/repo/Tests/ChapterUITests/__Snapshots__/ComponentSnapshotTests/buttons.png")
     }
 
+    /// References are recorded on iOS 26.0 (ios.yml pins that simulator); a failure on another
+    /// iOS version says so.
+    func testReferenceRuntimeIsIOS26_0() {
+      XCTAssertEqual(ChapterSnapshot.referenceSystemVersion, "26.0")
+      XCTAssertTrue(ChapterSnapshot.isReferenceSystem("26.0"))
+      XCTAssertTrue(ChapterSnapshot.isReferenceSystem("26.0.1"))
+      XCTAssertFalse(ChapterSnapshot.isReferenceSystem("26.01"))
+      XCTAssertFalse(ChapterSnapshot.isReferenceSystem("26.2"))
+      XCTAssertFalse(ChapterSnapshot.isReferenceSystem("18.5"))
+    }
+
     /// The view of the harness's own reference,
     /// `__Snapshots__/SnapshotComparisonTests/harness.png`.
     private struct HarnessView: View {

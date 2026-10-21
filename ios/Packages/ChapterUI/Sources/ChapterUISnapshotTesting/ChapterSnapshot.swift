@@ -22,15 +22,33 @@
   /// On a mismatch the new image, the reference and a diff are attached to the test and written
   /// to `$SNAPSHOT_ARTIFACTS` (default: the temporary directory, `ChapterUISnapshots/`).
   ///
-  /// Run on an iPhone 17 Pro simulator (CI: ios.yml), whose screen is the 402 × 874 pt @3x
-  /// artboard frame.
+  /// Run on an iPhone 17 Pro simulator with iOS 26.0 (`referenceSystemVersion`; CI: ios.yml
+  /// pins it), whose screen is the 402 × 874 pt @3x artboard frame. Other iOS versions draw the
+  /// system chrome (navigation bar, switches) differently, by more than the tolerance.
   public enum ChapterSnapshot {
+    /// The iOS version of the simulator every phone reference is recorded and compared on.
+    public static let referenceSystemVersion = "26.0"
+
     /// Registers the fonts and applies the navigation bar appearance, as the app does at launch.
-    /// `ChapterSnapshotTestCase` calls it in `setUp`.
+    /// `ChapterSnapshotTestCase` calls it in `setUp`. (The harness puts `chapterRoot()` on every
+    /// view it draws.)
     @MainActor
     public static func prepare() {
       ChapterFonts.register()
       ChapterAppearance.apply()
+    }
+
+    /// True for the reference iOS version and its point releases ("26.0", "26.0.1").
+    static func isReferenceSystem(_ version: String) -> Bool {
+      version == referenceSystemVersion || version.hasPrefix(referenceSystemVersion + ".")
+    }
+
+    /// The simulator of this run, e.g. "iOS 18.5 on iPhone 16 Pro".
+    @MainActor
+    static var currentRuntime: String {
+      let device = UIDevice.current
+      let name = ProcessInfo.processInfo.environment["SIMULATOR_DEVICE_NAME"] ?? device.model
+      return "\(device.systemName) \(device.systemVersion) on \(name)"
     }
 
     /// True when the environment asks to record references instead of comparing.
@@ -151,8 +169,14 @@
         result.differingFraction * 100, tolerance.channelTolerance,
         tolerance.maxDifferingFraction * 100)
       : "the size is \(pixels(result.actualSize)), the reference \(pixels(result.referenceSize))"
+    let runtime =
+      ChapterSnapshot.isReferenceSystem(UIDevice.current.systemVersion)
+      ? ""
+      : " This run is on \(ChapterSnapshot.currentRuntime); the references are recorded on iOS "
+        + "\(ChapterSnapshot.referenceSystemVersion) (iPhone 17 Pro), and the system chrome "
+        + "differs between iOS versions."
     XCTFail(
       "Snapshot \(name) does not match \(referenceURL.lastPathComponent): \(detail). New image: "
-        + "\(actualURL.path)", file: file, line: line)
+        + "\(actualURL.path).\(runtime)", file: file, line: line)
   }
 #endif

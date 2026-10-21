@@ -4,20 +4,21 @@
   import UIKit
 
   /// Renders SwiftUI views the way every phone snapshot test does (critique R-18d): the view is
-  /// hosted in a `UIWindow` of the iPhone 17 Pro screen (402 × 874 pt, safe area 62 pt at the top
-  /// and 34 pt at the bottom) in the light appearance, and drawn at scale 3 from the window's
-  /// layers, which also draws the UIKit-backed views (`TextField`, `Toggle`, `ScrollView`, the
-  /// navigation bar) that `ImageRenderer` leaves out.
+  /// hosted under the app's root environment (`chapterRoot()`) in a `UIWindow` of the iPhone 17
+  /// Pro screen (402 × 874 pt, safe area 62 pt at the top and 34 pt at the bottom) in the light
+  /// appearance, and drawn at scale 3 from the window, which also draws the UIKit-backed views
+  /// (`TextField`, `Toggle`, `ScrollView`, the navigation bar) that `ImageRenderer` leaves out.
   ///
   /// How the window is drawn: in a test bundle with a host app, the window joins the app's window
-  /// scene and is drawn with `drawHierarchy(in:afterScreenUpdates: true)`. Swift package tests run
-  /// in the bare `xctest` process, which has no `UIApplication`; its windows are not on any render
-  /// server, so `drawHierarchy` fails there ("Render server returned error", an all-black image)
-  /// and the window's layer tree is drawn in process with `layer.render(in:)` instead. That draws
-  /// everything ChapterUI and the screens use, UIKit-backed views included, except what iOS 26
-  /// composites in the render server (backdrop and portal layers): the glass of a switch's knob
-  /// and of the back button's pill is missing, and the back chevron comes out light. Compare
-  /// those parts on a device, not in snapshots.
+  /// scene and is drawn with `drawHierarchy(in:afterScreenUpdates: true)` (R-18d). Swift package
+  /// tests run in the bare `xctest` process, which has no `UIApplication`; its windows are not on
+  /// any render server, so `drawHierarchy` fails there ("Render server returned error", an
+  /// all-black image) and the window's layer tree is drawn in process with `layer.render(in:)`
+  /// instead. That draws everything ChapterUI and the screens use, UIKit-backed views included,
+  /// except what iOS 26 composites in the render server (backdrop and portal layers): the glass
+  /// of a switch's knob and of the back button's pill is missing, and the back chevron comes out
+  /// light. Screens with that system chrome are also snapshotted in an app-hosted test target
+  /// (`ChapterUIHostedSnapshotTests` in ios/project.yml), where `drawsWithRenderServer` is true.
   @MainActor
   public enum SnapshotRenderer {
     /// The iPhone 16 Pro / 17 Pro screen of every artboard, in points.
@@ -36,7 +37,9 @@
       UIView.setAnimationsEnabled(false)
       defer { UIView.setAnimationsEnabled(previousAnimations) }
 
-      let host = UIHostingController(rootView: view.transaction { $0.disablesAnimations = true })
+      // The app's root environment (Inter, ink tint), as ChapterCaptureApp sets it.
+      let host = UIHostingController(
+        rootView: view.chapterRoot().transaction { $0.disablesAnimations = true })
       let appScene = hostWindowScene
       let window: UIWindow
       if let appScene {
@@ -84,6 +87,11 @@
         }
       }
     }
+
+    /// True when the tests run inside a host app, so views are drawn with `drawHierarchy` by the
+    /// render server, glass included (the ChapterUIHostedSnapshotTests target of
+    /// ios/project.yml); false in a Swift package's tests (`layer.render(in:)`).
+    public static var drawsWithRenderServer: Bool { hostWindowScene != nil }
 
     /// The host app's window scene, when the tests run inside an app; nil in the bare `xctest`
     /// process of a Swift package (no `UIApplication` exists there, so it is looked up by name).

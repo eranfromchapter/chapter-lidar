@@ -412,6 +412,47 @@
     }
   }
 
+  /// A pushed screen opened scrolled to its end, so the large title has collapsed into the bar
+  /// and the bar draws its standard appearance (opaque ground, no shadow line) over the cards
+  /// scrolled under it; `PushedScreen` shows the transparent scroll-edge appearance instead
+  /// (phone-capture §9 R6: snapshot both a large and a collapsed title).
+  struct CollapsedTitleScreen: View {
+    var body: some View {
+      NavigationStack(path: .constant([1])) {
+        Color.clear
+          .navigationDestination(for: Int.self) { _ in
+            ScrollView {
+              VStack(alignment: .leading, spacing: ChapterTheme.Metric.sectionGap) {
+                ScreenSubtitle("Captured today by Dana Ruiz · not sealed yet")
+                ForEach(1...4, id: \.self) { floor in
+                  ChapterSection(header: "Floor \(floor)") {
+                    NavigationRow(
+                      title: "Floor \(floor)",
+                      subtitle: "Whole floor · 12 rooms · 42 photos · controls from the scan",
+                      status: RowStatus(.done, "Done"), density: .compact
+                    ) {}
+                    ValueRow(label: "Compass", value: "Verified")
+                    ValueRow(label: "Rooms not scanned", value: "None")
+                  }
+                }
+              }
+              .padding(.horizontal, ChapterTheme.Metric.screenPadding)
+              .padding(.top, ChapterTheme.Metric.subtitleTop)
+            }
+            .defaultScrollAnchor(.bottom)
+            .navigationTitle("Capture overview")
+            .navigationBarTitleDisplayMode(.large)
+            .chapterNavigationCaption("Deal 4821")
+            .chapterBackChevronOnly()
+            .chapterScreenBackground()
+            .chapterActionBar {
+              Button("Review the package") {}.buttonStyle(.chapter(.primary))
+            }
+          }
+      }
+    }
+  }
+
   /// The Captures home's bar: logo leading, avatar trailing, large title.
   struct HomeHeaderScreen: View {
     var body: some View {

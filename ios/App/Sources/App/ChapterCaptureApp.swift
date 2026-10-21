@@ -11,7 +11,8 @@ struct ChapterCaptureApp: App {
 
   init() {
     // Inter is bundled in ChapterUI and registered here, before any screen draws (not through
-    // UIAppFonts, which cannot see a package's bundle); then the navigation bar's Chapter look.
+    // UIAppFonts, which cannot see a package's bundle); then the navigation bar's Chapter look
+    // (its SwiftUI half is `chapterRoot()` below).
     ChapterFonts.register()
     ChapterAppearance.apply()
   }
@@ -19,8 +20,9 @@ struct ChapterCaptureApp: App {
   var body: some Scene {
     WindowGroup {
       RootView(model: model)
-        // Inter replaces SF on the phone: the default for text without a font of its own.
-        .font(ChapterTheme.Font.body)
+        // Inter replaces SF on the phone (the default for text without a font of its own), and
+        // ink is the tint: the back chevron and bar buttons take their colour from it.
+        .chapterRoot()
         .onOpenURL { url in
           // Microsoft Entra sign-in returns here (msauth.<bundle id>://auth).
           model.handleOpenURL(url)
