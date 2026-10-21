@@ -47,8 +47,8 @@ fixtures in the snapshot tests. The app's NavigationStack hosts them (phone-capt
 | Screen | API | Driven by |
 | --- | --- | --- |
 | Captures home (2b-0) | `CapturesHomeScreen(state:actions:)` | `CapturesHomeState` (rows of critique R-28 via `Row.inProgress` / `Row.sealed`), built by the app's `CaptureLibrary` |
-| New capture (2b-1, 1b, 1c) | `NewCaptureScreen(model:onDiscard:)` | `CaptureFlowModel` step 1: `continueBlocker`/`continueTitle`, `offlineBanner`, `addressToggleChanged(isOn:)` |
-| What are you scanning? (2b-2) | `ScanSetupScreen(model:)` | step 2: `startScanBlocker`, `existingAreaKeys` (the "Floor N" suggestion), `compassPrecheck`, `readCompassAgain()`, `openLocationSettings()` |
+| New capture (2b-1, 1b, 1c) | `NewCaptureScreen(model:onDiscard:)` | `CaptureFlowModel` step 1: `continueBlocker`/`continueTitle`, `offlineBanner`, `addressToggleChanged(isOn:)`, `addressAlert(_:dial:discard:)` with the words of `AddressDifferentAlert` |
+| What are you scanning? (2b-2) | `ScanSetupScreen(model:)` | step 2: `startScanBlocker`, `existingAreaKeys` (the "Floor N" suggestion and the duplicate check; the host sets it when adding a floor), `compassPrecheck`, `readCompassAgain()`, `openLocationSettings()`; no compass row when `hasCompass` is false |
 | Live scan (2b-3, 3b) | `LiveScanScreen(model:preview:)` | `livePhase` (scanning, paused, tracking lost, stopped), `liveCompass`, `recordingStatus`, `restartFloor()` |
 | Capture overview (2b-4) | `CaptureOverviewScreen(state:actions:)` | `CaptureOverviewState`, built by the app's `OverviewBuilder` |
 
@@ -83,8 +83,10 @@ live scan is true; scans with tracking trouble have fewer depth samples, as inte
 `Tests/CaptureUITests` draws every screen and state with `ChapterUISnapshotTesting` (402 × 874 pt
 at scale 3) and compares with `__Snapshots__/`, recorded on the iPhone 17 Pro simulator with iOS
 26.0 (the CI pin). In package tests the system chrome comes out as ChapterUI's README describes
-(no glass back pill, no switch knob) and system alerts are not drawn: the address-different alert
-of 1c is checked by the app's UI tests.
+(no glass back pill, no switch knob) and system alerts are not drawn: the words, button order and
+actions of the address-different alert of 1c are unit tests (`AddressDifferentAlert`,
+`CaptureFlowModel.addressAlert`), and the drawn alert is checked by the app's UI tests. "Keyboard
+up" is drawn with a stand-in of the keyboard's height, as the bare test process has no keyboard.
 
 ```sh
 cd ios/Packages/CaptureCore

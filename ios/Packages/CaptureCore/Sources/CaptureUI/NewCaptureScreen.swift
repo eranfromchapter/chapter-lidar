@@ -55,17 +55,16 @@
       .sheet(isPresented: $showsProjects) {
         HubProjectSheet(model: model)
       }
-      .alert("Address is different on site?", isPresented: $showsAddressAlert) {
-        Button("Go back", role: .cancel) {}
-        Button("Call the PM") {
-          if let url = model.draft.project?.projectManagerCallURL { openURL(url) }
-          onDiscard()
+      // Words, order and actions come from `AddressDifferentAlert` and the model (unit tested).
+      .alert(AddressDifferentAlert.title, isPresented: $showsAddressAlert) {
+        ForEach(AddressDifferentAlert.actions, id: \.self) { action in
+          Button(action.title, role: action.isCancel ? .cancel : nil) {
+            model.addressAlert(action, dial: { openURL($0) }, discard: onDiscard)
+          }
+          .keyboardShortcut(action.isDefault ? .defaultAction : nil)
         }
-        .keyboardShortcut(.defaultAction)
       } message: {
-        Text(
-          "Do not scan under this project. Call the PM to fix the HUB record, then start the "
-            + "capture again. Nothing is saved.")
+        Text(AddressDifferentAlert.message)
       }
       .task {
         if model.listing == nil, !model.isLoadingProjects, !model.isOfflineWithoutList {
@@ -113,7 +112,8 @@
           : nil
       ) {
         NavigationRow(
-          title: model.projectRowTitle, subtitle: model.projectRowSubtitle,
+          title: model.projectRowTitle,
+          subtitle: CaptureText.keepingAgesTogether(model.projectRowSubtitle),
           detail: project == nil ? "Choose" : "Change", isPlaceholder: project == nil
         ) {
           showsProjects = true

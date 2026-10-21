@@ -164,6 +164,31 @@ import XCTest
       XCTAssertFalse(model.addressToggleChanged(isOn: false), "already off")
     }
 
+    func testAddressAlertActions() throws {
+      var withPhone = project
+      withPhone.projectManagerPhone = "+1 (212) 555-0142"
+      for (chosen, dialled) in [(withPhone, ["tel:+12125550142"]), (project, [])] {
+        let model = try makeModel()
+        model.choose(chosen)
+        XCTAssertFalse(model.addressToggleChanged(isOn: true))
+        XCTAssertTrue(model.addressToggleChanged(isOn: false), "the alert shows")
+        var steps: [String] = []
+
+        model.addressAlert(
+          .goBack, dial: { steps.append($0.absoluteString) }, discard: { steps.append("discard") })
+        XCTAssertEqual(steps, [], "Go back only closes the alert")
+        XCTAssertEqual(model.draft.project, chosen, "the project is kept")
+        XCTAssertFalse(model.draft.isAddressConfirmed, "the switch stays off")
+        XCTAssertEqual(model.continueTitle, "Confirm the address to continue")
+        XCTAssertFalse(model.canContinueToSetup)
+
+        model.addressAlert(
+          .callProjectManager, dial: { steps.append($0.absoluteString) },
+          discard: { steps.append("discard") })
+        XCTAssertEqual(steps, dialled + ["discard"], "dial when the HUB has a phone, then discard")
+      }
+    }
+
     func testProjectManagerCall() {
       var withPhone = project
       withPhone.projectManagerPhone = "+1 (212) 555-0142"
@@ -249,28 +274,40 @@ import XCTest
       XCTAssertEqual(CompassPhoneText.chip(model.liveCompass).text, "N · not verified")
     }
 
+    /// compass §13.1: Try again starts a new session (a new world frame), so a reading the failed
+    /// scan had taken is neither shown nor recorded.
     func testTryAgainDiscardsTheReading() async throws {
-      var sessions: [FailingSession] = []
-      let compass = FakeCompass(.verified)
-      var first = true
+      let verified = CompassLiveState.result(
+        .verified(heading: 212.4, accuracy: 8), cameraBearing: 300)
+      var sessions = 0
       let source = try replaySource()
       let model = try modelReadyToScan(
         factory: {
-          if first {
-            first = false
-            let failing = FailingSession(failure: .tooHot)
-            sessions.append(failing)
-            return failing
-          }
-          return try ReplaySession(source: source, autoPlay: false, compass: compass.replayCompass)
+          sessions += 1
+          if sessions == 1 { return FailingSession(failure: .tooHot, compass: verified) }
+          // The new session reads no compass (`.none(issue: nil)` at Finish floor).
+          return try ReplaySession(source: source)
         })
       await model.startScan()
       await settle { model.scanFailed }
+      XCTAssertEqual(model.liveCompass, verified, "the failed scan had a verified reading")
       XCTAssertEqual(model.livePhase, .stopped(CaptureSessionError.tooHot.description))
       XCTAssertEqual(model.recordingStatus.text, "Recording stopped")
+
       await model.retryScan()
-      XCTAssertEqual(model.liveCompass, .reading, "the new session reads the compass again")
-      XCTAssertEqual(sessions.count, 1)
+      XCTAssertEqual(sessions, 2)
+      XCTAssertEqual(model.liveCompass, .reading, "the chip starts again")
+      await settle { model.canFinishFloor }
+      XCTAssertEqual(model.liveCompass, .reading, "nothing of the old reading comes back")
+      await model.finishFloor()
+      XCTAssertNil(model.errorMessage)
+      let capture = try XCTUnwrap(model.result).record.captures[0]
+      XCTAssertNil(capture.heading, "the failed scan's reading is not recorded")
+      XCTAssertNil(capture.headingAccuracy)
+      XCTAssertNil(capture.headingSource)
+      XCTAssertNil(capture.headingRecordedAt)
+      XCTAssertNil(capture.headingIssue)
+      XCTAssertEqual(CompassState(capture), .notVerified(.noReading, accuracy: nil))
     }
 
     // MARK: Pre-check
@@ -291,11 +328,17 @@ import XCTest
     }
 
     func testPrecheckWithoutACompass() async throws {
+      // No compass from the host (the v1 app shell): nothing is read and nothing claims the phone
+      // has no compass; step 2 shows no compass row.
       let none = try makeModel()
+      XCTAssertFalse(none.hasCompass)
       await none.readCompassAgain()
-      XCTAssertEqual(none.compassPrecheck, .unavailable)
+      XCTAssertNotEqual(none.compassPrecheck, .unavailable, "never \"No compass on this phone\"")
+      XCTAssertEqual(none.compassPrecheck, .reading)
+      XCTAssertEqual(none.locationAuthorization, .notDetermined)
 
       let unavailable = try makeModel(compass: FakeCompass(.verified, isAvailable: false))
+      XCTAssertTrue(unavailable.hasCompass)
       await unavailable.readCompassAgain()
       XCTAssertEqual(unavailable.compassPrecheck, .unavailable)
       XCTAssertFalse(CompassPhoneText.row(unavailable.compassPrecheck, now: Self.now).showsReadAgain)

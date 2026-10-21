@@ -2,6 +2,7 @@
   import CaptureContract
   import CaptureCore
   import ChapterUI
+  import ChapterUISnapshotTesting
   import Foundation
   import SwiftUI
 
@@ -109,7 +110,7 @@
     /// Step 2 as drawn (artboard 2b-2): Floor 1, Whole floor, Primary closet · Locked, the
     /// coverage note and the compass pre-check of `compass`.
     static func stepTwo(
-      compass: (any CompassProviding)?? = .none,
+      compass: (any CompassProviding)?? = .none, project: HubProjectSummary = project,
       existingAreaKeys: Set<String> = [], mode: CaptureMode? = .floor, filled: Bool = true,
       readCompass: Bool = true
     ) async -> CaptureFlowModel {
@@ -235,6 +236,32 @@
           visitedAt: now.addingTimeInterval(-5400), now: now, operatorName: "Dana Ruiz",
           sealState: sealState, timeZone: newYork),
         floors: floors, canAddFloor: canAddFloor, checks: checks, button: button)
+    }
+  }
+
+  /// The keyboard for "keyboard up" snapshots: the bare test process has no keyboard, so a
+  /// stand-in of the iPhone 17 Pro keyboard (iOS 26, letters with the suggestions bar: 345 pt
+  /// from the bottom edge, measured on the simulator) takes the bottom of the screen and its
+  /// safe area, as the system keyboard does.
+  struct KeyboardStandIn<Content: View>: View {
+    static var height: CGFloat { 345 }
+    static var color: Color { Color(red: 225 / 255, green: 223 / 255, blue: 223 / 255) }
+    let content: Content
+
+    init(@ViewBuilder _ content: () -> Content) {
+      self.content = content()
+    }
+
+    var body: some View {
+      content.safeAreaInset(edge: .bottom, spacing: 0) {
+        let shape = UnevenRoundedRectangle(topLeadingRadius: 26, topTrailingRadius: 26)
+        Text("Keyboard")
+          .font(.system(size: 13))
+          .foregroundStyle(Color(white: 0.45))
+          .frame(maxWidth: .infinity)
+          .frame(height: Self.height - SnapshotRenderer.deviceSafeArea.bottom)
+          .background(Self.color.clipShape(shape).ignoresSafeArea(edges: .bottom))
+      }
     }
   }
 

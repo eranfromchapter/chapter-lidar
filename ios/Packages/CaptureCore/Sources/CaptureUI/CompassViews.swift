@@ -56,7 +56,7 @@
             case .limited: StatusGlyph(.partly, size: glyphSize).padding(.top, glyphTop)
             case .none: EmptyView()
             }
-            Text(row.line2)
+            Text(CaptureText.keepingAgesTogether(row.line2))
               .chapterTextStyle(.footnote)
               .foregroundStyle(color(row.status))
               .fixedSize(horizontal: false, vertical: true)

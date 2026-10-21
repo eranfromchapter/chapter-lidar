@@ -21,6 +21,32 @@ final class CaptureTextTests: XCTestCase {
       "on Oct 20")
   }
 
+  func testAgesAreDrawnWithoutABreakInside() {
+    let space = "\u{00A0}"
+    XCTAssertEqual(
+      CaptureText.keepingAgesTogether("Approximate · read 40 s ago"),
+      "Approximate · read 40\(space)s\(space)ago", "never \"read 40\" / \"s ago\"")
+    XCTAssertEqual(
+      CaptureText.keepingAgesTogether("Deal 4821 · from the HUB, updated 2 min ago"),
+      "Deal 4821 · from the HUB, updated 2\(space)min\(space)ago")
+    XCTAssertEqual(CaptureText.keepingAgesTogether("updated 3 h ago"), "updated 3\(space)h\(space)ago")
+    XCTAssertEqual(
+      CaptureText.keepingAgesTogether("Not verified · accuracy too low · read 12 s ago"),
+      "Not verified · accuracy too low · read 12\(space)s\(space)ago")
+    for unchanged in [
+      "Verified · read just now", "Approximate · read over an hour ago", "updated on Oct 20",
+      "Deal 4821 · saved on this phone", "Floor 1 · Whole floor",
+    ] {
+      XCTAssertEqual(CaptureText.keepingAgesTogether(unchanged), unchanged)
+    }
+    // What the screens draw: the compass row's second line and the HUB project row.
+    let row = CompassPhoneText.row(
+      .result(heading: 212.4, accuracy: 12, source: .magnetic, readAt: now.addingTimeInterval(-40)),
+      now: now)
+    XCTAssertEqual(row.line2, "Approximate · read 40 s ago", "the string keeps ordinary spaces")
+    XCTAssertFalse(CaptureText.keepingAgesTogether(row.line2).contains("40 s"))
+  }
+
   func testDates() {
     let sealed = Date(timeIntervalSince1970: 1_737_820_800)  // Jan 25, 2025 16:00 UTC
     XCTAssertEqual(CaptureText.sealedDate(sealed, timeZone: newYork), "Jan 25, 2025")

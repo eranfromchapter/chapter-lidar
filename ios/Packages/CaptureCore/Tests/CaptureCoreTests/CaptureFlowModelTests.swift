@@ -28,22 +28,29 @@ import XCTest
     }
 
     /// A session that RoomPlan stops on its own (`failure` after start), or that cannot start
-    /// at all (`startError`), as on a hot phone.
+    /// at all (`startError`), as on a hot phone. With `compass` it shows that compass state
+    /// before it fails (a reading the failed scan had taken).
     final class FailingSession: CaptureSession, @unchecked Sendable {
       let events: AsyncStream<CaptureSessionEvent>
       private let continuation: AsyncStream<CaptureSessionEvent>.Continuation
       private let failure: CaptureSessionError?
       private let startError: CaptureSessionError?
+      private let compass: CompassLiveState?
 
-      init(failure: CaptureSessionError? = nil, startError: CaptureSessionError? = nil) {
+      init(
+        failure: CaptureSessionError? = nil, startError: CaptureSessionError? = nil,
+        compass: CompassLiveState? = nil
+      ) {
         (events, continuation) = AsyncStream.makeStream(of: CaptureSessionEvent.self)
         self.failure = failure
         self.startError = startError
+        self.compass = compass
       }
 
       func start(_ configuration: CaptureSessionConfiguration) async throws {
         if let startError { throw startError }
         continuation.yield(.stateChanged(.running))
+        if let compass { continuation.yield(.compass(compass)) }
         if let failure {
           continuation.yield(.stateChanged(.failed(failure.description)))
           continuation.finish()

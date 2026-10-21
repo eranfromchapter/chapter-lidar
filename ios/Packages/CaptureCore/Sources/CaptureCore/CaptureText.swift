@@ -18,6 +18,16 @@ public enum CaptureText {
     return "on \(format(date, "MMM d", timeZone))"
   }
 
+  /// The text as it is drawn, with no line break inside an age: the spaces of "40 s ago",
+  /// "2 min ago" and "3 h ago" become no-break spaces (U+00A0), so a wrapped line never leaves a
+  /// number at the end of one line and its unit on the next ("read 40" / "s ago"; Inter is wider
+  /// than the design's SF). For drawn text only: the strings themselves, and what VoiceOver reads,
+  /// keep ordinary spaces.
+  public static func keepingAgesTogether(_ text: String) -> String {
+    text.replacingOccurrences(
+      of: "([0-9]+) (s|min|h) ago", with: "$1\u{00A0}$2\u{00A0}ago", options: .regularExpression)
+  }
+
   /// A sealed package's date: "Jan 25, 2025".
   public static func sealedDate(_ date: Date, timeZone: TimeZone = .current) -> String {
     format(date, "MMM d, yyyy", timeZone)

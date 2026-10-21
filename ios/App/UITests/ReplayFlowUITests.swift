@@ -57,14 +57,15 @@ final class ReplayFlowUITests: XCTestCase {
       ).firstMatch.exists)
     tap(app.buttons["HUB project"])
     tap(button("UI test visit"))
-    tap(button("I am at this address"))
+    tap(app.switches["capture.addressConfirmed"])
     tap(app.buttons["Continue"])
 
     // 2 What are you scanning? No skipped room is entered: the box room has none, and the
     // checklist's "No rooms skipped" confirms that below. The sign-out link is gone from here on.
     XCTAssertTrue(app.staticTexts["What are you scanning?"].waitForExistence(timeout: 10))
     XCTAssertFalse(app.buttons["account.signOut"].exists)
-    type("Floor 1", into: app.textFields["Floor 1"])
+    // The name is prefilled with the next free "Floor N".
+    XCTAssertEqual(app.textFields["capture.floorName"].value as? String, "Floor 1")
     tap(app.buttons["Whole floor"])
     tap(app.buttons["Start scan"])
 

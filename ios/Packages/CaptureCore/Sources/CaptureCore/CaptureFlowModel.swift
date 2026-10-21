@@ -122,8 +122,8 @@
     @ObservationIgnored private var precheckGeneration = 0
     @ObservationIgnored private var askedForLocation = false
 
-    /// `compass` is the app's one compass (`CompassService`), or a `FakeCompass`; without one the
-    /// pre-check says the phone has no compass. `existingAreaKeys`: see the property.
+    /// `compass` is the app's one compass (`CompassService`), or a `FakeCompass`; without one
+    /// there is no pre-check (`hasCompass`). `existingAreaKeys`: see the property.
     public init(
       draft: CaptureRecordDraft, capabilities: DeviceCapabilities, projectProvider: HubProjectProvider,
       originalsRoot: URL,
@@ -191,6 +191,22 @@
       let wasOn = draft.isAddressConfirmed
       setAddressConfirmed(isOn)
       return wasOn && !isOn
+    }
+
+    /// A button of "Address is different on site?" (`AddressDifferentAlert`). Go back changes
+    /// nothing: the switch stays off and the project stays chosen. Call the PM dials the PM's
+    /// `tel:` URL when the HUB project has a phone number, then calls `discard` (the host drops
+    /// the draft and goes back to the Captures home; nothing was saved).
+    public func addressAlert(
+      _ action: AddressDifferentAlert.Action, dial: (URL) -> Void, discard: () -> Void
+    ) {
+      switch action {
+      case .goBack:
+        return
+      case .callProjectManager:
+        if let url = draft.project?.projectManagerCallURL { dial(url) }
+        discard()
+      }
     }
 
     /// Why Continue is disabled, as its label says it (phone-capture §3.2); nil when enabled.
@@ -306,14 +322,17 @@
       draft.omittedRooms.remove(at: index)
     }
 
+    /// True when the host gave a compass. Without one (the v1 app shell until it passes its
+    /// `CompassService`) step 2 shows no compass row: nothing is read, and "No compass on this
+    /// phone" would be false on a phone that has one. The scan then records no reading, and the
+    /// plans say north is not verified.
+    public var hasCompass: Bool { compass != nil }
+
     /// Runs the compass pre-check (on appear, and for Read again). The first call asks for the
     /// location permission when it is not determined (compass §3.1). A newer call wins over one
-    /// still running; a cancelled call leaves the row reading.
+    /// still running; a cancelled call leaves the row reading. Without a compass it does nothing.
     public func readCompassAgain() async {
-      guard let compass else {
-        compassPrecheck = .unavailable
-        return
-      }
+      guard let compass else { return }
       if !askedForLocation {
         askedForLocation = true
         if compass.authorization == .notDetermined { compass.requestAuthorization() }

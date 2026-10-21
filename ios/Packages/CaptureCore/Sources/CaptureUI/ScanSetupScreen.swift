@@ -8,7 +8,8 @@
   /// floor or area name (prefilled "Floor N"), the mode, the rooms that will not be scanned, the
   /// coverage notes and the compass pre-check. Start scan moves the model to the live scan
   /// (`model.step == .scanning`), which the host presents full screen. The compass never blocks
-  /// Start scan. When adding a floor, the caption is the project title.
+  /// Start scan. When adding a floor, the caption is the project title. Without a compass from
+  /// the host (`model.hasCompass`) there is no compass row.
   public struct ScanSetupScreen: View {
     @Bindable var model: CaptureFlowModel
     @State private var showsAddRoom = false
@@ -49,13 +50,17 @@
             )
             .accessibilityIdentifier("capture.coverageNotes")
           }
-          ChapterSection(header: "Compass") {
-            CompassRow(state: model.compassPrecheck, now: { model.now() }) {
-              readAgain?.cancel()
-              readAgain = Task { await model.readCompassAgain() }
+          // Without a compass from the host nothing is read: no row, rather than a false "No
+          // compass on this phone".
+          if model.hasCompass {
+            ChapterSection(header: "Compass") {
+              CompassRow(state: model.compassPrecheck, now: { model.now() }) {
+                readAgain?.cancel()
+                readAgain = Task { await model.readCompassAgain() }
+              }
+            } footer: {
+              CompassFootnotes(isLocationOff: model.isLocationOff) { model.openLocationSettings() }
             }
-          } footer: {
-            CompassFootnotes(isLocationOff: model.isLocationOff) { model.openLocationSettings() }
           }
         }
         .captureContent(top: ChapterTheme.Metric.contentTopCompact)

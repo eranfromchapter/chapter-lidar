@@ -31,18 +31,45 @@
     }
   }
 
+  /// The widest the caption of `captureNavigationCaption` gets: on the narrowest LiDAR iPhone
+  /// (390 pt) it still leaves the back button's 44 pt pill its 16 pt margins and a 16 pt gap.
+  let captureCaptionMaxWidth: CGFloat = 280
+
+  /// Proposes its one subview its ideal width up to `maxWidth`: a shorter text keeps its own
+  /// width, a longer one gets `maxWidth` and is cut short by its truncation mode.
+  struct CappedWidth: Layout {
+    let maxWidth: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+      guard let subview = subviews.first else { return .zero }
+      let ideal = subview.sizeThatFits(.unspecified)
+      return subview.sizeThatFits(ProposedViewSize(width: min(ideal.width, maxWidth), height: nil))
+    }
+
+    func placeSubviews(
+      in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+    ) {
+      subviews.first?.place(at: bounds.origin, proposal: ProposedViewSize(bounds.size))
+    }
+  }
+
   extension View {
-    /// The right-hand caption of the navigation bar at its full width: the project title of step
+    /// The right-hand caption of the navigation bar at its own width: the project title of step
     /// 2 when adding a floor ("618 Valley Street") is longer than the bar gives a caption by
-    /// default. Footnote, muted, one line; text, not a button.
+    /// default. A longer title (a whole address when the HUB project has no name, R-29) is cut
+    /// short with "…" at `captureCaptionMaxWidth`, before it reaches the back button; VoiceOver
+    /// reads it whole. Footnote, muted, one line; text, not a button.
     func captureNavigationCaption(_ text: String) -> some View {
       toolbar {
         PlainToolbarItem(placement: .topBarTrailing) {
-          Text(text)
-            .chapterTextStyle(.footnote)
-            .foregroundStyle(ChapterTheme.Color.muted)
-            .lineLimit(1)
-            .fixedSize()
+          CappedWidth(maxWidth: captureCaptionMaxWidth) {
+            Text(text)
+              .chapterTextStyle(.footnote)
+              .foregroundStyle(ChapterTheme.Color.muted)
+              .lineLimit(1)
+              .truncationMode(.tail)
+          }
+          .fixedSize()
         }
       }
     }

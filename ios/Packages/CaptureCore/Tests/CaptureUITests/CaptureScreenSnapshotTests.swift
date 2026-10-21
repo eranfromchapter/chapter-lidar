@@ -60,6 +60,10 @@
       assertChapterSnapshot(of: Pushed { NewCaptureScreen(model: model) }, named: "new-capture-offline")
     }
 
+    /// 1c behind its alert: the switch off and Continue disabled. The package harness cannot draw
+    /// a system alert (no UIApplication); the alert's words, button order and actions are unit
+    /// tests (`AddressDifferentAlertTests`, `testAddressAlertActions`), and the app's UI tests
+    /// show it (U3).
     func testNewCaptureAddressDifferent() async {
       let model = await F.stepOne(confirmed: false)
       assertChapterSnapshot(
@@ -180,6 +184,54 @@
       let model = await F.stepTwo(existingAreaKeys: ["floor-1"], filled: false)
       model.draft.floorLabel = "Floor 1"
       stepTwo(model, named: "scan-setup-duplicate")
+    }
+
+    /// Adding a floor to a project without a HUB name: the caption is the whole address (R-29),
+    /// here longer than the bar, so it is cut short with "…" before it reaches the back button.
+    func testScanSetupAddingAFloorWithALongProjectTitle() async {
+      let unnamed = HubProjectSummary(
+        dealId: "4790", projectName: "", address: "1150 Fifth Avenue, Apartment 12B, New York, NY 10128")
+      let model = await F.stepTwo(project: unnamed, existingAreaKeys: ["floor-1"], filled: false)
+      XCTAssertEqual(model.scanSetupCaption, unnamed.address)
+      stepTwo(model, named: "scan-setup-long-caption")
+    }
+
+    /// The caption's width, measured (a few cut letters are within the snapshot tolerance): a
+    /// short title keeps its own width, a long one stops at `captureCaptionMaxWidth`.
+    func testTheCaptionStopsBeforeTheBackButton() {
+      func width(_ text: String, capped: Bool = true) -> CGFloat {
+        let caption = Text(text).chapterTextStyle(.footnote).lineLimit(1)
+        let view =
+          capped
+          ? AnyView(CappedWidth(maxWidth: captureCaptionMaxWidth) { caption }.fixedSize())
+          : AnyView(caption.fixedSize())
+        return UIHostingController(rootView: view.chapterRoot())
+          .sizeThatFits(in: CGSize(width: 2000, height: 200)).width
+      }
+      let long = "1150 Fifth Avenue, Apartment 12B, New York, NY 10128"
+      XCTAssertGreaterThan(width(long, capped: false), captureCaptionMaxWidth, "too long for the bar")
+      XCTAssertLessThanOrEqual(width(long), captureCaptionMaxWidth)
+      XCTAssertGreaterThan(width(long), captureCaptionMaxWidth - 12, "cut at the cap, not shorter")
+      XCTAssertEqual(width("618 Valley Street"), width("618 Valley Street", capped: false), accuracy: 0.5)
+      XCTAssertLessThan(width("618 Valley Street"), 150)
+    }
+
+    /// The keyboard is up while the name is typed: Start scan stays visible above it. (The
+    /// stand-in goes on the pushed screen, where the system's keyboard region would be: an inset
+    /// outside the NavigationStack does not reach its pushed screens.)
+    func testScanSetupKeyboardUp() async {
+      let model = await F.stepTwo(filled: false)
+      assertChapterSnapshot(
+        of: Pushed { KeyboardStandIn { ScanSetupScreen(model: model) } },
+        named: "scan-setup-keyboard")
+    }
+
+    /// No compass from the host (the v1 app shell): no compass row, rather than a false "No
+    /// compass on this phone".
+    func testScanSetupWithoutACompass() async {
+      let model = await F.stepTwo(compass: .some(nil), filled: false)
+      XCTAssertFalse(model.hasCompass)
+      stepTwo(model, named: "scan-setup-without-compass")
     }
 
     func testScanSetupAtAX3() async {
