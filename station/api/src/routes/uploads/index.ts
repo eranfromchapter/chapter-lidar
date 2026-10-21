@@ -316,14 +316,13 @@ async function openSession(
       ],
     );
     const carriedOver = files.filter((file) => file.carriedOverFrom !== undefined).length;
-    const removedNotice =
-      source === undefined
-        ? 0
-        : ((
-            await tx.query("DELETE FROM next_revision_notices WHERE package_id = $1", [
-              body.supersedesPackageId,
-            ])
-          ).rowCount ?? 0);
+    let removedNotice = false;
+    if (source !== undefined) {
+      const deleted = await tx.query("DELETE FROM next_revision_notices WHERE package_id = $1", [
+        body.supersedesPackageId,
+      ]);
+      removedNotice = (deleted.rowCount ?? 0) > 0;
+    }
     await audit(
       request,
       "package.create",
@@ -338,7 +337,7 @@ async function openSession(
         files: body.files.length,
         uploadTargets: body.files.length - carriedOver,
         carriedOver,
-        ...(removedNotice > 0 ? { nextRevisionNoticeRemoved: true } : {}),
+        ...(removedNotice ? { nextRevisionNoticeRemoved: true } : {}),
         container: request.server.services.originals?.container,
       },
       tx,
