@@ -475,6 +475,28 @@
       }
     }
 
+    /// Where Return in a word field goes: From → To, a typed room → where in the room (ceiling)
+    /// or which opening, else the first value field; nil (the keyboard goes) for a landmark,
+    /// whose next step is a chip.
+    public func focus(after field: Field) -> Field? {
+      switch (kind, field) {
+      case (.distanceA, .from), (.distanceB, .from): return .to
+      case (.ceilingHeight, .room): return .location
+      case (.opening, .room): return .label
+      default: return hasMeasurement ? .firstValue : nil
+      }
+    }
+
+    /// Words as one line: a line break (Return, or pasted) becomes one space between the words
+    /// around it and nothing at either end.
+    public static func oneLine(_ text: String) -> String {
+      guard text.contains(where: \.isNewline) else { return text }
+      return text.split(whereSeparator: \.isNewline)
+        .map { $0.trimmingCharacters(in: .whitespaces) }
+        .filter { !$0.isEmpty }
+        .joined(separator: " ")
+    }
+
     // MARK: Loading recorded controls
 
     func load(distance: FieldControls.Distance, defaultUnit: EnteredUnit) {

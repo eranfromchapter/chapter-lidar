@@ -100,8 +100,9 @@
 
   /// One row of the list (phone-field §4.2): the status glyph, title over subtitle, the values
   /// (millimetres over feet and inches in SF Mono, and the scan's value), the chevron. Two-line
-  /// rows are at least 50 pt, one-line rows 42. At accessibility text sizes the values go under
-  /// the titles, so nothing is cut. The row is one accessibility element.
+  /// rows are at least 60 pt (50 of content, padding 5), one-line rows 42. At accessibility
+  /// text sizes the values go under the titles, so nothing is cut. The row is one accessibility
+  /// element.
   struct ControlRowView: View {
     let row: ControlRow
     let action: () -> Void
@@ -125,18 +126,28 @@
           }
           Chevron()
         }
+        .frame(maxWidth: .infinity, minHeight: minContentHeight, alignment: .leading)
         .padding(.horizontal, FieldTheme.Metric.rowPadding)
-        .padding(.vertical, row.isCompact ? 4 : FieldMetric.controlRowVerticalPadding)
-        .frame(
-          maxWidth: .infinity,
-          minHeight: row.isCompact ? FieldMetric.controlRowCompactHeight : FieldMetric.controlRowHeight,
-          alignment: .leading)
+        .padding(.vertical, verticalPadding)
       }
       .buttonStyle(FieldRowButtonStyle())
       .accessibilityElement(children: .ignore)
       .accessibilityLabel(row.accessibilityLabel)
       .accessibilityAddTraits(.isButton)
       .accessibilityIdentifier(row.accessibilityIdentifier)
+    }
+
+    /// Two-line rows: 50 pt of content and 5 above and below (60 in all, as drawn); compact rows:
+    /// 42 in all.
+    private var verticalPadding: CGFloat {
+      row.isCompact
+        ? FieldMetric.controlRowCompactVerticalPadding : FieldMetric.controlRowVerticalPadding
+    }
+
+    private var minContentHeight: CGFloat {
+      row.isCompact
+        ? FieldMetric.controlRowCompactHeight - 2 * FieldMetric.controlRowCompactVerticalPadding
+        : FieldMetric.controlRowHeight
     }
 
     private var titles: some View {

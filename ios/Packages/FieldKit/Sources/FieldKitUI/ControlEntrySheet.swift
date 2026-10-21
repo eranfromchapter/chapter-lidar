@@ -15,6 +15,7 @@
     let onSave: () -> Void
     let onEditRecorded: (String) -> Void
     @FocusState private var focus: FocusField?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     enum FocusField: Hashable {
       case word(ControlEntryModel.Field)
@@ -106,9 +107,10 @@
                   Chevron()
                 }
                 .foregroundStyle(FieldTheme.Color.ink)
-                .padding(.horizontal, FieldTheme.Metric.rowPadding)
-                .padding(.vertical, 5)
+                // As a two-line row of the list: 50 pt of content, padding 5.
                 .frame(maxWidth: .infinity, minHeight: FieldMetric.controlRowHeight)
+                .padding(.horizontal, FieldTheme.Metric.rowPadding)
+                .padding(.vertical, FieldMetric.controlRowVerticalPadding)
               }
               .buttonStyle(FieldRowButtonStyle())
               .accessibilityElement(children: .combine)
@@ -207,37 +209,51 @@
       }
     }
 
-    /// A label and a right-aligned field in a 52 pt card row ("From · Kitchen east wall").
+    /// A label and a right-aligned field in a 52 pt card row ("From · Kitchen east wall"). The
+    /// words wrap onto more lines rather than being cut; at accessibility text sizes the field
+    /// goes under its label.
     private func wordRow(
       label: String, text: Binding<String>, prompt: String, field: ControlEntryModel.Field
     ) -> some View {
-      HStack(spacing: FieldTheme.Metric.rowGap) {
+      let stacked = dynamicTypeSize.isAccessibilitySize
+      let layout =
+        stacked
+        ? AnyLayout(VStackLayout(alignment: .leading, spacing: FieldTheme.Metric.rowTitleGap))
+        : AnyLayout(HStackLayout(spacing: FieldTheme.Metric.rowGap))
+      return layout {
         Text(label)
           .chapterTextStyle(.body)
           .foregroundStyle(FieldTheme.Color.ink)
-          .fixedSize()
+          .fixedSize(horizontal: !stacked, vertical: true)
           .accessibilityHidden(true)
-        TextField(text: text, prompt: Text(prompt).foregroundStyle(FieldTheme.Color.muted)) {
+        TextField(
+          text: oneLine(text, field: field),
+          prompt: Text(prompt).foregroundStyle(FieldTheme.Color.muted), axis: .vertical
+        ) {
           Text(label)
         }
         .font(FieldTheme.Font.body)
         .foregroundStyle(FieldTheme.Color.ink)
-        .multilineTextAlignment(.trailing)
+        .multilineTextAlignment(stacked ? .leading : .trailing)
         .textInputAutocapitalization(.words)
         .submitLabel(.next)
         .focused($focus, equals: .word(field))
         .accessibilityIdentifier("entry.\(field)")
       }
       .padding(.horizontal, FieldTheme.Metric.rowPadding)
+      .padding(.vertical, FieldMetric.wordFieldVerticalPadding)
       .frame(minHeight: FieldTheme.Metric.navigationRowHeight)
     }
 
-    /// A field filling a 52 pt card row.
+    /// A field filling a 52 pt card row; the words wrap onto more lines rather than being cut.
     private func plainField(
       text: Binding<String>, prompt: String, accessibilityLabel: String,
       field: ControlEntryModel.Field
     ) -> some View {
-      TextField(text: text, prompt: Text(prompt).foregroundStyle(FieldTheme.Color.muted)) {
+      TextField(
+        text: oneLine(text, field: field),
+        prompt: Text(prompt).foregroundStyle(FieldTheme.Color.muted), axis: .vertical
+      ) {
         Text(accessibilityLabel)
       }
       .font(FieldTheme.Font.body)
@@ -247,7 +263,30 @@
       .focused($focus, equals: .word(field))
       .accessibilityIdentifier("entry.\(field)")
       .padding(.horizontal, FieldTheme.Metric.rowPadding)
+      .padding(.vertical, FieldMetric.wordFieldVerticalPadding)
       .frame(minHeight: FieldTheme.Metric.navigationRowHeight)
+    }
+
+    /// The text of a wrapping word field. Return types a line break in a field that wraps; here
+    /// it is "Next" instead: the line break is dropped (the words are one line in
+    /// field-controls.json) and the focus moves on (`ControlEntryModel.focus(after:)`).
+    private func oneLine(
+      _ text: Binding<String>, field: ControlEntryModel.Field
+    ) -> Binding<String> {
+      Binding(
+        get: { text.wrappedValue },
+        set: { newValue in
+          guard newValue.contains(where: \.isNewline) else {
+            text.wrappedValue = newValue
+            return
+          }
+          text.wrappedValue = ControlEntryModel.oneLine(newValue)
+          switch entry.focus(after: field) {
+          case .firstValue: focus = firstValueField
+          case .some(let next): focus = .word(next)
+          case nil: focus = nil
+          }
+        })
     }
 
     // MARK: Measurement

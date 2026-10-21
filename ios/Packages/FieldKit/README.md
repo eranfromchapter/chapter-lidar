@@ -8,7 +8,7 @@ v2, artboard 2d `app-field-v2`, build spec `phone-field`).
 | `FieldRules`              | Foundation, CaptureContract            | `ChecklistRules`, `ControlsList`, `LengthParser` (exact mm), `LengthFormatter`, `MeasurementEntryDraft`, `FieldControlsEditor`, `FieldControlsFile`, `PhotoRecord`, `PhotoLabelDraft`, `PhotoStrip`, the compass pre-fill (`PhotoHeadingSample`, `CameraAxis`, `PhotoDirection.fromCompass`) and `CaptureCompassStatus` / `CompassSummary` |
 | `PhotoStore`              | Foundation, FieldRules                 | `PhotoRecordStore` keeps original HEIC/JPEG bytes unchanged; `PhotoFileStore` is injected; pure-Swift SHA-256   |
 | `FieldKitUI`              | SwiftUI, UIKit, AVFoundation, ChapterUI | The v2 screens on ChapterUI's tokens and components (iOS only; empty on Linux and macOS)                       |
-| `FieldKitUISnapshotTests` | ChapterUISnapshotTesting               | The screens and sheets of artboard 2d, at the default text size and at AX3 (iOS simulator only)                |
+| `FieldKitUISnapshotTests` | ChapterUISnapshotTesting               | The screens and sheets of artboard 2d, at the default text size and at AX3, plus the screen models and thumbnail decoding (iOS simulator only) |
 
 `FieldRules` and `PhotoStore` build and test on Linux (`scripts/swift-test.sh`). There is no
 `.apple-only` marker; the UI target is excluded from non-iOS builds with `#if canImport`.
@@ -49,6 +49,11 @@ through callbacks. Fonts, colours and components are ChapterUI's (`FieldTheme` i
   `valueMm` is exactly what was entered. Feet must be whole; inches a decimal (`0,5` reads as
   0.5). `enteredText` is `10' 0.5"` with `enteredUnit` `ft_in`. Changing the unit clears the fields.
 - Screens show `7,520 mm`, `2,690–2,740 mm` and `24' 8.1"` (ASCII marks, 0.1 in, comma thousands).
+- Row heights are minimums of the content inside the row's padding, as the artboard's CSS draws
+  them: a Before you leave row is 72 pt (56 + 2 × 8; 80 with a button), a two-line Field controls
+  row 60 (50 + 2 × 5). Nothing is cut at any text size: sheet titles wrap (at accessibility sizes
+  they take a row of their own under Cancel and Save) and word fields wrap; Return in a word field
+  moves to the next field instead of typing a line break.
 - Photo direction is N/E/S/W only (the manifest schema has no free-text direction). The saved
   label's `directionSource` is `compass` only when the operator kept the untouched pre-fill.
 - Rooms not scanned: the row passes when every omitted or inaccessible room has a name and a

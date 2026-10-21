@@ -33,6 +33,13 @@
     let store: PhotoRecordStore
     @State private var image: UIImage?
 
+    /// A thumbnail decoded before shows at once (the strip is rebuilt after every saved photo).
+    init(record: PhotoRecord, store: PhotoRecordStore) {
+      self.record = record
+      self.store = store
+      _image = State(initialValue: ThumbnailCache.shared.cached(record))
+    }
+
     var body: some View {
       FieldTheme.Color.line
         .frame(width: FieldMetric.thumbnail, height: FieldMetric.thumbnail)

@@ -37,6 +37,22 @@
       both(Pushed { PhotoLabelingView(model: model, onDone: {}, onRenameRooms: {}) }, named: "label-photo-no-compass")
     }
 
+    /// Not drawn (the artboard has placeholders): real photos, portrait as the camera tags them.
+    /// The photo just taken fills its frame; the strip shows the Kitchen's last four, decoded
+    /// beforehand, as the cache serves them after the first visit.
+    func testLabelAPhotoWithRealPhotos() async throws {
+      let model = try await F.labelingModel(compass: true, subject: true, decodablePhotos: true)
+      XCTAssertEqual(model.pendingFormat, .jpeg)
+      XCTAssertEqual(model.strip.thumbnails.count, 4)
+      for record in model.strip.thumbnails {
+        let thumbnail = await ThumbnailCache.shared.thumbnail(for: record, store: model.store)
+        XCTAssertNotNil(thumbnail, record.path)
+      }
+      assertChapterSnapshot(
+        of: Pushed { PhotoLabelingView(model: model, onDone: {}, onRenameRooms: {}) },
+        named: "label-photo-photos")
+    }
+
     // MARK: 3–4 Field controls
 
     func testFieldControlsManualPolicy() throws {
@@ -50,10 +66,21 @@
       both(Pushed { FieldControlsView(model: model) }, named: "field-controls-standard")
     }
 
+    /// Sealed (addendum B4): the same rows, and under the last card the footnote that says why
+    /// nothing changes. The whole list is drawn (a screen taller than the phone's) so the
+    /// footnote, below the fold on the phone, is in the picture.
     func testFieldControlsReadOnly() throws {
       let model = try F.controlsModel(policy: .standard, withScan: true, isReadOnly: true)
-      assertChapterSnapshot(of: Pushed { FieldControlsView(model: model) }, named: "field-controls-sealed")
+      XCTAssertEqual(
+        model.footnote,
+        "Revision 1 is sealed. To change it, use Add to this capture on the verdict screen.")
+      assertChapterSnapshot(
+        of: Pushed { FieldControlsView(model: model) }, named: "field-controls-sealed",
+        size: CGSize(width: SnapshotRenderer.deviceSize.width, height: Self.wholeListHeight))
     }
+
+    /// Tall enough for the standard-policy list of the artboard scenario, footnote included.
+    private static let wholeListHeight: CGFloat = 1040
 
     // MARK: 5–6 Entry sheet
 
@@ -102,7 +129,7 @@
       model.focus(rowId: "floor-1.ceilingHeight")
       XCTAssertEqual(model.entry?.recordedCaption, "Recorded on Floor 1")
       let view = try entrySheet(model)
-      assertChapterSnapshot(of: view, named: "entry-sheet-ceiling")
+      both(view, named: "entry-sheet-ceiling")
     }
 
     func testEntrySheetLandmark() throws {
@@ -110,7 +137,7 @@
       model.focus(rowId: "floor-1~floor-2.landmarks")
       XCTAssertEqual(model.entry?.title, "Shared landmark")
       let view = try entrySheet(model)
-      assertChapterSnapshot(of: view, named: "entry-sheet-landmark")
+      both(view, named: "entry-sheet-landmark")
     }
 
     func testEntrySheetReadOnly() throws {
@@ -145,6 +172,33 @@
             report: report, headerCaption: "618 Valley Street", onTakePhoto: { _ in },
             onAddControls: { _ in }, onConfirmNoRoomsSkipped: {}, onRenameRooms: {}, onFinish: {})
         }, named: "before-you-leave-passed")
+    }
+
+    /// Opened from the capture overview's Compass row (addendum B3): at AX3 the compass row is
+    /// below the fold, so the screen scrolls to it, and it is filled nude (for 0.6 s; the
+    /// snapshot is taken within it).
+    func testBeforeYouLeaveOpenedOnTheCompassRow() throws {
+      let report = try F.failingReport()
+      assertChapterSnapshot(
+        of: withoutScrollEdgeEffect(
+          Pushed {
+            BeforeYouLeaveView(
+              report: report, headerCaption: "618 Valley Street", focus: .compass,
+              onTakePhoto: { _ in }, onAddControls: { _ in }, onConfirmNoRoomsSkipped: {},
+              onRenameRooms: nil, onFinish: {})
+          }), named: "before-you-leave-focus-ax3", contentSize: .accessibilityExtraLarge)
+    }
+
+    /// A scrolled screen without the iOS 26 scroll edge effect under the navigation bar: in a
+    /// package's tests the harness draws the window in process (`layer.render(in:)`), where that
+    /// effect's backdrop layer covers the whole scrolled content in black.
+    @ViewBuilder
+    private func withoutScrollEdgeEffect(_ view: some View) -> some View {
+      if #available(iOS 26, *) {
+        view.scrollEdgeEffectHidden(true, for: .all)
+      } else {
+        view
+      }
     }
 
     func testBeforeYouLeaveSealed() throws {

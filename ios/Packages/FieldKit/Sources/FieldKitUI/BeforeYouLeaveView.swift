@@ -116,19 +116,14 @@
       }
     }
 
-    /// Scrolls the focused row into view and fills it nude for 0.6 s (no fade with Reduce
-    /// Motion).
+    /// Scrolls the focused row into view and fills it nude for 0.6 s (`FocusFlash`).
     private func reveal(_ proxy: ScrollViewProxy) {
       guard let focus else { return }
       DispatchQueue.main.async {
         proxy.scrollTo(focus, anchor: .center)
         highlighted = focus
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-          if reduceMotion {
-            highlighted = nil
-          } else {
-            withAnimation(.easeOut(duration: 0.3)) { highlighted = nil }
-          }
+        DispatchQueue.main.asyncAfter(deadline: .now() + FocusFlash.hold) {
+          withAnimation(FocusFlash.fade(reduceMotion: reduceMotion)) { highlighted = nil }
         }
       }
     }
@@ -168,14 +163,15 @@
           actionButton(action)
         }
       }
-      .padding(.horizontal, FieldTheme.Metric.rowPadding)
-      .padding(.vertical, 8)
+      // 56 pt of content (64 with a button) inside the 8 pt padding: 72 / 80 pt, as drawn.
       .frame(
         maxWidth: .infinity,
         minHeight: action == nil
           ? FieldMetric.checklistRowHeight : FieldMetric.checklistRowWithButtonHeight,
         alignment: .leading
       )
+      .padding(.horizontal, FieldTheme.Metric.rowPadding)
+      .padding(.vertical, FieldMetric.checklistRowVerticalPadding)
       .background(highlighted == item.id ? FieldTheme.Color.nude : Color.clear)
       .accessibilityElement(children: .contain)
       .accessibilityIdentifier("checklist.row.\(item.id.rawValue)")
@@ -234,6 +230,16 @@
     private func statusWord(_ item: ChecklistItem) -> String {
       if item.passed { return "Done" }
       return item.severity == .advisory ? "Recommended" : "Missing"
+    }
+  }
+
+  /// How Before you leave shows the row it was opened for (addendum B3): the row is filled nude
+  /// for `hold`, then eases out back to clear; with Reduce Motion it clears without a fade.
+  enum FocusFlash {
+    static let hold: TimeInterval = 0.6
+
+    static func fade(reduceMotion: Bool) -> Animation? {
+      reduceMotion ? nil : .easeOut(duration: 0.3)
     }
   }
 #endif

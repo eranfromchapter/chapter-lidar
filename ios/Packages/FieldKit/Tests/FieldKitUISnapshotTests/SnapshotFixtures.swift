@@ -3,8 +3,11 @@
   import FieldKitUI
   import FieldRules
   import Foundation
+  import ImageIO
   import PhotoStore
   import SwiftUI
+  import UIKit
+  import UniformTypeIdentifiers
 
   /// The states of artboard 2d (app-field-v2) as data: 618 Valley Street, two floors, Floor 1
   /// with Kitchen, Living, Bath 1, Bedroom 1 and more rooms.
@@ -28,6 +31,7 @@
     // MARK: Photos
 
     /// A JPEG-shaped file (not a decodable image: the photo shows its placeholder, as drawn).
+    /// ImageIO logs that it cannot make a thumbnail of it; that is expected.
     static func jpeg(_ seed: UInt8) -> Data {
       var bytes: [UInt8] = [0xFF, 0xD8, 0xFF, 0xE1, 0x00, 0x08] + Array("Exif".utf8) + [0, 0]
       bytes += (0..<64).map { UInt8(truncatingIfNeeded: Int($0) &* 7 &+ Int(seed)) }
@@ -42,6 +46,50 @@
       return Data(bytes)
     }
 
+    /// A decodable JPEG, `width` × `height` pixels as stored, of `color` with a lighter band
+    /// along the stored top edge, tagged with the EXIF `orientation` (the phone's camera stores
+    /// portrait photos landscape, tagged `.right`: the band is then on the right when shown).
+    static func photoJPEG(
+      width: Int = 400, height: Int = 300, color: UIColor,
+      orientation: CGImagePropertyOrientation = .right
+    ) -> Data {
+      let format = UIGraphicsImageRendererFormat()
+      format.scale = 1
+      format.opaque = true
+      let size = CGSize(width: width, height: height)
+      let image = UIGraphicsImageRenderer(size: size, format: format).image { context in
+        color.setFill()
+        context.fill(CGRect(origin: .zero, size: size))
+        UIColor(white: 0.92, alpha: 1).setFill()
+        context.fill(CGRect(x: 0, y: 0, width: size.width, height: size.height / 10))
+      }
+      let data = NSMutableData()
+      guard let cgImage = image.cgImage,
+        let destination = CGImageDestinationCreateWithData(
+          data, UTType.jpeg.identifier as CFString, 1, nil)
+      else { return Data() }
+      CGImageDestinationAddImage(
+        destination, cgImage, [kCGImagePropertyOrientation: orientation.rawValue] as CFDictionary)
+      CGImageDestinationFinalize(destination)
+      return data as Data
+    }
+
+    /// Photo-like tones for the decodable photos (wood, plaster, tile, stone, …).
+    static let photoColors: [UIColor] = [
+      UIColor(red: 0.55, green: 0.42, blue: 0.30, alpha: 1),
+      UIColor(red: 0.78, green: 0.74, blue: 0.66, alpha: 1),
+      UIColor(red: 0.42, green: 0.48, blue: 0.52, alpha: 1),
+      UIColor(red: 0.66, green: 0.58, blue: 0.46, alpha: 1),
+      UIColor(red: 0.36, green: 0.40, blue: 0.34, alpha: 1),
+    ]
+
+    /// Floor 1 under another capture id, for the decodable photos: thumbnails are cached by path,
+    /// which holds the capture id, so they never stand in for the placeholders of the drawn
+    /// states.
+    static let floor1WithPhotos = FieldControls.CaptureRef(
+      captureId: LowercaseUUID(rawValue: "c2b7e4f1-9a3d-4e6b-8c1f-5d2a7e9b3f04")!,
+      areaKey: "floor-1")
+
     static func capture(
       _ ref: FieldControls.CaptureRef, _ label: String, at time: UTCTimestamp, rooms: [String],
       scan: ScanMeasurements? = nil
@@ -51,7 +99,8 @@
     }
 
     /// 13 photos of Floor 1, 4 of them of the Kitchen (the last one): the next is Photo 14.
-    static func photoStore() throws -> PhotoRecordStore {
+    /// `decodable`: real JPEGs of `floor1WithPhotos`; else JPEG-shaped files of `floor1`.
+    static func photoStore(decodable: Bool = false) throws -> PhotoRecordStore {
       let store = try PhotoRecordStore(files: InMemoryPhotoFileStore())
       let rooms = [
         "Living", "Kitchen", "Bath 1", "Bedroom 1", "Kitchen", "Living", "Bedroom 2", "Bath 1",
@@ -59,7 +108,9 @@
       ]
       for (index, room) in rooms.enumerated() {
         _ = try store.save(
-          original: jpeg(UInt8(index)), capture: floor1,
+          original: decodable
+            ? photoJPEG(color: photoColors[index % photoColors.count]) : jpeg(UInt8(index)),
+          capture: decodable ? floor1WithPhotos : floor1,
           labels: PackageManifest.PhotoLabels(
             room: room, direction: .north, subject: .general, takenAt: t0,
             directionSource: .manual))
@@ -69,14 +120,24 @@
 
     /// "Label a photo" after the shutter: Photo 14 of Floor 1, HEIC, 12:41, Kitchen kept from the
     /// last photo, the compass's E (85° ±8° true) or no reading, Cabinetry chosen when `subject`.
-    @MainActor static func labelingModel(compass: Bool, subject: Bool) async throws -> PhotoLabelingModel {
+    /// `decodablePhotos`: the photo just taken (a JPEG) and the saved ones are real images.
+    @MainActor static func labelingModel(
+      compass: Bool, subject: Bool, decodablePhotos: Bool = false
+    ) async throws -> PhotoLabelingModel {
       let shutterDate = shutter.date
       let model = PhotoLabelingModel(
-        capture: capture(floor1, "Floor 1", at: t0, rooms: floor1Rooms),
-        store: try photoStore(),
+        capture: capture(
+          decodablePhotos ? floor1WithPhotos : floor1, "Floor 1", at: t0, rooms: floor1Rooms),
+        store: try photoStore(decodable: decodablePhotos),
         heading: FixedPhotoHeading(
           azimuthDegrees: compass ? 85 : nil, accuracyDegrees: 8, now: { shutterDate }),
-        capturePhoto: { heic() },
+        capturePhoto: {
+          decodablePhotos
+            ? photoJPEG(
+              width: 1200, height: 900,
+              color: UIColor(red: 0.70, green: 0.62, blue: 0.52, alpha: 1))
+            : heic()
+        },
         now: { shutter }, date: { shutterDate }, timeZone: newYork)
       await model.takePhoto()
       if subject { model.chooseSubject(.cabinetry) }

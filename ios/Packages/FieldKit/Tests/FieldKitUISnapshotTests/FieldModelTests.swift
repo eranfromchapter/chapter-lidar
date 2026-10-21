@@ -4,10 +4,12 @@
   import FieldRules
   import Foundation
   import PhotoStore
+  import SwiftUI
   import XCTest
 
-  /// The screen models behind the snapshots: photo labeling (room kept, compass pre-fill, saving)
-  /// and the Field controls entry sheet (prefill, saving, editing, read-only).
+  /// The screen models behind the snapshots: photo labeling (room kept, compass pre-fill, saving),
+  /// the Field controls entry sheet (prefill, saving, editing, read-only, word fields) and
+  /// Before you leave's focus flash.
   @MainActor
   final class FieldModelTests: XCTestCase {
     private typealias F = SnapshotFixtures
@@ -281,6 +283,49 @@
       XCTAssertEqual(
         try controls(policy: .standard).subtitle,
         "Measured by the LiDAR scan. Tap a row to add an optional tape or laser check.")
+    }
+
+    /// The word fields wrap (`axis: .vertical`), so Return would type a line break: it moves on
+    /// instead, From → To → the value, a typed room → the next words, a landmark's label → the
+    /// floor chips (no field).
+    func testReturnInAWordFieldMovesOn() throws {
+      let model = try controls()
+      model.focus(rowId: "floor-2.distanceA")
+      XCTAssertEqual(model.entry?.focus(after: .from), .to)
+      XCTAssertEqual(model.entry?.focus(after: .to), .firstValue)
+      model.focus(rowId: "floor-1.ceilingHeight")
+      XCTAssertEqual(model.entry?.focus(after: .room), .location)
+      XCTAssertEqual(model.entry?.focus(after: .location), .firstValue)
+      model.focus(rowId: "floor-1.openings")
+      XCTAssertEqual(model.entry?.focus(after: .room), .label)
+      XCTAssertEqual(model.entry?.focus(after: .label), .firstValue)
+      model.focus(rowId: "floor-1~floor-2.floorToFloor")
+      XCTAssertEqual(model.entry?.focus(after: .location), .firstValue)
+      model.focus(rowId: "floor-1~floor-2.landmarks")
+      XCTAssertNil(model.entry?.focus(after: .label))
+    }
+
+    /// What a word field keeps of a line break: nothing at the ends, one space between words.
+    func testWordsStayOnOneLine() {
+      typealias Entry = ControlEntryModel
+      XCTAssertEqual(Entry.oneLine("At the stair"), "At the stair")
+      XCTAssertEqual(Entry.oneLine("  Kitchen  "), "  Kitchen  ", "no line break: as typed")
+      XCTAssertEqual(Entry.oneLine("Kitchen east wall\n"), "Kitchen east wall")
+      XCTAssertEqual(Entry.oneLine("Kitchen east\n wall"), "Kitchen east wall")
+      XCTAssertEqual(
+        Entry.oneLine("\nAt the stair,\r\n\nFloor 1 landing \n"), "At the stair, Floor 1 landing")
+      XCTAssertEqual(Entry.oneLine("\n"), "")
+    }
+
+    // MARK: Before you leave
+
+    /// Addendum B3: the row Before you leave was opened for stays nude for 0.6 s, then fades
+    /// out; with Reduce Motion it clears at once. (The scroll and the fill are in the
+    /// `before-you-leave-focus-ax3` snapshot.)
+    func testTheFocusedRowFlashesForSixTenthsOfASecond() {
+      XCTAssertEqual(FocusFlash.hold, 0.6)
+      XCTAssertEqual(FocusFlash.fade(reduceMotion: false), .easeOut(duration: 0.3))
+      XCTAssertNil(FocusFlash.fade(reduceMotion: true))
     }
   }
 #endif
