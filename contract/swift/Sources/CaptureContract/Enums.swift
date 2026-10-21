@@ -23,8 +23,8 @@ public enum CaptureRecordSchemaVersion: String, CaseIterable, Codable, Sendable 
 
 /// `schemaVersion` of the manifest. 1.1.0 adds the optional `photo.directionSource` and retires
 /// the role `spatial_report_pdf` (`FileRole.retiredRoles`). Both are read; `PackageManifest`
-/// writes `current` except for a 1.0.0 manifest that lists a retired role (see
-/// `PackageManifest.writtenSchemaVersion`).
+/// writes `current` except for a manifest that lists a retired role, which is written as 1.0.0
+/// (see `PackageManifest.writtenSchemaVersion`).
 public enum ManifestSchemaVersion: String, CaseIterable, Codable, Sendable {
   case v1 = "1.0.0"
   case v1_1 = "1.1.0"

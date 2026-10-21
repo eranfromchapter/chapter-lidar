@@ -5,9 +5,10 @@
 /// with a new `packageId`.
 ///
 /// Reads schema 1.0.0 and 1.1.0 and writes `ManifestSchemaVersion.current`, with one exception:
-/// a manifest read as 1.0.0 that lists a retired role (a package sealed by an app before v2) is
-/// written back as 1.0.0, the only version that allows it (`writtenSchemaVersion`). New
-/// manifests never list a retired role.
+/// a manifest that lists a retired role is written as 1.0.0, the only version that allows it
+/// (`writtenSchemaVersion`). That is a package sealed by an app before v2, or one sealed while
+/// PlanExport still writes the phone report. A manifest that lists a retired role and a field
+/// added in 1.1.0 (`photo.directionSource`) fits neither version and does not encode.
 public struct PackageManifest: Hashable, Sendable, Codable {
   /// The version this manifest was read as; `.current` for a new manifest. What is written is
   /// `writtenSchemaVersion`.
@@ -42,10 +43,11 @@ public struct PackageManifest: Hashable, Sendable, Codable {
     self.files = files
   }
 
-  /// The `schemaVersion` this manifest is written with: `current`, or 1.0.0 for a manifest read
-  /// as 1.0.0 that lists a retired role (1.1.0 does not allow those files).
+  /// The `schemaVersion` this manifest is written with: 1.0.0 when it lists a retired role (1.1.0
+  /// does not allow those files), else `current`. It does not depend on the version read, so a
+  /// new manifest that still lists the phone report is valid too.
   public var writtenSchemaVersion: ManifestSchemaVersion {
-    schemaVersion == .v1 && files.contains(where: { $0.role.isRetired }) ? .v1 : .current
+    files.contains(where: { $0.role.isRetired }) ? .v1 : .current
   }
 
   private enum CodingKeys: String, CodingKey {
@@ -55,9 +57,25 @@ public struct PackageManifest: Hashable, Sendable, Codable {
 
   // Decoding is synthesized: `schemaVersion` accepts every `ManifestSchemaVersion`.
 
+  /// Throws `EncodingError.invalidValue` for a manifest that fits no schema version: a retired
+  /// role (1.0.0 only) next to `photo.directionSource` (1.1.0 only).
   public func encode(to encoder: Encoder) throws {
+    let version = writtenSchemaVersion
+    if version == .v1,
+      let retired = files.first(where: { $0.role.isRetired }),
+      let photo = files.first(where: { $0.photo?.directionSource != nil })
+    {
+      throw EncodingError.invalidValue(
+        self,
+        EncodingError.Context(
+          codingPath: [CodingKeys.files],
+          debugDescription:
+            "\(retired.path) has the retired role \(retired.role.rawValue), which only manifest "
+            + "1.0.0 allows, and \(photo.path) has photo.directionSource, which only 1.1.0 "
+            + "allows; leave the retired file out of the package"))
+    }
     var container = encoder.container(keyedBy: CodingKeys.self)
-    try container.encode(writtenSchemaVersion, forKey: .schemaVersion)
+    try container.encode(version, forKey: .schemaVersion)
     try container.encode(layoutVersion, forKey: .layoutVersion)
     try container.encode(packageId, forKey: .packageId)
     try container.encode(visitId, forKey: .visitId)

@@ -6,8 +6,8 @@ import XCTest
 /// "Equal" is semantic: same keys, same values, numbers compared numerically, key order and
 /// whitespace ignored. A dropped field, an added field or a `null` fails the test. The one
 /// expected change: a capture model, a capture record and a manifest are written as the current
-/// version, so a 1.0.0 example comes back as 1.1.0 (except a 1.0.0 manifest that lists a retired
-/// role, which 1.1.0 does not allow).
+/// version, so a 1.0.0 example comes back as 1.1.0 (except a manifest that lists a retired role,
+/// which 1.1.0 does not allow and is written as 1.0.0).
 final class RoundTripTests: XCTestCase {
   /// One entry per schema in contract/schema, keyed by the schema name (file name without
   /// `.schema.json`, which is also the example folder name).
@@ -43,12 +43,9 @@ final class RoundTripTests: XCTestCase {
           return role
         }
       }()
-      let legacy =
-        members["schemaVersion"] == .string(ManifestSchemaVersion.v1.rawValue)
-        && roles.contains { FileRole(rawValue: $0)?.isRetired == true }
-      if !legacy {
-        members["schemaVersion"] = .string(ManifestSchemaVersion.current.rawValue)
-      }
+      let listsRetiredRole = roles.contains { FileRole(rawValue: $0)?.isRetired == true }
+      members["schemaVersion"] = .string(
+        (listsRetiredRole ? ManifestSchemaVersion.v1 : .current).rawValue)
     default:
       break
     }
@@ -288,7 +285,7 @@ final class RoundTripTests: XCTestCase {
     XCTAssertEqual(ManifestSchemaVersion.current, .v1_1)
   }
 
-  func testALegacyManifestWithARetiredRoleIsWrittenBackAs1_0_0() throws {
+  func testAManifestWithARetiredRoleIsWrittenAs1_0_0() throws {
     let legacy = try CaptureContractJSON.makeDecoder().decode(
       PackageManifest.self, from: example("manifest/valid/legacy-spatial-report-1.0.0.json"))
     XCTAssertTrue(legacy.files.contains { $0.role == .spatialReportPDF })
@@ -299,9 +296,14 @@ final class RoundTripTests: XCTestCase {
     dropped.files.removeAll { $0.role.isRetired }
     XCTAssertEqual(dropped.writtenSchemaVersion, .v1_1)
 
+    // Built new (as PackageAssembler does) while PlanExport still writes the phone report:
+    // 1.1.0 would not allow the file, so it is written as 1.0.0 too.
     var created = legacy
     created.schemaVersion = .current
-    XCTAssertEqual(created.writtenSchemaVersion, .v1_1, "a new manifest is always 1.1.0")
+    XCTAssertEqual(created.writtenSchemaVersion, .v1)
+    XCTAssertEqual(try writtenVersion(created), .string("1.0.0"))
+    created.files.removeAll { $0.role.isRetired }
+    XCTAssertEqual(try writtenVersion(created), .string("1.1.0"))
   }
 
   func testPhotoDirectionSourceDecodesAndIsOmittedWhenNil() throws {

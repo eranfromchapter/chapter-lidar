@@ -30,8 +30,9 @@ public enum FileRole: String, CaseIterable, Codable, Sendable {
     FileRole.visitRoles.contains(self)
   }
 
-  /// Retired roles: listed only by manifest 1.0.0 packages from app builds before v2; a 1.1.0
-  /// manifest never lists them. The phone's spatial report became a station output.
+  /// Retired roles: listed only in manifest 1.0.0 (app builds before v2, and builds whose
+  /// PlanExport still writes the phone report); a 1.1.0 manifest never lists them. The phone's
+  /// spatial report became a station output.
   public static let retiredRoles: [FileRole] = [.spatialReportPDF]
 
   public var isRetired: Bool {

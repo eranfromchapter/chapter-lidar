@@ -22,9 +22,11 @@ Each document has its own schema version. Field controls and verdict use `Schema
 | capture record | `CaptureRecordSchemaVersion` | the compass reading of each capture (`heading`, `headingAccuracy`, `headingSource`, `headingRecordedAt`) or `headingIssue` |
 | manifest       | `ManifestSchemaVersion`      | `photo.directionSource` (`PhotoDirectionSource`); retires `spatial_report_pdf`                                             |
 
-A manifest read as 1.0.0 that lists a retired role (`FileRole.retiredRoles`, `isRetired`) is
-written back as 1.0.0 (`PackageManifest.writtenSchemaVersion`), the only version that allows it;
-new manifests never list one.
+A manifest that lists a retired role (`FileRole.retiredRoles`, `isRetired`) is written as 1.0.0
+(`PackageManifest.writtenSchemaVersion`), the only version that allows it, whether it was read
+as 1.0.0 (a package sealed by an app before v2) or built new while PlanExport still writes the
+phone report. A manifest that lists a retired role and `photo.directionSource` (1.1.0 only)
+fits no version: encoding it throws `EncodingError.invalidValue`.
 
 ## Compass
 
@@ -56,6 +58,10 @@ swift test --package-path contract/swift --filter SchemaParityTests
 - `RoundTripTests`: every `contract/examples/<schema>/valid/*.json` decodes and re-encodes to
   semantically equal JSON (a 1.0.0 capture model, capture record or manifest comes back as
   1.1.0, except the legacy manifest with a retired role; nothing else changes).
+- `SchemaValidityTests`: what the types write validates against the schemas
+  (`Support/SchemaValidator.swift`, the subset of JSON Schema the contract uses; it accepts
+  every valid example and rejects every invalid one): every re-encoded valid example, and new
+  manifests with and without the phone report.
 - `CompassTests`: every vector of `contract/test-vectors/compass-states.json` (the TypeScript
   tests run the same file), plus `{AGO}` and the tokens.
 - `CompassMathTests`: synthetic Core Motion attitudes and ARKit poses (upright, flat, pitched,
