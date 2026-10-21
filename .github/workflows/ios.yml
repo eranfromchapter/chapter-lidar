@@ -54,6 +54,10 @@ jobs:
         include:
           - package: CaptureContract
             path: contract/swift
+          # Screen tokens, fonts, logo, components and the snapshot harness; its tests are the
+          # ChapterUI component snapshots (iPhone 17 Pro simulator, 402 x 874 pt @3x).
+          - package: ChapterUI
+            path: ios/Packages/ChapterUI
           - package: CaptureCore
             path: ios/Packages/CaptureCore
           - package: PlanExport
@@ -141,6 +145,9 @@ jobs:
         working-directory: ${{ matrix.path }}
         env:
           SCHEME: ${{ steps.scheme.outputs.name }}
+          # ChapterUISnapshotTesting writes the new image and a diff of a failing snapshot here
+          # (xcodebuild passes TEST_RUNNER_* to the tests without the prefix); uploaded below.
+          TEST_RUNNER_SNAPSHOT_ARTIFACTS: ${{ runner.temp }}/results/snapshots-${{ matrix.package }}
         run: |
           xcodebuild test \
             -scheme "${SCHEME}" \

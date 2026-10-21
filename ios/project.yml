@@ -23,6 +23,8 @@ settings:
 packages:
   CaptureContract:
     path: ../contract/swift
+  ChapterUI:
+    path: Packages/ChapterUI
   CaptureCore:
     path: Packages/CaptureCore
   PlanExport:
@@ -74,6 +76,9 @@ targets:
         product: AppCore
       - package: CaptureContract
         product: CaptureContract
+      # Screen tokens v2, fonts (Inter, registered at launch), logo and shared components.
+      - package: ChapterUI
+        product: ChapterUI
       - package: CaptureCore
         product: CaptureCore
       - package: CaptureCore
