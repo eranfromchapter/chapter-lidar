@@ -20,6 +20,13 @@ public struct ReplaySource: Sendable, Equatable {
 /// A `CaptureSession` that plays back a recording. Progress counts grow in `steps` equal steps;
 /// the last step has the totals of the recording. With `autoPlay` (the default) `start` and
 /// `resume` play to the end at once; with `autoPlay: false` a test calls `advance()` for each step.
+///
+/// Scripts for tests and UI tests:
+/// - `compass`: right after `.stateChanged(.running)` the chip reads `.compass(.reading)`; from
+///   step 1 it shows the script's reading (or `.notVerified`), and `finish()` returns its result.
+///   Without a script the session reads no compass (`.none(issue: nil)`), as before.
+/// - `trackingLost`: steps during which tracking is lost (`.tracking(.lost(since:))` on entering
+///   the range, `.tracking(.normal)` on leaving it).
 public actor ReplaySession: CaptureSession {
   public nonisolated let events: AsyncStream<CaptureSessionEvent>
   private let continuation: AsyncStream<CaptureSessionEvent>.Continuation
@@ -29,21 +36,28 @@ public actor ReplaySession: CaptureSession {
   private let steps: Int
   private let autoPlay: Bool
   private let clock: @Sendable () -> Date
+  private let compass: ReplayCompass?
+  private let trackingLost: ClosedRange<Int>?
 
   public private(set) var state: CaptureSessionState = .idle
   private var step = 0
   private var startedAt: Date?
+  private var compassShown = false
+  private var isTrackingLost = false
 
   /// Throws when the recording's RoomPlan JSON cannot be decoded.
   public init(
     source: ReplaySource, steps: Int = 10, autoPlay: Bool = true,
-    clock: @escaping @Sendable () -> Date = { Date() }
+    clock: @escaping @Sendable () -> Date = { Date() }, compass: ReplayCompass? = nil,
+    trackingLost: ClosedRange<Int>? = nil
   ) throws {
     self.source = source
     self.document = try RoomPlanDocument.decode(from: source.originals.roomPlanJSON)
     self.steps = max(1, steps)
     self.autoPlay = autoPlay
     self.clock = clock
+    self.compass = compass
+    self.trackingLost = trackingLost
     (events, continuation) = AsyncStream.makeStream(of: CaptureSessionEvent.self)
   }
 
@@ -54,6 +68,7 @@ public actor ReplaySession: CaptureSession {
     startedAt = clock()
     step = 0
     setState(.running)
+    if compass != nil { continuation.yield(.compass(.reading)) }
     continuation.yield(.instruction(.normal))
     continuation.yield(.progress(progress(forStep: 0)))
     if autoPlay { playToEnd() }
@@ -79,6 +94,18 @@ public actor ReplaySession: CaptureSession {
   public func advance() -> Bool {
     guard state == .running, step < steps else { return false }
     step += 1
+    if let compass, !compassShown, let startedAt {
+      compassShown = true
+      let readAt = startedAt.addingTimeInterval(compass.recordedAfter)
+      continuation.yield(.compass(compass.liveState(at: readAt)))
+    }
+    if let trackingLost {
+      let lost = trackingLost.contains(step)
+      if lost != isTrackingLost {
+        isTrackingLost = lost
+        continuation.yield(.tracking(lost ? .lost(since: clock()) : .normal))
+      }
+    }
     continuation.yield(.progress(progress(forStep: step)))
     return true
   }
@@ -98,7 +125,9 @@ public actor ReplaySession: CaptureSession {
     }
     setState(.finished)
     continuation.finish()
-    return CaptureSessionResult(originals: source.originals, startedAt: startedAt, finishedAt: clock())
+    return CaptureSessionResult(
+      originals: source.originals, startedAt: startedAt, finishedAt: clock(),
+      compass: compass?.result(startedAt: startedAt) ?? .none(issue: nil))
   }
 
   public func cancel() async {

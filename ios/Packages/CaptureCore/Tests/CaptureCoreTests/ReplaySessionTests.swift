@@ -86,6 +86,51 @@ final class ReplaySessionTests: XCTestCase {
     _ = try await session.finish()
   }
 
+  func testCompassScriptRightAfterRunningThenItsReadingAndResult() async throws {
+    let start = Date(timeIntervalSince1970: 1_792_245_500)
+    let session = try ReplaySession(
+      source: try source("box-room"), steps: 2, clock: { start },
+      compass: ReplayCompass(
+        reading: .init(heading: 212.4, accuracy: 8, source: .trueNorth), cameraBearing: 30))
+    try await session.start(CaptureSessionConfiguration(mode: .room))
+    let result = try await session.finish()
+    let events = await collect(session)
+    XCTAssertEqual(Array(events.prefix(2)), [.stateChanged(.running), .compass(.reading)])
+    let compass = events.compactMap { event -> CompassLiveState? in
+      if case .compass(let value) = event { return value }
+      return nil
+    }
+    XCTAssertEqual(
+      compass, [.reading, .result(.verified(heading: 212.4, accuracy: 8), cameraBearing: 30)])
+    XCTAssertEqual(
+      result.compass,
+      .reading(
+        heading: 212.4, accuracy: 8, source: .trueNorth,
+        recordedAt: UTCTimestamp(start.addingTimeInterval(2))))
+  }
+
+  func testWithoutACompassScriptTheScanReadsNone() async throws {
+    let session = try ReplaySession(source: try source("box-room"))
+    try await session.start(CaptureSessionConfiguration(mode: .room))
+    let result = try await session.finish()
+    let events = await collect(session)
+    XCTAssertFalse(events.contains { if case .compass = $0 { return true } else { return false } })
+    XCTAssertEqual(result.compass, .none(issue: nil))
+  }
+
+  func testTrackingLostScript() async throws {
+    let start = Date(timeIntervalSince1970: 1_792_245_500)
+    let session = try ReplaySession(
+      source: try source("box-room"), steps: 5, clock: { start }, trackingLost: 2...3)
+    try await session.start(CaptureSessionConfiguration(mode: .room))
+    _ = try await session.finish()
+    let tracking = await collect(session).compactMap { event -> TrackingStatus? in
+      if case .tracking(let value) = event { return value }
+      return nil
+    }
+    XCTAssertEqual(tracking, [.lost(since: start), .normal])
+  }
+
   func testStateErrors() async throws {
     let session = try ReplaySession(source: try source("box-room"))
     do {

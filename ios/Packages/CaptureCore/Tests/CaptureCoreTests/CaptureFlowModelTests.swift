@@ -9,25 +9,27 @@ import XCTest
 
   @MainActor
   final class CaptureFlowModelTests: XCTestCase {
-    private let project = HubProjectSummary(
+    let project = HubProjectSummary(
       dealId: "fixture-deal-0001", projectName: "Fixture project",
       address: "100 Example Street, Testville, NY 00000", updatedAt: nil)
+    /// Fri Oct 17, 2026 13:58:20 UTC: the clock of every model and replay in these tests.
+    nonisolated static let now = Date(timeIntervalSince1970: 1_792_245_500)
 
-    private func temporaryDirectory() -> URL {
+    func temporaryDirectory() -> URL {
       let url = FileManager.default.temporaryDirectory.appendingPathComponent("FlowTests-\(UUID().uuidString)")
       addTeardownBlock { try? FileManager.default.removeItem(at: url) }
       return url
     }
 
     /// Holds the session the factory made without keeping it alive.
-    private final class MadeSessions {
+    final class MadeSessions {
       weak var last: ReplaySession?
       var count = 0
     }
 
     /// A session that RoomPlan stops on its own (`failure` after start), or that cannot start
     /// at all (`startError`), as on a hot phone.
-    private final class FailingSession: CaptureSession, @unchecked Sendable {
+    final class FailingSession: CaptureSession, @unchecked Sendable {
       let events: AsyncStream<CaptureSessionEvent>
       private let continuation: AsyncStream<CaptureSessionEvent>.Continuation
       private let failure: CaptureSessionError?
@@ -53,34 +55,46 @@ import XCTest
       func cancel() async { continuation.finish() }
     }
 
-    private func makeModel(
-      lidar: Bool = true, fixture: String = "box-room", made: MadeSessions? = nil,
-      onFinished: @escaping @MainActor (CaptureFlowResult) -> Void = { _ in },
-      factory: (@MainActor () throws -> any CaptureSession)? = nil
-    ) throws -> CaptureFlowModel {
+    func replaySource(_ fixture: String = "box-room") throws -> ReplaySource {
       let fixtureData = try Fixtures.load(fixture)
-      let source = ReplaySource(
+      return ReplaySource(
         originals: RawOriginals(
           roomPlanJSON: try fixtureData.roomPlanData(),
           depthSamples: try DepthSamplesCodec.decode(fixtureData.depthSamplesData())))
+    }
+
+    func makeModel(
+      lidar: Bool = true, fixture: String = "box-room", made: MadeSessions? = nil,
+      provider: HubProjectProvider? = nil, compass: (any CompassProviding)? = nil,
+      replayCompass: ReplayCompass? = nil, trackingLost: ClosedRange<Int>? = nil,
+      autoPlay: Bool = true, existingAreaKeys: Set<String> = [],
+      onFinished: @escaping @MainActor (CaptureFlowResult) -> Void = { _ in },
+      factory: (@MainActor () throws -> any CaptureSession)? = nil
+    ) throws -> CaptureFlowModel {
+      let source = try replaySource(fixture)
       let draft = CaptureRecordDraft(
         operatorName: "Test Operator",
         device: DeviceInfo(model: "iPhone17,1", osName: .iOS, osVersion: "26.0.1", hasLidar: lidar),
         app: CaptureRecord.AppInfo(version: "1.0.0", build: "1"))
+      let clock: @Sendable () -> Date = { Self.now }
       return CaptureFlowModel(
         draft: draft,
         capabilities: DeviceCapabilities(
           model: "iPhone17,1", osName: .iOS, osVersion: "26.0.1", supportsSceneReconstructionMesh: lidar,
           roomPlanSupported: true),
-        projectProvider: StaticHubProjectProvider([project]), originalsRoot: temporaryDirectory(),
+        projectProvider: provider ?? StaticHubProjectProvider([project]),
+        originalsRoot: temporaryDirectory(),
         makeSession: { _ in
           if let factory { return try factory() }
-          let session = try ReplaySession(source: source)
+          let session = try ReplaySession(
+            source: source, autoPlay: autoPlay, clock: clock, compass: replayCompass,
+            trackingLost: trackingLost)
           made?.last = session
           made?.count += 1
           return session
         },
-        clock: { Date(timeIntervalSince1970: 1_792_245_500) }, onFinished: onFinished)
+        compass: compass, existingAreaKeys: existingAreaKeys, clock: clock,
+        timeZone: TimeZone(identifier: "America/New_York")!, onFinished: onFinished)
     }
 
     func testContinueNeedsAProjectAndAConfirmedAddress() async throws {
@@ -105,6 +119,8 @@ import XCTest
       model.choose(project)
       model.setAddressConfirmed(true)
       model.continueToSetup()
+      XCTAssertEqual(model.draft.floorLabel, "Floor 1", "prefilled")
+      model.draft.floorLabel = ""
       XCTAssertFalse(model.canStartScan)
       await model.startScan()
       XCTAssertEqual(model.step, .scanSetup)
@@ -182,10 +198,14 @@ import XCTest
 
     // MARK: Current session (the host shows its camera feed)
 
-    private func modelReadyToScan(
-      made: MadeSessions, factory: (@MainActor () throws -> any CaptureSession)? = nil
+    func modelReadyToScan(
+      made: MadeSessions = MadeSessions(), compass: (any CompassProviding)? = nil,
+      replayCompass: ReplayCompass? = nil, trackingLost: ClosedRange<Int>? = nil,
+      autoPlay: Bool = true, factory: (@MainActor () throws -> any CaptureSession)? = nil
     ) throws -> CaptureFlowModel {
-      let model = try makeModel(made: made, factory: factory)
+      let model = try makeModel(
+        made: made, compass: compass, replayCompass: replayCompass, trackingLost: trackingLost,
+        autoPlay: autoPlay, factory: factory)
       model.choose(project)
       model.setAddressConfirmed(true)
       model.continueToSetup()
@@ -195,7 +215,7 @@ import XCTest
     }
 
     /// The flow drops the session when it ends; the event task lets go of it a moment later.
-    private func waitUntilReleased(_ made: MadeSessions, file: StaticString = #filePath, line: UInt = #line) async {
+    func waitUntilReleased(_ made: MadeSessions, file: StaticString = #filePath, line: UInt = #line) async {
       for _ in 0..<200 where made.last != nil {
         try? await Task.sleep(nanoseconds: 10_000_000)
       }
