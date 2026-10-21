@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="29.41mm" height="19.05mm" viewBox="0 0 29.41 19.05">
+  <title>North symbol, verified, 26 pt, A 212.4</title>
+  <rect x="0" y="0" width="29.41" height="19.05" fill="#faf5ee"/>
+  <g class="compass">
+    <path d="M11.86 7.13 C10.96 5.72 11.38 3.86 12.78 2.97 C14.19 2.08 16.05 2.50 16.94 3.90 C17.83 5.30 17.41 7.16 16.01 8.05 C14.61 8.94 12.75 8.53 11.86 7.13 Z" fill="none" stroke="#1f2429" stroke-width="0.21" stroke-linecap="butt" stroke-linejoin="miter"/>
+    <path d="M16.16 8.30 L12.16 4.39 L13.78 4.55 L14.33 3.01 Z" fill="#1f2429" stroke="#1f2429" stroke-width="0.21" stroke-linecap="butt" stroke-linejoin="round"/>
+    <text x="16.45" y="8.76" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="1.72" text-anchor="middle" fill="#1f2429" font-weight="600" transform="rotate(-212.40 16.45 8.76)">N</text>
+    <text x="14.70" y="13.84" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="2.65" text-anchor="middle" fill="#6b6557">True north · compass</text>
+    <text x="14.70" y="17.01" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="2.65" text-anchor="middle" fill="#6b6557">±8° · 212°</text>
+  </g>
+</svg>

@@ -29,7 +29,9 @@ let package = Package(
       dependencies: [
         "PlanExport", .product(name: "CaptureContract", package: "swift"),
         .product(name: "CaptureModelMapping", package: "CaptureCore"),
-      ]
+      ],
+      // SVG references of the visual checks (NorthSymbolSnapshotTests), read by path.
+      exclude: ["__Snapshots__"]
     ),
   ]
 )

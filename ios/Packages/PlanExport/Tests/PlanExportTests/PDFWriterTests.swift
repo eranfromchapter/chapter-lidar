@@ -105,25 +105,87 @@ final class PDFWriterTests: XCTestCase {
     }
   }
 
-  func testPlanSheetNorthSymbolFitsItsPanelUnderTheScaleBar() throws {
-    // The block's foot on the title block's bottom edge plus 1.5 mm, its top under the scale
-    // bar (17 mm under the title block's top), its left edge 1.5 mm into the right panel of
-    // the narrowest sheet, Letter portrait.
-    let sheet = PlanSheet(paper: .letter, landscape: false, scaleDenominator: 50)
-    let blockW = sheet.widthMM - 2 * PlanSheet.pageMargin
-    let rightX = PlanSheet.pageMargin + blockW * 0.62
-    for state in [
-      CompassState.verified(heading: 212.4, accuracy: 8),
+  func testPlanSheetNorthSymbolSitsInTheRightPanelUnderTheScaleBar() throws {
+    // Everything is read from the PDF as written: the title block (its frame, the one `re`),
+    // its right panel (from the frame's one full-height divider to the frame's right edge),
+    // the scale bar (the horizontal rules inside that panel; its baseline is the lowest) and
+    // the north symbol (its strings, and the stroked paths drawn just before them: ring and
+    // arrow, or the box's border). Every fixture plan and two synthetic ones (a long room on
+    // Letter portrait, the narrowest panel, and a plan too large for Letter), in each state.
+    let base = try XCTUnwrap(Fixtures.load("box-room").first)
+    let models =
+      try Fixtures.all().map(\.model)
+      + [Synthetic.room(width: 3, length: 9), Synthetic.room(width: 60, length: 40)]
+    let states: [CompassState] = [
+      .verified(heading: 212.4, accuracy: 8),
       .approximate(heading: 87.5, accuracy: 12, source: .magnetic),
-      .notVerified(.inaccurate, accuracy: 42),
-    ] {
-      let symbol = NorthSymbol(state: state)
-      let size = NorthArrow.blockSizeMM(
-        symbol: symbol, boxMM: PlanPDFWriter.northBoxSize, caption: true)
-      XCTAssertLessThan(
-        PlanPDFWriter.northBottom + size.height, PlanSheet.titleBlockHeight - 17, "\(state)")
-      XCTAssertLessThan(rightX + 1.5 + size.width, sheet.widthMM - PlanSheet.pageMargin)
+      .notVerified(.inaccurate, accuracy: 42), .notVerified(.noReading, accuracy: nil),
+    ]
+    var sheets = Set<String>()
+    for (index, model) in models.enumerated() {
+      for state in states {
+        var context = try PlanExportContext(record: base.record, captureId: base.model.captureId)
+        context.compass = state
+        let output = try PlanPDFWriter.write(model: model, context: context)
+        let sheet = "\(output.paper) \(output.landscape ? "landscape" : "portrait")"
+        sheets.insert(sheet)
+        let name = "plan \(index), \(sheet), \(state)"
+        let pdf = PDFFile(output.file.data)
+        let marks = pdf.marks()
+
+        let frame = try XCTUnwrap(marks.first { $0.operators == ["re"] && $0.isStroked }, name)
+        let inner = (
+          minX: frame.minX + frame.lineWidth, minY: frame.minY + frame.lineWidth,
+          maxX: frame.maxX - frame.lineWidth, maxY: frame.maxY - frame.lineWidth
+        )
+        let segments = pdf.segments()
+        let divider = try XCTUnwrap(
+          segments.first {
+            abs($0.x1 - $0.x2) < 1e-6 && $0.x1 > inner.minX && $0.x1 < inner.maxX
+              && abs(abs($0.y2 - $0.y1) - (frame.maxY - frame.minY - frame.lineWidth)) < 0.01
+          }, name)
+        let panel = (left: divider.x1 + divider.widthPoints / 2, right: inner.maxX)
+        let rules = segments.filter {
+          abs($0.y1 - $0.y2) < 1e-6 && min($0.x1, $0.x2) > panel.left
+            && max($0.x1, $0.x2) < panel.right && $0.y1 > inner.minY && $0.y1 < inner.maxY
+        }
+        let baseline = try XCTUnwrap(rules.min { $0.y1 < $1.y1 }, "scale bar: \(name)")
+        let barBottom = baseline.y1 - baseline.widthPoints / 2
+
+        // The symbol's marks.
+        let symbol: [PDFFile.Mark]
+        switch NorthSymbol(state: state) {
+        case .arrow(_, _, let line1, let line2):
+          let start = try XCTUnwrap(
+            marks.indices.first {
+              $0 >= 2 && $0 + 2 < marks.count && marks[$0].string == "N"
+                && marks[$0 + 1].string == line1 && marks[$0 + 2].string == line2
+            }, name)
+          symbol = Array(marks[(start - 2)...(start + 2)])
+          XCTAssertEqual(symbol[0].kind, .path(paint: "S", curves: 4), "ring: \(name)")
+          XCTAssertEqual(symbol[1].kind, .path(paint: "B", curves: 0), "arrow: \(name)")
+        case .notVerified(let box, let reason):
+          let start = try XCTUnwrap(
+            marks.indices.first {
+              $0 >= 1 && $0 + 1 < marks.count && marks[$0].string == box
+                && marks[$0 + 1].string == reason
+            }, name)
+          symbol = Array(marks[(start - 1)...(start + 1)])
+          XCTAssertEqual(symbol[0].kind, .path(paint: "S", curves: 4), "border: \(name)")
+        }
+        let extent = (
+          minX: symbol.map(\.minX).min()!, minY: symbol.map(\.minY).min()!,
+          maxX: symbol.map(\.maxX).max()!, maxY: symbol.map(\.maxY).max()!
+        )
+        // Inside the panel, above the frame's bottom edge and under the scale bar.
+        XCTAssertGreaterThan(extent.minX, panel.left, name)
+        XCTAssertLessThan(extent.maxX, panel.right, name)
+        XCTAssertGreaterThan(extent.minY, inner.minY, name)
+        XCTAssertLessThan(extent.maxY, barBottom, name)
+      }
     }
+    XCTAssertTrue(sheets.contains("Letter portrait"), "\(sheets)")
+    XCTAssertGreaterThan(sheets.count, 2, "\(sheets)")
   }
 
   func testObjectsAndDimensionStringsAreTextOnThePlan() throws {

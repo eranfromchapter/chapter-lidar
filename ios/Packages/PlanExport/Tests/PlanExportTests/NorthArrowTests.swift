@@ -238,6 +238,40 @@ final class NorthArrowTests: XCTestCase {
     XCTAssertEqual(sheet.shapes[0].stroke?.dash[0] ?? 0, 2 * point, accuracy: 1e-12)
   }
 
+  func testTheRingStartsAtItsRightmostPointAndRunsClockwiseAsTheArtboardCircle() throws {
+    // An SVG circle starts at (cx + r, cy) and runs clockwise on the page; the dashes of an
+    // approximate reading start there, so the ring is drawn the same way, turned with the box.
+    let boxMM = 32 * point
+    let s = boxMM / 32
+    for angle in [0.0, 32.0, 212.4] {
+      let symbol = NorthSymbol(state: .approximate(heading: angle, accuracy: 12, source: .magnetic))
+      let ring = parts(
+        NorthArrow.items(
+          symbol: symbol, centerMM: center, boxMM: boxMM, page: .white, caption: false)
+      ).shapes[0]
+      let ends = ring.path.elements.compactMap { element -> DrawingPoint? in
+        switch element {
+        case .move(let p), .curve(_, _, let p): return p
+        default: return nil
+        }
+      }
+      XCTAssertEqual(ends.count, 5, "four quarter arcs, back to the start")
+      let a = angle * .pi / 180
+      // View box (x, y down) about the box centre (16, 16), turned counter-clockwise by A.
+      func onPage(_ x: Double, _ y: Double) -> DrawingPoint {
+        let dx = (x - 16) * s
+        let dy = (16 - y) * s
+        return DrawingPoint(
+          x: center.x + dx * cos(a) - dy * sin(a), y: center.y + dx * sin(a) + dy * cos(a))
+      }
+      // (26.5, 18), then (16, 28.5), (5.5, 18), (16, 7.5): right, bottom, left, top.
+      let expected = [(26.5, 18.0), (16.0, 28.5), (5.5, 18.0), (16.0, 7.5), (26.5, 18.0)]
+      for (end, want) in zip(ends, expected) {
+        assertClose(end, onPage(want.0, want.1), "A \(angle)")
+      }
+    }
+  }
+
   func testNotVerifiedIsATextBoxThatDoesNotScale() throws {
     let symbol = NorthSymbol(state: .notVerified(.inaccurate, accuracy: 42))
     let text = "Orientation: not verified"

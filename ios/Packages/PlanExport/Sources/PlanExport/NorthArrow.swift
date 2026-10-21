@@ -153,10 +153,12 @@ public enum NorthArrow {
     }
     func metres(_ p: Point2) -> Point2 { p * 0.001 }
     let line = 0.75 * s
-    // The ring as an ellipse in the turned frame, so its dashes turn with it.
+    // The ring as an ellipse in the turned frame, so its dashes turn with it. It starts at its
+    // rightmost point and runs clockwise on the page, as the artboard's SVG circle does, so
+    // the dashes of an approximate reading fall where the artboard draws them.
     var ring = PathBuilder()
     ring.ellipse(
-      in: DrawingFrame(origin: metres(mm(16, 18)), u: u, v: v), cx: 0, cy: 0,
+      in: DrawingFrame(origin: metres(mm(16, 18)), u: u, v: v * -1), cx: 0, cy: 0,
       rx: 10.5 * s / 1000, ry: 10.5 * s / 1000)
     var arrow = PathBuilder()
     arrow.polygon([mm(16, 6.5), mm(20.5, 25.5), mm(16, 22), mm(11.5, 25.5)].map(metres))

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="33.38mm" height="21.17mm" viewBox="0 0 33.38 21.17">
+  <title>North symbol, approximate, 32 pt, A 32</title>
+  <rect x="0" y="0" width="33.38" height="21.17" fill="#faf5ee"/>
+  <g class="compass">
+    <path d="M20.21 5.69 C21.29 7.43 20.76 9.71 19.03 10.80 C17.29 11.88 15.01 11.35 13.92 9.62 C12.84 7.88 13.37 5.60 15.10 4.51 C16.84 3.43 19.12 3.96 20.21 5.69 Z" fill="none" stroke="#1f2429" stroke-width="0.26" stroke-linecap="butt" stroke-linejoin="miter" stroke-dasharray="0.56 0.56"/>
+    <path d="M14.91 4.21 L19.81 9.06 L17.81 8.85 L17.12 10.74 Z" fill="#faf5ee" stroke="#1f2429" stroke-width="0.26" stroke-linecap="butt" stroke-linejoin="round"/>
+    <text x="14.56" y="3.64" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="2.12" text-anchor="middle" fill="#1f2429" font-weight="600" transform="rotate(-32.00 14.56 3.64)">N</text>
+    <text x="16.69" y="15.95" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="2.65" text-anchor="middle" fill="#6b6557">Approx. north · compass</text>
+    <text x="16.69" y="19.13" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="2.65" text-anchor="middle" fill="#6b6557">±12° · magnetic</text>
+  </g>
+</svg>
