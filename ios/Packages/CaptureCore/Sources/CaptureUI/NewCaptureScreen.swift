@@ -119,6 +119,9 @@
           showsProjects = true
         }
         .disabled(model.isOfflineWithoutList && project == nil)
+        // VoiceOver: "HUB project, 618 Valley Street, Deal 4821 · from the HUB, …, button".
+        .accessibilityLabel(Text("HUB project"))
+        .accessibilityValue(Text("\(model.projectRowTitle), \(model.projectRowSubtitle)"))
         .accessibilityIdentifier("capture.project")
       }
     }

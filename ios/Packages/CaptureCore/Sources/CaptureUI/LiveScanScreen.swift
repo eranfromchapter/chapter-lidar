@@ -12,7 +12,7 @@
   /// The host presents it as a `fullScreenCover` while `model.step == .scanning`, with no
   /// navigation bar and a light status bar. `preview` is the camera feed
   /// (`CaptureSessionPreview(model:)` from CaptureRoomPlan), clipped to the well; without one
-  /// (replay, UI tests) the well stays plain.
+  /// (replay, UI tests) the well stays plain. Text follows Dynamic Type up to xxxLarge.
   public struct LiveScanScreen<Preview: View>: View {
     @Bindable var model: CaptureFlowModel
     let preview: () -> Preview
@@ -40,6 +40,9 @@
           .padding(.bottom, ChapterTheme.Metric.actionBarBottom)
       }
       .chapterContentWidth()
+      // The camera well needs the screen: text grows up to the largest standard size, not into
+      // the accessibility sizes, where the card and the counts would push the well off screen.
+      .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
       .background(ChapterTheme.Color.ink.ignoresSafeArea())
       .preferredColorScheme(.dark)
       .alert(restartTitle, isPresented: $showsRestart) {

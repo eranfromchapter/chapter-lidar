@@ -174,8 +174,11 @@
 
     // MARK: 4 Live scan (2b-3, 3b, compass §5.2)
 
-    private func live(_ model: CaptureFlowModel, named name: String) {
-      assertChapterSnapshot(of: LiveScanScreen(model: model) { EmptyView() }, named: name)
+    private func live(
+      _ model: CaptureFlowModel, named name: String, contentSize: UIContentSizeCategory = .large
+    ) {
+      assertChapterSnapshot(
+        of: LiveScanScreen(model: model) { EmptyView() }, named: name, contentSize: contentSize)
     }
 
     func testLiveScanDrawn() async {
@@ -209,6 +212,12 @@
         named: "live-compass-magnetic")
     }
 
+    func testLiveScanAtAX3() async {
+      let model = await F.liveScan(
+        elapsed: 408, extra: [.tracking(.lost(since: F.now.addingTimeInterval(-6)))])
+      live(model, named: "live-ax3", contentSize: .accessibilityExtraLarge)
+    }
+
     func testLiveScanBeforeTheFirstWall() async {
       let model = await F.liveScan(
         compass: .reading, elapsed: 3, counts: ScanCounts())
@@ -217,9 +226,17 @@
 
     // MARK: 5 Capture overview (2b-4)
 
-    private func overview(_ state: CaptureOverviewState, named name: String) {
+    private func overview(
+      _ state: CaptureOverviewState, named name: String,
+      contentSize: UIContentSizeCategory = .large
+    ) {
       assertChapterSnapshot(
-        of: Pushed { CaptureOverviewScreen(state: state, actions: .none) }, named: name)
+        of: Pushed { CaptureOverviewScreen(state: state, actions: .none) }, named: name,
+        contentSize: contentSize)
+    }
+
+    func testOverviewAtAX3() {
+      overview(F.overview(), named: "overview-ax3", contentSize: .accessibilityExtraLarge)
     }
 
     func testOverviewDrawn() {

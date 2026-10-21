@@ -16,33 +16,18 @@
     @ScaledMetric(relativeTo: .footnote) private var glyphSize = ChapterTheme.Metric.statusGlyph
     @ScaledMetric(relativeTo: .footnote) private var glyphTop: CGFloat = 3.5
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
       TimelineView(.periodic(from: .now, by: 1)) { _ in
         let row = CompassPhoneText.row(state, now: now())
-        HStack(spacing: ChapterTheme.Metric.rowGap) {
-          HStack(spacing: ChapterTheme.Metric.rowGap) {
-            CompassGlyph(state: row.glyph.glyphState, rotation: row.rotation)
-            VStack(alignment: .leading, spacing: ChapterTheme.Metric.rowTitleGap) {
-              Text(row.line1)
-                .chapterTextStyle(.body)
-                .foregroundStyle(ChapterTheme.Color.ink)
-              HStack(alignment: .top, spacing: ChapterTheme.Metric.statusGlyphGap) {
-                switch row.status {
-                case .verified: StatusGlyph(.done, size: glyphSize).padding(.top, glyphTop)
-                case .limited: StatusGlyph(.partly, size: glyphSize).padding(.top, glyphTop)
-                case .none: EmptyView()
-                }
-                Text(row.line2)
-                  .chapterTextStyle(.footnote)
-                  .foregroundStyle(color(row.status))
-                  .fixedSize(horizontal: false, vertical: true)
-              }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-          }
-          .accessibilityElement(children: .ignore)
-          .accessibilityLabel(Text(row.accessibilityLabel))
-          .accessibilityIdentifier("compass.row")
+        // At accessibility text sizes Read again goes under the reading, so nothing is squeezed.
+        let layout =
+          dynamicTypeSize.isAccessibilitySize
+          ? AnyLayout(VStackLayout(alignment: .leading, spacing: ChapterTheme.Metric.rowGap))
+          : AnyLayout(HStackLayout(spacing: ChapterTheme.Metric.rowGap))
+        layout {
+          reading(row)
           if row.showsReadAgain {
             Button(CompassPhoneText.readAgain, action: onReadAgain)
               .buttonStyle(.chapter(.rowAction))
@@ -53,8 +38,35 @@
         }
         .padding(.horizontal, ChapterTheme.Metric.rowPadding)
         .padding(.vertical, ChapterTheme.Metric.navigationRowVerticalPadding)
-        .frame(maxWidth: .infinity, minHeight: ChapterTheme.Metric.compassRowHeight)
+        .frame(maxWidth: .infinity, minHeight: ChapterTheme.Metric.compassRowHeight, alignment: .leading)
       }
+    }
+
+    /// The glyph and the two lines: one accessibility element.
+    private func reading(_ row: CompassPhoneText.Row) -> some View {
+      HStack(spacing: ChapterTheme.Metric.rowGap) {
+        CompassGlyph(state: row.glyph.glyphState, rotation: row.rotation)
+        VStack(alignment: .leading, spacing: ChapterTheme.Metric.rowTitleGap) {
+          Text(row.line1)
+            .chapterTextStyle(.body)
+            .foregroundStyle(ChapterTheme.Color.ink)
+          HStack(alignment: .top, spacing: ChapterTheme.Metric.statusGlyphGap) {
+            switch row.status {
+            case .verified: StatusGlyph(.done, size: glyphSize).padding(.top, glyphTop)
+            case .limited: StatusGlyph(.partly, size: glyphSize).padding(.top, glyphTop)
+            case .none: EmptyView()
+            }
+            Text(row.line2)
+              .chapterTextStyle(.footnote)
+              .foregroundStyle(color(row.status))
+              .fixedSize(horizontal: false, vertical: true)
+          }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+      }
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel(Text(row.accessibilityLabel))
+      .accessibilityIdentifier("compass.row")
     }
 
     private func color(_ status: CompassPhoneText.Status) -> Color {
