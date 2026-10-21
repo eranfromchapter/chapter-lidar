@@ -2,6 +2,7 @@ import AppCore
 import CaptureContract
 import CaptureModelMapping
 import CaptureUI
+import ChapterUI
 import FieldRules
 import Foundation
 import Observation
@@ -34,41 +35,19 @@ struct ScanItem: Identifiable, Hashable {
   var captureLabel: String? = nil
   /// The operator's names for rooms of this scan (the visit's `room-names.json`).
   var roomNames: [RoomName] = []
+  /// The capture's compass, for the Floorplan's north symbol (compass §6.3); nil for a scan
+  /// without a capture record (nothing is drawn).
+  var north: CompassState? = nil
   var id: String { folder.path }
 
   /// When the scan was made: the capture record's time, else the file's.
   var scanDate: Date { capturedAt ?? date }
 }
 
-/// Every scan on the phone, newest first. Reads the visit folders; changes nothing.
+/// One scan's folder as the viewer needs it (the Capture overview's floor rows, a v1 visit's
+/// scans). Reads; changes nothing.
 enum ScanLibrary {
   static let roomPlanFile = "roomplan.json"
-
-  static func items(visitsRoot: URL) -> [ScanItem] {
-    var items: [ScanItem] = []
-    for visit in children(of: visitsRoot) {
-      let record = record(visit: visit)
-      // The operator's room names of this visit; none when it has no names file.
-      let names = (try? VisitRoomNames.load(from: VisitWorkspace(root: visit))) ?? VisitRoomNames()
-      let exports = visit.appendingPathComponent("originals/Original Exports", isDirectory: true)
-      for area in children(of: exports) {
-        for capture in children(of: area) {
-          let recorded = record?.captures.first {
-            $0.captureId.rawValue == capture.lastPathComponent
-          }
-          if let item = item(
-            folder: capture, title: title(areaKey: area.lastPathComponent),
-            address: record?.address.formatted, displayUnits: recorded?.units.display,
-            capturedAt: recorded?.capturedAt.date, captureLabel: recorded?.label,
-            roomNames: names.captures[capture.lastPathComponent] ?? [])
-          {
-            items.append(item)
-          }
-        }
-      }
-    }
-    return items.sorted { $0.date > $1.date }
-  }
 
   static func item(
     folder: URL, title: String, address: String? = nil, displayUnits: DisplayUnitSystem? = nil,
@@ -82,31 +61,6 @@ enum ScanLibrary {
     return ScanItem(
       folder: folder, title: title, date: date, address: address, displayUnits: displayUnits,
       capturedAt: capturedAt, captureLabel: captureLabel, roomNames: roomNames)
-  }
-
-  /// The newest capture record written for a visit (by "Package ready", under
-  /// `drafts/<draft>/Source Register/<visitId>/`); nil before there is one.
-  static func record(visit: URL) -> CaptureRecord? {
-    var newest: (date: Date, url: URL)?
-    for draft in children(of: VisitWorkspace(root: visit).draftsRoot) {
-      let register = draft.appendingPathComponent(PackageFolder.sourceRegister.name)
-      for folder in children(of: register) {
-        let file = folder.appendingPathComponent(PackageLayout.captureRecordFileName)
-        guard
-          let date = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?
-            .contentModificationDate
-        else { continue }
-        if newest == nil || date > newest!.date { newest = (date, file) }
-      }
-    }
-    guard let url = newest?.url, let data = try? Data(contentsOf: url) else { return nil }
-    return try? CaptureContractJSON.makeDecoder().decode(CaptureRecord.self, from: data)
-  }
-
-  /// What a folder holds; empty when it cannot be read.
-  private static func children(of folder: URL) -> [URL] {
-    (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil))
-      ?? []
   }
 
   /// "floor-1" → "Floor 1".
@@ -155,7 +109,7 @@ final class ScanViewerModel {
       counts = "\(result.3) \(result.3 == 1 ? "room" : "rooms") \u{00B7} \(result.2) walls"
       let floorplan = FloorplanModel(
         model: result.0, address: item.address, units: item.displayUnits ?? .imperial,
-        capturedAt: item.scanDate, exportName: item.folder.lastPathComponent)
+        capturedAt: item.scanDate, north: item.north, exportName: item.folder.lastPathComponent)
       self.floorplan = floorplan
       isLoading = false
       await floorplan.write()
@@ -197,45 +151,40 @@ final class ScanViewerModel {
   }
 }
 
-/// One scan: the Floorplan (pinch to zoom, units, download), the measurements and a 3D view of
-/// the model.
+/// One scan, pushed from its floor row on the Capture overview (or from a v1 visit's scans):
+/// the Floorplan (pinch to zoom, units, download), the measurements and a 3D view of the model.
+/// Inline title = the floor's label; the system back chevron returns (no "Done").
 struct ScanViewer: View {
   @State private var model: ScanViewerModel
-  @Environment(\.dismiss) private var dismiss
 
   init(item: ScanItem) {
     _model = State(initialValue: ScanViewerModel(item: item))
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 14) {
-      HStack {
-        VStack(alignment: .leading, spacing: 2) {
-          Text(model.item.title).font(Typo.serif(30)).foregroundStyle(Palette.ink)
-          Text(model.item.date.formatted(date: .abbreviated, time: .shortened)
-            + (model.counts.map { " \u{00B7} \($0)" } ?? ""))
-            .font(Typo.caption).foregroundStyle(Palette.muted)
-        }
-        Spacer()
-        Button("Done") { dismiss() }
-          .font(Typo.sans(15, weight: .semibold)).foregroundStyle(Palette.ink)
-          .frame(minHeight: Control.minTouch)
-      }
+    VStack(alignment: .leading, spacing: 12) {
+      Text(subtitle)
+        .chapterTextStyle(.subhead)
+        .foregroundStyle(ChapterTheme.Color.muted)
+        .lineLimit(2)
 
       if let floorplan = model.floorplan {
         FloorplanView(floorplan: floorplan)
       } else {
         ZStack {
-          Palette.surface
+          ChapterTheme.Color.surface
           if model.isLoading {
             ProgressView("Drawing the floor plan…")
           } else {
-            Text(model.errorMessage ?? "No floor plan").font(Typo.caption)
-              .foregroundStyle(Palette.blocked).padding()
+            Text(model.errorMessage ?? "No floor plan")
+              .chapterTextStyle(.footnote)
+              .foregroundStyle(ChapterTheme.Color.blocked).padding()
           }
         }
-        .clipShape(RoundedRectangle(cornerRadius: Radius.card))
-        .overlay(RoundedRectangle(cornerRadius: Radius.card).stroke(Palette.line, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: ChapterTheme.Metric.cardRadius))
+        .overlay(
+          RoundedRectangle(cornerRadius: ChapterTheme.Metric.cardRadius)
+            .strokeBorder(ChapterTheme.Color.line, lineWidth: ChapterTheme.Metric.cardBorder))
       }
 
       if let scan = model.measurements {
@@ -245,59 +194,74 @@ struct ScanViewer: View {
       Button {
         Task { await model.open3D() }
       } label: {
-        HStack(spacing: Space.s2) {
-          if model.isExporting { ProgressView().tint(Palette.surface) }
+        HStack(spacing: 8) {
+          if model.isExporting { ProgressView().tint(ChapterTheme.Color.surface) }
           Image(systemName: "cube")
           Text(model.isExporting ? "Making the 3D model…" : "View in 3D")
         }
-        .font(Typo.headline).foregroundStyle(Palette.surface)
-        .frame(maxWidth: .infinity, minHeight: Control.primaryHeight)
-        .background(Palette.ink, in: RoundedRectangle(cornerRadius: Radius.card))
       }
-      .buttonStyle(.plain)
+      .buttonStyle(.chapter(.primary))
       .disabled(model.isExporting)
       .accessibilityIdentifier("scan.view3D")
     }
-    .padding(.horizontal, 20)
-    .padding(.top, Space.s4)
-    .padding(.bottom, Space.s4)
-    .background(Palette.ground.ignoresSafeArea())
+    .padding(.horizontal, ChapterTheme.Metric.screenPadding)
+    .padding(.top, 8)
+    .padding(.bottom, ChapterTheme.Metric.actionBarBottom)
+    .chapterContentWidth()
+    .navigationTitle(model.item.title)
+    .navigationBarTitleDisplayMode(.inline)
+    .chapterBackChevronOnly()
+    .chapterScreenBackground()
     .fullScreenCover(item: $model.modelURL) { url in
       ModelViewer(url: url, title: model.item.title)
     }
     .task { await model.load() }
   }
 
+  /// "Oct 20, 2026 at 14:12 · 12 rooms · 40 walls".
+  private var subtitle: String {
+    model.item.scanDate.formatted(date: .abbreviated, time: .shortened)
+      + (model.counts.map { " \u{00B7} \($0)" } ?? "")
+  }
+
   /// The measurements in the units the Floorplan is shown in, written as the plan writes them.
   private func measurements(_ scan: ScanMeasurements, units: DisplayUnitSystem) -> some View {
     let formatter = UnitFormatter(system: units)
     let length = { (millimetres: Double) in formatter.dimension(millimetres / 1000) }
-    return VStack(spacing: 0) {
-      row("Long distance A", scan.distanceAMm.map(length) ?? "\u{2014}")
-      row("Long distance B", scan.distanceBMm.map(length) ?? "\u{2014}")
-      row(
-        "Ceiling height",
-        {
-          let heights = scan.ceilingHeights.map(\.heightMm)
-          guard let low = heights.min(), let high = heights.max() else { return "\u{2014}" }
-          let lowText = length(low)
-          let highText = length(high)
-          return lowText == highText ? lowText : "\(lowText) \u{2013} \(highText)"
-        }())
-      row("Openings", scan.openingsSummary)
+    let ceiling: String = {
+      let heights = scan.ceilingHeights.map(\.heightMm)
+      guard let low = heights.min(), let high = heights.max() else { return "\u{2014}" }
+      let lowText = length(low)
+      let highText = length(high)
+      return lowText == highText ? lowText : "\(lowText) \u{2013} \(highText)"
+    }()
+    return ChapterCard {
+      MeasureRow(title: "Long distance A", value: scan.distanceAMm.map(length) ?? "\u{2014}")
+      MeasureRow(title: "Long distance B", value: scan.distanceBMm.map(length) ?? "\u{2014}")
+      MeasureRow(title: "Ceiling height", value: ceiling)
+      MeasureRow(title: "Openings", value: scan.openingsSummary)
     }
-    .background(Palette.surface, in: RoundedRectangle(cornerRadius: Radius.card))
-    .overlay(RoundedRectangle(cornerRadius: Radius.card).stroke(Palette.line, lineWidth: 1))
   }
+}
 
-  private func row(_ title: String, _ value: String) -> some View {
-    HStack {
-      Text(title).font(Typo.sans(15, weight: .semibold))
-      Spacer()
-      Text(value).font(Typo.sans(15))
+/// One measurement: label and value on one line, 40 pt, the scan viewer's compact rows.
+private struct MeasureRow: View {
+  let title: String
+  let value: String
+
+  var body: some View {
+    HStack(spacing: ChapterTheme.Metric.rowGap) {
+      Text(title)
+        .chapterTextStyle(.subhead)
+        .foregroundStyle(ChapterTheme.Color.ink)
+      Spacer(minLength: 8)
+      Text(value)
+        .chapterTextStyle(.subhead)
+        .foregroundStyle(ChapterTheme.Color.muted)
+        .multilineTextAlignment(.trailing)
     }
-    .foregroundStyle(Palette.ink)
-    .padding(.horizontal, Space.s4).padding(.vertical, 10)
+    .padding(.horizontal, ChapterTheme.Metric.rowPadding)
+    .frame(minHeight: 40)
     .accessibilityElement(children: .combine)
   }
 }
@@ -338,7 +302,7 @@ struct ModelViewer: View {
     .overlay(alignment: .top) {
       HStack {
         Button { dismiss() } label: {
-          Image(systemName: "xmark").font(.system(size: 17, weight: .semibold))
+          Image(systemName: "xmark").font(ChapterTheme.Font.bodyEmphasis)
             .frame(width: Control.minTouch, height: Control.minTouch)
         }
         .accessibilityLabel("Close")
@@ -346,12 +310,12 @@ struct ModelViewer: View {
         Text(title).font(Typo.sans(15, weight: .semibold)).lineLimit(1)
         Spacer()
         Button { load() } label: {
-          Image(systemName: "arrow.counterclockwise").font(.system(size: 17, weight: .semibold))
+          Image(systemName: "arrow.counterclockwise").font(ChapterTheme.Font.bodyEmphasis)
             .frame(width: Control.minTouch, height: Control.minTouch)
         }
         .accessibilityLabel("Reset view")
         ShareLink(item: url) {
-          Image(systemName: "square.and.arrow.up").font(.system(size: 17, weight: .semibold))
+          Image(systemName: "square.and.arrow.up").font(ChapterTheme.Font.bodyEmphasis)
             .frame(width: Control.minTouch, height: Control.minTouch)
         }
       }
@@ -385,69 +349,5 @@ struct ModelViewer: View {
       ? Float(size.width / size.height) : ModelStyle.defaultAspect
     camera = ModelStyle.apply(to: loaded, background: ModelStyle.backgroundColor, aspect: aspect)
     scene = loaded
-  }
-}
-
-/// "My scans": every scan on this phone, newest first.
-struct MyScansView: View {
-  let visitsRoot: URL
-  @State private var items: [ScanItem] = []
-  @State private var open: ScanItem?
-  @Environment(\.dismiss) private var dismiss
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 14) {
-      HStack {
-        Text("My scans").font(Typo.serif(30)).foregroundStyle(Palette.ink)
-        Spacer()
-        Button("Done") { dismiss() }
-          .font(Typo.sans(15, weight: .semibold)).foregroundStyle(Palette.ink)
-          .frame(minHeight: Control.minTouch)
-      }
-      if items.isEmpty {
-        Text("No scans on this phone yet.").font(Typo.sans(15)).foregroundStyle(Palette.muted)
-        Spacer()
-      } else {
-        ScrollView {
-          ScanList(items: items) { open = $0 }
-        }
-      }
-    }
-    .padding(.horizontal, 20)
-    .padding(.top, Space.s4)
-    .background(Palette.ground.ignoresSafeArea())
-    .task { items = ScanLibrary.items(visitsRoot: visitsRoot) }
-    .sheet(item: $open) { ScanViewer(item: $0) }
-  }
-}
-
-/// Rows of scans; tapping one calls `onOpen`.
-struct ScanList: View {
-  let items: [ScanItem]
-  let onOpen: (ScanItem) -> Void
-
-  var body: some View {
-    VStack(spacing: 0) {
-      ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-        Button { onOpen(item) } label: {
-          HStack {
-            VStack(alignment: .leading, spacing: 2) {
-              Text(item.title).font(Typo.sans(17, weight: .semibold))
-              Text(item.date.formatted(date: .abbreviated, time: .shortened))
-                .font(Typo.caption).foregroundStyle(Palette.muted)
-            }
-            Spacer()
-            Image(systemName: "chevron.right").foregroundStyle(Palette.muted)
-          }
-          .foregroundStyle(Palette.ink)
-          .padding(.horizontal, Space.s4).padding(.vertical, 14)
-          .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        if index < items.count - 1 { Rectangle().fill(Palette.nude).frame(height: 1) }
-      }
-    }
-    .background(Palette.surface, in: RoundedRectangle(cornerRadius: Radius.card))
-    .overlay(RoundedRectangle(cornerRadius: Radius.card).stroke(Palette.line, lineWidth: 1))
   }
 }

@@ -88,7 +88,9 @@ final class EntraSignIn {
     var signedInOperator: SignedInOperator
   }
 
-  private static func outcome(_ result: MSALResult?, _ error: Error?) -> Result<TokenOutcome, Error>
+  /// Called on MSAL's callback queue: reads only its arguments.
+  private nonisolated static func outcome(_ result: MSALResult?, _ error: Error?)
+    -> Result<TokenOutcome, Error>
   {
     if let error {
       let nsError = error as NSError
@@ -108,7 +110,7 @@ final class EntraSignIn {
       TokenOutcome(accessToken: result.accessToken, signedInOperator: operatorOf(result.account)))
   }
 
-  private static func operatorOf(_ account: MSALAccount) -> SignedInOperator {
+  private nonisolated static func operatorOf(_ account: MSALAccount) -> SignedInOperator {
     let name = (account.accountClaims?["name"] as? String) ?? account.username ?? ""
     return SignedInOperator(name: name, userId: account.homeAccountId?.objectId)
   }

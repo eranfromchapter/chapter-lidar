@@ -40,6 +40,16 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Chapter Capture uses the camera for site photos and the LiDAR room scan.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Chapter Capture uses your location only to turn the compass into true north on the plans. Your location is not saved.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.hellochapter.capture.verdict-refresh</string>
+	</array>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
 		<string>arkit</string>

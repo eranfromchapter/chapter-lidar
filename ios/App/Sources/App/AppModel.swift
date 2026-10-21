@@ -1,4 +1,5 @@
 import AppCore
+import CaptureCompass
 import CaptureContract
 import CaptureCore
 import CaptureRoomPlan
@@ -10,20 +11,33 @@ import PackageTransport
 import StationClient
 
 /// What the app runs on: the station client, the project list, the blob transport, the scan
-/// session factory and the camera. `live` is the real phone; the UI-test variant (Debug only)
-/// is built in UITestEnvironment.swift.
+/// session factory, the compass and the camera. `live` is the real phone; the UI-test and
+/// field-test variants (Debug only) are built in Debug/.
 struct AppServices {
   var station: StationAPI
   var projects: ProjectStore
   var blobTransport: any BlobTransport
-  /// Nil in the UI-test mode (stub token, no MSAL).
+  /// Nil in the UI-test and field-test modes (stub token, no MSAL).
   var signIn: EntraSignIn?
   var capabilities: DeviceCapabilities
   var device: DeviceInfo
-  var makeSession: @MainActor (CaptureSessionConfiguration) throws -> any CaptureSession
+  var makeSession: @MainActor @Sendable (CaptureSessionConfiguration) throws -> any CaptureSession
   var photoSource: PhotoSource
-  /// Fixed operator for the UI-test mode; nil means "the signed-in Entra account".
+  /// The app's one compass (compass §3.5): `CompassService` on the phone, `FakeCompass` in UI
+  /// tests. It reads the step 2 pre-check and, through `CompassPhotoHeading`, the photo heading;
+  /// the scan session reads it too (`LiveCaptureSession(compass:)`). Nil: no compass row.
+  var compass: (any CompassProviding)?
+  /// Fixed operator for the UI-test and field-test modes; nil means "the signed-in Entra
+  /// account".
   var fixedOperator: SignedInOperator?
+  /// Ask for the verdict notification after the first seal (phone-package Q10). Off in UI tests,
+  /// where the system's permission alert would cover the screens under test.
+  var asksForNotifications = true
+
+  /// The photo step's heading provider over `compass`.
+  @MainActor var photoHeading: PhotoHeadingProviding? {
+    compass.map { CompassPhotoHeading(compass: $0) }
+  }
 }
 
 /// Where photos come from: the app's own camera, or (UI tests) the fixture's photo bytes.
@@ -32,14 +46,15 @@ enum PhotoSource {
   case fixed(@Sendable () async throws -> Data)
 }
 
-/// App-wide state: configuration, sign-in, the current visit and background uploads.
+/// App-wide state: configuration, sign-in, the Captures home and the background uploads (one
+/// coordinator per sealed package for the app's lifetime).
 @MainActor
 @Observable
 final class AppModel {
   enum Screen {
     case notConfigured([ConfigurationIssue])
     case signIn
-    case visit(VisitModel)
+    case home(HomeModel)
   }
 
   private(set) var screen: Screen
@@ -49,11 +64,12 @@ final class AppModel {
   /// resume after sign-in; sign-out deletes nothing).
   private(set) var pendingUploadCount = 0
 
-  @ObservationIgnored private var services: AppServices? = nil
-  @ObservationIgnored private var signedIn: SignedInOperator? = nil
+  @ObservationIgnored private(set) var services: AppServices? = nil
+  @ObservationIgnored private(set) var signedIn: SignedInOperator? = nil
   @ObservationIgnored private var uploads: [String: UploadCoordinator] = [:]
-  /// The visit on screen when the station asked for sign-in again; shown again after sign-in.
-  @ObservationIgnored private var suspendedVisit: VisitModel? = nil
+  /// The home shown when the station asked for sign-in again; shown again after sign-in, with
+  /// whatever visit was open.
+  @ObservationIgnored private var suspendedHome: HomeModel? = nil
   @ObservationIgnored let visitsRoot: URL
 
   private init(screen: Screen, services: AppServices?, visitsRoot: URL) {
@@ -66,30 +82,33 @@ final class AppModel {
   /// not configured" and nothing is created that could send a request.
   static func make() -> AppModel {
     let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    let arguments = ProcessInfo.processInfo.arguments
     let mode = LaunchModeResolver.resolve(
-      arguments: ProcessInfo.processInfo.arguments, isDebugBuild: AppBuild.isDebug,
+      arguments: arguments, isDebugBuild: AppBuild.isDebug,
       fieldTestFlag: Bundle.main.object(forInfoDictionaryKey: LaunchModeResolver.fieldTestKey)
         as? String)
     switch mode {
     case .fieldTest:
       #if DEBUG
+        // The visits of the field-test builds before v2 are here too: the Captures home lists
+        // them (VisitStore migrates each to visit.json on the first read).
         let root = support.appendingPathComponent("FieldTestVisits", isDirectory: true)
         let services = FieldTestEnvironment.services(cacheRoot: root)
-        let model = AppModel(screen: .signIn, services: services, visitsRoot: root)
-        model.signedIn = services.fixedOperator
-        model.startNewVisit()
-        return model
+        return signedInModel(services: services, visitsRoot: root)
       #else
         break
       #endif
     case .uiTestReplay(let fixture):
       #if DEBUG
-        let root = support.appendingPathComponent("UITestVisits-\(UUID().uuidString)", isDirectory: true)
-        let services = UITestEnvironment.services(fixture: fixture, cacheRoot: root)
-        let model = AppModel(screen: .signIn, services: services, visitsRoot: root)
-        model.signedIn = services.fixedOperator
-        model.startNewVisit()
-        return model
+        let options = UITestLaunchOptions(arguments: arguments)
+        let root = support.appendingPathComponent(options.visitsFolderName(), isDirectory: true)
+        if options.seedsV1Visits {
+          let fixture = Bundle.main.resourceURL!.appendingPathComponent("package", isDirectory: true)
+          try? UITestV1Visits.seed(in: root, fixture: fixture)
+        }
+        let services = UITestEnvironment.services(
+          fixture: fixture, cacheRoot: root, options: options)
+        return signedInModel(services: services, visitsRoot: root)
       #else
         // Unreachable: LaunchModeResolver returns .live for Release builds.
         break
@@ -99,16 +118,12 @@ final class AppModel {
     }
 
     let visitsRoot = support.appendingPathComponent("Visits", isDirectory: true)
-    guard
-      case .configured(let configuration) = ConfigurationLoader.load(
-        infoDictionary: Bundle.main.infoDictionary)
-    else {
-      if case .notConfigured(let issues) = ConfigurationLoader.load(
-        infoDictionary: Bundle.main.infoDictionary)
-      {
-        return AppModel(screen: .notConfigured(issues), services: nil, visitsRoot: visitsRoot)
-      }
-      return AppModel(screen: .notConfigured([]), services: nil, visitsRoot: visitsRoot)
+    let configuration: AppConfiguration
+    switch ConfigurationLoader.load(infoDictionary: Bundle.main.infoDictionary) {
+    case .configured(let loaded):
+      configuration = loaded
+    case .notConfigured(let issues):
+      return AppModel(screen: .notConfigured(issues), services: nil, visitsRoot: visitsRoot)
     }
     let signIn: EntraSignIn
     do {
@@ -120,6 +135,7 @@ final class AppModel {
     }
     let station = StationAPI(
       configuration: configuration.station, tokenProvider: EntraTokenProvider(signIn: signIn))
+    let compass = CompassService()
     let services = AppServices(
       station: station,
       projects: ProjectStore(
@@ -127,14 +143,30 @@ final class AppModel {
         cacheDirectory: support.appendingPathComponent("StationCache", isDirectory: true)),
       blobTransport: BackgroundUploads.shared.transport, signIn: signIn,
       capabilities: DeviceCapabilities.current(), device: DeviceInfo.current(),
-      makeSession: { _ in LiveCaptureSession() }, photoSource: .camera(CameraEngine()),
-      fixedOperator: nil)
+      makeSession: { _ in LiveCaptureSession(compass: compass) },
+      photoSource: .camera(CameraEngine()), compass: compass, fixedOperator: nil)
     let model = AppModel(screen: .signIn, services: services, visitsRoot: visitsRoot)
+    model.configureBackgroundRefresh()
     if let current = signIn.currentOperator() {
       model.signedIn = current
-      model.startNewVisit()
+      model.showHome()
     }
     return model
+  }
+
+  /// The UI-test and field-test modes: the stub operator is signed in from the start.
+  private static func signedInModel(services: AppServices, visitsRoot: URL) -> AppModel {
+    let model = AppModel(screen: .signIn, services: services, visitsRoot: visitsRoot)
+    model.configureBackgroundRefresh()
+    model.signedIn = services.fixedOperator
+    model.showHome()
+    return model
+  }
+
+  private func configureBackgroundRefresh() {
+    guard let services else { return }
+    VerdictRefresh.shared.configure(
+      visitsRoot: visitsRoot, source: StationStatusSource(client: services.station))
   }
 
   // MARK: Sign-in
@@ -143,7 +175,7 @@ final class AppModel {
     if services?.signIn == nil, let fixed = services?.fixedOperator {
       // UI-test and field-test modes: the stub operator signs straight back in.
       signedIn = fixed
-      startNewVisit()
+      showHome()
       return
     }
     guard let signIn = services?.signIn, !isSigningIn else { return }
@@ -152,12 +184,7 @@ final class AppModel {
     defer { isSigningIn = false }
     do {
       signedIn = try await signIn.signIn()
-      if let visit = suspendedVisit {
-        suspendedVisit = nil
-        screen = .visit(visit)
-      } else {
-        startNewVisit()
-      }
+      showHome()
       for upload in uploads.values { upload.retry() }
     } catch is SignInRequired {
       signInMessage = "Sign-in was not completed."
@@ -167,21 +194,22 @@ final class AppModel {
   }
 
   /// Removes the account from MSAL's Keychain cache and the offline project list, then shows the
-  /// sign-in screen. Deletes no file: sealed packages not yet confirmed by the station stay in
-  /// `visitsRoot` and their uploads resume after the next sign-in.
+  /// sign-in screen. Deletes no file: captures in progress and sealed packages not yet
+  /// confirmed by the station stay in `visitsRoot`; their uploads resume after the next sign-in.
   func signOut() async {
     services?.signIn?.signOut()
     try? await services?.projects.clearCache()
     signedIn = nil
-    suspendedVisit = nil
+    suspendedHome = nil
+    PackageRouter.shared.onOpenPackage = nil
     screen = .signIn
   }
 
   /// A station call said the token is no longer accepted.
   func requireSignIn() {
     guard services?.signIn != nil else { return }
-    if case .visit(let visit) = screen {
-      suspendedVisit = visit
+    if case .home(let home) = screen {
+      suspendedHome = home
     }
     signInMessage = "Sign in again to continue."
     screen = .signIn
@@ -195,31 +223,31 @@ final class AppModel {
     for upload in uploads.values { upload.retry() }
   }
 
-  // MARK: Visits
+  // MARK: Home
 
-  /// A new visit starts at "New capture". If a sealed package is still waiting for the
-  /// station's confirmation, its upload resumes and its status is shown first.
-  func startNewVisit(showPendingUpload: Bool = true) {
+  /// The Captures home (the app's root): the uploads of sealed packages still waiting for the
+  /// station resume first. After a sign-in that the station asked for, the home comes back as
+  /// it was (with its open visit).
+  func showHome() {
     guard let services, let signedIn else { return }
-    let pending = PendingUploads.find(visitsRoot: visitsRoot)
-    for item in pending { _ = coordinator(for: item.package, dealId: item.dealId) }
-    do {
-      let workspace = try VisitWorkspace.create(in: visitsRoot)
-      let visit = try VisitModel(
-        services: services, workspace: workspace, operatorInfo: signedIn, app: self)
-      if showPendingUpload, let newest = pending.first,
-        let coordinator = uploads[newest.package.packageId.rawValue]
-      {
-        visit.showUpload(of: newest.package, coordinator: coordinator)
-      }
-      screen = .visit(visit)
-    } catch {
-      signInMessage = "The visit folder could not be created: \(error.localizedDescription)"
-      screen = .signIn
+    for item in PendingUploads.find(visitsRoot: visitsRoot) {
+      _ = coordinator(for: item.package, dealId: item.dealId)
     }
+    let home: HomeModel
+    if let suspended = suspendedHome {
+      home = suspended
+      suspendedHome = nil
+    } else {
+      home = HomeModel(app: self, services: services, operatorInfo: signedIn)
+    }
+    screen = .home(home)
+    PackageRouter.shared.onOpenPackage = { [weak home] id in home?.openPackage(id: id) }
   }
 
-  /// One coordinator per sealed package for the app's lifetime; started at once.
+  // MARK: Uploads
+
+  /// One coordinator per sealed package for the app's lifetime; started at once (a package the
+  /// station confirmed only follows its verdict; a superseded one never runs).
   func coordinator(for package: SealedPackage, dealId: String) -> UploadCoordinator {
     let key = package.packageId.rawValue
     if let existing = uploads[key] { return existing }
@@ -231,21 +259,38 @@ final class AppModel {
       statusSource: StationStatusSource(client: services.station),
       onChange: { [weak self] snapshot in
         Task { @MainActor in self?.uploadChanged(snapshot) }
-      })
+      },
+      onVerdict: { notification in VerdictNotifier.shared.post(notification) })
     uploads[key] = coordinator
     coordinator.start()
     countPendingUploads()
     return coordinator
   }
 
+  /// The running coordinator of a package, if any.
+  func runningCoordinator(for packageId: LowercaseUUID) -> UploadCoordinator? {
+    uploads[packageId.rawValue]
+  }
+
+  /// The latest snapshots of every coordinator, by package (the Captures home rows).
+  var liveSnapshots: [LowercaseUUID: UploadSnapshot] {
+    Dictionary(
+      uploads.values.map { ($0.package.packageId, $0.snapshot) }, uniquingKeysWith: { a, _ in a })
+  }
+
   private func countPendingUploads() {
-    pendingUploadCount = uploads.values.filter { !$0.snapshot.isConfirmedByStation }.count
+    pendingUploadCount = uploads.values.filter {
+      !$0.snapshot.isConfirmedByStation && !$0.snapshot.isSuperseded
+    }.count
   }
 
   private func uploadChanged(_ snapshot: UploadSnapshot) {
     countPendingUploads()
-    if case .visit(let visit) = screen {
-      visit.uploadChanged(snapshot)
+    VerdictRefresh.shared.scheduleIfWaiting(snapshot)
+    if case .home(let home) = screen {
+      home.uploadChanged(snapshot)
+    } else {
+      suspendedHome?.uploadChanged(snapshot)
     }
     if snapshot.activity == .signInRequired {
       requireSignIn()
