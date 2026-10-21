@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Chapter Capture station API
-  version: 1.0.0
+  version: 1.1.0
   summary: Upload, registration and verdicts for Chapter Capture intake packages.
   description: |
     The station receives intake packages from the Chapter Capture app, registers them, runs the
@@ -19,11 +19,22 @@ info:
     4. When every file is verified, send the manifest with `POST /packages/{packageId}/seal`. The
        package moves to `checks_queued`.
     5. Poll `GET /packages/{packageId}` until `verdict_ready`, then read
-       `GET /packages/{packageId}/verdict`.
+       `GET /packages/{packageId}/verdict`. After the checks the station makes the spatial
+       report (`GET /packages/{packageId}/spatial-report`) and publishes the package to the HUB
+       (`publication` on the package).
+    6. While the operator prepares the next revision on the phone, the app may describe it with
+       `PUT /packages/{packageId}/next-revision` (best effort; the review screen shows it).
+
+    The review screen lists projects and packages with `GET /review/projects`,
+    `GET /review/packages` and `GET /modeling-decisions`.
 
     Document bodies use the contract JSON Schemas in `contract/schema/` (manifest, capture
-    record, verdict). Conventions: optional fields are omitted, never null; timestamps are UTC
-    with whole seconds (`2026-10-17T14:02:11Z`); UUIDs and SHA-256 values are lowercase.
+    record, field controls, verdict). Conventions: optional fields are omitted, never null;
+    timestamps are UTC with whole seconds (`2026-10-17T14:02:11Z`); UUIDs and SHA-256 values are
+    lowercase.
+
+    1.1.0 is additive: new operations and new optional response properties. A client written
+    for 1.0.0 keeps working.
 
     Every operation except `GET /health` needs a Microsoft Entra ID bearer token. Each operation
     lists the app roles it accepts in `x-roles`; a valid token without one of them gets 403.
@@ -46,6 +57,8 @@ tags:
     description: Station verdict for a package.
   - name: modeling-decisions
     description: Log of the package source a BIM operator used for each modeling decision.
+  - name: review
+    description: Project and package lists for the review screen.
 paths:
   /health:
     get:
@@ -156,6 +169,15 @@ paths:
         Idempotent: repeating the call with the same body returns the same session with fresh
         upload targets (200), which is how the app resumes after going offline or after the
         targets expire. A different body for an existing `packageId` is a conflict (409).
+
+        Carry-over (new packages of revision 2 or later): when the station holds the package
+        named by `supersedesPackageId`, it must be the same visit and deal, revision one lower,
+        and no longer uploading; otherwise 422 with code `supersedes_mismatch` (pointer
+        `/supersedesPackageId`). Each declared file whose path, role, capture, SHA-256 and size
+        equal a verified file of that package is verified at once from the stored blob
+        (`carriedOverFrom` is set and no upload target is granted). When the station does not
+        hold that package (revision n never arrived), every file gets a target as usual. Opening
+        the session removes the next-revision notice of the superseded package.
       x-roles: [capture, admin]
       requestBody:
         required: true
@@ -306,12 +328,16 @@ paths:
         the package, valid for 10 minutes. Files that are not verified have no link (409 with
         code `file_not_verified`). Every link handed out is recorded in the audit log (who,
         which file, when); the URL itself is never recorded.
+
+        Once the package is sealed, `path` may also be the sealed manifest
+        (`Source Register/{visitId}/manifest.json`, `Package.manifestFile.path`); before the
+        seal that path is 404. The audit entry records the role as `manifest`.
       x-roles: [bim, admin]
       parameters:
         - name: path
           in: query
           required: true
-          description: The file's path in the manifest.
+          description: The file's path in the manifest, or the sealed manifest's own path.
           schema:
             $ref: "#/components/schemas/RelativePath"
       responses:
@@ -468,6 +494,296 @@ paths:
           $ref: "#/components/responses/NotFound"
         "422":
           $ref: "#/components/responses/UnprocessableContent"
+
+  /packages/{packageId}/next-revision:
+    parameters:
+      - $ref: "#/components/parameters/PackageId"
+    put:
+      tags: [packages]
+      operationId: putNextRevisionNotice
+      summary: Describe the next revision the phone is preparing
+      description: |
+        Replaces the stored notice of the sealed package `packageId`: what the next revision
+        (`revision` = the package's revision + 1) adds, changes or removes while the operator is
+        still working on it on the phone. Best effort: the app sends it when online, debounced,
+        and ignores failures. The station records who sent it (`updatedBy`) and when
+        (`updatedAt`) and returns it as `Package.nextRevision`. The notice is removed when an
+        upload session opens for a package that supersedes `packageId`.
+      x-roles: [capture, admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NextRevisionNoticeInput"
+      responses:
+        "200":
+          description: The stored notice.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NextRevisionNotice"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: |
+            The package is still uploading (code `package_not_sealed`), or a package that
+            supersedes it already exists (code `revision_exists`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: The notice's `revision` is not the package's revision + 1 (code `revision_mismatch`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /packages/{packageId}/spatial-report:
+    parameters:
+      - $ref: "#/components/parameters/PackageId"
+    get:
+      tags: [verdicts]
+      operationId: getSpatialReportLink
+      summary: Get a short-lived read-only link to the station's spatial report
+      description: |
+        The spatial report PDF of the package's current verdict, made by the station after its
+        checks. Read-only SAS link valid for 10 minutes; every link handed out is audited (the URL
+        never is). 404 with code `report_not_ready` while there is no report for the current
+        verdict.
+      x-roles: [bim, admin]
+      responses:
+        "200":
+          description: The link.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpatialReportLink"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /packages/{packageId}/archive:
+    parameters:
+      - $ref: "#/components/parameters/PackageId"
+    post:
+      tags: [packages]
+      operationId: requestPackageArchive
+      summary: Prepare a ZIP of the whole sealed package, or get its link when it is ready
+      description: |
+        A store-only ZIP of every verified package file at its manifest path, plus
+        `manifest.json`, `verdict.json` and `spatial-report.pdf` when present, kept for 7 days.
+        200 with a read-only link (path `{revision}.zip`, audited like file links) when the ZIP
+        exists; otherwise the station queues it and answers 202 with its state.
+      x-roles: [bim, admin]
+      responses:
+        "200":
+          description: The ZIP is ready.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DownloadLink"
+        "202":
+          description: The ZIP is being prepared.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArchiveState"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The package is not sealed (code `package_not_sealed`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    get:
+      tags: [packages]
+      operationId: getPackageArchive
+      summary: Get the state of the package ZIP without preparing it
+      description: |
+        200 with the link when the ZIP is ready, 202 while it is being prepared, 404 with code
+        `archive_not_requested` when nobody asked for it (or it expired).
+      x-roles: [bim, admin]
+      responses:
+        "200":
+          description: The ZIP is ready.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DownloadLink"
+        "202":
+          description: The ZIP is being prepared.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArchiveState"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /review/projects:
+    get:
+      tags: [review]
+      operationId: listReviewProjects
+      summary: List the projects that have packages
+      description: |
+        Projects with at least one package, most recent package change first, each with its
+        newest package. Name and address come from the HUB project cache (also when expired),
+        else from the newest sealed capture record, else `HUB deal {dealId}`. `q` matches,
+        case-insensitively, part of the project name or address, the start of the deal id, or
+        the start (8 hex characters or more) of a capture or package id.
+      x-roles: [capture, bim, admin]
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: Text to match (project name, address, deal id, capture or package id).
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 100
+      responses:
+        "200":
+          description: The projects.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [projects, truncated]
+                properties:
+                  projects:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ReviewProject"
+                  truncated:
+                    description: True when more projects match than `limit`.
+                    type: boolean
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /review/packages:
+    get:
+      tags: [review]
+      operationId: listReviewPackages
+      summary: List packages across projects, newest first
+      description: Every package the station knows, newest first, with its project's name and address. `q` matches as for `GET /review/projects`.
+      x-roles: [capture, bim, admin]
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: Text to match (project name, address, deal id, capture or package id).
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 100
+      responses:
+        "200":
+          description: The packages.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [packages, truncated]
+                properties:
+                  packages:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ReviewPackage"
+                  truncated:
+                    description: True when more packages match than `limit`.
+                    type: boolean
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /modeling-decisions:
+    get:
+      tags: [modeling-decisions]
+      operationId: listAllModelingDecisions
+      summary: List modeling decisions across packages, newest first
+      x-roles: [bim, admin]
+      parameters:
+        - name: dealId
+          in: query
+          required: false
+          description: Only decisions on packages of this HUB deal.
+          schema:
+            $ref: "#/components/schemas/DealId"
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 100
+      responses:
+        "200":
+          description: The decisions, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [decisions, truncated]
+                properties:
+                  decisions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ModelingDecisionWithContext"
+                  truncated:
+                    description: True when more decisions match than `limit`.
+                    type: boolean
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
 components:
   securitySchemes:
@@ -639,6 +955,21 @@ components:
               type: string
               minLength: 1
               maxLength: 300
+        projectManager:
+          description: The deal's project manager, when the HUB provides one. Omitted otherwise.
+          type: object
+          additionalProperties: false
+          required: [name]
+          properties:
+            name:
+              type: string
+              minLength: 1
+              maxLength: 200
+            phone:
+              description: Phone number as the HUB gives it, for a call from the app.
+              type: string
+              minLength: 1
+              maxLength: 50
 
     UploadFileDeclaration:
       description: One manifest file entry, as declared before upload.
@@ -737,6 +1068,9 @@ components:
         upload:
           description: Present for every file that is not verified.
           $ref: "#/components/schemas/UploadTarget"
+        carriedOverFrom:
+          description: Present when the file is verified because revision N-1 (`supersedesPackageId`) holds the same verified file; no upload target is granted.
+          $ref: "#/components/schemas/Uuid"
 
     UploadSession:
       type: object
@@ -754,6 +1088,9 @@ components:
           minimum: 1
         status:
           $ref: "#/components/schemas/PackageStatus"
+        createdAt:
+          description: When the station registered the package (the session was first opened). The app shows it as "Registered".
+          $ref: "#/components/schemas/DateTime"
         files:
           type: array
           items:
@@ -810,6 +1147,35 @@ components:
         checkedAt:
           description: Time of the last server-side check. Omitted while pending.
           $ref: "#/components/schemas/DateTime"
+        generator:
+          description: The manifest entry's generator, for example chapter-capture-ios/PlanExport. Present once sealed.
+          type: string
+          minLength: 1
+          maxLength: 100
+        generatorVersion:
+          description: The manifest entry's generatorVersion. Present once sealed.
+          type: string
+          minLength: 1
+          maxLength: 50
+        carriedOverFrom:
+          description: Present when the file was verified by carry-over from that package (revision N-1).
+          $ref: "#/components/schemas/Uuid"
+        hub:
+          description: Where the file is in the HUB after the last successful publication. Omitted before.
+          $ref: "#/components/schemas/HubFileState"
+
+    HubFileState:
+      description: How a file appears in the HUB.
+      type: object
+      additionalProperties: false
+      required: [state]
+      properties:
+        state:
+          description: uploaded to the HUB folder, or linked (a station link listed instead).
+          enum: [uploaded, linked]
+        reason:
+          description: Present when state is linked. too_large means over the HUB upload cap; not_published means the role is not uploaded to the HUB.
+          enum: [too_large, not_published]
 
     DownloadLink:
       description: |
@@ -849,9 +1215,13 @@ components:
         evaluatedAt:
           $ref: "#/components/schemas/DateTime"
 
-    PackageSummary:
+    PackageSummaryFields:
+      description: |
+        The fields of a package summary, shared by PackageSummary, Package and ReviewPackage.
+        Open on its own; each of those closes it (unevaluatedProperties false). Properties
+        added in 1.1.0 are optional; `updatedAt`, `captures` and `totals` are sent in every
+        response of a 1.1.0 station.
       type: object
-      additionalProperties: false
       required: [packageId, visitId, dealId, revision, status, createdAt]
       properties:
         packageId:
@@ -868,38 +1238,63 @@ components:
         status:
           $ref: "#/components/schemas/PackageStatus"
         createdAt:
-          description: When the upload session was opened.
+          description: When the upload session was opened, which is when the station registered the package. Shown as "Registered" on the phone and the web.
           $ref: "#/components/schemas/DateTime"
         sealedAt:
           description: The manifest's sealedAt. Present once the package is sealed at the station.
           $ref: "#/components/schemas/DateTime"
+        updatedAt:
+          description: Last change of the package (status, files, verdict, publication, report).
+          $ref: "#/components/schemas/DateTime"
+        createdBy:
+          description: Who opened the upload session. Omitted when the name is unknown.
+          type: object
+          additionalProperties: false
+          required: [name]
+          properties:
+            name:
+              type: string
+              minLength: 1
+              maxLength: 200
+        visitedAt:
+          description: The capture record's visitedAt. Present once sealed.
+          $ref: "#/components/schemas/DateTime"
+        operatorName:
+          description: The capture record's operator.name. Present once sealed.
+          type: string
+          minLength: 1
+          maxLength: 200
+        captures:
+          description: The package's captures, in capture-record order once sealed, else in order of first appearance in path order. May be empty.
+          type: array
+          items:
+            $ref: "#/components/schemas/PackageCapture"
+        totals:
+          $ref: "#/components/schemas/PackageTotals"
+        checks:
+          $ref: "#/components/schemas/CheckRunSummary"
+        publication:
+          $ref: "#/components/schemas/PublicationSummary"
+        report:
+          $ref: "#/components/schemas/ReportSummary"
+        links:
+          $ref: "#/components/schemas/PackageLinks"
         verdict:
           description: Present when status is verdict_ready.
           $ref: "#/components/schemas/VerdictSummary"
 
+    PackageSummary:
+      description: A package without its files.
+      allOf:
+        - $ref: "#/components/schemas/PackageSummaryFields"
+      unevaluatedProperties: false
+
     Package:
       description: A package with its files. Manifest and capture record are present once sealed.
-      type: object
-      additionalProperties: false
-      required: [packageId, visitId, dealId, revision, status, createdAt, files]
+      allOf:
+        - $ref: "#/components/schemas/PackageSummaryFields"
+      required: [files]
       properties:
-        packageId:
-          $ref: "#/components/schemas/Uuid"
-        visitId:
-          $ref: "#/components/schemas/Uuid"
-        dealId:
-          $ref: "#/components/schemas/DealId"
-        revision:
-          type: integer
-          minimum: 1
-        supersedesPackageId:
-          $ref: "#/components/schemas/Uuid"
-        status:
-          $ref: "#/components/schemas/PackageStatus"
-        createdAt:
-          $ref: "#/components/schemas/DateTime"
-        sealedAt:
-          $ref: "#/components/schemas/DateTime"
         files:
           type: array
           items:
@@ -907,12 +1302,334 @@ components:
         manifest:
           description: The registered manifest. Present once sealed.
           $ref: "../schema/manifest.schema.json"
+        manifestFile:
+          $ref: "#/components/schemas/ManifestFile"
         captureRecord:
           description: The package's capture record file. Present once sealed.
           $ref: "../schema/capture-record.schema.json"
-        verdict:
-          description: Present when status is verdict_ready.
-          $ref: "#/components/schemas/VerdictSummary"
+        fieldControls:
+          description: The package's field-controls file, parsed at sealing. Present once sealed when the package has one.
+          $ref: "../schema/field-controls.schema.json"
+        nextRevision:
+          $ref: "#/components/schemas/NextRevisionNotice"
+      unevaluatedProperties: false
+
+    PackageCapture:
+      description: One capture of a package.
+      type: object
+      additionalProperties: false
+      required: [captureId, areaKey]
+      properties:
+        captureId:
+          $ref: "#/components/schemas/Uuid"
+        areaKey:
+          $ref: "#/components/schemas/AreaKey"
+        label:
+          description: From the capture record, once sealed.
+          type: string
+          minLength: 1
+          maxLength: 100
+        mode:
+          description: From the capture record, once sealed.
+          enum: [room, floor, exterior]
+
+    PackageTotals:
+      description: File counts and sizes of the package, all declared files and the verified ones.
+      type: object
+      additionalProperties: false
+      required: [files, bytes, filesVerified, bytesVerified]
+      properties:
+        files:
+          type: integer
+          minimum: 0
+        bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        filesVerified:
+          type: integer
+          minimum: 0
+        bytesVerified:
+          type: integer
+          format: int64
+          minimum: 0
+
+    CheckRunSummary:
+      description: The latest check run of the package. Omitted before the seal.
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          description: queued (sealed, no run yet), running, completed or failed (the station could not finish the checks).
+          enum: [queued, running, completed, failed]
+        startedAt:
+          $ref: "#/components/schemas/DateTime"
+        finishedAt:
+          description: Present when completed or failed.
+          $ref: "#/components/schemas/DateTime"
+        rules:
+          description: Rules run. Present when completed.
+          type: integer
+          minimum: 0
+
+    PublicationSummary:
+      description: HUB publication of this revision. Omitted when nothing was queued.
+      type: object
+      additionalProperties: false
+      required: [status, hubFolder]
+      properties:
+        status:
+          enum: [pending, publishing, published, publish_failed]
+        publishedAt:
+          description: Present exactly when published.
+          $ref: "#/components/schemas/DateTime"
+        hubFolder:
+          description: The revision's HUB folder, Capture/{visitId}/r{revision}.
+          type: string
+          minLength: 1
+          maxLength: 200
+
+    ReportSummary:
+      description: |
+        The station's spatial report of the current verdict. ready: a report of the current
+        verdict exists; failed: the current verdict's publication failed and there is no such
+        report; pending: otherwise. Omitted before a verdict.
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          enum: [pending, ready, failed]
+        generatedAt:
+          description: Present when ready (the verdict's evaluatedAt).
+          $ref: "#/components/schemas/DateTime"
+        pages:
+          description: Present when ready.
+          type: integer
+          minimum: 1
+        bytes:
+          description: Present when ready.
+          type: integer
+          format: int64
+          minimum: 1
+        sha256:
+          description: Present when ready.
+          $ref: "#/components/schemas/Sha256"
+        checksPage:
+          description: Page of the report that holds the capture checks. Present when ready.
+          type: integer
+          minimum: 1
+        floors:
+          description: Per capture with a readable model, in capture-record order. Present when ready.
+          type: array
+          items:
+            $ref: "#/components/schemas/ReportFloor"
+        hub:
+          description: The report's file in the HUB (publication entry with role spatial_report). Omitted before it is published.
+          $ref: "#/components/schemas/HubFileState"
+
+    ReportFloor:
+      description: Totals the spatial report computed for one floor or area.
+      type: object
+      additionalProperties: false
+      required: [captureId, areaKey, roomsScanned, roomsUnlabeled, floorAreaSqFt]
+      properties:
+        captureId:
+          $ref: "#/components/schemas/Uuid"
+        areaKey:
+          $ref: "#/components/schemas/AreaKey"
+        roomsScanned:
+          type: integer
+          minimum: 0
+        roomsUnlabeled:
+          type: integer
+          minimum: 0
+        floorAreaSqFt:
+          description: Sum of the rooms' floor areas, square feet, rounded to 0.1 once.
+          type: number
+          minimum: 0
+
+    PackageLinks:
+      description: Web pages of the package.
+      type: object
+      additionalProperties: false
+      required: [review]
+      properties:
+        review:
+          description: The package page of the review screen.
+          type: string
+          format: uri
+        hub:
+          description: The HUB page of the deal. Omitted when the station has no HUB deal URL configured.
+          type: string
+          format: uri
+
+    ManifestFile:
+      description: The sealed manifest file. Present once sealed.
+      type: object
+      additionalProperties: false
+      required: [path, sha256, bytes]
+      properties:
+        path:
+          description: Source Register/{visitId}/manifest.json.
+          $ref: "#/components/schemas/RelativePath"
+        sha256:
+          $ref: "#/components/schemas/Sha256"
+        bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        hub:
+          $ref: "#/components/schemas/HubFileState"
+
+    NextRevisionChange:
+      description: One row of what the next revision adds, changes or removes, worded as the phone shows it.
+      type: object
+      additionalProperties: false
+      required: [kind, subject, title, detail]
+      properties:
+        kind:
+          enum: [added, changed, removed]
+        subject:
+          enum: [capture, room_names, field_control, photos, retired_file]
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        detail:
+          type: string
+          minLength: 1
+          maxLength: 300
+        answersNextAction:
+          description: A next action of the base verdict, verbatim, that this change answers.
+          type: string
+          minLength: 1
+          maxLength: 500
+        method:
+          description: Instrument of a field-control change.
+          enum: [tape, laser]
+
+    NextRevisionNoticeInput:
+      description: What the phone sends; the station adds updatedBy.
+      type: object
+      additionalProperties: false
+      required: [revision, updatedAt, changes]
+      properties:
+        revision:
+          description: The revision being prepared, the package's revision + 1.
+          type: integer
+          minimum: 2
+        updatedAt:
+          description: When the phone last changed the revision.
+          $ref: "#/components/schemas/DateTime"
+        changes:
+          type: array
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/NextRevisionChange"
+
+    NextRevisionNotice:
+      description: The next revision as the phone last described it. Present on a sealed package while its next revision is in progress on the phone.
+      type: object
+      additionalProperties: false
+      required: [revision, updatedAt, changes]
+      properties:
+        revision:
+          type: integer
+          minimum: 2
+        updatedAt:
+          $ref: "#/components/schemas/DateTime"
+        updatedBy:
+          description: Name of the signed-in user who sent the notice (set by the station).
+          type: string
+          minLength: 1
+          maxLength: 200
+        changes:
+          type: array
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/NextRevisionChange"
+
+    SpatialReportLink:
+      description: |
+        Read-only link to the station's spatial report of the current verdict. The URL carries a
+        signature: treat it as a secret until it expires.
+      type: object
+      additionalProperties: false
+      required: [verdictId, name, sha256, bytes, pages, checksPage, generatedAt, url, expiresAt]
+      properties:
+        verdictId:
+          $ref: "#/components/schemas/Uuid"
+        name:
+          type: string
+          pattern: "^spatial-report-[0-9a-f-]{36}\\.pdf$"
+        sha256:
+          $ref: "#/components/schemas/Sha256"
+        bytes:
+          type: integer
+          format: int64
+          minimum: 1
+        pages:
+          type: integer
+          minimum: 1
+        checksPage:
+          description: Page of the report that holds the capture checks.
+          type: integer
+          minimum: 1
+        generatedAt:
+          $ref: "#/components/schemas/DateTime"
+        url:
+          type: string
+          format: uri
+        expiresAt:
+          description: When the link stops working (10 minutes after it was issued).
+          $ref: "#/components/schemas/DateTime"
+
+    ArchiveState:
+      description: The package ZIP is being prepared.
+      type: object
+      additionalProperties: false
+      required: [status, startedAt]
+      properties:
+        status:
+          const: preparing
+        startedAt:
+          $ref: "#/components/schemas/DateTime"
+
+    ReviewProject:
+      description: A HUB project that has packages, with its newest package.
+      type: object
+      additionalProperties: false
+      required: [dealId, address, packageCount, latest]
+      properties:
+        dealId:
+          $ref: "#/components/schemas/DealId"
+        projectName:
+          type: string
+          minLength: 1
+          maxLength: 200
+        address:
+          $ref: "#/components/schemas/HubProject/properties/address"
+        packageCount:
+          type: integer
+          minimum: 1
+        latest:
+          $ref: "#/components/schemas/PackageSummary"
+
+    ReviewPackage:
+      description: A package summary with its project's name and address.
+      allOf:
+        - $ref: "#/components/schemas/PackageSummaryFields"
+      required: [address]
+      properties:
+        projectName:
+          type: string
+          minLength: 1
+          maxLength: 200
+        address:
+          $ref: "#/components/schemas/HubProject/properties/address"
+      unevaluatedProperties: false
 
     DecisionSource:
       description: One package file a decision relied on, optionally narrowed to one control or element in it.
@@ -1003,3 +1720,36 @@ components:
               maxLength: 128
         decidedAt:
           $ref: "#/components/schemas/DateTime"
+
+    ModelingDecisionWithContext:
+      description: A logged decision with the deal and revision of its package, for lists across packages.
+      type: object
+      additionalProperties: false
+      required:
+        [decisionId, packageId, dealId, revision, element, decision, sources, decidedBy, decidedAt]
+      properties:
+        decisionId:
+          $ref: "#/components/schemas/ModelingDecision/properties/decisionId"
+        packageId:
+          $ref: "#/components/schemas/ModelingDecision/properties/packageId"
+        dealId:
+          $ref: "#/components/schemas/DealId"
+        revision:
+          type: integer
+          minimum: 1
+        element:
+          $ref: "#/components/schemas/ModelingDecision/properties/element"
+        decision:
+          $ref: "#/components/schemas/ModelingDecision/properties/decision"
+        captureId:
+          $ref: "#/components/schemas/ModelingDecision/properties/captureId"
+        areaKey:
+          $ref: "#/components/schemas/ModelingDecision/properties/areaKey"
+        sources:
+          $ref: "#/components/schemas/ModelingDecision/properties/sources"
+        note:
+          $ref: "#/components/schemas/ModelingDecision/properties/note"
+        decidedBy:
+          $ref: "#/components/schemas/ModelingDecision/properties/decidedBy"
+        decidedAt:
+          $ref: "#/components/schemas/ModelingDecision/properties/decidedAt"

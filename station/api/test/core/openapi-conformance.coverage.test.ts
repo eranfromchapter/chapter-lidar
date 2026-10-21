@@ -2,7 +2,8 @@
 // least one openapi-conformance.*.test.ts under station/api/test, so an operation can never be
 // left out of the conformance suite (`npm test -- openapi-conformance`) unnoticed.
 //
-// This file itself is not counted: it reads the operationIds from the document and names none.
+// This file itself is not counted: it reads the operationIds from the document and names only
+// the operations the contract declares ahead of the station (NOT_YET_IMPLEMENTED).
 
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
@@ -14,6 +15,21 @@ import { OpenApi } from "../packages/openapi.js";
 const TEST_DIR = fileURLToPath(new URL("..", import.meta.url));
 const SELF = basename(fileURLToPath(import.meta.url));
 const CONFORMANCE_FILE = /^openapi-conformance\..+\.test\.ts$/;
+
+/**
+ * Operations the contract (OpenAPI 1.1.0) declares before the station implements them. Each
+ * one leaves this list in the change that adds its route and its conformance test; the test
+ * below fails while a listed operation is already covered, so the list cannot go stale.
+ */
+const NOT_YET_IMPLEMENTED = new Set([
+  "putNextRevisionNotice",
+  "getSpatialReportLink",
+  "requestPackageArchive",
+  "getPackageArchive",
+  "listReviewProjects",
+  "listReviewPackages",
+  "listAllModelingDecisions",
+]);
 
 function conformanceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -50,9 +66,14 @@ describe("OpenAPI conformance coverage", () => {
       return !files.some((file) => pattern.test(file.text));
     });
     assert.deepEqual(
-      missing,
+      missing.filter((operationId) => !NOT_YET_IMPLEMENTED.has(operationId)),
       [],
       `operationIds not referenced by any of ${files.map((file) => file.name).join(", ")}`,
+    );
+    assert.deepEqual(
+      [...NOT_YET_IMPLEMENTED].filter((operationId) => !missing.includes(operationId)),
+      [],
+      "operations listed as not yet implemented that are in no document or already covered",
     );
   });
 });
