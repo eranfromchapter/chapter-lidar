@@ -12,19 +12,30 @@
   /// the Capture overview (phone-capture §3.0); remove this view once the app no longer uses it.
   ///
   /// `preview` is shown inside the live scan's camera well (`CaptureSessionPreview(model:)` from
-  /// `CaptureRoomPlan`). `finished` is shown after Finish floor.
+  /// `CaptureRoomPlan`). `finished` is shown after Finish floor. `footer` goes under New
+  /// capture's action bar (the v1 account footer): an inset applied outside the view does not
+  /// reach into its NavigationStack, so the footer would cover the Continue button.
   public struct CaptureFlowView<Preview: View, Finished: View>: View {
     @Bindable var model: CaptureFlowModel
     let preview: () -> Preview
     let finished: (CaptureFlowResult) -> Finished
+    let footer: AnyView
 
     public init(
       model: CaptureFlowModel, @ViewBuilder preview: @escaping () -> Preview,
       @ViewBuilder finished: @escaping (CaptureFlowResult) -> Finished
     ) {
+      self.init(model: model, preview: preview, finished: finished, footer: AnyView(EmptyView()))
+    }
+
+    init(
+      model: CaptureFlowModel, preview: @escaping () -> Preview,
+      finished: @escaping (CaptureFlowResult) -> Finished, footer: AnyView
+    ) {
       self.model = model
       self.preview = preview
       self.finished = finished
+      self.footer = footer
     }
 
     public var body: some View {
@@ -33,6 +44,7 @@
       } else {
         NavigationStack(path: path) {
           NewCaptureScreen(model: model)
+            .safeAreaInset(edge: .bottom, spacing: 0) { footer }
             .navigationDestination(for: CaptureFlowStep.self) { _ in
               ScanSetupScreen(model: model)
             }
@@ -60,6 +72,15 @@
   extension CaptureFlowView where Finished == EmptyView {
     public init(model: CaptureFlowModel, @ViewBuilder preview: @escaping () -> Preview) {
       self.init(model: model, preview: preview, finished: { _ in EmptyView() })
+    }
+
+    /// With a footer under New capture's action bar.
+    public init<Footer: View>(
+      model: CaptureFlowModel, @ViewBuilder preview: @escaping () -> Preview,
+      @ViewBuilder footer: () -> Footer
+    ) {
+      self.init(
+        model: model, preview: preview, finished: { _ in EmptyView() }, footer: AnyView(footer()))
     }
   }
 

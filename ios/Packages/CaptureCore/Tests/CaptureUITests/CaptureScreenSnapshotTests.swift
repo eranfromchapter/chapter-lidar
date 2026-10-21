@@ -114,6 +114,20 @@
       assertChapterSnapshot(of: HubProjectSheet(model: model), named: "hub-project-sheet")
     }
 
+    /// The v1 app shell hosts step 1 in `CaptureFlowView`, with its account footer under it.
+    func testCaptureFlowViewHostsStepOne() async {
+      let model = await F.stepOne()
+      assertChapterSnapshot(
+        of: CaptureFlowView(model: model, preview: { EmptyView() }) {
+          Text("Signed in as Dana Ruiz · Sign out")
+            .chapterTextStyle(.footnote)
+            .foregroundStyle(ChapterTheme.Color.muted)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .background(ChapterTheme.Color.ground)
+        },
+        named: "flow-view-step-one")
+    }
+
     // MARK: 3 What are you scanning? (2b-2, compass §5.1)
 
     private func stepTwo(_ model: CaptureFlowModel, named name: String, contentSize: UIContentSizeCategory = .large) {

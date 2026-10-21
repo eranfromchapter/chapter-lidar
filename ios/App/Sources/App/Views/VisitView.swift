@@ -47,13 +47,14 @@ struct VisitView: View {
       switch visit.flow.step {
       case .captureRecord, .scan:
         if let model = visit.captureModel {
-          CaptureFlowView(model: model, preview: { CaptureSessionPreview(model: model) })
-            .onChange(of: model.step) { _, step in visit.captureStepChanged(step) }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-              if visit.canSignOut {
-                AccountFooter(visit: visit)
-              }
+          // The footer goes inside CaptureFlowView's NavigationStack, under New capture's
+          // Continue button (an outer inset does not reach into the stack).
+          CaptureFlowView(model: model, preview: { CaptureSessionPreview(model: model) }) {
+            if visit.canSignOut {
+              AccountFooter(visit: visit)
             }
+          }
+          .onChange(of: model.step) { _, step in visit.captureStepChanged(step) }
         }
       case .photos:
         if let model = visit.photoModel {
