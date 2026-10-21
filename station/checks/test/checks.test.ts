@@ -38,6 +38,9 @@ const EXPECTED: Record<string, Array<[string, "blocker" | "limitation"]>> = {
     ["las.header", "limitation"],
   ],
   "glb rotated z-up by its node": [["orientation.up", "limitation"]],
+  "compass reading rejected by the phone": [["orientation.compass", "limitation"]],
+  "compass accuracy over 30 degrees": [["orientation.compass", "limitation"]],
+  "capture record 1.1.0 without a compass reading": [["orientation.compass", "limitation"]],
   "obj material library missing": [["companions.resolve", "limitation"]],
   "mtl texture missing": [["companions.resolve", "limitation"]],
   "gltf image missing": [["companions.resolve", "limitation"]],
@@ -51,7 +54,11 @@ const EXPECTED: Record<string, Array<[string, "blocker" | "limitation"]>> = {
     ["geometry.plausibility", "limitation"],
     ["geometry.plausibility", "limitation"],
   ],
-  "house with one shared landmark": [["floors.registration", "limitation"]],
+  // Plus the two-floor house's own limitation: Floor 2 has no compass reading.
+  "house with one shared landmark": [
+    ["orientation.compass", "limitation"],
+    ["floors.registration", "limitation"],
+  ],
   "field controls derived from the scan": [["evidence.independence", "limitation"]],
 };
 
@@ -81,8 +88,10 @@ describe("rules on single-change variants", () => {
     const variant = all.find((item) => item.name === "house with one shared landmark");
     assert.ok(variant !== undefined);
     const verdict = runChecks(variant.pkg, HUB_ADDRESS);
-    assert.match(nonInfo(verdict)[0]?.message ?? "", /Floor alignment not established/);
-    assert.match(nonInfo(verdict)[0]?.measured ?? "", /1 shared landmark/);
+    const registration = nonInfo(verdict).filter((item) => item.ruleId === "floors.registration");
+    assert.equal(registration.length, 1);
+    assert.match(registration[0]?.message ?? "", /Floor alignment not established/);
+    assert.match(registration[0]?.measured ?? "", /1 shared landmark/);
   });
 
   it("a Z-up mesh corrected by its node rotation is +Y up", () => {

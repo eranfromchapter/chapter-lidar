@@ -19,6 +19,9 @@ const verdict = runChecks(pkg, hubAddress, { evaluatedAt: "2026-10-17T16:00:00Z"
 
 Outcome rule: any blocker -> blocked; else any limitation -> limited; else ready.
 
+The rule set is evaluator `chapter-capture-station/checks` 1.1.0 (13 rules; read by people as
+"station-checks v1.1.0"). The verdict lists the rules in this table's order.
+
 | #   | Rule id                 | Blocker                                                                                                     | Limitation                                                                                         |
 | --- | ----------------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
 | 1   | `manifest.fingerprints` | listed file missing, or sha256/size differs                                                                 | (unlisted files are info)                                                                          |
@@ -26,6 +29,7 @@ Outcome rule: any blocker -> blocked; else any limitation -> limited; else ready
 | 3   | `property.address`      | address differs from the HUB address after normalization; no HUB address; files of another visit or capture |                                                                                                    |
 | 4   | `units.scale`           | a control differs from the capture model by more than 3% of the control                                     | over max(1%, 25.4 mm) up to 3%; scale not verifiable (no controls, no model)                       |
 | 5   | `orientation.up`        |                                                                                                             | GLB not +Y up or no horizontal floor; LAS Z extent vs ceiling; DXF not millimetres                 |
+| 5b  | `orientation.compass`   |                                                                                                             | a capture's compass reading not verified (capture record 1.1.0); no next action                    |
 | 6   | `companions.resolve`    | glTF geometry buffer missing or short                                                                       | glTF image, OBJ material library or MTL texture missing                                            |
 | 7   | `dxf.content`           |                                                                                                             | mesh, surface, solid or point entities; no plan entities                                           |
 | 8   | `las.header`            |                                                                                                             | version, point format, counts or extents differ from the data (point cloud is optional)            |
@@ -40,3 +44,16 @@ evidence). A control is matched to the extent of the rooms named at the start of
 `to` text (whole capture otherwise) along the capture's principal wall direction; axis A and B
 take the perpendicular assignment with the smaller worst difference. Values are rounded to
 1e-6 mm before comparison.
+
+Compass (5b, compass spec 8.2): each capture of a capture record 1.1.0 is graded by the
+contract's `compassState`, the evaluator the plan sheet, the spatial report and the web use. A
+verified or approximate reading is info ("True north from the compass.", "North is
+approximate."); any other is the limitation "Plan orientation is not verified; north is not
+shown." with the reason as the measured value (a reading outside the scan names its time and the
+scan's). The next action is None: a reading cannot be added to a finished scan, so the verdict
+lists no next action for it. A capture record 1.0.0 comes from an app that never read the compass
+(owner question Q-B): with `COMPASS_LIMITATION_FOR_LEGACY_RECORDS` false (the default) the check
+is not applicable with one info finding, "No compass reading recorded; orientation not
+verified" (the drawn sample's wording, without a full stop), and the outcome is unchanged; true
+grades its captures like 1.1.0 ones, which makes every package of an app before the compass
+Limited. No capture record: not applicable, no finding.

@@ -1,12 +1,21 @@
 // F8 AC1: every synthetic good fixture gets outcome ready, with no blocker or limitation
-// finding, and a verdict that validates against the contract.
+// finding, and a verdict that validates against the contract. The one exception is by design:
+// the two-floor house's Floor 2 has no compass reading, so it is limited by orientation.compass
+// alone (GOOD_LIMITATIONS).
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { formatErrors, validateVerdict } from "@chapter/capture-contract";
 import { RULES } from "../src/types.js";
 import { runChecks } from "../src/verdict.js";
-import { loadGood, nonInfo, readIndex, readTruth } from "./helpers.js";
+import {
+  GOOD_LIMITATIONS,
+  goodOutcome,
+  loadGood,
+  nonInfo,
+  readIndex,
+  readTruth,
+} from "./helpers.js";
 
 const index = readIndex();
 
@@ -22,11 +31,25 @@ describe("good fixtures", () => {
     describe(fixture.name, () => {
       const pkg = loadGood(fixture.name);
       const verdict = runChecks(pkg, readTruth(fixture.name).hub.address);
+      const expected = GOOD_LIMITATIONS[fixture.name] ?? [];
 
-      it("is ready with no blocker or limitation", () => {
-        assert.deepEqual(nonInfo(verdict), []);
-        assert.equal(verdict.outcome, "ready");
-        assert.deepEqual(verdict.limitations, []);
+      it(`is ${goodOutcome(fixture.name)} with no blocker and only its expected limitations`, () => {
+        const labels = new Map(
+          readTruth(fixture.name).captures.map((capture) => [capture.captureId, capture.label]),
+        );
+        assert.deepEqual(
+          nonInfo(verdict).map((item) => [
+            item.ruleId,
+            item.severity,
+            labels.get(item.captureId ?? ""),
+          ]),
+          expected.map((item) => [item.ruleId, "limitation", item.label]),
+        );
+        assert.equal(verdict.outcome, goodOutcome(fixture.name));
+        assert.deepEqual(
+          verdict.limitations,
+          expected.map((item) => item.limitation),
+        );
         assert.deepEqual(verdict.nextActions, []);
       });
 
@@ -35,13 +58,14 @@ describe("good fixtures", () => {
         assert.ok(result.ok, result.ok ? "" : formatErrors(result.errors));
       });
 
-      it("reports every rule once, none failed", () => {
+      it("reports every rule once, none failed but its expected limitations' rules", () => {
         assert.deepEqual(
           verdict.checks.map((check) => check.ruleId),
           RULES.map((rule) => rule.id),
         );
+        const limited = new Set(expected.map((item) => item.ruleId));
         for (const check of verdict.checks) {
-          assert.notEqual(check.status, "failed", check.ruleId);
+          assert.equal(check.status === "failed", limited.has(check.ruleId), check.ruleId);
         }
       });
 
