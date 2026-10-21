@@ -1,11 +1,13 @@
 #if canImport(RoomPlan) && canImport(ARKit) && os(iOS)
   import ARKit
+  import CaptureCompass
   import CaptureContract
   import CaptureCore
   import CaptureModelMapping
   import Foundation
   import Metal
   import RoomPlan
+  import os
   import simd
 
   /// The live scan: Apple RoomPlan and ARKit LiDAR behind the `CaptureSession` API.
@@ -23,6 +25,17 @@
   /// own configuration does not provide `sceneDepth` or scene reconstruction on a device, the
   /// originals hold empty depth and mesh; the live counts show `depthSampleCount` and
   /// `meshAnchorCount` so that is visible during a scan.
+  ///
+  /// Tracking (phone-capture §5.5): each tick reads `frame.camera.trackingState` into a
+  /// `TrackingMonitor` and emits `.tracking` when it is lost or back. While a frame is not
+  /// tracked normally nothing is sampled, so no depth, pose or mesh comes from a drifting frame.
+  ///
+  /// Compass (compass §3.3, §3.4): with the app's `CompassService`, each tick pairs the frame
+  /// with the Core Motion sample nearest to it (25 ms) and feeds a `HeadingWindow`; the chip
+  /// follows as `.compass` events. Pause and resume keep the ARSession, so the reading stays
+  /// valid; a new session reads again. At `finish()` the frame check compares the surfaces of
+  /// RoomPlan's last live update with the final result and the reading goes into
+  /// `CaptureSessionResult.compass`. Without a compass service the result is no reading.
   @MainActor
   public final class LiveCaptureSession: NSObject, CaptureSession, RoomCaptureSessionDelegate {
     public nonisolated let events: AsyncStream<CaptureSessionEvent>
@@ -65,7 +78,18 @@
     private var intrinsics: CameraIntrinsics?
     private var meshAnchors: [UUID: ARMeshAnchor] = [:]
 
-    public override init() {
+    private let compass: CompassService?
+    private var headingWindow = HeadingWindow()
+    private var lastCompassState: CompassLiveState?
+    private var tracking = TrackingMonitor()
+    /// Plan-frame yaw of every surface in RoomPlan's last live update, by identifier.
+    private var liveSurfaceYaws: [String: Double] = [:]
+    private var compassSensorsRunning = false
+    nonisolated static let log = Logger(subsystem: "com.hellochapter.capture", category: "compass")
+
+    /// `compass`: the app's one compass; nil reads none.
+    public init(compass: CompassService? = nil) {
+      self.compass = compass
       (events, continuation) = AsyncStream.makeStream(of: CaptureSessionEvent.self)
       super.init()
     }
@@ -96,9 +120,15 @@
       elapsed = 0
       baseFrameTimestamp = nil
       lastFrameTimestamp = -1
+      headingWindow = HeadingWindow()
+      lastCompassState = nil
+      tracking = TrackingMonitor()
+      liveSurfaceYaws = [:]
+      startCompass()
       startSegment()
       startTimer()
       setState(.running)
+      emitCompass(worldFromCamera: nil)
       continuation.yield(.instruction(.normal))
       emitProgress()
     }
@@ -139,13 +169,17 @@
           throw CaptureSessionError.noRoomsCaptured
         }
         let json: Data
+        let finalYaws: [String: Double]
         if segments.count == 1 {
           json = try RoomPlanAdapter.encode(segments[0])
+          finalYaws = Self.surfaceYaws(of: segments[0])
         } else {
           let structure = try await StructureBuilder(options: [.beautifyObjects]).capturedStructure(
             from: segments)
           json = try RoomPlanAdapter.encode(structure)
+          finalYaws = Self.surfaceYaws(of: structure)
         }
+        let (compassResult, diagnostics) = finishCompass(finalYaws: finalYaws)
         let originals = RawOriginals(
           roomPlanJSON: json, depthSamples: depthSamples,
           cameraPoses: CameraPoseLog(intrinsics: intrinsics, frames: poseFrames),
@@ -153,7 +187,9 @@
             .compactMap(Self.rawMesh))
         setState(.finished)
         continuation.finish()
-        return CaptureSessionResult(originals: originals, startedAt: startedAt, finishedAt: Date())
+        return CaptureSessionResult(
+          originals: originals, startedAt: startedAt, finishedAt: Date(), compass: compassResult,
+          compassDiagnostics: diagnostics)
       } catch let error as CaptureSessionError {
         failed(error)
         throw error
@@ -167,6 +203,7 @@
     public func cancel() async {
       guard state != .idle, state != .finished else { return }
       stopTimer()
+      stopCompass()
       roomSession?.stop(pauseARSession: true)
       roomSession = nil
       arSession.pause()
@@ -218,8 +255,11 @@
 
     nonisolated public func captureSession(_ session: RoomCaptureSession, didUpdate room: CapturedRoom) {
       let counts = RoomPlanAdapter.counts(of: room)
+      let yaws = Self.surfaceYaws(of: room)
       Task { @MainActor in
         self.currentCounts = counts
+        // Per segment the last update wins; earlier segments keep theirs (identifiers differ).
+        self.liveSurfaceYaws.merge(yaws) { _, new in new }
         self.emitProgress()
       }
     }
@@ -277,11 +317,136 @@
       let now = Date()
       elapsed += now.timeIntervalSince(lastTick)
       lastTick = now
+      let startPeriodEnded = headingWindow.advance(runningTime: elapsed)
+      var worldFromCamera: CompassMath.Matrix3?
       if let frame = arSession.currentFrame, frame.timestamp != lastFrameTimestamp {
         lastFrameTimestamp = frame.timestamp
-        sample(frame)
+        if let status = tracking.update(
+          Self.quality(frame.camera.trackingState), at: frame.timestamp, date: now)
+        {
+          continuation.yield(.tracking(status))
+        }
+        // Nothing is taken from a frame that is not tracked normally ("Recording paused").
+        if tracking.isSampling { sample(frame) }
+        let camera = Self.rotation(frame.camera.transform)
+        worldFromCamera = camera
+        pairCompass(frame, worldFromCamera: camera, date: now)
+      }
+      if worldFromCamera != nil || startPeriodEnded {
+        emitCompass(worldFromCamera: worldFromCamera)
       }
       emitProgress()
+    }
+
+    // MARK: Compass
+
+    private func startCompass() {
+      guard let compass else { return }
+      if compass.isUnavailableForScan { headingWindow.markUnavailable() }
+      compass.startScanSensors()
+      compassSensorsRunning = true
+    }
+
+    private func stopCompass() {
+      guard compassSensorsRunning, let compass else { return }
+      compass.stopScanSensors()
+      compassSensorsRunning = false
+    }
+
+    /// Pairs the frame with Core Motion (compass §3.3 steps 1–2) and feeds the window.
+    private func pairCompass(_ frame: ARFrame, worldFromCamera: CompassMath.Matrix3, date: Date) {
+      guard let compass, compassSensorsRunning, !headingWindow.isDone else { return }
+      guard let motion = compass.motionRing.nearest(to: frame.timestamp) else {
+        headingWindow.addUnpaired()
+        return
+      }
+      let pair = CompassPair(
+        timestamp: frame.timestamp, runningTime: elapsed, date: date,
+        trackingNormal: frame.camera.trackingState == .normal, worldFromCamera: worldFromCamera,
+        motion: motion, heading: compass.latestHeading)
+      let wasMismatch = headingWindow.diagnostics.conventionMismatch
+      headingWindow.add(pair)
+      if headingWindow.diagnostics.conventionMismatch, !wasMismatch {
+        // Compass §2.2: a transposed matrix or a wrong camera mapping on this phone. The bad
+        // pairs are dropped, so no wrong heading is recorded; the log makes it visible.
+        Self.log.fault("compass.convention_mismatch: most pairs of the first 10 s fail gravity")
+      }
+    }
+
+    /// Emits the chip's state when it changed (the camera bearing changes it at every tick).
+    private func emitCompass(worldFromCamera: CompassMath.Matrix3?) {
+      var state = headingWindow.liveState(worldFromCamera: worldFromCamera)
+      // Keep the last bearing while the camera points steeply up or down, or between frames.
+      if case .result(let compassState, nil) = state, let last = lastCompassState?.cameraBearing {
+        state = .result(compassState, cameraBearing: last)
+      }
+      guard state != lastCompassState else { return }
+      lastCompassState = state
+      continuation.yield(.compass(state))
+    }
+
+    /// The frame check and the recorded reading (compass §3.3 step 9, §3.4).
+    private func finishCompass(finalYaws: [String: Double]) -> (CompassResult, CompassDiagnostics) {
+      stopCompass()
+      let check = FrameCheck.frameYaw(live: liveSurfaceYaws, final: finalYaws)
+      if check.consensus, abs(check.frameYaw) > FrameCheck.logThreshold {
+        Self.log.notice(
+          "compass.frame_yaw \(check.frameYaw, format: .fixed(precision: 2)) deg, \(check.matches) surfaces")
+      }
+      var diagnostics = headingWindow.diagnostics
+      diagnostics.frameYaw = check.frameYaw
+      diagnostics.frameMatches = check.matches
+      diagnostics.frameConsensus = check.consensus
+      let result = headingWindow.result(frameYaw: check.frameYaw)
+      Self.log.info(
+        "compass: \(String(describing: result), privacy: .public); pairs \(diagnostics.pairs), windows \(diagnostics.windowsAccepted) accepted, \(diagnostics.windowsRejected) rejected")
+      return (result, diagnostics)
+    }
+
+    /// Plan-frame yaw of every surface and object of a room or structure (compass §3.4).
+    nonisolated static func surfaceYaws(of room: CapturedRoom) -> [String: Double] {
+      yaws(
+        surfaces: room.walls + room.doors + room.windows + room.openings,
+        objects: room.objects)
+    }
+
+    nonisolated static func surfaceYaws(of structure: CapturedStructure) -> [String: Double] {
+      yaws(
+        surfaces: structure.walls + structure.doors + structure.windows + structure.openings,
+        objects: structure.objects)
+    }
+
+    private nonisolated static func yaws(
+      surfaces: [CapturedRoom.Surface], objects: [CapturedRoom.Object]
+    ) -> [String: Double] {
+      var yaws: [String: Double] = [:]
+      for surface in surfaces {
+        let x = surface.transform.columns.0
+        yaws[surface.identifier.uuidString] = FrameCheck.yaw(columnX: Double(x.x), z: Double(x.z))
+      }
+      for object in objects {
+        let x = object.transform.columns.0
+        yaws[object.identifier.uuidString] = FrameCheck.yaw(columnX: Double(x.x), z: Double(x.z))
+      }
+      return yaws
+    }
+
+    /// The upper-left 3 × 3 of a transform: R_W←K for the camera.
+    nonisolated static func rotation(_ m: simd_float4x4) -> CompassMath.Matrix3 {
+      func vector(_ c: SIMD4<Float>) -> Vec3 {
+        Vec3(x: Double(c.x), y: Double(c.y), z: Double(c.z))
+      }
+      return CompassMath.Matrix3(
+        columns: vector(m.columns.0), vector(m.columns.1), vector(m.columns.2))
+    }
+
+    nonisolated static func quality(_ state: ARCamera.TrackingState) -> TrackingQuality {
+      switch state {
+      case .normal: return .normal
+      case .notAvailable: return .notAvailable
+      case .limited(.relocalizing): return .relocalizing
+      case .limited: return .limited
+      }
     }
 
     private func sample(_ frame: ARFrame) {
@@ -453,6 +618,7 @@
 
     private func failed(_ error: CaptureSessionError) {
       stopTimer()
+      stopCompass()
       roomSession?.stop(pauseARSession: true)
       roomSession = nil
       arSession.pause()

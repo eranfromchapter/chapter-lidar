@@ -1,26 +1,29 @@
 #if canImport(SwiftUI) && canImport(Observation) && os(iOS)
+  import ChapterUI
   import SwiftUI
 
-  /// The frozen design tokens (docs/waves/design/snapshot.html#tokens). Names and values match the
-  /// `:root` variables of the snapshot.
+  /// The v1 token names, kept as a façade over ChapterUI's `ChapterTheme` (phone-capture §2,
+  /// critique R-18) so screens outside this package that still use them compile unchanged and
+  /// pick up the v2 values: Inter instead of SF (`sans`), Times New Roman for display titles,
+  /// 52 pt primary buttons, a 44 pt segmented control. New code uses `ChapterTheme` directly.
   public enum ChapterTokens {
     public enum Palette {
-      public static let ink = Color(hex: 0x1F2429)
-      public static let ground = Color(hex: 0xF5EFE6)
-      public static let surface = Color(hex: 0xFAF5EE)
-      public static let nude = Color(hex: 0xE8DDD0)
-      public static let line = Color(hex: 0xD9CCBC)
-      public static let muted = Color(hex: 0x6B6557)
-      public static let ready = Color(hex: 0x2E5E2E)
-      public static let limited = Color(hex: 0x9A6A1E)
-      public static let limitedText = Color(hex: 0x7A5214)
-      public static let blocked = Color(hex: 0x8B2E2E)
+      public static let ink = ChapterTheme.Color.ink
+      public static let ground = ChapterTheme.Color.ground
+      public static let surface = ChapterTheme.Color.surface
+      public static let nude = ChapterTheme.Color.nude
+      public static let line = ChapterTheme.Color.line
+      public static let muted = ChapterTheme.Color.muted
+      public static let ready = ChapterTheme.Color.ready
+      public static let limited = ChapterTheme.Color.limited
+      public static let limitedText = ChapterTheme.Color.limitedText
+      public static let blocked = ChapterTheme.Color.blocked
 
-      // Live scan screen (dark): values taken from screen-capture, panel 3.
-      public static let scanPanel = Color(hex: 0x2B3137)
-      public static let scanPanelBorder = Color(hex: 0x3A424A)
-      public static let scanPlaceholder = Color(hex: 0xB9AFA2)
-      public static let scanCaption = Color(hex: 0xD9CCBC)
+      // Live scan screen (dark).
+      public static let scanPanel = ChapterTheme.Color.scanWell
+      public static let scanPanelBorder = ChapterTheme.Color.scanWellBorder
+      public static let scanPlaceholder = ChapterTheme.Color.chevron
+      public static let scanCaption = ChapterTheme.Color.onDarkCaption
     }
 
     /// Space scale 4, 8, 12, 16, 24, 32, 48.
@@ -35,50 +38,47 @@
     }
 
     public enum Radius {
-      public static let chip: CGFloat = 8
-      public static let card: CGFloat = 12
-      public static let sheet: CGFloat = 16
-      /// Segment inside the mode control (screen-capture panel 2).
-      public static let segment: CGFloat = 9
+      public static let chip: CGFloat = ChapterTheme.Metric.chipRadius
+      public static let card: CGFloat = ChapterTheme.Metric.cardRadius
+      public static let sheet: CGFloat = ChapterTheme.Metric.sheetRadius
+      public static let segment: CGFloat = ChapterTheme.Metric.segmentedRadius
     }
 
     public enum Control {
-      /// Primary action height on the capture screens (the token minimum is 52).
-      public static let primaryHeight: CGFloat = 56
-      public static let fieldHeight: CGFloat = 52
-      public static let projectButtonHeight: CGFloat = 56
-      public static let segmentHeight: CGFloat = 48
+      /// Primary action height (v1 was 56).
+      public static let primaryHeight: CGFloat = ChapterTheme.Metric.primaryButtonHeight
+      public static let fieldHeight: CGFloat = ChapterTheme.Metric.navigationRowHeight
+      public static let projectButtonHeight: CGFloat = ChapterTheme.Metric.navigationRowHeight
+      /// v1 was 48.
+      public static let segmentHeight: CGFloat = ChapterTheme.Metric.segmentedHeight
       /// Chips and checkboxes.
-      public static let minTouch: CGFloat = 44
+      public static let minTouch: CGFloat = ChapterTheme.Metric.touchTarget
       public static let checkbox: CGFloat = 24
     }
 
     public enum Typography {
-      /// Display and title serif: 34 / 30 / 24.
+      /// Display and title serif: Times New Roman Regular.
       public static func serif(_ size: CGFloat) -> Font {
-        .custom("Times New Roman", size: size)
+        .custom(ChapterFonts.timesRegular, size: size)
       }
 
+      /// Inter: SemiBold for semibold and heavier weights, else Regular.
       public static func sans(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        .system(size: size, weight: weight)
+        let semibold: [Font.Weight] = [.semibold, .bold, .heavy, .black]
+        return .custom(
+          semibold.contains(weight) ? ChapterFonts.interSemiBold : ChapterFonts.interRegular,
+          size: size)
       }
 
       public static func mono(_ size: CGFloat) -> Font {
         .system(size: size, design: .monospaced)
       }
 
-      public static let display = serif(34)
-      public static let headline = sans(17, weight: .semibold)
-      public static let body = sans(17)
-      public static let caption = sans(13)
-    }
-  }
-
-  extension Color {
-    init(hex: UInt32) {
-      self.init(
-        .sRGB, red: Double((hex >> 16) & 0xFF) / 255, green: Double((hex >> 8) & 0xFF) / 255,
-        blue: Double(hex & 0xFF) / 255, opacity: 1)
+      /// The large title: Times New Roman 34.
+      public static let display = ChapterTheme.Font.largeTitle
+      public static let headline = ChapterTheme.Font.bodyEmphasis
+      public static let body = ChapterTheme.Font.body
+      public static let caption = ChapterTheme.Font.footnote
     }
   }
 #endif

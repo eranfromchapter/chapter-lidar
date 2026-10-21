@@ -7,11 +7,18 @@
 //                        opening-to-wall assignment. The mapping math is tested here.
 //   CaptureCore          Foundation only. Linux, macOS, iOS. CaptureSession protocol, ReplaySession,
 //                        device gate, raw-originals writer, capture-record form logic.
+//   CaptureCompass       APPLE ONLY (CoreLocation + CoreMotion). The app's one compass
+//                        (`CompassService`) and the device-test recorder. Guarded by
+//                        `#if canImport(CoreMotion) ... os(iOS)`. Carries the `.apple-only` marker.
 //   CaptureRoomPlan      APPLE ONLY (RoomPlan + ARKit). Guarded by `#if canImport(RoomPlan)`, so
 //                        it compiles to an empty module on Linux. Carries the `.apple-only` marker.
-//   CaptureUI            APPLE ONLY (SwiftUI). Guarded by `#if canImport(SwiftUI)`. Carries the
-//                        `.apple-only` marker.
+//   CaptureUI            APPLE ONLY (SwiftUI, on ChapterUI). The capture screens. Guarded by
+//                        `#if canImport(SwiftUI)`. Carries the `.apple-only` marker.
 //   CaptureTestSupport   test helper (fixture paths, JSON Schema subset validator). Not a product.
+//
+// Test targets: CaptureModelMappingTests and CaptureCoreTests run everywhere; CaptureUITests (the
+// screens' snapshots, ChapterUISnapshotTesting) and CaptureCompassTests (CompassService on the
+// simulator, device test D0 on a phone) are empty outside iOS.
 //
 // There is deliberately NO `.apple-only` marker at the package root: scripts/swift-test.sh skips a
 // whole package that has one, and the mapping, schema and capture-record tests must run on Linux.
@@ -26,12 +33,14 @@ let package = Package(
   products: [
     .library(name: "CaptureModelMapping", targets: ["CaptureModelMapping"]),
     .library(name: "CaptureCore", targets: ["CaptureCore"]),
+    .library(name: "CaptureCompass", targets: ["CaptureCompass"]),
     .library(name: "CaptureRoomPlan", targets: ["CaptureRoomPlan"]),
     .library(name: "CaptureUI", targets: ["CaptureUI"]),
   ],
   dependencies: [
     // Package identity of a path dependency is the directory name, here "swift".
-    .package(path: "../../../contract/swift")
+    .package(path: "../../../contract/swift"),
+    .package(path: "../ChapterUI"),
   ],
   targets: [
     .target(
@@ -46,9 +55,17 @@ let package = Package(
       ]
     ),
     .target(
+      name: "CaptureCompass",
+      dependencies: ["CaptureCore", .product(name: "CaptureContract", package: "swift")],
+      exclude: [".apple-only"],
+      // CLLocationManagerDelegate and Core Motion handlers are Objective-C callbacks.
+      swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    .target(
       name: "CaptureRoomPlan",
       dependencies: [
-        "CaptureCore", "CaptureModelMapping", .product(name: "CaptureContract", package: "swift"),
+        "CaptureCore", "CaptureCompass", "CaptureModelMapping",
+        .product(name: "CaptureContract", package: "swift"),
       ],
       exclude: [".apple-only"],
       // RoomPlan and ARKit delegates are Objective-C protocols with non-Sendable arguments.
@@ -56,7 +73,10 @@ let package = Package(
     ),
     .target(
       name: "CaptureUI",
-      dependencies: ["CaptureCore", .product(name: "CaptureContract", package: "swift")],
+      dependencies: [
+        "CaptureCore", .product(name: "CaptureContract", package: "swift"),
+        .product(name: "ChapterUI", package: "ChapterUI"),
+      ],
       exclude: [".apple-only"],
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
@@ -81,6 +101,23 @@ let package = Package(
         "CaptureCore", "CaptureModelMapping", "CaptureTestSupport",
         .product(name: "CaptureContract", package: "swift"),
       ]
+    ),
+    // iOS simulator only: the screens' snapshots (402 x 874 pt @3x, iOS 26.0), compared with the
+    // PNGs in __Snapshots__ (read from the source tree).
+    .testTarget(
+      name: "CaptureUITests",
+      dependencies: [
+        "CaptureUI", "CaptureCore", .product(name: "CaptureContract", package: "swift"),
+        .product(name: "ChapterUI", package: "ChapterUI"),
+        .product(name: "ChapterUISnapshotTesting", package: "ChapterUI"),
+      ],
+      exclude: ["__Snapshots__"],
+      swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    // CompassService on the simulator (no compass there) and device test D0 on a phone.
+    .testTarget(
+      name: "CaptureCompassTests",
+      dependencies: ["CaptureCompass", "CaptureCore", .product(name: "CaptureContract", package: "swift")]
     ),
   ]
 )

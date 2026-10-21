@@ -43,12 +43,15 @@
   }
 
   extension DeviceInfo {
-    /// Device, OS and the LiDAR flag for the capture record, read from the phone.
+    /// Device, OS and the LiDAR flag for the capture record, read from the phone. The marketing
+    /// name ("iPhone 16 Pro") comes from `DeviceNames`; nil for an identifier it does not know.
     @MainActor
     public static func current() -> DeviceInfo {
       let capabilities = DeviceCapabilities.current()
       return DeviceInfo(
-        model: capabilities.model, marketingName: nil, osName: capabilities.osName,
+        model: capabilities.model,
+        marketingName: DeviceNames.marketingName(for: capabilities.model),
+        osName: capabilities.osName,
         osVersion: capabilities.osVersion, hasLidar: capabilities.supportsSceneReconstructionMesh)
     }
   }
