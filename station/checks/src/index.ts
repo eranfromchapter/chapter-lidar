@@ -3,6 +3,11 @@
 // "@chapter/station-checks/node"; loading from storage and storing verdicts are in F9.
 
 export { addressesMatch, normalizeAddress } from "./address.js";
+export {
+  COMPASS_EXPECTED,
+  COMPASS_LIMITATION_FOR_LEGACY_RECORDS,
+  ORIENTATION_NOT_VERIFIED,
+} from "./checks/compass.js";
 export { CheckContext, resolveRelative, type CaptureInfo } from "./context.js";
 export { clip, finding, outcomeOf, NO_ACTION } from "./finding.js";
 export { PackageLoadError, packageFromFiles } from "./package.js";

@@ -21,9 +21,16 @@ interface Expectation {
   filePath?: (defect: ReturnType<typeof readDefect>) => string;
   /** Text the measured value must contain. */
   measured?: RegExp;
+  /**
+   * The next action of the finding; by default anything but "None". A compass reading cannot be
+   * added to a finished scan, so the compass limitation asks for nothing (compass spec 8.2).
+   */
+  nextAction?: string;
+  /** The verdict's one limitation line, for a limited outcome. */
+  limitation?: string;
 }
 
-/** Orchestrator decisions for the seven defects. */
+/** Orchestrator decisions for the eight defects. */
 const EXPECTED: Record<string, Expectation> = {
   "empty-file": {
     ruleId: "files.parseable",
@@ -71,15 +78,15 @@ const EXPECTED: Record<string, Expectation> = {
     outcome: "limited",
     measured: /header point count 1888, data holds 888 points/,
   },
-};
-
-/**
- * Broken fixtures whose rule the station does not run yet (contract v1.1 ships the fixture
- * first), with that rule. Until then the defect goes unnoticed: the package is otherwise the
- * good box room. Each moves to EXPECTED with its rule.
- */
-const AWAITING_RULE: Record<string, string> = {
-  "compass-time-outside-scan": "orientation.compass",
+  "compass-time-outside-scan": {
+    ruleId: "orientation.compass",
+    severity: "limitation",
+    outcome: "limited",
+    measured:
+      /^Compass reading rejected; orientation not verified \(reading at 2026-10-17T12:02:11Z, scan 2026-10-17T14:02:11Z to 2026-10-17T14:20:40Z\)$/,
+    nextAction: "None",
+    limitation: "Floor 1: Plan orientation is not verified; north is not shown.",
+  },
 };
 
 const index = readIndex();
@@ -88,23 +95,11 @@ describe("broken fixtures", () => {
   it("every broken fixture has an expectation and every expectation a fixture", () => {
     assert.deepEqual(
       index.broken.map((item) => item.defectId).sort(),
-      [...Object.keys(EXPECTED), ...Object.keys(AWAITING_RULE)].sort(),
+      Object.keys(EXPECTED).sort(),
     );
   });
 
-  for (const broken of index.broken.filter((item) => item.defectId in AWAITING_RULE)) {
-    it(`${broken.defectId}: ready until ${AWAITING_RULE[broken.defectId]} runs`, () => {
-      const hubAddress = readTruth(broken.baseFixture).hub.address;
-      const verdict = runChecks(loadBroken(broken.defectId), hubAddress);
-      assert.ok(!verdict.checks.some((check) => check.ruleId === AWAITING_RULE[broken.defectId]));
-      assert.deepEqual(nonInfo(verdict), []);
-      assert.equal(verdict.outcome, "ready");
-      const result = validateVerdict(verdict);
-      assert.ok(result.ok, result.ok ? "" : formatErrors(result.errors));
-    });
-  }
-
-  for (const broken of index.broken.filter((item) => !(item.defectId in AWAITING_RULE))) {
+  for (const broken of index.broken) {
     const expected = EXPECTED[broken.defectId] as Expectation;
     describe(broken.defectId, () => {
       const defect = readDefect(broken.defectId);
@@ -130,13 +125,20 @@ describe("broken fixtures", () => {
         if (expected.measured !== undefined) {
           assert.match(item.measured ?? "", expected.measured);
         }
-        assert.notEqual(item.nextAction, "None");
+        if (expected.nextAction === undefined) {
+          assert.notEqual(item.nextAction, "None");
+        } else {
+          assert.equal(item.nextAction, expected.nextAction);
+        }
       });
 
       it(`is ${expected.outcome}`, () => {
         assert.equal(verdict.outcome, expected.outcome);
         if (expected.outcome === "limited") {
           assert.equal(verdict.limitations.length, 1);
+        }
+        if (expected.limitation !== undefined) {
+          assert.deepEqual(verdict.limitations, [expected.limitation]);
         }
       });
 

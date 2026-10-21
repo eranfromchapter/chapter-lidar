@@ -9,7 +9,7 @@ import type { CaptureModel } from "@chapter/capture-contract";
 import { parseByRole } from "../src/parsers/index.js";
 import type { LoadedPackage } from "../src/types.js";
 import { runChecks } from "../src/verdict.js";
-import { loadGood, pathOf, readIndex, readTruth, withJson } from "./helpers.js";
+import { goodOutcome, loadGood, pathOf, readIndex, readTruth, withJson } from "./helpers.js";
 
 /** Fixed so the verdicts of two packages compare whole. */
 const OPTIONS = {
@@ -80,7 +80,7 @@ describe("capture model schema versions", () => {
 
       it("gets the same verdict as the 1.0.0 package", () => {
         const verdict = runChecks(pkg, hubAddress, OPTIONS);
-        assert.equal(verdict.outcome, "ready");
+        assert.equal(verdict.outcome, goodOutcome(fixture.name));
         assert.deepEqual(verdict, runChecks(base, hubAddress, OPTIONS));
       });
     });

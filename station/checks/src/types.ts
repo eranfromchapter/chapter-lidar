@@ -52,6 +52,7 @@ export const RULES = [
   { id: "property.address", title: "Property match" },
   { id: "units.scale", title: "Units and scale" },
   { id: "orientation.up", title: "Up direction and orientation" },
+  { id: "orientation.compass", title: "Orientation (compass)" },
   { id: "companions.resolve", title: "Mesh companions" },
   { id: "dxf.content", title: "DXF content type" },
   { id: "las.header", title: "LAS header" },

@@ -3,6 +3,7 @@
 import { createHash } from "node:crypto";
 import type { CheckResult, Verdict } from "@chapter/capture-contract";
 import { checkCompanions } from "./checks/companions.js";
+import { checkCompass } from "./checks/compass.js";
 import { checkCoverage } from "./checks/coverage.js";
 import { checkDxfContent, checkLasHeader } from "./checks/formats.js";
 import { checkIndependence } from "./checks/independence.js";
@@ -22,8 +23,12 @@ import {
   type StationFinding,
 } from "./types.js";
 
-/** Station component and rule set version written into every verdict. */
-export const EVALUATOR = { name: "chapter-capture-station/checks", version: "1.0.0" } as const;
+/**
+ * Station component and rule set version written into every verdict. 1.1.0 adds
+ * `orientation.compass` (13 rules). People read it as "station-checks v1.1.0" (contract
+ * `ruleSetLabel`).
+ */
+export const EVALUATOR = { name: "chapter-capture-station/checks", version: "1.1.0" } as const;
 
 /** The preliminary task outcomes apply to, unless the caller names another. */
 export const DEFAULT_TASK = "Preliminary existing-condition plans";
@@ -42,6 +47,7 @@ const RUNNERS: Readonly<Record<RuleId, Check>> = {
   "property.address": checkProperty,
   "units.scale": checkScale,
   "orientation.up": checkOrientation,
+  "orientation.compass": checkCompass,
   "companions.resolve": checkCompanions,
   "dxf.content": checkDxfContent,
   "las.header": checkLasHeader,
@@ -51,7 +57,7 @@ const RUNNERS: Readonly<Record<RuleId, Check>> = {
   "evidence.independence": checkIndependence,
 };
 
-/** The twelve checks in checklist order. */
+/** The thirteen checks in checklist order. */
 export const CHECKS: ReadonlyArray<{ ruleId: RuleId; title: string; run: Check }> = RULES.map(
   (rule) => ({ ruleId: rule.id, title: rule.title, run: RUNNERS[rule.id] }),
 );
@@ -87,7 +93,12 @@ function unique(values: string[]): string[] {
   return [...new Set(values)];
 }
 
-function summaryOf(outcome: Verdict["outcome"], task: string, findings: StationFinding[]): string {
+function summaryOf(
+  outcome: Verdict["outcome"],
+  task: string,
+  findings: StationFinding[],
+  nextActions: string[],
+): string {
   const blockers = findings.filter((item) => item.severity === "blocker").length;
   const limitations = findings.filter((item) => item.severity === "limitation").length;
   const lower = task.charAt(0).toLowerCase() + task.slice(1);
@@ -95,7 +106,8 @@ function summaryOf(outcome: Verdict["outcome"], task: string, findings: StationF
     case "ready":
       return `Ready for ${lower}. No blockers and no limitations; this is not acceptance of all measurements.`;
     case "limited":
-      return `Usable for ${lower} with ${count(limitations, "named limitation")}. Continue the work the evidence supports and request the listed items.`;
+      // A limitation may ask for nothing (a compass reading cannot be added after the scan).
+      return `Usable for ${lower} with ${count(limitations, "named limitation")}. Continue the work the evidence supports${nextActions.length > 0 ? " and request the listed items" : ""}.`;
     case "blocked":
       return `Blocked: ${count(blockers, "blocker")} prevent${blockers === 1 ? "s" : ""} ${lower}${limitations > 0 ? `; ${count(limitations, "limitation")} also listed` : ""}. Resolve the blockers and re-upload.`;
   }
@@ -161,7 +173,7 @@ export function runChecks(
     revision: pkg.manifest.revision,
     outcome,
     task,
-    summary: summaryOf(outcome, task, findings),
+    summary: summaryOf(outcome, task, findings, nextActions),
     evaluatedAt,
     evaluator: { ...EVALUATOR },
     checks,

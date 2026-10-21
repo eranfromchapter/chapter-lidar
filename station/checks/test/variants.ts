@@ -25,6 +25,8 @@ export interface Variant {
 
 const box = loadGood("box-room");
 const house = loadGood("two-floor-house");
+/** Capture record 1.1.0 with an approximate compass reading (magnetic, ±12°). */
+const apartment = loadGood("two-room-apartment");
 const p = (role: string, pkg: LoadedPackage = box) => pathOf(pkg, role);
 
 function lasWithMaxZ(pkg: LoadedPackage, delta: number): LoadedPackage {
@@ -108,6 +110,30 @@ export function variants(): Variant[] {
         (nodes[0] as Record<string, unknown>).rotation = [Math.SQRT1_2, 0, 0, Math.SQRT1_2];
       }),
     ),
+  );
+  // Check 5b (every state of the reading: compass.test.ts)
+  add(
+    "compass reading rejected by the phone",
+    withJson<CaptureRecord>(apartment, p("capture_record", apartment), (record) => {
+      const capture = record.captures[0] as CaptureRecord["captures"][number];
+      delete capture.heading;
+      delete capture.headingAccuracy;
+      delete capture.headingSource;
+      delete capture.headingRecordedAt;
+      capture.headingIssue = "rejected";
+    }),
+  );
+  add(
+    "compass accuracy over 30 degrees",
+    withJson<CaptureRecord>(apartment, p("capture_record", apartment), (record) => {
+      (record.captures[0] as CaptureRecord["captures"][number]).headingAccuracy = 31;
+    }),
+  );
+  add(
+    "capture record 1.1.0 without a compass reading",
+    withJson<CaptureRecord>(box, p("capture_record"), (record) => {
+      record.schemaVersion = "1.1.0";
+    }),
   );
   // Check 6
   add("obj material library missing", withoutFile(box, p("mesh_mtl")));

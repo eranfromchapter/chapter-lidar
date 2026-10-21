@@ -13,6 +13,12 @@ import type { LoadedPackage } from "../src/types.js";
 
 const RULE_IDS = new Set<string>(RULES.map((rule) => rule.id));
 
+/**
+ * Rules whose limitations ask for nothing: a compass reading cannot be added to a finished scan
+ * (compass spec 8.2), so the next action is "None" and the verdict lists none.
+ */
+const NO_ACTION_RULES = new Set<string>(["orientation.compass"]);
+
 interface Case {
   name: string;
   pkg: LoadedPackage;
@@ -46,7 +52,10 @@ describe("finding shape", () => {
         assert.equal(typeof item.measured, "string", label);
         assert.ok((item.measured as string).trim().length > 0, label);
         assert.ok(item.nextAction.trim().length > 0, label);
-        if (item.severity !== "info") {
+        if (item.severity !== "info" && NO_ACTION_RULES.has(item.ruleId)) {
+          assert.equal(item.nextAction, "None", label);
+          assert.ok(!verdict.nextActions.includes(item.nextAction), label);
+        } else if (item.severity !== "info") {
           assert.notEqual(item.nextAction, "None", label);
           assert.ok(verdict.nextActions.includes(item.nextAction), label);
         }
