@@ -39,14 +39,15 @@ public struct FieldControlsEditor: Hashable, Sendable {
     self.controls = controls
   }
 
-  /// A long distance on a floor; `axis` B is perpendicular to A.
+  /// A long distance on a floor; `axis` B is perpendicular to A. Returns the control's id.
+  @discardableResult
   public mutating func setDistance(
     capture: FieldControls.CaptureRef,
     axis: DistanceAxis,
     from: String,
     to: String,
     measurement: FieldControls.Measurement
-  ) throws {
+  ) throws -> String {
     let item = FieldControls.Distance(
       id: "\(capture.areaKey)-distance-\(axis.rawValue.lowercased())",
       capture: capture,
@@ -55,14 +56,16 @@ public struct FieldControlsEditor: Hashable, Sendable {
       to: try Self.text(to, field: "To"),
       measurement: measurement)
     Self.upsert(item, id: item.id, in: &controls.distances) { $0.id }
+    return item.id
   }
 
+  @discardableResult
   public mutating func setCeilingHeight(
     capture: FieldControls.CaptureRef,
     room: String,
     location: String? = nil,
     measurement: FieldControls.Measurement
-  ) throws {
+  ) throws -> String {
     let room = try Self.text(room, field: "Room")
     let location = try Self.optionalText(location, field: "Location")
     var id = "\(capture.areaKey)-ceiling-\(Self.slug(room))"
@@ -70,30 +73,34 @@ public struct FieldControlsEditor: Hashable, Sendable {
     let item = FieldControls.CeilingHeight(
       id: id, capture: capture, room: room, location: location, measurement: measurement)
     Self.upsert(item, id: id, in: &controls.ceilingHeights) { $0.id }
+    return id
   }
 
+  @discardableResult
   public mutating func setOpening(
     capture: FieldControls.CaptureRef,
     room: String,
     label: String,
     width: FieldControls.Measurement,
     height: FieldControls.Measurement? = nil
-  ) throws {
+  ) throws -> String {
     let room = try Self.text(room, field: "Room")
     let label = try Self.text(label, field: "Opening")
     let id = "\(capture.areaKey)-opening-\(Self.slug(room))-\(Self.slug(label))"
     let item = FieldControls.Opening(
       id: id, capture: capture, room: room, label: label, width: width, height: height)
     Self.upsert(item, id: id, in: &controls.openings) { $0.id }
+    return id
   }
 
   /// Finished floor of the lower floor to finished floor of the upper floor.
+  @discardableResult
   public mutating func setFloorToFloor(
     lower: FieldControls.CaptureRef,
     upper: FieldControls.CaptureRef,
     location: String,
     measurement: FieldControls.Measurement
-  ) throws {
+  ) throws -> String {
     guard lower.captureId != upper.captureId else {
       throw FieldControlsEditError.floorToFloorNeedsTwoCaptures
     }
@@ -102,15 +109,17 @@ public struct FieldControlsEditor: Hashable, Sendable {
     let item = FieldControls.FloorToFloor(
       id: id, lower: lower, upper: upper, location: location, measurement: measurement)
     Self.upsert(item, id: id, in: &controls.floorToFloor) { $0.id }
+    return id
   }
 
   /// A landmark visible from two or more different captures.
+  @discardableResult
   public mutating func setLandmark(
     label: String,
     description: String? = nil,
     captures: [FieldControls.CaptureRef],
     photoPaths: [String]? = nil
-  ) throws {
+  ) throws -> String {
     let label = try Self.text(label, field: "Landmark")
     let description = try Self.optionalText(description, field: "Description", maximum: 1000)
     var unique: [FieldControls.CaptureRef] = []
@@ -123,6 +132,7 @@ public struct FieldControlsEditor: Hashable, Sendable {
       id: id, label: label, description: description, captures: unique,
       photoPaths: (photoPaths?.isEmpty ?? true) ? nil : photoPaths)
     Self.upsert(item, id: id, in: &controls.landmarks) { $0.id }
+    return id
   }
 
   /// Removes the control with this id from whichever list holds it. True when one was removed.

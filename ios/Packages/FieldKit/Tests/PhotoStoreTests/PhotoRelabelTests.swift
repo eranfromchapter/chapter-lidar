@@ -57,6 +57,24 @@ final class PhotoRelabelTests: XCTestCase {
     XCTAssertEqual(store.nextSequence(captureId: floor1.captureId), 4, "numbering unchanged")
   }
 
+  func testRelabelAndRestoreKeepTheDirectionSource() throws {
+    let files = InMemoryPhotoFileStore()
+    let store = try PhotoRecordStore(files: files)
+    let saved = try store.save(
+      original: jpeg(9), capture: floor1,
+      labels: PackageManifest.PhotoLabels(
+        room: "Closet", direction: .south, subject: .fixture, takenAt: takenAt,
+        directionSource: .compass))
+    let before = store.records
+    try store.relabelRoom(captureId: floor1.captureId, from: "Closet", to: "Shower")
+    XCTAssertEqual(store.records[0].room, "Shower")
+    XCTAssertEqual(store.records[0].labels.directionSource, .compass)
+    XCTAssertEqual(try PhotoRecordStore(files: files).records[0].labels.directionSource, .compass)
+    try store.restoreLabels(before)
+    XCTAssertEqual(store.records[0].labels, saved.labels)
+    XCTAssertTrue(store.isIntact(store.records[0]))
+  }
+
   func testRenamesApplyAtOnceSoTwoRoomsCanSwap() throws {
     let store = try PhotoRecordStore(files: InMemoryPhotoFileStore())
     try save(store, floor1, room: "Bathroom", seed: 1)

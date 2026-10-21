@@ -1,10 +1,10 @@
 import CaptureContract
 import Foundation
 
-// The before-leaving checklist. Pure rules over the capture record, the saved photos and the
-// field controls; nothing here touches the file system, a camera or the UI. "Finish capture" is
-// blocked until `ChecklistReport.canFinish`, and `ChecklistReport.gaps` lists exactly what is
-// missing.
+// The before-leaving checklist (design v2, artboard 2d-4). Pure rules over the capture record,
+// the saved photos and the field controls; nothing here touches the file system, a camera or the
+// UI. "Finish capture" is blocked until `ChecklistReport.canFinish`, and `ChecklistReport.gaps`
+// lists exactly what is missing. The compass item is advisory: it is shown, never blocks.
 
 /// Everything the checklist looks at.
 public struct ChecklistInput: Sendable {
@@ -14,26 +14,32 @@ public struct ChecklistInput: Sendable {
   public var capturedRooms: [LowercaseUUID: [String]]
   public var photos: [PhotoRecord]
   public var controls: FieldControls
-  /// The operator confirmed that no room was omitted or inaccessible. Needed only when the
-  /// capture record lists none.
+  /// The operator confirmed that every room was scanned (none omitted or inaccessible). Needed
+  /// only when the capture record lists no room not scanned.
   public var noRoomsSkippedConfirmed: Bool
+  /// The compass of a capture when the caller knows better than its stored reading; a capture
+  /// not in here is evaluated from the record (`CaptureCompassStatus(capture:)`, the contract's
+  /// evaluator; a 1.0.0 record has no reading: `notRead`).
+  public var compass: [LowercaseUUID: CaptureCompassStatus]
 
   public init(
     record: CaptureRecord,
     capturedRooms: [LowercaseUUID: [String]] = [:],
     photos: [PhotoRecord] = [],
     controls: FieldControls,
-    noRoomsSkippedConfirmed: Bool = false
+    noRoomsSkippedConfirmed: Bool = false,
+    compass: [LowercaseUUID: CaptureCompassStatus] = [:]
   ) {
     self.record = record
     self.capturedRooms = capturedRooms
     self.photos = photos
     self.controls = controls
     self.noRoomsSkippedConfirmed = noRoomsSkippedConfirmed
+    self.compass = compass
   }
 }
 
-/// Tunable minimums. `standard` is the v1 rule set.
+/// Tunable minimums. `standard` is the shipping rule set.
 public struct ChecklistPolicy: Hashable, Sendable {
   /// Shared landmarks needed between each pair of consecutive floors. Two landmarks fix both the
   /// position and the rotation of one floor against the next.
@@ -49,8 +55,13 @@ public struct ChecklistPolicy: Hashable, Sendable {
   }
 
   public static let standard = ChecklistPolicy()
-  /// Every floor needs its tape or laser controls (the original rule).
+  /// Every floor needs its tape or laser controls (the original rule, drawn in design v2).
   public static let manualControls = ChecklistPolicy(manualControlsRequired: true)
+
+  /// The policy the app ships with: the one constant that switches the Field controls list and
+  /// Before you leave between the two renderings (owner question Q-A; default kept at
+  /// `.standard`, the scan provides the measurements).
+  public static let shipping: ChecklistPolicy = .standard
 }
 
 public enum ChecklistItemID: String, CaseIterable, Sendable {
@@ -58,18 +69,33 @@ public enum ChecklistItemID: String, CaseIterable, Sendable {
   case skippedRoomsRecorded
   case photoPerRoom
   case minimumControls
+  case compass
   case visitDetails
 
-  /// Wording of the checklist row (frozen design).
+  /// Wording of the checklist row (design v2, artboard 2d-4).
   public var title: String {
     switch self {
     case .floorsLabeled: return "Every floor and area labeled"
-    case .skippedRoomsRecorded: return "Skipped rooms recorded"
+    case .skippedRoomsRecorded: return "Rooms not scanned recorded"
     case .photoPerRoom: return "A photo for every room"
     case .minimumControls: return "Minimum field controls"
+    case .compass: return "Compass reading"
     case .visitDetails: return "Device, mode, date, operator"
     }
   }
+
+  /// Blocking items stop "Finish capture"; the compass is recommended, not required.
+  public var severity: ChecklistSeverity {
+    self == .compass ? .advisory : .blocking
+  }
+}
+
+/// Whether a failing item stops the package.
+public enum ChecklistSeverity: String, Sendable {
+  /// ■ when failing; counted in "Fix 2 items to finish".
+  case blocking
+  /// ▲ when failing; shown, never counted, never blocks.
+  case advisory
 }
 
 /// One thing that is missing. Equatable so tests and the UI can compare exactly.
@@ -113,9 +139,9 @@ public enum ChecklistGap: Hashable, Sendable {
     case .unlabeledCapture(let areaKey):
       return "Capture \(areaKey) has no label"
     case .skippedRoomsNotRecorded:
-      return "Record skipped rooms, or confirm none were skipped"
-    case .skippedRoomWithoutName(let kind):
-      return "A \(kind.rawValue) room has no name"
+      return "Record rooms not scanned, or confirm there are none"
+    case .skippedRoomWithoutName:
+      return "A room not scanned has no name"
     case .skippedRoomWithoutReason(let room):
       return "\(room): reason missing"
     case .roomWithoutPhoto(_, let room):
@@ -143,6 +169,26 @@ public enum ChecklistGap: Hashable, Sendable {
       }
     }
   }
+
+  /// The short wording of a "Minimum field controls" gap on Before you leave (phone-field §6.3):
+  /// `Long distance A` (`Long distance A on Floor 2` with more than one floor), `Ceiling height`,
+  /// `Floor to floor` (`Floor to floor between Floor 2 and Floor 3` with more than two floors),
+  /// `1 of 2 landmarks`. Other gaps use `text`. A floor missing A, B and its ceiling height at
+  /// once reads `Floor 2 set` (`ChecklistRules`).
+  public func compactText(showCapture: Bool, showPair: Bool) -> String {
+    switch self {
+    case .missingDistance(let capture, let axis):
+      return "Long distance \(axis.rawValue)" + (showCapture ? " on \(capture)" : "")
+    case .missingCeilingHeight(let capture):
+      return "Ceiling height" + (showCapture ? " on \(capture)" : "")
+    case .missingFloorToFloor(let lower, let upper):
+      return "Floor to floor" + (showPair ? " between \(lower) and \(upper)" : "")
+    case .missingLandmarks(let lower, let upper, let have, let need):
+      return "\(have) of \(need) landmarks" + (showPair ? " between \(lower) and \(upper)" : "")
+    default:
+      return text(showCapture: showCapture, showPair: showPair)
+    }
+  }
 }
 
 extension ChecklistGap: CustomStringConvertible {
@@ -154,10 +200,21 @@ public struct ChecklistItem: Hashable, Sendable {
   public let passed: Bool
   /// Second line of the row: what was found, or what is missing.
   public let detail: String
-  /// Exactly what is missing; empty when `passed`.
+  /// Exactly what is missing; empty when `passed`, and always empty for the advisory compass
+  /// item (its detail says which captures are not verified).
   public let gaps: [ChecklistGap]
 
+  public init(id: ChecklistItemID, passed: Bool, detail: String, gaps: [ChecklistGap]) {
+    self.id = id
+    self.passed = passed
+    self.detail = detail
+    self.gaps = gaps
+  }
+
   public var title: String { id.title }
+  public var severity: ChecklistSeverity { id.severity }
+  /// A failing blocking item: ■, red detail, counted in "Fix 2 items to finish".
+  public var isBlocking: Bool { !passed && severity == .blocking }
 }
 
 /// Raised when finishing is attempted while the checklist has gaps.
@@ -172,16 +229,28 @@ public struct ChecklistBlockedError: Error, Equatable, Sendable, CustomStringCon
 public struct ChecklistReport: Hashable, Sendable {
   /// One item per `ChecklistItemID`, in checklist order.
   public let items: [ChecklistItem]
+  /// Every capture's compass, in record order: the compass item's detail; "Read" takes the
+  /// first capture that is not verified.
+  public let compass: [CompassSummary.Entry]
 
+  public init(items: [ChecklistItem], compass: [CompassSummary.Entry] = []) {
+    self.items = items
+    self.compass = compass
+  }
+
+  /// Every item that did not pass, the advisory compass included.
   public var failedItems: [ChecklistItem] { items.filter { !$0.passed } }
-  /// "Finish capture" is allowed only when every item passes.
-  public var canFinish: Bool { failedItems.isEmpty }
+  /// The failing items that stop the package (the compass never does).
+  public var blockingItems: [ChecklistItem] { items.filter(\.isBlocking) }
+  /// "Finish capture" is allowed when every blocking item passes.
+  public var canFinish: Bool { blockingItems.isEmpty }
   /// Every missing thing across all items, in checklist order.
   public var gaps: [ChecklistGap] { items.flatMap(\.gaps) }
 
-  /// Label of the primary button: "Finish capture" or "Fix 2 items to finish".
+  /// Label of the primary button: "Finish capture" or "Fix 2 items to finish" (blocking items
+  /// only).
   public var finishButtonTitle: String {
-    let count = failedItems.count
+    let count = blockingItems.count
     if count == 0 { return "Finish capture" }
     return "Fix \(count) \(count == 1 ? "item" : "items") to finish"
   }
@@ -190,7 +259,13 @@ public struct ChecklistReport: Hashable, Sendable {
     items.first { $0.id == id }!
   }
 
-  /// Throws `ChecklistBlockedError` listing every gap unless the checklist passed.
+  /// The first capture whose compass is not verified (what "Read" would read); nil when all are.
+  public var firstCaptureWithoutVerifiedCompass: LowercaseUUID? {
+    compass.first { $0.status != .verified }?.captureId
+  }
+
+  /// Throws `ChecklistBlockedError` listing every gap unless the blocking items passed. The
+  /// compass is ignored.
   public func requireCanFinish() throws {
     guard canFinish else { throw ChecklistBlockedError(gaps: gaps) }
   }
@@ -198,17 +273,21 @@ public struct ChecklistReport: Hashable, Sendable {
 
 public enum ChecklistRules {
   public static func evaluate(
-    _ input: ChecklistInput, policy: ChecklistPolicy = .standard
+    _ input: ChecklistInput, policy: ChecklistPolicy = .shipping
   ) -> ChecklistReport {
     let captures = input.record.captures
     let wording = Wording(showCapture: captures.count > 1, showPair: captures.count > 2)
-    return ChecklistReport(items: [
-      floorsLabeled(captures, wording),
-      skippedRooms(captures, input, wording),
-      photoPerRoom(captures, input, wording),
-      minimumControls(captures, input, policy, wording),
-      visitDetails(input, wording),
-    ])
+    let compass = CompassSummary.entries(record: input.record, overrides: input.compass)
+    return ChecklistReport(
+      items: [
+        floorsLabeled(captures, wording),
+        skippedRooms(captures, input, wording),
+        photoPerRoom(captures, input, wording),
+        minimumControls(captures, input, policy),
+        compassItem(compass),
+        visitDetails(input, wording),
+      ],
+      compass: compass)
   }
 
   struct Wording {
@@ -247,7 +326,7 @@ public enum ChecklistRules {
         .joined(separator: ", "), wording)
   }
 
-  // MARK: 2 Skipped rooms recorded
+  // MARK: 2 Rooms not scanned recorded
 
   private static func skippedRooms(
     _ captures: [CaptureRecord.Capture], _ input: ChecklistInput, _ wording: Wording
@@ -273,7 +352,7 @@ public enum ChecklistRules {
     }
     return item(
       .skippedRoomsRecorded, gaps: gaps,
-      passedDetail: found.isEmpty ? "No rooms skipped" : found.joined(separator: "; "), wording)
+      passedDetail: found.isEmpty ? "All rooms scanned" : found.joined(separator: "; "), wording)
   }
 
   // MARK: 3 A photo for every room
@@ -308,50 +387,14 @@ public enum ChecklistRules {
 
   /// Per floor or area (every capture except `exterior`): long distance A, long distance B and
   /// one ceiling height. For each pair of consecutive floors (by capture time): one
-  /// floor-to-floor level and the policy's number of shared landmarks.
+  /// floor-to-floor level and the policy's number of shared landmarks. The gaps come from
+  /// `ControlsList.gaps` in the order of the Field controls list, so both screens agree; the
+  /// detail is the short wording of phone-field §6.3 (`Floor to floor · 1 of 2 landmarks ·
+  /// Floor 2 set`).
   private static func minimumControls(
-    _ captures: [CaptureRecord.Capture], _ input: ChecklistInput, _ policy: ChecklistPolicy,
-    _ wording: Wording
+    _ captures: [CaptureRecord.Capture], _ input: ChecklistInput, _ policy: ChecklistPolicy
   ) -> ChecklistItem {
-    let floors = captures.enumerated()
-      .filter { $0.element.mode != .exterior }
-      .sorted {
-        ($0.element.capturedAt, $0.offset) < ($1.element.capturedAt, $1.offset)
-      }
-      .map(\.element)
     let controls = input.controls
-    var gaps: [ChecklistGap] = []
-
-    for floor in floors {
-      let id = floor.captureId
-      for axis in [DistanceAxis.a, .b]
-      where !controls.distances.contains(where: { $0.capture.captureId == id && $0.axis == axis }) {
-        gaps.append(.missingDistance(capture: floor.label, axis: axis))
-      }
-      if !controls.ceilingHeights.contains(where: { $0.capture.captureId == id }) {
-        gaps.append(.missingCeilingHeight(capture: floor.label))
-      }
-    }
-
-    for (lower, upper) in zip(floors, floors.dropFirst()) {
-      let ids: Set<LowercaseUUID> = [lower.captureId, upper.captureId]
-      let hasLevel = controls.floorToFloor.contains {
-        Set([$0.lower.captureId, $0.upper.captureId]) == ids
-      }
-      if !hasLevel {
-        gaps.append(.missingFloorToFloor(lower: lower.label, upper: upper.label))
-      }
-      let shared = controls.landmarks.filter { landmark in
-        let landmarkIds = Set(landmark.captures.map(\.captureId))
-        return ids.isSubset(of: landmarkIds)
-      }.count
-      if shared < policy.minimumLandmarksPerFloorPair {
-        gaps.append(
-          .missingLandmarks(
-            lower: lower.label, upper: upper.label, have: shared,
-            need: policy.minimumLandmarksPerFloorPair))
-      }
-    }
     guard policy.manualControlsRequired else {
       let checks =
         controls.distances.count + controls.ceilingHeights.count + controls.openings.count
@@ -362,11 +405,49 @@ public enum ChecklistRules {
         : "Measured by the LiDAR scan \u{00B7} \(checks) tape or laser \(checks == 1 ? "check" : "checks")"
       return ChecklistItem(id: .minimumControls, passed: true, detail: detail, gaps: [])
     }
-    return item(
-      .minimumControls, gaps: gaps, passedDetail: "All minimum controls recorded", wording)
+    let floors = ControlsList.floors(captures.map { ControlsFloor(capture: $0) })
+    let gaps = ControlsList.gaps(floors: floors, controls: controls, policy: policy)
+    guard !gaps.isEmpty else {
+      return ChecklistItem(
+        id: .minimumControls, passed: true, detail: "All minimum controls recorded", gaps: [])
+    }
+    let showCapture = floors.count > 1
+    let showPair = floors.count > 2
+    var parts: [String] = []
+    var index = 0
+    while index < gaps.count {
+      // A floor with nothing recorded is one "Floor 2 set", not three gaps.
+      if case .missingDistance(let capture, .a) = gaps[index], index + 2 < gaps.count,
+        gaps[index + 1] == .missingDistance(capture: capture, axis: .b),
+        gaps[index + 2] == .missingCeilingHeight(capture: capture)
+      {
+        parts.append("\(capture) set")
+        index += 3
+        continue
+      }
+      parts.append(gaps[index].compactText(showCapture: showCapture, showPair: showPair))
+      index += 1
+    }
+    return ChecklistItem(
+      id: .minimumControls, passed: false, detail: parts.joined(separator: " \u{00B7} "),
+      gaps: gaps)
   }
 
-  // MARK: 5 Device, mode, date, operator
+  // MARK: 5 Compass reading (advisory)
+
+  /// Passes when every capture's compass is verified; otherwise ▲ with the per-capture words
+  /// and what the plans will say. Never blocks and carries no gaps.
+  private static func compassItem(_ entries: [CompassSummary.Entry]) -> ChecklistItem {
+    guard !entries.isEmpty else {
+      return ChecklistItem(
+        id: .compass, passed: false, detail: "No floor or area has been captured", gaps: [])
+    }
+    return ChecklistItem(
+      id: .compass, passed: CompassSummary.allVerified(entries),
+      detail: CompassSummary.detail(entries), gaps: [])
+  }
+
+  // MARK: 6 Device, mode, date, operator
 
   /// The capture mode is a required enum on every capture, so it cannot be missing; device,
   /// operator and the visit and capture dates can.

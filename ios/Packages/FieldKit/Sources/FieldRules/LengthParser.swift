@@ -98,6 +98,37 @@ public enum LengthParser {
       valueMm: try storedMillimetres(mm), unit: unit, enteredText: entered)
   }
 
+  /// A feet-and-inches text (any spelling `parse(_:unit: .ftIn)` accepts) split for the two
+  /// fields of the entry sheet when a measurement is edited: whole feet, and the inches left as
+  /// a terminating decimal. `36' 10 1/2"` → (36, "10.5"), `24' 8"` → (24, "8"), `1/16"` → (0,
+  /// "0.0625"), `96"` → (8, "0"). Throws `LengthParseError` as `parse` does.
+  public static func feetAndInches(_ text: String) throws -> (feet: Int, inches: String) {
+    let entered = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !entered.isEmpty else { throw LengthParseError.empty }
+    guard entered.count <= maximumTextLength else { throw LengthParseError.textTooLong }
+    let inches = try parseFeetInches(entered)
+    let perFoot = 12 * inches.denominator
+    let feet = inches.numerator / perFoot
+    let rest = Rational(inches.numerator - feet * perFoot, inches.denominator).reduced()
+    return (feet, try decimalText(rest))
+  }
+
+  /// A rational as a terminating decimal: `21/2` → `10.5`, `1/16` → `0.0625`, `0` → `0`. Tape
+  /// fractions and decimals always terminate; anything else throws `tooPrecise`.
+  static func decimalText(_ value: Rational) throws -> String {
+    let whole = value.numerator / value.denominator
+    var remainder = value.numerator % value.denominator
+    guard remainder != 0 else { return String(whole) }
+    var digits = ""
+    for _ in 0..<12 {
+      remainder *= 10
+      digits.append(String(remainder / value.denominator))
+      remainder %= value.denominator
+      if remainder == 0 { return "\(whole).\(digits)" }
+    }
+    throw LengthParseError.tooPrecise
+  }
+
   // MARK: Exact arithmetic
 
   /// Non-negative rational number with overflow-checked 64-bit arithmetic.

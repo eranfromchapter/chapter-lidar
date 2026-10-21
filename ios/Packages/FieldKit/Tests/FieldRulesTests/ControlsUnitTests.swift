@@ -110,27 +110,8 @@ final class ControlsUnitTests: XCTestCase {
     XCTAssertFalse(LengthParseError.tooPrecise.message.isEmpty)
   }
 
-  func testEntryDraftShowsBothUnitsAndErrors() {
-    var draft = MeasurementEntryDraft(text: "24' 8\"", unit: .ftIn)
-    XCTAssertEqual(draft.bothUnits, "7 518 mm \u{00B7} 24\u{2032} 8\u{2033}")
-    XCTAssertNil(draft.errorMessage)
-    draft.text = "36' 10 1/2\""
-    XCTAssertEqual(draft.bothUnits, "11 240 mm \u{00B7} 36\u{2032} 10\u{00BD}\u{2033}")
-    draft.text = "abc"
-    XCTAssertNil(draft.bothUnits)
-    XCTAssertNotNil(draft.errorMessage)
-    draft.text = ""
-    XCTAssertNil(draft.errorMessage)
-  }
-
-  func testFormatterShowsBothUnits() {
-    XCTAssertEqual(LengthFormatter.millimetres(2690), "2 690 mm")
-    XCTAssertEqual(LengthFormatter.millimetres(914.4), "914 mm")
-    XCTAssertEqual(LengthFormatter.feetInches(7518.4), "24\u{2032} 8\u{2033}")
-    XCTAssertEqual(LengthFormatter.feetInches(11239.5), "36\u{2032} 10\u{00BD}\u{2033}")
-    XCTAssertEqual(LengthFormatter.feetInches(1524), "5\u{2032} 0\u{2033}")
-    XCTAssertEqual(LengthFormatter.feetInches(1.5875), "0\u{2032} 0 1/16\u{2033}")
-  }
+  // The two-field entry draft is tested in MeasurementEntryDraftTests and the v2 number formats
+  // in LengthFormatterV2Tests.
 
   // MARK: Controls model and schema
 
@@ -285,11 +266,21 @@ final class ControlsUnitTests: XCTestCase {
         "landmark-stair-newel-post",
       ])
   }
-}
 
-extension ControlsUnitTests {
-  func testRangeText() {
-    XCTAssertEqual(LengthFormatter.millimetreRange(2690, 2740), "2 690 \u{2013} 2 740 mm")
-    XCTAssertEqual(LengthFormatter.millimetreRange(2690, 2690.2), "2 690 mm")
+  func testEveryEditReturnsTheIdItWroteTo() throws {
+    var editor = FieldControlsEditor(visitId: Fixtures.visitId)
+    XCTAssertEqual(
+      try editor.setCeilingHeight(
+        capture: Fixtures.floor1, room: "Kitchen", location: "By the window",
+        measurement: Fixtures.measurement("2690", .mm)),
+      "floor-1-ceiling-kitchen-by-the-window")
+    XCTAssertEqual(
+      try editor.setFloorToFloor(
+        lower: Fixtures.floor1, upper: Fixtures.floor2, location: "At the stair",
+        measurement: Fixtures.measurement("3061", .mm)),
+      "floor-to-floor-floor-1-floor-2-at-the-stair")
+    XCTAssertEqual(
+      try editor.setLandmark(label: "Newel post", captures: [Fixtures.floor1, Fixtures.floor2]),
+      "landmark-newel-post")
   }
 }
