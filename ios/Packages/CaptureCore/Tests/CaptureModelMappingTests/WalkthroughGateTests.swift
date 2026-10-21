@@ -7,7 +7,9 @@ import XCTest
 
 /// Only walk-throughs are split (floorplan plan, phase 3): every other capture, and a walk-through
 /// the splitter cannot split, maps exactly as before. The goldens in `Golden/` are the capture
-/// models of the mapper at commit cd97c36, before walk-through splitting.
+/// models of the mapper at commit cd97c36, before walk-through splitting; those of fixtures added
+/// later (contract v1.1: the compass broken fixture, legacy-1.0.0, sample-424) were written when
+/// the fixture was added.
 final class WalkthroughGateTests: XCTestCase {
   private static let goldenDirectory = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent().appendingPathComponent("Golden", isDirectory: true)
@@ -51,11 +53,13 @@ final class WalkthroughGateTests: XCTestCase {
     XCTAssertEqual(
       names,
       [
-        "box-room.floor-1.json", "broken.dimensions-3pct-off.floor-1.json", "broken.empty-file.floor-1.json",
+        "box-room.floor-1.json", "broken.compass-time-outside-scan.floor-1.json",
+        "broken.dimensions-3pct-off.floor-1.json", "broken.empty-file.floor-1.json",
         "broken.inches-as-metres.floor-1.json", "broken.las-bad-header.floor-1.json",
         "broken.missing-gltf-bin.floor-1.json", "broken.wrong-address.floor-1.json",
-        "broken.z-up-mesh.floor-1.json", "l-shaped-room.floor-1.json", "two-floor-house.floor-1.json",
-        "two-floor-house.floor-2.json", "two-room-apartment.floor-1.json",
+        "broken.z-up-mesh.floor-1.json", "l-shaped-room.floor-1.json", "legacy-1.0.0.floor-1.json",
+        "sample-424.floor-1.json", "two-floor-house.floor-1.json", "two-floor-house.floor-2.json",
+        "two-room-apartment.floor-1.json",
       ])
   }
 
