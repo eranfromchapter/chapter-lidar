@@ -162,8 +162,14 @@ public struct UploadSnapshot: Equatable, Sendable {
   /// The Station card: with "Registered" on Package status, without it on Verdict received.
   public func timeline(now: Date = Date(), timeZone: TimeZone = .current) -> StationTimeline {
     StationTimeline.make(
-      registeredAt: state.registeredAt, isConfirmed: isConfirmedByStation, station: station,
+      registeredAt: registeredAt, isConfirmed: isConfirmedByStation, station: station,
       verdict: verdict, includeRegistered: phase != .verdict, now: now, timeZone: timeZone)
+  }
+
+  /// When the station registered the package: recorded at the first session answer, else (a
+  /// state written before v2) the station's `createdAt` from the seal answer or the package.
+  public var registeredAt: UTCTimestamp? {
+    state.registeredAt ?? state.sealResult?.createdAt ?? station?.createdAt
   }
 
   /// The muted line under the fatal message of Upload stopped. `canReseal`: the visit's

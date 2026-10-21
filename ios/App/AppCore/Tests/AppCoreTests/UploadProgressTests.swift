@@ -228,6 +228,20 @@ final class UploadProgressTests: XCTestCase {
       "The package could not be sealed: a package needs at least one file. Nothing was uploaded.")
   }
 
+  /// A package confirmed by an app build before v2 has no `registeredAt` in its state: the seal
+  /// answer's `createdAt` says when the station registered it.
+  func testRegisteredFallsBackToTheSealAnswer() throws {
+    let fixture = try SealedFixture(in: base)
+    var state = confirmed(fixture)
+    state.registeredAt = nil
+    let snapshot = snapshot(fixture, state: state, activity: .confirmed)
+    XCTAssertEqual(snapshot.registeredAt, Make.time("2026-05-16T14:02:00Z"))
+    let registered = snapshot.timeline(now: Make.time("2026-05-16T15:00:00Z").date, timeZone: Make.utc)
+      .row(.registered)
+    XCTAssertEqual(registered?.state, .done)
+    XCTAssertEqual(registered?.detail, "14:02")
+  }
+
   func testSubtitleAndCaptions() throws {
     let fixture = try SealedFixture(in: base)
     let snapshot = snapshot(fixture, activity: .uploading)
