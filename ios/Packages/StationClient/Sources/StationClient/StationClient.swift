@@ -160,6 +160,21 @@ public struct StationClient: Sendable {
       as: ModelingDecision.self)
   }
 
+  // MARK: - next revision
+
+  /// `PUT /packages/{packageId}/next-revision` (putNextRevisionNotice): replaces the notice of
+  /// the sealed package `packageId` with what its next revision (`notice.revision`, the
+  /// package's revision + 1) changes so far. Best effort for the caller: 409
+  /// (`package_not_sealed`, `revision_exists`) and 422 (`revision_mismatch`) are thrown as usual.
+  @discardableResult
+  public func putNextRevisionNotice(packageId: UUID, _ notice: NextRevisionNoticeInput)
+    async throws -> NextRevisionNotice
+  {
+    try await call(
+      .putNextRevisionNotice, path: packagePath(packageId), body: try encode(notice),
+      as: NextRevisionNotice.self)
+  }
+
   // MARK: - plumbing
 
   private func packagePath(_ packageId: UUID) -> [String: String] {
