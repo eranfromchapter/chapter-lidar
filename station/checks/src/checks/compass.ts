@@ -37,6 +37,13 @@ export const COMPASS_EXPECTED = `a compass reading at scan start, true north, ac
 /** The capture record version written before the app read the compass. */
 const LEGACY_RECORD_VERSION: CaptureRecord["schemaVersion"] = "1.0.0";
 
+/**
+ * The info finding of a capture record 1.0.0 (Q-B, compass G4): the contract's no-reading phrase,
+ * which is the drawn sample's wording. No full stop, unlike the other messages: the checks table
+ * and the web row show it as drawn.
+ */
+const LEGACY_RECORD_MESSAGE = compassDetail({ kind: "not_verified", reason: "no_reading" });
+
 export interface CompassPolicy {
   /** Grade the captures of a capture record 1.0.0 too (Q-B); otherwise not applicable. */
   limitationForLegacyRecords: boolean;
@@ -108,7 +115,7 @@ export function compassCheck(policy: CompassPolicy): (ctx: CheckContext) => Chec
           finding({
             ruleId: "orientation.compass",
             severity: "info",
-            message: "No compass reading recorded; orientation not verified.",
+            message: LEGACY_RECORD_MESSAGE,
             filePath,
             measured: `capture record ${record.schemaVersion}, written before the app read the compass (${labels})`,
             nextAction: NO_ACTION,

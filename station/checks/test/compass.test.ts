@@ -42,6 +42,9 @@ import {
 const RULE = "orientation.compass";
 const index = readIndex();
 
+/** The info finding of a 1.0.0 record: the drawn sample's wording (compass G4), no full stop. */
+const LEGACY_MESSAGE = "No compass reading recorded; orientation not verified";
+
 function compassFindings(verdict: Verdict): Verdict["findings"] {
   return verdict.findings.filter((item) => item.ruleId === RULE);
 }
@@ -107,7 +110,7 @@ describe("compass findings of the generated fixtures", () => {
     findings: [
       {
         severity: "info",
-        message: "No compass reading recorded; orientation not verified.",
+        message: LEGACY_MESSAGE,
         measured: `capture record 1.0.0, written before the app read the compass (${labels})`,
       },
     ],
@@ -247,7 +250,7 @@ describe("compass findings of the generated fixtures", () => {
       assert.equal(compassStatus(verdict), "not_applicable", broken.defectId);
       assert.deepEqual(
         compassFindings(verdict).map((item) => [item.severity, item.message]),
-        [["info", "No compass reading recorded; orientation not verified."]],
+        [["info", LEGACY_MESSAGE]],
         broken.defectId,
       );
     }
@@ -387,7 +390,7 @@ describe("Q-B: capture records 1.0.0", () => {
         {
           ruleId: RULE,
           severity: "info",
-          message: "No compass reading recorded; orientation not verified.",
+          message: LEGACY_MESSAGE,
           filePath: pathOf(box, "capture_record"),
           measured: "capture record 1.0.0, written before the app read the compass (Floor 1)",
           nextAction: "None",

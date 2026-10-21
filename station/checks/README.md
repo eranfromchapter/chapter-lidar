@@ -54,6 +54,6 @@ scan's). The next action is None: a reading cannot be added to a finished scan, 
 lists no next action for it. A capture record 1.0.0 comes from an app that never read the compass
 (owner question Q-B): with `COMPASS_LIMITATION_FOR_LEGACY_RECORDS` false (the default) the check
 is not applicable with one info finding, "No compass reading recorded; orientation not
-verified.", and the outcome is unchanged; true grades its captures like 1.1.0 ones, which makes
-every package of an app before the compass Limited. No capture record: not applicable, no
-finding.
+verified" (the drawn sample's wording, without a full stop), and the outcome is unchanged; true
+grades its captures like 1.1.0 ones, which makes every package of an app before the compass
+Limited. No capture record: not applicable, no finding.
