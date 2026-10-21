@@ -64,6 +64,12 @@ public struct StationStatusCache: Codable, Equatable, Sendable {
   public var isSettled: Bool {
     verdict != nil && publication?.status.isFinal == true
   }
+
+  /// Still asked about at `now` (the background refresh): no verdict yet, or a publication not
+  /// final yet within `StationStatusRefresh.publicationFollowLimit` of the verdict.
+  public func isFollowed(at now: Date) -> Bool {
+    StationStatusRefresh.isFollowed(verdict: verdict, publication: publication, at: now)
+  }
 }
 
 public enum StationStatusCacheError: Error, Equatable, Sendable, CustomStringConvertible {
@@ -189,14 +195,31 @@ public struct VerdictNotification: Equatable, Sendable {
 
 /// The background refresh of phone-package §7 (`BGAppRefreshTask`
 /// `com.hellochapter.capture.verdict-refresh`): for every package on the phone the station
-/// confirmed but has not settled (no verdict yet, or a verdict whose publication is not final),
-/// ask the station, update the cache and collect the verdict notifications still to post.
+/// confirmed and still followed (no verdict yet, or a verdict whose publication is not final and
+/// at most `publicationFollowLimit` old), ask the station, update the cache and collect the
+/// verdict notifications still to post.
 public enum StationStatusRefresh {
   /// The task identifier, registered at launch and listed in Info.plist
   /// (`BGTaskSchedulerPermittedIdentifiers`).
   public static let taskIdentifier = "com.hellochapter.capture.verdict-refresh"
   /// Earliest start of the next refresh.
   public static let interval: TimeInterval = 15 * 60
+  /// How long after the verdict a publication that is not final is still followed (§7: "at
+  /// most 30 minutes after the verdict"), in the background and by `UploadCoordinator`.
+  public static let publicationFollowLimit: TimeInterval = 30 * 60
+
+  /// The station still has something to tell about a package at `now`: its verdict, or the
+  /// publication of a verdict at most `publicationFollowLimit` old (by the station's
+  /// `evaluatedAt`). A publication that never ends (the publish worker or the HUB is down, or a
+  /// station that reports none) is not asked about for ever; the status the phone last saw stays
+  /// in the cache.
+  public static func isFollowed(
+    verdict: VerdictStatus?, publication: StationPackageInfo.Publication?, at now: Date
+  ) -> Bool {
+    guard let verdict else { return true }
+    guard publication?.status.isFinal != true else { return false }
+    return now.timeIntervalSince(verdict.evaluatedAt.date) < publicationFollowLimit
+  }
 
   public struct Item: Sendable {
     public let package: SealedPackage
@@ -208,22 +231,22 @@ public enum StationStatusRefresh {
   public struct Outcome: Sendable {
     /// Notifications of verdicts not notified yet (post them, then `markNotified`).
     public var notifications: [VerdictNotification] = []
-    /// Some package is still not settled: schedule the next refresh.
+    /// Some package is still followed: schedule the next refresh.
     public var stillFollowing = false
     /// Packages the station could not be asked about (offline, error); kept as they were.
     public var failed = 0
   }
 
   /// Sealed packages on the phone that the station confirmed (their upload state says so) and
-  /// that are not settled; superseded packages are left out.
-  public static func followed(visitsRoot: URL) -> [Item] {
+  /// that are still followed at `now` (`isFollowed`); superseded packages are left out.
+  public static func followed(visitsRoot: URL, now: Date = Date()) -> [Item] {
     SealedPackageFolders.all(visitsRoot: visitsRoot).compactMap { folder, package in
       let state = try? UploadStateStore(url: UploadStateStore.defaultURL(forPackageAt: folder))
         .load()
       guard let state, state.isConfirmedByStation, state.supersededBy == nil else { return nil }
       let store = StationStatusStore(packageRoot: folder)
       let cache = try? store.load()
-      guard cache?.isSettled != true else { return nil }
+      guard cache?.isFollowed(at: now) != false else { return nil }
       return Item(
         package: package, store: store, cache: cache, summary: SealedPackageSummary.make(package))
     }
@@ -254,7 +277,7 @@ public enum StationStatusRefresh {
               packageId: item.package.packageId, verdict: known,
               projectTitle: item.summary.projectTitle, revision: item.summary.revision))
         }
-        if !cache.isSettled { outcome.stillFollowing = true }
+        if cache.isFollowed(at: now()) { outcome.stillFollowing = true }
       } catch {
         outcome.failed += 1
         outcome.stillFollowing = true

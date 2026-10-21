@@ -9,8 +9,9 @@
 
   /// The package screens of artboard 2f (`canvas/app-package-v2.dc.html`; phone-package §13.4),
   /// drawn by the phone's one snapshot harness (critique R-18d): Package ready, Uploading paused,
-  /// Uploaded, Upload stopped, Verdict received (Limited, Ready, Blocked, publishing), Revision 2
-  /// and Revision 2 with nothing changed, and Package ready at the accessibility text size.
+  /// Uploaded, Upload stopped, Verdict received (Limited, Ready, Blocked, publishing, without the
+  /// HUB link), Revision 2 and Revision 2 with nothing changed, and four screens at the
+  /// accessibility text size (the long title wraps, the bar caption is whole).
   ///
   /// Hosted by ChapterUI's empty host app (target `PackageScreensSnapshotTests`, scheme
   /// `ChapterUISnapshots` in ios/project.yml), which draws the system chrome (back pill, bar
@@ -120,10 +121,11 @@
     // MARK: Screen C · Verdict received
 
     private func verdict(
-      _ outcome: VerdictOutcome, published: Bool = true, name: String,
+      _ outcome: VerdictOutcome, published: Bool = true, hubLink: Bool = true, name: String,
       contentSize: UIContentSizeCategory = .large
     ) throws {
-      let board = try Board.verdict(outcome, published: published, in: folder)
+      var board = try Board.verdict(outcome, published: published, in: folder)
+      if !hubLink { board.station?.links?.hub = nil }
       var options = Board.statusOptions
       options.now = Board.time("2026-05-20T09:00:00Z").date
       assertChapterSnapshot(
@@ -142,6 +144,10 @@
     func testVerdictBlocked() throws { try verdict(.blocked, name: "verdict-blocked") }
     func testVerdictWhilePublishing() throws {
       try verdict(.limited, published: false, name: "verdict-publishing")
+    }
+    /// A station without the HUB deal URL: no "Open in the HUB" (critique Q-C).
+    func testVerdictWithoutTheHubLink() throws {
+      try verdict(.limited, hubLink: false, name: "verdict-no-hub-link")
     }
 
     // MARK: Screen D · Revision n

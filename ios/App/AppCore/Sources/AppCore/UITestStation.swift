@@ -137,6 +137,8 @@
     public static let stationURL = URL(string: "https://uitest-station.invalid")!
     public static let blobHost = "https://uitest-blob.invalid"
     public static let reviewHost = "https://uitest-review.invalid"
+    /// The HUB's deal pages, as a station with `HUB_WEB_DEAL_URL_TEMPLATE` sends them.
+    public static let hubHost = "https://uitest-hub.invalid"
     public static let project = HubProject(
       dealId: "UITEST-0001", projectName: "UI test visit",
       address: HubProject.Address(formatted: "618 Valley Street, Test Town"))
@@ -427,7 +429,9 @@
         },
         manifest: stored.manifest, verdict: state.verdict, checks: state.checks,
         publication: state.publication,
-        links: PackageLinks(review: URL(string: "\(Self.reviewHost)/packages/\(key)")!),
+        links: PackageLinks(
+          review: URL(string: "\(Self.reviewHost)/packages/\(key)")!,
+          hub: URL(string: "\(Self.hubHost)/deals/")?.appendingPathComponent(request.dealId)),
         nextRevision: lock.withLock { notices[key] })
     }
 

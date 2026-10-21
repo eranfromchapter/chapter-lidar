@@ -133,9 +133,72 @@ final class StationStatusCacheTests: XCTestCase {
     try store.markNotified(verdict.verdictId)
 
     let second = await StationStatusRefresh.refresh(
-      StationStatusRefresh.followed(visitsRoot: base), source: source, now: { Make.t1402.date })
+      StationStatusRefresh.followed(visitsRoot: base, now: Make.t1402.date), source: source,
+      now: { Make.t1402.date })
+    XCTAssertEqual(source.calls.package, 2, "still followed: the publication is not final")
     XCTAssertTrue(second.notifications.isEmpty, "never twice for one verdict")
     XCTAssertEqual(source.calls.verdict, 1, "a known verdict is not fetched again")
+  }
+
+  /// As in the foreground (§7), a publication is followed at most 30 minutes after the verdict:
+  /// one that stays pending or publishing, or a station that reports none, is not asked about
+  /// every 15 minutes for ever.
+  func testAPublicationThatNeverEndsIsFollowedForHalfAnHourAfterTheVerdict() throws {
+    let verdict = VerdictStatus(Make.verdict(.limited, limitations: ["a"]))  // 14:02
+    let limit = StationStatusRefresh.publicationFollowLimit
+    XCTAssertEqual(limit, 30 * 60)
+    let verdictTime = Make.t1402.date
+    for publication: StationPackageInfo.Publication? in [
+      .init(status: .pending), .init(status: .publishing), nil,
+    ] {
+      XCTAssertTrue(
+        StationStatusRefresh.isFollowed(
+          verdict: verdict, publication: publication, at: verdictTime.addingTimeInterval(limit - 1)))
+      XCTAssertFalse(
+        StationStatusRefresh.isFollowed(
+          verdict: verdict, publication: publication, at: verdictTime.addingTimeInterval(limit)))
+    }
+    for status: StationPackageInfo.Publication.Status in [.published, .publishFailed] {
+      XCTAssertFalse(
+        StationStatusRefresh.isFollowed(
+          verdict: verdict, publication: .init(status: status), at: verdictTime),
+        "final")
+    }
+    XCTAssertTrue(
+      StationStatusRefresh.isFollowed(
+        verdict: nil, publication: nil, at: verdictTime.addingTimeInterval(30 * 24 * 3600)),
+      "the verdict itself is waited for (the station retries its checks)")
+
+    // The packages followed on the phone.
+    let fixture = try SealedFixture(in: base)
+    try confirm(fixture.sealed)
+    try StationStatusStore(packageRoot: fixture.sealed.root).record(
+      packageId: fixture.sealed.packageId,
+      station: Make.station(.verdictReady, publication: .init(status: .publishing), verdictId: verdict.verdictId),
+      verdict: verdict, at: verdictTime)
+    XCTAssertEqual(
+      StationStatusRefresh.followed(visitsRoot: base, now: verdictTime.addingTimeInterval(limit - 60))
+        .count, 1)
+    XCTAssertTrue(
+      StationStatusRefresh.followed(visitsRoot: base, now: verdictTime.addingTimeInterval(limit))
+        .isEmpty)
+  }
+
+  /// A refresh past the limit still records the status and notifies the verdict, then stops.
+  func testARefreshPastTheLimitNotifiesAndStopsFollowing() async throws {
+    let fixture = try SealedFixture(in: base)
+    try confirm(fixture.sealed)
+    let verdict = VerdictStatus(Make.verdict(.ready))  // 14:02
+    let source = ScriptedStatusSource(
+      [.success(Make.station(.verdictReady, publication: .init(status: .pending), verdictId: verdict.verdictId))],
+      verdicts: [verdict])
+    let late = Make.t1402.date.addingTimeInterval(2 * 3600)
+    let outcome = await StationStatusRefresh.refresh(
+      StationStatusRefresh.followed(visitsRoot: base, now: late), source: source, now: { late })
+    XCTAssertEqual(outcome.notifications.map(\.title), ["Verdict: Ready"])
+    XCTAssertFalse(outcome.stillFollowing, "no next refresh for a publication 2 hours late")
+    XCTAssertEqual(
+      try StationStatusStore(packageRoot: fixture.sealed.root).load()?.publication?.status, .pending)
   }
 
   func testARefreshThatCannotReachTheStationKeepsFollowing() async throws {

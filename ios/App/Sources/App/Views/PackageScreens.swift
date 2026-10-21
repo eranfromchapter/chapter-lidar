@@ -2,6 +2,7 @@ import AppCore
 import CaptureContract
 import ChapterUI
 import SwiftUI
+import UIKit
 
 // The package screens of design v2 (artboard 2f, build spec phone-package §3–§6): Package ready,
 // Package status (Uploading, Paused, Uploaded, Upload stopped), Verdict received and Revision n.
@@ -90,9 +91,7 @@ struct PackageReadyView: View {
       .padding(.bottom, ChapterTheme.Metric.sectionGap)
       .chapterContentWidth()
     }
-    .navigationTitle("Package ready")
-    .navigationBarTitleDisplayMode(.large)
-    .chapterNavigationCaption("Step 3 of 3")
+    .packageHeader(title: "Package ready", caption: "Step 3 of 3")
     .chapterBackChevronOnly()
     .navigationBarBackButtonHidden(state.isSealing)
     .chapterScreenBackground()
@@ -217,6 +216,98 @@ private struct ExportSubRow: View {
     .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
     .accessibilityElement(children: .combine)
     .accessibilityIdentifier("package.floor.\(areaKey).\(row.kind.rawValue)")
+  }
+}
+
+extension View {
+  /// The bar of a package screen: the large title and the right caption (critique R-18c), with
+  /// what the system bar does not do on its own (phone-package §2.2, §13.4):
+  /// - a title too long for one line wraps to two (tail truncation after that), from iOS 26 on
+  ///   (`ToolbarItemPlacement.largeTitle`); a title that fits keeps the system large title, as
+  ///   drawn. Earlier systems truncate it on one line.
+  /// - the caption keeps its whole width when the bar has room ("Revision 1", not "Re…": the bar
+  ///   keeps room for the inline title, which a large title hides), and is cut only where the back
+  ///   button starts.
+  fileprivate func packageHeader(title: String, caption: String) -> some View {
+    modifier(PackageHeader(title: title, caption: caption))
+  }
+}
+
+private struct PackageHeader: ViewModifier {
+  let title: String
+  let caption: String
+  /// The screen's width, once laid out.
+  @State private var width: CGFloat = 0
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+  /// The system back button (the 44 pt pill on iOS 26) and the gap after it.
+  private static let backWidth: CGFloat = 44 + 12
+  /// The caption's room before the screen is measured.
+  private static let unmeasuredCaptionWidth: CGFloat = 160
+
+  func body(content: Content) -> some View {
+    content
+      .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+      .navigationTitle(title)
+      .navigationBarTitleDisplayMode(.large)
+      .toolbar {
+        if #available(iOS 26.0, *) {
+          if !titleFitsOneLine {
+            ToolbarItem(placement: .largeTitle) {
+              Text(title)
+                .chapterTextStyle(.largeTitle)
+                .foregroundStyle(ChapterTheme.Color.ink)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityAddTraits(.isHeader)
+            }
+          }
+        }
+        PlainToolbarItem(placement: .topBarTrailing) {
+          UpToWidth(maxWidth: captionWidth).callAsFunction {
+            Text(caption)
+              .chapterTextStyle(.footnote)
+              .foregroundStyle(ChapterTheme.Color.muted)
+              .lineLimit(1)
+          }
+        }
+      }
+  }
+
+  /// The title in the large-title font fits between the bar's margins (16 pt each side).
+  private var titleFitsOneLine: Bool {
+    guard width > 0 else { return true }
+    let traits = UITraitCollection(
+      preferredContentSizeCategory: UIContentSizeCategory(dynamicTypeSize))
+    let font = ChapterTheme.TextStyle.largeTitle.uiFont(compatibleWith: traits)
+    let needed = (title as NSString).size(withAttributes: [.font: font]).width
+    return needed.rounded(.up) <= width - 2 * ChapterTheme.Metric.screenPadding
+  }
+
+  private var captionWidth: CGFloat {
+    guard width > 0 else { return Self.unmeasuredCaptionWidth }
+    return max(0, width - 2 * ChapterTheme.Metric.screenPadding - Self.backWidth)
+  }
+}
+
+/// Lays its content out at its own width up to `maxWidth`, whatever width is proposed (a bar
+/// item is proposed what the bar has left, which can be far less than it has room for).
+private struct UpToWidth: Layout {
+  let maxWidth: CGFloat
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    guard let content = subviews.first else { return .zero }
+    let width = min(content.sizeThatFits(.unspecified).width, maxWidth)
+    return CGSize(
+      width: width, height: content.sizeThatFits(ProposedViewSize(width: width, height: nil)).height)
+  }
+
+  func placeSubviews(
+    in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+  ) {
+    subviews.first?.place(
+      at: bounds.origin, proposal: ProposedViewSize(width: bounds.width, height: bounds.height))
   }
 }
 
@@ -356,13 +447,20 @@ struct PackageStatusActions {
   var reseal: (() -> Void)?
   /// "Add to this capture" or "Continue revision n".
   var addToCapture: (() -> Void)?
-  /// "Open in the HUB", with the station's link (opened in Safari).
+  /// "Open in the HUB", with the deal's HUB link (opened in Safari). Shown only when the station
+  /// sends `links.hub`.
   var openInHub: ((URL) -> Void)?
 }
 
 /// Screen B (§4) for one package; once the verdict is known, Screen C (§5) on the same route.
+///
+/// The route is the package (`PackageStatusView(packageId:)`, the entry of a notification tap and
+/// of the Captures home rows): the app passes the snapshot of that package's coordinator, or its
+/// cached status, as it changes. A snapshot of another package is never drawn under this route
+/// (the screen waits for its own), so a late update of the previous package cannot show here.
 struct PackageStatusView: View {
   let packageId: LowercaseUUID
+  /// The package's latest snapshot; nil until the app has one.
   let snapshot: UploadSnapshot?
   let options: PackageStatusOptions
   let actions: PackageStatusActions
@@ -380,9 +478,9 @@ struct PackageStatusView: View {
   }
 
   var body: some View {
-    if let snapshot, snapshot.phase == .verdict {
+    if let snapshot = shown, snapshot.phase == .verdict {
       VerdictView(snapshot: snapshot, options: options, actions: actions)
-    } else if let snapshot {
+    } else if let snapshot = shown {
       status(snapshot)
     } else {
       ProgressView()
@@ -398,7 +496,12 @@ struct PackageStatusView: View {
       VStack(alignment: .leading, spacing: 14) {
         PackageSubtitle(snapshot.subtitle)
           .padding(.top, ChapterTheme.Metric.subtitleTop)
-        ProgressCard(snapshot: snapshot, options: options)
+        ProgressCard(
+          snapshot: snapshot,
+          stoppedNote: snapshot.stoppedNote(
+            canRetry: actions.retry != nil, canReseal: canReseal,
+            scansOnPhone: options.canReseal),
+          resealError: options.resealError)
         ChapterSection(header: "Files") {
           ForEach(snapshot.progress.rows, id: \.category) { row in
             CategoryRow(row: row)
@@ -416,9 +519,7 @@ struct PackageStatusView: View {
       .padding(.bottom, ChapterTheme.Metric.sectionGap)
       .chapterContentWidth()
     }
-    .navigationTitle(snapshot.title)
-    .navigationBarTitleDisplayMode(.large)
-    .chapterNavigationCaption(snapshot.navigationCaption)
+    .packageHeader(title: snapshot.title, caption: snapshot.navigationCaption)
     .chapterBackChevronOnly()
     .chapterScreenBackground()
     .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -449,6 +550,11 @@ struct PackageStatusView: View {
     }
   }
 
+  /// The snapshot, when it is this route's package.
+  private var shown: UploadSnapshot? {
+    snapshot?.packageId == packageId ? snapshot : nil
+  }
+
   /// Re-seal needs the visit's originals on the phone and an action that does it.
   private var canReseal: Bool { options.canReseal && actions.reseal != nil }
 }
@@ -456,7 +562,10 @@ struct PackageStatusView: View {
 /// The progress card: bytes and percent, the 8 pt bar and the state's caption.
 private struct ProgressCard: View {
   let snapshot: UploadSnapshot
-  let options: PackageStatusOptions
+  /// Upload stopped: the muted line, naming the buttons the screen shows.
+  let stoppedNote: String
+  /// The re-seal failed.
+  let resealError: String?
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
@@ -474,8 +583,8 @@ private struct ProgressCard: View {
         fraction: snapshot.progress.fraction, height: ChapterTheme.Metric.progressBarHeightLarge)
       if case .stopped(let message) = snapshot.phase {
         ErrorLine(text: message)
-        caption(snapshot.stoppedNote(canReseal: options.canReseal))
-        if let error = options.resealError {
+        caption(stoppedNote)
+        if let error = resealError {
           ErrorLine(text: error)
         }
       } else {
@@ -626,9 +735,7 @@ struct VerdictView: View {
       .padding(.bottom, ChapterTheme.Metric.sectionGap)
       .chapterContentWidth()
     }
-    .navigationTitle(snapshot.title)
-    .navigationBarTitleDisplayMode(.large)
-    .chapterNavigationCaption(snapshot.navigationCaption)
+    .packageHeader(title: snapshot.title, caption: snapshot.navigationCaption)
     .chapterBackChevronOnly()
     .chapterScreenBackground()
     .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -660,7 +767,8 @@ struct VerdictView: View {
     }
   }
 
-  /// The station's HUB page, else its review page (Q2); nil without a link or an action.
+  /// The deal's HUB page; nil (no button) until the station has one configured (critique Q-C),
+  /// or without an action.
   private var hubLink: URL? {
     actions.openInHub == nil ? nil : snapshot.station?.links?.openInHub
   }
@@ -835,9 +943,7 @@ struct RevisionReviewView: View {
       .padding(.bottom, ChapterTheme.Metric.sectionGap)
       .chapterContentWidth()
     }
-    .navigationTitle(changes.title)
-    .navigationBarTitleDisplayMode(.large)
-    .chapterNavigationCaption(state.projectTitle)
+    .packageHeader(title: changes.title, caption: state.projectTitle)
     .chapterBackChevronOnly()
     .navigationBarBackButtonHidden(state.isSealing)
     .chapterScreenBackground()

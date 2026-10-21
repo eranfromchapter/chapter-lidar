@@ -97,9 +97,10 @@ public struct StationPackageInfo: Codable, Equatable, Sendable {
       self.hub = hub
     }
 
-    /// What "Open in the HUB" opens: the HUB page when the station has one, else the review page
-    /// (phone-package Q2).
-    public var openInHub: URL? { URL(string: hub ?? review) }
+    /// What "Open in the HUB" opens: the HUB page of the deal, only when the station has one
+    /// configured. Without it the button is hidden (critique Q-C, over phone-package Q2's fallback
+    /// to the review page, which is not the HUB).
+    public var openInHub: URL? { hub.flatMap { URL(string: $0) } }
   }
 
   public var stage: StationPackageStage

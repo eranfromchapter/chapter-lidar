@@ -100,6 +100,36 @@ final class UploadProgressTests: XCTestCase {
     XCTAssertEqual(summary.rows[0].status, .confirmed, "carried over and verified")
   }
 
+  /// Revision n: a category whose carried-over files the station confirmed at once (uploaded,
+  /// then verified) and whose own new file has not started is Waiting, not "Uploading · 0%".
+  func testACategoryWithCarriedOverFilesWaitsForItsOwnFiles() throws {
+    let (fixture, uploading) = try midUpload()
+    var state = uploading
+    let roles = Dictionary(
+      fixture.sealed.manifest.files.map { ($0.path, $0.role) }, uniquingKeysWith: { a, _ in a })
+    let plans = state.files.indices.filter {
+      UploadProgressSummary.Category.of(roles[state.files[$0].path]!) == .plansAndRecord
+    }
+    XCTAssertGreaterThan(plans.count, 2)
+    // One new file of its own; the others carried over, one of them still being confirmed.
+    let new = plans[0]
+    state.files[new].phase = .pending
+    state.carriedOver = Set(plans.dropFirst().map { state.files[$0].path })
+    state.files[plans[1]].phase = .uploaded
+    let bytes = state.files[new].bytes
+    let block = Int(bytes / 4)
+    func plansRow() -> UploadProgressSummary.Status {
+      UploadProgressSummary.make(state: state, manifest: fixture.sealed.manifest, blockSize: block)
+        .rows[0].status
+    }
+    XCTAssertEqual(plansRow(), .waiting)
+
+    // Its own file starts: the percent is of its own bytes only.
+    state.files[new].stagedBlockIds = ["0"]
+    XCTAssertEqual(
+      plansRow(), .uploading(percent: UploadProgressSummary.percent(Int64(block), of: bytes)))
+  }
+
   func testStoppedIsShownOnTheFileItStoppedOnElseTheFirstOpenCategory() throws {
     let (fixture, state) = try midUpload()
     let photo = try XCTUnwrap(fixture.sealed.manifest.files.first { $0.role == .photo }?.path)
@@ -170,6 +200,28 @@ final class UploadProgressTests: XCTestCase {
     return state
   }
 
+  /// When the app schedules the background refresh (`VerdictRefresh.scheduleIfWaiting`).
+  func testTheBackgroundRefreshFollowsUntilThePublicationOrHalfAnHourAfterTheVerdict() throws {
+    let fixture = try SealedFixture(in: base)
+    let verdict = VerdictStatus(Make.verdict(.ready))  // evaluated 14:02
+    let publishing = Make.station(
+      .verdictReady, publication: .init(status: .publishing), verdictId: verdict.verdictId)
+    let at = Make.t1402.date
+    XCTAssertFalse(snapshot(fixture, activity: .uploading).isFollowedInBackground(at: at))
+    XCTAssertTrue(
+      snapshot(fixture, state: confirmed(fixture), activity: .confirmed)
+        .isFollowedInBackground(at: at.addingTimeInterval(24 * 3600)), "no verdict yet")
+    let waiting = snapshot(
+      fixture, state: confirmed(fixture), activity: .confirmed, station: publishing,
+      verdict: verdict)
+    XCTAssertTrue(waiting.isFollowedInBackground(at: at.addingTimeInterval(29 * 60)))
+    XCTAssertFalse(waiting.isFollowedInBackground(at: at.addingTimeInterval(30 * 60)))
+    var superseded = confirmed(fixture)
+    superseded.supersededBy = LowercaseUUID()
+    XCTAssertFalse(
+      snapshot(fixture, state: superseded, activity: .confirmed).isFollowedInBackground(at: at))
+  }
+
   func testTitlesAndCaptions() throws {
     let fixture = try SealedFixture(in: base)
     let uploading = snapshot(fixture, activity: .uploading)
@@ -199,13 +251,23 @@ final class UploadProgressTests: XCTestCase {
     XCTAssertEqual(stopped.title, "Upload stopped")
     XCTAssertEqual(stopped.caption, "The station refused the upload (409 package_conflict).")
     XCTAssertEqual(
-      stopped.stoppedNote(canReseal: true),
+      stopped.stoppedNote(canRetry: true, canReseal: true),
       "Nothing was deleted. Try again, or re-seal to upload the files as they are on this phone "
         + "now as revision 2. Revision 1 stays on this phone.")
     XCTAssertEqual(
-      stopped.stoppedNote(canReseal: false),
+      stopped.stoppedNote(canRetry: true, canReseal: false, scansOnPhone: false),
       "Nothing was deleted. Try again. This phone no longer has the scans to re-seal; start a new "
         + "capture.")
+    // The line never names a button the screen does not show.
+    XCTAssertEqual(stopped.stoppedNote(canRetry: true, canReseal: false), "Nothing was deleted. Try again.")
+    XCTAssertEqual(
+      stopped.stoppedNote(canRetry: false, canReseal: true),
+      "Nothing was deleted. Re-seal to upload the files as they are on this phone now as revision "
+        + "2. Revision 1 stays on this phone.")
+    XCTAssertEqual(stopped.stoppedNote(canRetry: false, canReseal: false), "Nothing was deleted.")
+    XCTAssertEqual(
+      stopped.stoppedNote(canRetry: false, canReseal: true, scansOnPhone: false),
+      "Nothing was deleted. This phone no longer has the scans to re-seal; start a new capture.")
     XCTAssertEqual(stopped.resealTitle, "Re-seal as revision 2")
     XCTAssertEqual(stopped.resealAlertTitle, "Re-seal as revision 2?")
     XCTAssertEqual(

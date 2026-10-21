@@ -2,8 +2,8 @@ import XCTest
 
 /// Replays the bundled box-room capture through every screen of the frozen design:
 /// capture record -> scan (replay) -> photos -> controls -> checklist -> package ready ->
-/// uploading -> station status, checks queued. Uses the Debug-only stub
-/// station. On the way the room is renamed twice, from the viewfinder ("Rooms") and from the
+/// uploading -> station status, checks queued -> the scan's Floorplan (from "My scans"). Uses the
+/// Debug-only stub station. On the way the room is renamed twice, from the viewfinder ("Rooms") and from the
 /// checklist ("Rename rooms"), and the photo (and the ceiling height measured in it) follows the
 /// name.
 final class ReplayFlowUITests: XCTestCase {
@@ -169,8 +169,8 @@ final class ReplayFlowUITests: XCTestCase {
     attachScreenshot("10 Checklist after renaming again")
     tap(button("Finish capture"))
 
-    // Package ready (phone-package §3, §13.3 test 1): the real file list, no phone report. (The
-    // scan's Floorplan is reviewed from the Capture overview's floor rows in design v2.)
+    // Package ready (phone-package §3, §13.3 test 1): the real file list, no phone report. (Its
+    // floor rows list the files; the scan's Floorplan is reviewed below, from "My scans".)
     XCTAssertTrue(app.staticTexts["Package ready"].waitForExistence(timeout: 30))
     XCTAssertTrue(app.staticTexts["Step 3 of 3"].exists)
     let floor = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'package.floor.'"))
@@ -207,5 +207,28 @@ final class ReplayFlowUITests: XCTestCase {
     XCTAssertEqual(
       app.descendants(matching: .any)["station.published"].label, "Published to the HUB, not yet")
     attachScreenshot("12 Uploaded")
+
+    // The scan's Floorplan, its units and Download (PDF and PNG). Package ready no longer opens
+    // the scan, so until the Capture overview's floor rows do, it is opened from "My scans" on
+    // the next visit's New capture.
+    tap(app.buttons["package.newCapture"])
+    XCTAssertTrue(app.staticTexts["New capture"].waitForExistence(timeout: 20))
+    tap(app.buttons["account.myScans"])
+    tap(button("Floor 1"))
+    let page = app.descendants(matching: .any)["floorplan.page"]
+    XCTAssertTrue(page.waitForExistence(timeout: 30), "floor plan page")
+    let download = app.descendants(matching: .any)["floorplan.download"]
+    waitForLabel(download, "Download floor plan, PDF and PNG")
+    attachScreenshot("13 Floorplan")
+    let units = app.buttons["floorplan.units"]
+    XCTAssertTrue(units.waitForExistence(timeout: 10))
+    XCTAssertEqual(units.label, "Units, feet and inches")
+    units.tap()
+    tap(app.buttons["Metric (m)"])
+    waitForLabel(units, "Units, metres")
+    waitForLabel(download, "Download floor plan, PDF and PNG")
+    attachScreenshot("14 Floorplan, metric")
+    XCTAssertTrue(page.exists)
+    XCTAssertTrue(app.buttons["scan.view3D"].exists)
   }
 }

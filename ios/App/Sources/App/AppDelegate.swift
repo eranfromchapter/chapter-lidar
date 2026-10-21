@@ -99,7 +99,8 @@ final class VerdictNotifier: Sendable {
 
 /// The background refresh of phone-package §7: `BGAppRefreshTask`
 /// `com.hellochapter.capture.verdict-refresh`, registered at launch, scheduled (earliest 15 min)
-/// while a package the station confirmed has no verdict or no final publication. Each run asks
+/// while a package the station confirmed has no verdict, or no final publication within 30
+/// minutes of the verdict (`StationStatusRefresh.isFollowed`). Each run asks
 /// the station about those packages (`StationStatusRefresh`), updates their status caches, posts
 /// the verdict notifications and schedules the next run while something is still waiting.
 final class VerdictRefresh: @unchecked Sendable {
@@ -143,7 +144,8 @@ final class VerdictRefresh: @unchecked Sendable {
   }
 
   /// Asks iOS for a run in 15 minutes or later. Call when a package is confirmed by the station
-  /// and not settled (`UploadSnapshot`), and after each run that still waits.
+  /// and still followed (`UploadSnapshot.isFollowedInBackground`), and after each run that still
+  /// waits.
   func schedule() {
     guard Self.isPermitted else { return }
     let request = BGAppRefreshTaskRequest(identifier: StationStatusRefresh.taskIdentifier)
@@ -151,12 +153,10 @@ final class VerdictRefresh: @unchecked Sendable {
     try? BGTaskScheduler.shared.submit(request)
   }
 
-  /// Schedules a run when `snapshot` is a package the station confirmed that has not settled.
+  /// Schedules a run when `snapshot` is a package the station confirmed whose verdict, or whose
+  /// publication within 30 minutes of the verdict, is still to come.
   func scheduleIfWaiting(_ snapshot: UploadSnapshot) {
-    guard snapshot.isConfirmedByStation, !snapshot.isSuperseded else { return }
-    if snapshot.verdict == nil || snapshot.station?.publication?.status.isFinal != true {
-      schedule()
-    }
+    if snapshot.isFollowedInBackground() { schedule() }
   }
 
   /// One refresh of every followed package; true while something still waits.

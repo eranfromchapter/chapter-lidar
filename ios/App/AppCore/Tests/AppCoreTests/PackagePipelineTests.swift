@@ -191,6 +191,10 @@ final class PackagePipelineTests: XCTestCase {
     XCTAssertEqual(cache.stage, .checksQueued)
     XCTAssertEqual(
       cache.links?.review, "https://uitest-review.invalid/packages/\(sealed.packageId.rawValue)")
+    XCTAssertEqual(
+      cache.links?.openInHub,
+      URL(string: "https://uitest-hub.invalid/deals/\(visit.record.hub.dealId)"),
+      "the stub station has the HUB deal URL configured")
 
     // Originals are untouched, and the sealed package still matches its manifest.
     XCTAssertEqual(try visit.originalDigests(), before)

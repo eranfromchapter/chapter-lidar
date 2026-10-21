@@ -543,12 +543,15 @@ public struct UploadProgressSummary: Equatable, Sendable {
       if files.allSatisfy({ $0.phase == .verified }) {
         return Row(category: category, status: .confirmed)
       }
-      let started = files.contains {
+      // A later revision: the files the station carried over are confirmed at once and say
+      // nothing about this package's own upload, so "started" and the percent count only its
+      // own files.
+      let own = files.filter { !state.carriedOver.contains($0.path) }
+      let counted = own.isEmpty ? files : own
+      let started = counted.contains {
         $0.phase != .pending || !$0.stagedBlockIds.isEmpty || $0.lastCheck != nil
       }
       guard started else { return Row(category: category, status: .waiting) }
-      let own = files.filter { !state.carriedOver.contains($0.path) }
-      let counted = own.isEmpty ? files : own
       return Row(
         category: category,
         status: .uploading(

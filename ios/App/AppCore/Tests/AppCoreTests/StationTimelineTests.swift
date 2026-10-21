@@ -210,6 +210,17 @@ final class VerdictStatusTests: XCTestCase {
       "Ready for BIM model of the ground floor. Details: spatial report in the HUB.")
   }
 
+  /// "Open in the HUB" opens the deal's HUB page, and is hidden until the station has one
+  /// (critique Q-C): never the review page under the HUB's name.
+  func testOpenInTheHubNeedsTheHubLink() {
+    let review = "https://review.test/packages/1"
+    XCTAssertNil(StationPackageInfo.Links(review: review).openInHub)
+    XCTAssertNil(Make.station(.verdictReady).links?.openInHub, "a station without the HUB URL")
+    XCTAssertEqual(
+      StationPackageInfo.Links(review: review, hub: "https://hub.test/deals/4821").openInHub,
+      URL(string: "https://hub.test/deals/4821"))
+  }
+
   func testTheNotificationText() {
     let status = VerdictStatus(Make.verdict(.limited))
     let packageId = LowercaseUUID()

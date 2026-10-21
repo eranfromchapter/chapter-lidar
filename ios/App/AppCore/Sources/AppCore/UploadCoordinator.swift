@@ -159,6 +159,14 @@ public struct UploadSnapshot: Equatable, Sendable {
   /// The station published the revision to the HUB.
   public var isPublished: Bool { station?.publication?.status == .published }
 
+  /// The background refresh still asks the station about this package at `now`: confirmed, not
+  /// superseded, and its verdict or publication still to come (`StationStatusRefresh.isFollowed`).
+  public func isFollowedInBackground(at now: Date = Date()) -> Bool {
+    isConfirmedByStation && !isSuperseded
+      && StationStatusRefresh.isFollowed(
+        verdict: verdict, publication: station?.publication, at: now)
+  }
+
   /// The Station card: with "Registered" on Package status, without it on Verdict received.
   public func timeline(now: Date = Date(), timeZone: TimeZone = .current) -> StationTimeline {
     StationTimeline.make(
@@ -172,16 +180,28 @@ public struct UploadSnapshot: Equatable, Sendable {
     state.registeredAt ?? state.sealResult?.createdAt ?? station?.createdAt
   }
 
-  /// The muted line under the fatal message of Upload stopped. `canReseal`: the visit's
-  /// originals are still on the phone.
-  public func stoppedNote(canReseal: Bool) -> String {
-    guard canReseal else {
-      return "Nothing was deleted. Try again. This phone no longer has the scans to re-seal; "
-        + "start a new capture."
+  /// The muted line under the fatal message of Upload stopped (§4.2). It names only the buttons
+  /// the screen shows: `canRetry` "Try again", `canReseal` "Re-seal as revision n+1".
+  /// `scansOnPhone`: the visit's originals are still on the phone (false: re-seal is impossible
+  /// and the line says so).
+  public func stoppedNote(canRetry: Bool, canReseal: Bool, scansOnPhone: Bool = true) -> String {
+    let upload =
+      "to upload the files as they are on this phone now as revision \(package.revision + 1)."
+    let reseals = canReseal && scansOnPhone
+    var note = "Nothing was deleted."
+    switch (canRetry, reseals) {
+    case (true, true): note += " Try again, or re-seal \(upload)"
+    case (true, false): note += " Try again."
+    case (false, true): note += " Re-seal \(upload)"
+    case (false, false): break
     }
-    let next = package.revision + 1
-    return "Nothing was deleted. Try again, or re-seal to upload the files as they are on this "
-      + "phone now as revision \(next). Revision \(package.revision) stays on this phone."
+    if reseals {
+      note += " Revision \(package.revision) stays on this phone."
+    }
+    if !scansOnPhone {
+      note += " This phone no longer has the scans to re-seal; start a new capture."
+    }
+    return note
   }
 
   /// "Re-seal as revision 2".
@@ -329,7 +349,7 @@ public final class UploadCoordinator: @unchecked Sendable {
     now: @escaping @Sendable () -> Date = { Date() },
     retryDelays: [TimeInterval] = [2, 5, 15, 30, 60, 120, 300],
     pollInterval: TimeInterval = 15,
-    verdictFollowLimit: TimeInterval = 30 * 60,
+    verdictFollowLimit: TimeInterval = StationStatusRefresh.publicationFollowLimit,
     onChange: @escaping @Sendable (UploadSnapshot) -> Void = { _ in },
     onVerdict: (@Sendable (VerdictNotification) -> Void)? = nil
   ) {
