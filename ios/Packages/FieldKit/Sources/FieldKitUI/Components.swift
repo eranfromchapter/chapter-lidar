@@ -1,8 +1,13 @@
 #if canImport(SwiftUI) && canImport(UIKit)
+  import ChapterUI
   import FieldRules
   import Foundation
   import PhotoStore
   import SwiftUI
+
+  // The few pieces the field screens share that ChapterUI does not have. Buttons, chips, the
+  // segmented control, cards, captions, status glyphs, the chevron and the sheet bar are
+  // ChapterUI's (critique R-18).
 
   /// Text for an error under a screen. Known errors have their own wording; anything else uses
   /// the system description.
@@ -21,7 +26,7 @@
 
   /// Wraps chips onto several lines (design: `display: flex; flex-wrap: wrap; gap: 8px`).
   struct FlowLayout: Layout {
-    var spacing: CGFloat = FieldTheme.space8
+    var spacing: CGFloat = FieldMetric.chipGap
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
       let maxWidth = proposal.width ?? .infinity
@@ -64,45 +69,8 @@
     }
   }
 
-  /// A selectable chip: ink with light text when selected, nude otherwise. At least 44 pt tall.
-  /// `needsPhoto` puts a small dot in the chip's top right corner (blocked red, light on the
-  /// selected chip) and "needs photo" in the accessibility value: a room the checklist still
-  /// asks a photo of. The dot sits in the chip's padding, so the chip is as wide as without it
-  /// and the chips wrap as they do without dots.
-  struct ChoiceChip: View {
-    let title: String
-    let isSelected: Bool
-    var horizontalPadding: CGFloat = 14
-    var needsPhoto = false
-    let action: () -> Void
-
-    var body: some View {
-      Button(action: action) {
-        Text(title)
-          .font(FieldTheme.chip)
-          .padding(.horizontal, horizontalPadding)
-          .frame(minHeight: FieldTheme.chipHeight)
-          .foregroundStyle(isSelected ? FieldTheme.surface : FieldTheme.ink)
-          .background(isSelected ? FieldTheme.ink : FieldTheme.nude)
-          .overlay(alignment: .topTrailing) {
-            if needsPhoto {
-              Circle()
-                .fill(isSelected ? FieldTheme.surface : FieldTheme.blocked)
-                .frame(width: 7, height: 7)
-                .padding(5)
-                .accessibilityHidden(true)
-            }
-          }
-          .clipShape(RoundedRectangle(cornerRadius: FieldTheme.chipRadius))
-      }
-      .buttonStyle(.plain)
-      .accessibilityAddTraits(isSelected ? .isSelected : [])
-      .accessibilityValue(needsPhoto ? Text("needs photo") : Text(""))
-    }
-  }
-
-  /// A quiet text action with an icon, at least 44 pt tall: "Rename rooms" next to a checklist
-  /// row's main action and above the Room chips.
+  /// A quiet text action with an icon, at least 44 pt tall (phone-field §1.3): pencil and
+  /// "Rename rooms" in subhead 15 ink.
   struct InlineAction: View {
     let title: String
     var systemImage = "pencil"
@@ -111,88 +79,95 @@
     var body: some View {
       Button(action: action) {
         Label(title, systemImage: systemImage)
-          .font(FieldTheme.chip)
-          .foregroundStyle(FieldTheme.ink)
-          .padding(.horizontal, FieldTheme.space4)
-          .frame(minHeight: FieldTheme.chipHeight)
+          .chapterTextStyle(.subhead)
+          .foregroundStyle(FieldTheme.Color.ink)
+          .frame(minHeight: FieldTheme.Metric.touchTarget)
           .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
     }
   }
 
-  /// Full-width primary action: 56 pt, ink, light bold text; greyed out when disabled.
-  struct PrimaryButton: View {
-    let title: String
-    var isEnabled: Bool = true
-    let action: () -> Void
-
-    var body: some View {
-      Button(action: action) {
-        Text(title)
-          .font(FieldTheme.headline)
-          .frame(maxWidth: .infinity)
-          .frame(height: FieldTheme.primaryHeight)
-          .foregroundStyle(isEnabled ? FieldTheme.surface : FieldTheme.disabledText)
-          .background(isEnabled ? FieldTheme.ink : FieldTheme.line)
-          .clipShape(RoundedRectangle(cornerRadius: FieldTheme.cardRadius))
-      }
-      .buttonStyle(.plain)
-      .disabled(!isEnabled)
+  /// A row that is a button: nude while pressed, dimmed when disabled.
+  struct FieldRowButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+      configuration.label
+        .contentShape(Rectangle())
+        .background(configuration.isPressed ? FieldTheme.Color.nude : Color.clear)
     }
   }
 
-  /// Outlined 44 pt action used inside checklist rows ("Take photo", "Add controls").
-  struct OutlineButton: View {
-    let title: String
-    let action: () -> Void
-
-    var body: some View {
-      Button(action: action) {
-        Text(title)
-          .font(FieldTheme.chip)
-          .padding(.horizontal, 14)
-          .frame(minHeight: FieldTheme.chipHeight)
-          .foregroundStyle(FieldTheme.ink)
-          .overlay(
-            RoundedRectangle(cornerRadius: FieldTheme.chipRadius)
-              .stroke(FieldTheme.ink, lineWidth: 1))
-      }
-      .buttonStyle(.plain)
-    }
-  }
-
-  /// Small muted label above a group of controls.
-  struct FieldCaption: View {
+  /// A footnote under a card or list (13/17, 16 pt inset, wrapping): muted, or blocked for an
+  /// error.
+  struct FieldFootnote: View {
     let text: String
+    var isError = false
+
     var body: some View {
-      Text(text).font(FieldTheme.caption).foregroundStyle(FieldTheme.muted)
+      Text(text)
+        .chapterTextStyle(.footnote)
+        .foregroundStyle(isError ? FieldTheme.Color.blocked : FieldTheme.Color.muted)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.horizontal, FieldTheme.Metric.sectionInset)
     }
   }
 
-  extension View {
-    /// Text field look from the design: surface fill, 1 pt line border, 12 pt radius, 52 pt tall.
-    func fieldBox(fontSize: CGFloat = 17) -> some View {
-      self
-        .font(.system(size: fontSize))
-        .padding(.horizontal, FieldTheme.space16)
-        .frame(height: FieldTheme.fieldHeight)
-        .background(FieldTheme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: FieldTheme.cardRadius))
-        .overlay(
-          RoundedRectangle(cornerRadius: FieldTheme.cardRadius)
-            .stroke(FieldTheme.line, lineWidth: 1))
+  /// "No photo yet" with the chips' 7 pt dot, footnote blocked: a room the checklist still asks
+  /// a photo of.
+  struct NoPhotoYetLabel: View {
+    var body: some View {
+      HStack(spacing: 6) {
+        Circle().fill(FieldTheme.Color.blocked).frame(width: 7, height: 7)
+        Text("No photo yet")
+          .chapterTextStyle(.footnote)
+          .foregroundStyle(FieldTheme.Color.blocked)
+      }
+      .fixedSize()
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel("No photo yet")
+    }
+  }
+
+  /// The back button of a screen that must ask before leaving ("Label a photo", phone-field
+  /// §1.3): a leading toolbar button with the system `chevron.left`. iOS 26 puts it in the glass
+  /// pill like the system back button; earlier versions get the drawn pill (44 pt, surface at
+  /// 80 %, hairline border, two soft shadows).
+  struct InterceptedBackButton: View {
+    let action: () -> Void
+
+    var body: some View {
+      Button(action: action) {
+        if #available(iOS 26.0, *) {
+          chevron
+        } else {
+          chevron
+            .frame(width: 44, height: 44)
+            .background(
+              Circle().fill(FieldTheme.Color.surface.opacity(0.8))
+                .overlay(Circle().strokeBorder(Color.black.opacity(0.06), lineWidth: 0.5))
+                .shadow(color: .black.opacity(0.07), radius: 1.5, y: 1)
+                .shadow(color: .black.opacity(0.06), radius: 5, y: 3))
+        }
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel("Back")
+      .accessibilityIdentifier("photo.back")
     }
 
-    /// Screen background and horizontal padding shared by the three screens.
-    func fieldScreen() -> some View {
-      self
-        .padding(.horizontal, 20)
-        .padding(.top, FieldTheme.space8)
-        .padding(.bottom, FieldTheme.space16)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(FieldTheme.ground.ignoresSafeArea())
-        .foregroundStyle(FieldTheme.ink)
+    private var chevron: some View {
+      Image(systemName: "chevron.left")
+        .font(.system(size: 17, weight: .semibold))
+        .foregroundStyle(FieldTheme.Color.ink)
+        .frame(minWidth: 44, minHeight: 44)
+        .contentShape(Rectangle())
+    }
+  }
+
+  /// The footnote of a screen opened after the visit was sealed (phone-field addendum B4).
+  enum ReadOnlyText {
+    static func sealed(revision: Int) -> String {
+      "Revision \(revision) is sealed. To change it, use Add to this capture on the verdict screen."
     }
   }
 #endif

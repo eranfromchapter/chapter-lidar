@@ -5,20 +5,23 @@
   import SwiftUI
 
   extension PhotoLabelingModel {
-    /// Model wired to the app's own camera.
+    /// Model wired to the app's own camera, and to the camera heading for the "Looking toward"
+    /// pre-fill (the app's adapter over its compass service).
     public convenience init(
       capture: FieldCaptureOption, store: PhotoRecordStore, camera: CameraEngine,
-      initialRoom: String? = nil
+      initialRoom: String? = nil, heading: PhotoHeadingProviding? = nil
     ) {
       self.init(
-        capture: capture, store: store, initialRoom: initialRoom,
+        capture: capture, store: store, initialRoom: initialRoom, heading: heading,
         capturePhoto: { try await camera.capture() })
     }
   }
 
-  /// The photo step: a live viewfinder with a shutter button (`PhotoViewfinder`), then the
-  /// labeling screen for the photo just taken. `onRenameRooms`, when given, adds "Rooms" to the
-  /// viewfinder and "Rename rooms" above the Room chips.
+  /// The photo step: a live viewfinder with a shutter button (`PhotoViewfinder`, navigation bar
+  /// hidden), then "Label a photo" for the photo just taken (inline navigation bar). "Done" on
+  /// the viewfinder and "Done with photos" call `onDone`; the app pops the step. The heading
+  /// provider runs with the viewfinder. `onRenameRooms`, when given, adds "Rooms" to the
+  /// viewfinder and "Rename rooms" to the room picker.
   public struct PhotoCaptureFlowView: View {
     let model: PhotoLabelingModel
     let camera: CameraEngine
@@ -45,7 +48,7 @@
             CameraPreview(session: camera.session)
           }
         } else {
-          PhotoLabelingView(model: model, onRenameRooms: onRenameRooms)
+          PhotoLabelingView(model: model, onDone: onDone, onRenameRooms: onRenameRooms)
         }
       }
       .task {

@@ -15,12 +15,16 @@
     public var rooms: [String]
     /// Measurements read from this capture's LiDAR model; nil before the model exists.
     public var scan: ScanMeasurements?
+    /// The capture's display units (`units.display`): the entry sheet starts in feet and inches
+    /// for imperial, millimetres for metric, until something was entered in this visit.
+    public var displayUnits: DisplayUnitSystem
 
     public var id: LowercaseUUID { ref.captureId }
 
     public init(
       ref: FieldControls.CaptureRef, label: String, mode: CaptureMode,
-      capturedAt: UTCTimestamp, rooms: [String] = [], scan: ScanMeasurements? = nil
+      capturedAt: UTCTimestamp, rooms: [String] = [], scan: ScanMeasurements? = nil,
+      displayUnits: DisplayUnitSystem = .imperial
     ) {
       self.ref = ref
       self.label = label
@@ -28,6 +32,13 @@
       self.capturedAt = capturedAt
       self.rooms = rooms
       self.scan = scan
+      self.displayUnits = displayUnits
+    }
+
+    /// The capture as the Field controls list sees it.
+    public var controlsFloor: ControlsFloor {
+      ControlsFloor(
+        ref: ref, label: label, mode: mode, capturedAt: capturedAt, rooms: rooms, scan: scan)
     }
   }
 #endif

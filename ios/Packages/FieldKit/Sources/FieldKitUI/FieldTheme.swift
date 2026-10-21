@@ -1,55 +1,45 @@
 #if canImport(SwiftUI) && canImport(UIKit)
+  import ChapterUI
   import SwiftUI
 
-  /// Design tokens from docs/waves/design/snapshot.html#tokens (frozen design).
-  enum FieldTheme {
-    // Colour
-    static let ink = Color(hex: 0x1F2429)
-    static let ground = Color(hex: 0xF5EFE6)
-    static let surface = Color(hex: 0xFAF5EE)
-    static let nude = Color(hex: 0xE8DDD0)
-    static let line = Color(hex: 0xD9CCBC)
-    static let muted = Color(hex: 0x6B6557)
-    static let ready = Color(hex: 0x2E5E2E)
-    static let limited = Color(hex: 0x9A6A1E)
-    static let blocked = Color(hex: 0x8B2E2E)
-    /// Text colour of a disabled primary button (design: #4E493F on #D9CCBC).
-    static let disabledText = Color(hex: 0x4E493F)
+  /// The field screens' tokens: a thin alias of ChapterUI's `ChapterTheme` (critique R-18), so
+  /// there is one source of colour, type and metrics on the phone. `FieldTheme.Color.ink`,
+  /// `FieldTheme.TextStyle.body`, `FieldTheme.Metric.screenPadding`.
+  typealias FieldTheme = ChapterTheme
 
-    // Space 4 8 12 16 24 32 48
-    static let space4: CGFloat = 4
-    static let space8: CGFloat = 8
-    static let space12: CGFloat = 12
-    static let space16: CGFloat = 16
-    static let space24: CGFloat = 24
+  /// Sizes of the field screens that no other screen shares (phone-field §3.2, §4.2, §5.2, §6.1).
+  enum FieldMetric {
+    // Label a photo
+    /// The photo just taken.
+    static let photoHeight: CGFloat = 210
+    static let photoRadius: CGFloat = 16
+    /// The time pill on the photo: 12 from the left, 10 from the bottom.
+    static let photoPillInset = CGSize(width: 12, height: 10)
+    /// Gap between the labeling screen's blocks, and from a caption to its control.
+    static let labelBlockGap: CGFloat = 12
+    static let labelCaptionGap: CGFloat = 6
+    /// Inset of the labeling screen's captions inside the screen padding.
+    static let labelCaptionInset: CGFloat = 4
+    static let thumbnail: CGFloat = 40
+    static let thumbnailRadius: CGFloat = 6
+    static let chipGap: CGFloat = 8
 
-    // Radius: chip 8, card 12, sheet 16
-    static let chipRadius: CGFloat = 8
-    static let cardRadius: CGFloat = 12
-    static let sheetRadius: CGFloat = 16
+    // Field controls list
+    static let controlRowHeight: CGFloat = 50
+    static let controlRowCompactHeight: CGFloat = 42
+    static let controlRowVerticalPadding: CGFloat = 5
+    static let controlSectionGap: CGFloat = 8
 
-    // Touch targets
-    static let chipHeight: CGFloat = 44
-    static let primaryHeight: CGFloat = 56
-    static let fieldHeight: CGFloat = 52
+    // Entry sheet
+    static let valueFieldHeight: CGFloat = 56
+    static let valueFieldPadding: CGFloat = 14
+    static let valueFieldGap: CGFloat = 10
+    static let sheetSectionGap: CGFloat = 14
 
-    // Type
-    static func title30() -> Font { .custom("Times New Roman", size: 30) }
-    static let headline = Font.system(size: 17, weight: .semibold)
-    static let body = Font.system(size: 17)
-    static let chip = Font.system(size: 15)
-    static let rowTitle = Font.system(size: 15, weight: .semibold)
-    static let caption = Font.system(size: 13)
-  }
-
-  extension Color {
-    init(hex: UInt32) {
-      self.init(
-        .sRGB,
-        red: Double((hex >> 16) & 0xFF) / 255,
-        green: Double((hex >> 8) & 0xFF) / 255,
-        blue: Double(hex & 0xFF) / 255,
-        opacity: 1)
-    }
+    // Before you leave
+    static let checklistRowHeight: CGFloat = 56
+    static let checklistRowWithButtonHeight: CGFloat = 64
+    static let checklistCardTop: CGFloat = 14
+    static let checklistGap: CGFloat = 10
   }
 #endif

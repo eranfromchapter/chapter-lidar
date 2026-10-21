@@ -13,11 +13,18 @@
       public let value: Value
       public let title: String
       public let accessibilityIdentifier: String?
+      /// What VoiceOver reads when the title is an abbreviation ("North" for "N"); the title
+      /// when nil.
+      public let accessibilityLabel: String?
 
-      public init(_ value: Value, _ title: String, accessibilityIdentifier: String? = nil) {
+      public init(
+        _ value: Value, _ title: String, accessibilityIdentifier: String? = nil,
+        accessibilityLabel: String? = nil
+      ) {
         self.value = value
         self.title = title
         self.accessibilityIdentifier = accessibilityIdentifier
+        self.accessibilityLabel = accessibilityLabel
       }
     }
 
@@ -85,6 +92,7 @@
           .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
+      .accessibilityLabel(Text(option.accessibilityLabel ?? option.title))
       .accessibilityAddTraits(isSelected ? .isSelected : [])
       .accessibilityIdentifier(ifPresent: option.accessibilityIdentifier)
     }

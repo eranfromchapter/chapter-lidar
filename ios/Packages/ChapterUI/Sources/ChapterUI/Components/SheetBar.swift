@@ -14,11 +14,14 @@
     let actionTitle: String?
     let isActionEnabled: Bool
     let onAction: () -> Void
+    let cancelAccessibilityIdentifier: String?
+    let actionAccessibilityIdentifier: String?
 
     public init(
       title: String, cancelTitle: String = "Cancel", onCancel: @escaping () -> Void,
       actionTitle: String? = nil, isActionEnabled: Bool = true,
-      onAction: @escaping () -> Void = {}
+      onAction: @escaping () -> Void = {}, cancelAccessibilityIdentifier: String? = nil,
+      actionAccessibilityIdentifier: String? = nil
     ) {
       self.title = title
       self.cancelTitle = cancelTitle
@@ -26,6 +29,8 @@
       self.actionTitle = actionTitle
       self.isActionEnabled = isActionEnabled
       self.onAction = onAction
+      self.cancelAccessibilityIdentifier = cancelAccessibilityIdentifier
+      self.actionAccessibilityIdentifier = actionAccessibilityIdentifier
     }
 
     public var body: some View {
@@ -35,42 +40,51 @@
           .frame(width: Metric.grabberWidth, height: Metric.grabberHeight)
           .padding(.top, Metric.grabberTop)
           .accessibilityHidden(true)
-        ZStack {
+        // The title takes the room between the two buttons (at least 60 pt each, so it is
+        // centred at the default text size); larger text never runs into Cancel or the action.
+        HStack(spacing: Metric.rowGap) {
+          Button(action: onCancel) {
+            Text(cancelTitle)
+              .chapterTextStyle(.body)
+              .foregroundStyle(ChapterTheme.Color.ink)
+              .lineLimit(1)
+              .frame(
+                minWidth: Metric.sheetBarButtonWidth, minHeight: Metric.touchTarget,
+                alignment: .leading
+              )
+              .contentShape(Rectangle())
+          }
+          .buttonStyle(.plain)
+          .fixedSize()
+          .accessibilityIdentifier(ifPresent: cancelAccessibilityIdentifier)
           Text(title)
             .chapterTextStyle(.navTitle)
             .foregroundStyle(ChapterTheme.Color.ink)
             .lineLimit(1)
-            .padding(.horizontal, Metric.sheetBarButtonWidth + Metric.rowGap)
+            .frame(maxWidth: .infinity)
             .accessibilityAddTraits(.isHeader)
-          HStack {
-            Button(action: onCancel) {
-              Text(cancelTitle)
-                .chapterTextStyle(.body)
-                .foregroundStyle(ChapterTheme.Color.ink)
+          if let actionTitle {
+            Button(action: onAction) {
+              Text(actionTitle)
+                .chapterTextStyle(.bodyEmphasis)
+                .foregroundStyle(
+                  isActionEnabled ? ChapterTheme.Color.ink : ChapterTheme.Color.chevron
+                )
+                .lineLimit(1)
                 .frame(
                   minWidth: Metric.sheetBarButtonWidth, minHeight: Metric.touchTarget,
-                  alignment: .leading
+                  alignment: .trailing
                 )
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            Spacer(minLength: 0)
-            if let actionTitle {
-              Button(action: onAction) {
-                Text(actionTitle)
-                  .chapterTextStyle(.bodyEmphasis)
-                  .foregroundStyle(
-                    isActionEnabled ? ChapterTheme.Color.ink : ChapterTheme.Color.chevron
-                  )
-                  .frame(
-                    minWidth: Metric.sheetBarButtonWidth, minHeight: Metric.touchTarget,
-                    alignment: .trailing
-                  )
-                  .contentShape(Rectangle())
-              }
-              .buttonStyle(.plain)
-              .disabled(!isActionEnabled)
-            }
+            .fixedSize()
+            .disabled(!isActionEnabled)
+            .accessibilityIdentifier(ifPresent: actionAccessibilityIdentifier)
+          } else {
+            Color.clear
+              .frame(width: Metric.sheetBarButtonWidth, height: 1)
+              .accessibilityHidden(true)
           }
         }
         .padding(.horizontal, Metric.screenPadding)

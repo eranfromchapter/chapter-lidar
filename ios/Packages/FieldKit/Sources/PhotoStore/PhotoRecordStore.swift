@@ -79,7 +79,9 @@ public final class PhotoRecordStore: @unchecked Sendable {
     (records(captureId: captureId).map(\.sequence).max() ?? 0) + 1
   }
 
-  /// Saves the unchanged original with its labels.
+  /// Saves the unchanged original with its labels, `directionSource` included (manifest 1.1.0:
+  /// compass when the operator kept the compass's pre-fill, manual otherwise). Indexes written
+  /// before that field existed load with it nil; relabeling and restoring never change it.
   public func save(
     original: Data,
     capture: FieldControls.CaptureRef,
