@@ -158,11 +158,11 @@
       "severity": "info",
       "message": "True north from the compass.",
       "filePath": "Source Register/b8dbc48a-f67f-4fd1-9859-7cfc2edaad7e/capture-record.json",
+      "measured": "True heading 212°, accuracy ±8°",
+      "nextAction": "None",
       "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
       "areaKey": "floor-1",
-      "measured": "True heading 212°, accuracy ±8°",
-      "expected": "a compass reading at scan start, true north, accuracy ±10° or better",
-      "nextAction": "None"
+      "expected": "a compass reading at scan start, true north, accuracy ±10° or better"
     },
     {
       "ruleId": "companions.resolve",

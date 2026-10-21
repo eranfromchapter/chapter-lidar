@@ -1,8 +1,9 @@
 // fixtures/report/424-west-end (critique R-19): one station verdict per outcome for the
-// sample-424 package, valid, about that package, with the 13 rules of the v2 rule set.
+// sample-424 package, valid, about that package, with the 13 rules of the v2 rule set, and
+// exactly what `npm run record-report` records from the station checks.
 
 import assert from "node:assert/strict";
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import {
@@ -12,9 +13,19 @@ import {
   compassState,
   countsLine,
   formatErrors,
+  ruleSetLabel,
   validateVerdict,
+  type Capture,
+  type CaptureRecord,
   type Verdict,
 } from "@chapter/capture-contract";
+import {
+  recordReportVerdicts,
+  reportDir,
+  reportVerdictFileName,
+  reportVerdictText,
+  withCompassRule,
+} from "../src/report.js";
 import { SAMPLE_424_NAME } from "../src/sample424.js";
 import { fixturesDir, loadSample, readJson } from "./helpers.js";
 
@@ -86,6 +97,7 @@ describe("report fixtures for sample-424", () => {
           name: "chapter-capture-station/checks",
           version: "1.1.0",
         });
+        assert.equal(ruleSetLabel(value.evaluator), "station-checks v1.1.0");
         const compass = value.checks.find((check) => check.ruleId === "orientation.compass");
         assert.deepEqual(compass, {
           ruleId: "orientation.compass",
@@ -120,5 +132,59 @@ describe("report fixtures for sample-424", () => {
       "Floor 1: Primary closet not captured (omitted by the operator: locked).",
       "Floor 1: Storage room not captured (inaccessible).",
     ]);
+  });
+
+  it("is what the station checks record for the three package states, byte for byte", async () => {
+    assert.equal(reportDir, dir);
+    const recorded = recordReportVerdicts();
+    for (const outcome of OUTCOMES) {
+      assert.equal(
+        await reportVerdictText(recorded[outcome]),
+        readFileSync(join(dir, reportVerdictFileName(outcome)), "utf8"),
+        `${outcome}: re-record with npm run record-report --workspace @chapter/fixtures`,
+      );
+    }
+  });
+});
+
+describe("withCompassRule (the v2 compass rule until the station runs it)", () => {
+  const limited = verdict("limited");
+  const recordPath = sample.fileOfRole("capture_record");
+  /** The limited verdict as a station without the compass rule gives it. */
+  const withoutRule: Verdict = {
+    ...limited,
+    evaluator: { ...limited.evaluator, version: "1.0.0" },
+    checks: limited.checks.filter((check) => check.ruleId !== "orientation.compass"),
+    findings: limited.findings.filter((item) => item.ruleId !== "orientation.compass"),
+  };
+  function withReading(change: Partial<Capture>): { record: CaptureRecord; capture: Capture } {
+    const [first, ...rest] = sample.record.captures;
+    const capture = { ...first, ...change };
+    return { record: { ...sample.record, captures: [capture, ...rest] }, capture };
+  }
+
+  it("adds the row after orientation.up, the finding in check order and evaluator 1.1.0", () => {
+    assert.deepEqual(withCompassRule(withoutRule, sample.record, recordPath), limited);
+  });
+
+  it("leaves a verdict that has the rule as it is", () => {
+    assert.equal(withCompassRule(limited, sample.record, recordPath), limited);
+  });
+
+  it("writes an approximate reading as an info finding", () => {
+    const { record, capture } = withReading({ headingSource: "magnetic", headingAccuracy: 12 });
+    const out = withCompassRule(withoutRule, record, recordPath);
+    const added = out.findings.filter((item) => item.ruleId === "orientation.compass");
+    assert.deepEqual(
+      added.map((item) => [item.severity, item.message, item.measured]),
+      [["info", "North is approximate.", compassDetail(compassState(capture))]],
+    );
+    assert.equal(out.outcome, "limited");
+    assert.deepEqual(out.limitations, limited.limitations);
+  });
+
+  it("refuses a reading that is not verified (it would change the outcome)", () => {
+    const { record } = withReading({ headingAccuracy: 40 });
+    assert.throws(() => withCompassRule(withoutRule, record, recordPath), /not verified/);
   });
 });

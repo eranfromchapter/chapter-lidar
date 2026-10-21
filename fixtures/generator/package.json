@@ -9,6 +9,7 @@
   },
   "scripts": {
     "generate": "tsx src/cli.ts",
+    "record-report": "tsx src/record-report.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx --test \"test/**/*.test.ts\"",
     "scan-pii": "node scripts/scan-pii.mjs .."

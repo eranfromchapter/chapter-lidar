@@ -5,7 +5,8 @@ every export writer and every station check is tested against these fixtures. Ev
 generated from fixed seeds, fixed UUIDs and fixed timestamps: two runs give byte-identical output.
 
 ```
-npm run generate --workspace @chapter/fixtures   # rewrites fixtures/generated
+npm run generate --workspace @chapter/fixtures        # rewrites fixtures/generated
+npm run record-report --workspace @chapter/fixtures   # rewrites fixtures/report/424-west-end
 npm test --workspace @chapter/fixtures
 node fixtures/generator/scripts/scan-pii.mjs fixtures
 ```
@@ -51,7 +52,8 @@ about their centre), 4 passages, 2 windows, 14 objects, Room 4 with one lower wa
 ceiling), Primary closet not scanned (locked), Storage room not entered, 7 photos of the Living
 Room (with `directionSource`) and one of every other room, compass verified (212.4°, ±8°, true
 north), units shown imperial. Text data stays placeholder data. Its station verdicts, one per
-outcome, are in `fixtures/report/424-west-end/` (see the README there).
+outcome, are in `fixtures/report/424-west-end/`, recorded from the station checks by
+`src/report.ts` (`npm run record-report`; see the README there).
 
 Broken fixtures are in `fixtures/generated/broken/<defect-id>/`, each with `defect.json` and a
 `package/`. Each is the `box-room` package with exactly one file changed; the manifest is rebuilt
