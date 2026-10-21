@@ -253,6 +253,19 @@ describe("verdict words", () => {
       ruleSetLabel({ name: "station-checks", version: "1.1.0" }),
       "station-checks v1.1.0",
     );
+    assert.equal(ruleSetLabel({ name: "other/checks", version: "2.0.0" }), "other/checks v2.0.0");
+    assert.equal(ruleSetLabel({ name: "constructor", version: "1.0.0" }), "constructor v1.0.0");
+  });
+
+  it("prints the station checks as station-checks, the name the design draws", () => {
+    // The evaluator every station verdict carries (station/checks EVALUATOR), as in the
+    // verdict example and the sample-424 report fixtures.
+    assert.equal(verdict.evaluator.name, "chapter-capture-station/checks");
+    assert.equal(ruleSetLabel(verdict.evaluator), `station-checks v${verdict.evaluator.version}`);
+    assert.equal(
+      ruleSetLabel({ name: "chapter-capture-station/checks", version: "1.1.0" }),
+      "station-checks v1.1.0",
+    );
   });
 });
 

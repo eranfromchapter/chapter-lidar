@@ -240,9 +240,22 @@ export function verdictHeadline(verdict: Pick<Verdict, "outcome" | "task">): str
   }
 }
 
-/** "station-checks v1.1.0": the rule set a verdict was evaluated with. */
+/**
+ * Short names of evaluators, for people. The station checks write their component name
+ * `chapter-capture-station/checks` into every verdict (station/checks `EVALUATOR`); the web and
+ * the spatial report print the rule set as `station-checks`.
+ */
+const RULE_SET_NAME: ReadonlyMap<string, string> = new Map([
+  ["chapter-capture-station/checks", "station-checks"],
+]);
+
+/**
+ * "station-checks v1.1.0": the rule set a verdict was evaluated with, as `{name} v{version}`.
+ * The name is the evaluator's short name when it has one, else the name in the verdict.
+ */
 export function ruleSetLabel(evaluator: Verdict["evaluator"]): string {
-  return `${evaluator.name} v${evaluator.version}`;
+  const name = RULE_SET_NAME.get(evaluator.name) ?? evaluator.name;
+  return `${name} v${evaluator.version}`;
 }
 
 /** A room the operator did not scan, from the capture record. */
