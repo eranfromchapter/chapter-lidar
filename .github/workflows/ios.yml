@@ -9,8 +9,11 @@
 #   - scheme: `<Name>-Package` when Xcode generates it (packages with several products),
 #     otherwise `<Name>`. Any other result fails the job.
 #   - `xcodebuild build` for generic iOS (no code signing).
-#   - `xcodebuild test` on the iOS simulator when the package has Swift files under Tests/.
-#     The .xcresult bundle is uploaded as an artifact.
+#   - `xcodebuild test` on the iOS simulator when the package has Swift files under Tests/,
+#     on SNAPSHOT_SIMULATOR_DESTINATION (the runtime the phone snapshot references are
+#     recorded on). The .xcresult bundle is uploaded as an artifact.
+#   - `hosted_scheme` (ChapterUI): the package's app-hosted snapshot tests, a scheme of the
+#     XcodeGen project (ios/project.yml), on the same simulator.
 #
 # App (contract for ios/project.yml): XcodeGen generates exactly one ios/*.xcodeproj
 # with a scheme named by APP_SCHEME whose test action holds the UI tests.
@@ -39,6 +42,11 @@ env:
   XCODE_VERSION: "26.3"
   DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
   SIMULATOR_DESTINATION: platform=iOS Simulator,name=iPhone 17 Pro,OS=latest
+  # Package tests, whose phone snapshots (ChapterUISnapshotTesting) are recorded on iOS 26.0:
+  # the system chrome (navigation bar, back button, switches) draws differently on other iOS
+  # versions, by more than the snapshot tolerance. The image has the iOS 26.0 runtime next to
+  # the newest one; record again (TEST_RUNNER_RECORD_SNAPSHOTS=1) when this pin moves.
+  SNAPSHOT_SIMULATOR_DESTINATION: platform=iOS Simulator,name=iPhone 17 Pro,OS=26.0
   XCODEGEN_VERSION: 2.46.0
   XCODEGEN_SHA256: 4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806
   APP_SCHEME: App
@@ -54,6 +62,12 @@ jobs:
         include:
           - package: CaptureContract
             path: contract/swift
+          # Screen tokens, fonts, logo, components and the snapshot harness; its tests are the
+          # ChapterUI component snapshots (iPhone 17 Pro simulator, 402 x 874 pt @3x), and the
+          # app-hosted ones of the boards with system chrome (drawHierarchy needs an app).
+          - package: ChapterUI
+            path: ios/Packages/ChapterUI
+            hosted_scheme: ChapterUISnapshots
           - package: CaptureCore
             path: ios/Packages/CaptureCore
           - package: PlanExport
@@ -141,12 +155,42 @@ jobs:
         working-directory: ${{ matrix.path }}
         env:
           SCHEME: ${{ steps.scheme.outputs.name }}
+          # ChapterUISnapshotTesting writes the new image and a diff of a failing snapshot here
+          # (xcodebuild passes TEST_RUNNER_* to the tests without the prefix); uploaded below.
+          TEST_RUNNER_SNAPSHOT_ARTIFACTS: ${{ runner.temp }}/results/snapshots-${{ matrix.package }}
         run: |
           xcodebuild test \
             -scheme "${SCHEME}" \
-            -destination "${SIMULATOR_DESTINATION}" \
+            -destination "${SNAPSHOT_SIMULATOR_DESTINATION}" \
             -derivedDataPath "${RUNNER_TEMP}/DerivedData" \
             -resultBundlePath "${RUNNER_TEMP}/results/${PACKAGE_NAME}.xcresult"
+
+      - name: Install XcodeGen ${{ env.XCODEGEN_VERSION }} (app-hosted tests)
+        if: ${{ !cancelled() && steps.present.outputs.present == 'true' && matrix.hosted_scheme }}
+        run: |
+          install_dir="${RUNNER_TEMP}/xcodegen-${XCODEGEN_VERSION}"
+          archive="${RUNNER_TEMP}/xcodegen-${XCODEGEN_VERSION}.zip"
+          curl --fail --location --silent --show-error --retry 3 -o "${archive}" \
+            "https://github.com/yonaskolb/XcodeGen/releases/download/${XCODEGEN_VERSION}/xcodegen.zip"
+          echo "${XCODEGEN_SHA256}  ${archive}" | shasum -a 256 --check --strict
+          mkdir -p "${install_dir}"
+          unzip -q "${archive}" -d "${install_dir}"
+          echo "${install_dir}/xcodegen/bin" >>"${GITHUB_PATH}"
+
+      # Runs after a failing package test step too, so both sets of snapshots are uploaded.
+      - name: App-hosted snapshot tests on iOS simulator
+        if: ${{ !cancelled() && steps.present.outputs.present == 'true' && matrix.hosted_scheme }}
+        env:
+          HOSTED_SCHEME: ${{ matrix.hosted_scheme }}
+          TEST_RUNNER_SNAPSHOT_ARTIFACTS: ${{ runner.temp }}/results/snapshots-${{ matrix.package }}-hosted
+        run: |
+          xcodegen generate --spec ios/project.yml
+          xcodebuild test \
+            -project ios/ChapterCapture.xcodeproj \
+            -scheme "${HOSTED_SCHEME}" \
+            -destination "${SNAPSHOT_SIMULATOR_DESTINATION}" \
+            -derivedDataPath "${RUNNER_TEMP}/HostedDerivedData" \
+            -resultBundlePath "${RUNNER_TEMP}/results/${PACKAGE_NAME}-hosted.xcresult"
 
       - name: Upload test results
         if: always() && steps.present.outputs.present == 'true' && steps.present.outputs.has_tests == 'true'

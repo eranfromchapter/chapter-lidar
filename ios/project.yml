@@ -3,6 +3,7 @@
 # Contract with .github/workflows/ios.yml (job App) and testflight.yml: exactly one
 # ios/*.xcodeproj, scheme `App` (build = the app, test = the UI tests on the simulator),
 # CFBundleVersion from CURRENT_PROJECT_VERSION, CFBundleShortVersionString from MARKETING_VERSION.
+# Scheme `ChapterUISnapshots` (ios.yml, job ChapterUI) runs ChapterUI's app-hosted snapshot tests.
 # No team id is committed: testflight.yml passes DEVELOPMENT_TEAM.
 name: ChapterCapture
 
@@ -23,6 +24,8 @@ settings:
 packages:
   CaptureContract:
     path: ../contract/swift
+  ChapterUI:
+    path: Packages/ChapterUI
   CaptureCore:
     path: Packages/CaptureCore
   PlanExport:
@@ -74,6 +77,9 @@ targets:
         product: AppCore
       - package: CaptureContract
         product: CaptureContract
+      # Screen tokens v2, fonts (Inter, registered at launch), logo and shared components.
+      - package: ChapterUI
+        product: ChapterUI
       - package: CaptureCore
         product: CaptureCore
       - package: CaptureCore
@@ -109,6 +115,47 @@ targets:
     dependencies:
       - target: App
 
+  # ChapterUI's app-hosted snapshot tests (critique R-18d): the boards with system chrome drawn
+  # with drawHierarchy, which needs a UIApplication (Swift package tests have none). The host is
+  # an empty app; the boards are shared with the package's tests.
+  ChapterUISnapshotHost:
+    type: application
+    platform: iOS
+    sources:
+      - path: Packages/ChapterUI/SnapshotHost
+    settings:
+      base:
+        PRODUCT_NAME: ChapterUISnapshotHost
+        PRODUCT_BUNDLE_IDENTIFIER: com.hellochapter.chapterui.snapshothost
+        GENERATE_INFOPLIST_FILE: YES
+        # A full-screen scene (no letterboxing), as the app has.
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "6.0"
+        ENABLE_PREVIEWS: NO
+
+  ChapterUIHostedSnapshotTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Packages/ChapterUI/HostedTests
+        excludes: ["__Snapshots__"]
+      - path: Packages/ChapterUI/Tests/ChapterUITests/SnapshotBoards.swift
+      - path: Packages/ChapterUI/Tests/ChapterUITests/PixelProbe.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hellochapter.chapterui.hostedsnapshottests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "6.0"
+    dependencies:
+      # The test host (XcodeGen sets TEST_HOST from it).
+      - target: ChapterUISnapshotHost
+      - package: ChapterUI
+        product: ChapterUI
+      - package: ChapterUI
+        product: ChapterUISnapshotTesting
+
 schemes:
   App:
     build:
@@ -124,3 +171,14 @@ schemes:
         - AppUITests
     archive:
       config: Release
+
+  ChapterUISnapshots:
+    build:
+      targets:
+        ChapterUISnapshotHost: [test]
+        ChapterUIHostedSnapshotTests: [test]
+    test:
+      config: Debug
+      gatherCoverageData: false
+      targets:
+        - ChapterUIHostedSnapshotTests

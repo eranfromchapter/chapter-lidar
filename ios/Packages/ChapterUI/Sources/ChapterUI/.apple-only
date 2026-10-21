@@ -1,0 +1,3 @@
+Apple frameworks only (SwiftUI, UIKit). Every source file is wrapped in
+#if canImport(SwiftUI) && os(iOS), so this target compiles to nothing on Linux and macOS.
+It is built and tested on the macOS runner (ios.yml, job ChapterUI).

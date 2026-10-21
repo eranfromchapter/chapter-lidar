@@ -1,4 +1,5 @@
 import AppCore
+import ChapterUI
 import SwiftUI
 
 /// Chapter Capture: one site visit from the capture record to the station's verdict.
@@ -8,9 +9,20 @@ struct ChapterCaptureApp: App {
   @State private var model = AppModel.make()
   @Environment(\.scenePhase) private var scenePhase
 
+  init() {
+    // Inter is bundled in ChapterUI and registered here, before any screen draws (not through
+    // UIAppFonts, which cannot see a package's bundle); then the navigation bar's Chapter look
+    // (its SwiftUI half is `chapterRoot()` below).
+    ChapterFonts.register()
+    ChapterAppearance.apply()
+  }
+
   var body: some Scene {
     WindowGroup {
       RootView(model: model)
+        // Inter replaces SF on the phone (the default for text without a font of its own), and
+        // ink is the tint: the back chevron and bar buttons take their colour from it.
+        .chapterRoot()
         .onOpenURL { url in
           // Microsoft Entra sign-in returns here (msauth.<bundle id>://auth).
           model.handleOpenURL(url)
