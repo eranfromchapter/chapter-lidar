@@ -212,7 +212,11 @@ public struct UploadSnapshot: Equatable, Sendable {
 /// Upload stopped).
 public enum SealFailureText {
   public static func make(_ error: Error) -> String {
-    var reason = String(describing: error)
+    make(reason: String(describing: error))
+  }
+
+  public static func make(reason: String) -> String {
+    var reason = reason
     while reason.hasSuffix(".") { reason.removeLast() }
     return "The package could not be sealed: \(reason). Nothing was uploaded."
   }
