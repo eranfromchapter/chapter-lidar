@@ -1,0 +1,791 @@
+[
+  {
+    "name": "no compass fields (a 1.0.0 record, or no reading was taken)",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z"
+    },
+    "rotationCcw": 0,
+    "expected": {
+      "kind": "not_verified",
+      "reason": "no_reading",
+      "word": "not read",
+      "symbol": {
+        "kind": "box",
+        "box": "Orientation: not verified",
+        "caption": "No compass reading"
+      },
+      "detail": "No compass reading recorded; orientation not verified"
+    }
+  },
+  {
+    "name": "headingIssue rejected",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z",
+      "headingIssue": "rejected"
+    },
+    "rotationCcw": 0,
+    "expected": {
+      "kind": "not_verified",
+      "reason": "rejected",
+      "word": "not verified",
+      "symbol": {
+        "kind": "box",
+        "box": "Orientation: not verified",
+        "caption": "Reading rejected"
+      },
+      "detail": "Compass reading rejected; orientation not verified"
+    }
+  },
+  {
+    "name": "headingIssue not_calibrated",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z",
+      "headingIssue": "not_calibrated"
+    },
+    "rotationCcw": 0,
+    "expected": {
+      "kind": "not_verified",
+      "reason": "not_calibrated",
+      "word": "not read",
+      "symbol": {
+        "kind": "box",
+        "box": "Orientation: not verified",
+        "caption": "Compass not calibrated"
+      },
+      "detail": "Compass not calibrated; orientation not verified"
+    }
+  },
+  {
+    "name": "headingIssue unavailable",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z",
+      "headingIssue": "unavailable"
+    },
+    "rotationCcw": 0,
+    "expected": {
+      "kind": "not_verified",
+      "reason": "unavailable",
+      "word": "not read",
+      "symbol": {
+        "kind": "box",
+        "box": "Orientation: not verified",
+        "caption": "Compass unavailable"
+      },
+      "detail": "No compass on the device; orientation not verified"
+    }
+  },
+  {
+    "name": "true 212.4 ±8 is verified (the sample floor)",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z",
+      "heading": 212.4,
+      "headingAccuracy": 8,
+      "headingSource": "true",
+      "headingRecordedAt": "2026-10-17T14:02:20Z"
+    },
+    "rotationCcw": 0,
+    "expected": {
+      "kind": "verified",
+      "word": "verified",
+      "symbol": {
+        "kind": "arrow",
+        "angleCcw": 212.4,
+        "approximate": false,
+        "lines": ["True north · compass", "±8° · 212°"]
+      },
+      "detail": "True heading 212°, accuracy ±8°"
+    }
+  },
+  {
+    "name": "true 0 ±1 is verified",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z",
+      "heading": 0,
+      "headingAccuracy": 1,
+      "headingSource": "true",
+      "headingRecordedAt": "2026-10-17T14:02:20Z"
+    },
+    "rotationCcw": 0,
+    "expected": {
+      "kind": "verified",
+      "word": "verified",
+      "symbol": {
+        "kind": "arrow",
+        "angleCcw": 0,
+        "approximate": false,
+        "lines": ["True north · compass", "±1° · 0°"]
+      },
+      "detail": "True heading 0°, accuracy ±1°"
+    }
+  },
+  {
+    "name": "true ±10 is verified (upper boundary)",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z",
+      "heading": 45,
+      "headingAccuracy": 10,
+      "headingSource": "true",
+      "headingRecordedAt": "2026-10-17T14:02:20Z"
+    },
+    "rotationCcw": 0,
+    "expected": {
+      "kind": "verified",
+      "word": "verified",
+      "symbol": {
+        "kind": "arrow",
+        "angleCcw": 45,
+        "approximate": false,
+        "lines": ["True north · compass", "±10° · 45°"]
+      },
+      "detail": "True heading 45°, accuracy ±10°"
+    }
+  },
+  {
+    "name": "true ±11 is approximate (lower boundary)",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z",
+      "heading": 45,
+      "headingAccuracy": 11,
+      "headingSource": "true",
+      "headingRecordedAt": "2026-10-17T14:02:20Z"
+    },
+    "rotationCcw": 0,
+    "expected": {
+      "kind": "approximate",
+      "word": "approximate",
+      "symbol": {
+        "kind": "arrow",
+        "angleCcw": 45,
+        "approximate": true,
+        "lines": ["Approx. north · compass", "±11° · true"]
+      },
+      "detail": "Approximate north: true heading 45°, accuracy ±11°"
+    }
+  },
+  {
+    "name": "true ±30 is approximate (upper boundary)",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z",
+      "heading": 300,
+      "headingAccuracy": 30,
+      "headingSource": "true",
+      "headingRecordedAt": "2026-10-17T14:02:20Z"
+    },
+    "rotationCcw": 0,
+    "expected": {
+      "kind": "approximate",
+      "word": "approximate",
+      "symbol": {
+        "kind": "arrow",
+        "angleCcw": 300,
+        "approximate": true,
+        "lines": ["Approx. north · compass", "±30° · true"]
+      },
+      "detail": "Approximate north: true heading 300°, accuracy ±30°"
+    }
+  },
+  {
+    "name": "true ±31 is not verified (inaccurate)",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z",
+      "heading": 300,
+      "headingAccuracy": 31,
+      "headingSource": "true",
+      "headingRecordedAt": "2026-10-17T14:02:20Z"
+    },
+    "rotationCcw": 0,
+    "expected": {
+      "kind": "not_verified",
+      "reason": "inaccurate",
+      "accuracy": 31,
+      "word": "not verified",
+      "symbol": {
+        "kind": "box",
+        "box": "Orientation: not verified",
+        "caption": "Compass accuracy ±31°"
+      },
+      "detail": "Compass accuracy ±31°; orientation not verified"
+    }
+  },
+  {
+    "name": "magnetic ±1 is approximate",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z",
+      "heading": 120,
+      "headingAccuracy": 1,
+      "headingSource": "magnetic",
+      "headingRecordedAt": "2026-10-17T14:02:20Z"
+    },
+    "rotationCcw": 0,
+    "expected": {
+      "kind": "approximate",
+      "word": "approximate",
+      "symbol": {
+        "kind": "arrow",
+        "angleCcw": 120,
+        "approximate": true,
+        "lines": ["Approx. north · compass", "±1° · magnetic"]
+      },
+      "detail": "Approximate north: magnetic heading 120°, accuracy ±1°"
+    }
+  },
+  {
+    "name": "magnetic ±5 is approximate",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z",
+      "heading": 10,
+      "headingAccuracy": 5,
+      "headingSource": "magnetic",
+      "headingRecordedAt": "2026-10-17T14:02:20Z"
+    },
+    "rotationCcw": 0,
+    "expected": {
+      "kind": "approximate",
+      "word": "approximate",
+      "symbol": {
+        "kind": "arrow",
+        "angleCcw": 10,
+        "approximate": true,
+        "lines": ["Approx. north · compass", "±5° · magnetic"]
+      },
+      "detail": "Approximate north: magnetic heading 10°, accuracy ±5°"
+    }
+  },
+  {
+    "name": "magnetic 87.5 ±12 is approximate (the two-room apartment fixture; 87.5 prints 88)",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z",
+      "heading": 87.5,
+      "headingAccuracy": 12,
+      "headingSource": "magnetic",
+      "headingRecordedAt": "2026-10-17T14:02:20Z"
+    },
+    "rotationCcw": 0,
+    "expected": {
+      "kind": "approximate",
+      "word": "approximate",
+      "symbol": {
+        "kind": "arrow",
+        "angleCcw": 87.5,
+        "approximate": true,
+        "lines": ["Approx. north · compass", "±12° · magnetic"]
+      },
+      "detail": "Approximate north: magnetic heading 88°, accuracy ±12°"
+    }
+  },
+  {
+    "name": "magnetic ±30 is approximate (upper boundary)",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z",
+      "heading": 200,
+      "headingAccuracy": 30,
+      "headingSource": "magnetic",
+      "headingRecordedAt": "2026-10-17T14:02:20Z"
+    },
+    "rotationCcw": 0,
+    "expected": {
+      "kind": "approximate",
+      "word": "approximate",
+      "symbol": {
+        "kind": "arrow",
+        "angleCcw": 200,
+        "approximate": true,
+        "lines": ["Approx. north · compass", "±30° · magnetic"]
+      },
+      "detail": "Approximate north: magnetic heading 200°, accuracy ±30°"
+    }
+  },
+  {
+    "name": "magnetic ±31 is not verified (inaccurate)",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z",
+      "heading": 200,
+      "headingAccuracy": 31,
+      "headingSource": "magnetic",
+      "headingRecordedAt": "2026-10-17T14:02:20Z"
+    },
+    "rotationCcw": 0,
+    "expected": {
+      "kind": "not_verified",
+      "reason": "inaccurate",
+      "accuracy": 31,
+      "word": "not verified",
+      "symbol": {
+        "kind": "box",
+        "box": "Orientation: not verified",
+        "caption": "Compass accuracy ±31°"
+      },
+      "detail": "Compass accuracy ±31°; orientation not verified"
+    }
+  },
+  {
+    "name": "true ±180 (the largest accuracy) is not verified",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z",
+      "heading": 5,
+      "headingAccuracy": 180,
+      "headingSource": "true",
+      "headingRecordedAt": "2026-10-17T14:02:20Z"
+    },
+    "rotationCcw": 0,
+    "expected": {
+      "kind": "not_verified",
+      "reason": "inaccurate",
+      "accuracy": 180,
+      "word": "not verified",
+      "symbol": {
+        "kind": "box",
+        "box": "Orientation: not verified",
+        "caption": "Compass accuracy ±180°"
+      },
+      "detail": "Compass accuracy ±180°; orientation not verified"
+    }
+  },
+  {
+    "name": "a reading 2 h before the scan is rejected",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z",
+      "heading": 212.4,
+      "headingAccuracy": 8,
+      "headingSource": "true",
+      "headingRecordedAt": "2026-10-17T12:02:11Z"
+    },
+    "rotationCcw": 0,
+    "expected": {
+      "kind": "not_verified",
+      "reason": "rejected",
+      "word": "not verified",
+      "symbol": {
+        "kind": "box",
+        "box": "Orientation: not verified",
+        "caption": "Reading rejected"
+      },
+      "detail": "Compass reading rejected; orientation not verified"
+    }
+  },
+  {
+    "name": "a reading 60 s before the scan start is accepted",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z",
+      "heading": 212.4,
+      "headingAccuracy": 8,
+      "headingSource": "true",
+      "headingRecordedAt": "2026-10-17T14:01:11Z"
+    },
+    "rotationCcw": 0,
+    "expected": {
+      "kind": "verified",
+      "word": "verified",
+      "symbol": {
+        "kind": "arrow",
+        "angleCcw": 212.4,
+        "approximate": false,
+        "lines": ["True north · compass", "±8° · 212°"]
+      },
+      "detail": "True heading 212°, accuracy ±8°"
+    }
+  },
+  {
+    "name": "a reading 61 s before the scan start is rejected",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z",
+      "heading": 212.4,
+      "headingAccuracy": 8,
+      "headingSource": "true",
+      "headingRecordedAt": "2026-10-17T14:01:10Z"
+    },
+    "rotationCcw": 0,
+    "expected": {
+      "kind": "not_verified",
+      "reason": "rejected",
+      "word": "not verified",
+      "symbol": {
+        "kind": "box",
+        "box": "Orientation: not verified",
+        "caption": "Reading rejected"
+      },
+      "detail": "Compass reading rejected; orientation not verified"
+    }
+  },
+  {
+    "name": "a reading 60 s after the scan end is accepted",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z",
+      "heading": 212.4,
+      "headingAccuracy": 8,
+      "headingSource": "true",
+      "headingRecordedAt": "2026-10-17T14:22:40Z"
+    },
+    "rotationCcw": 0,
+    "expected": {
+      "kind": "verified",
+      "word": "verified",
+      "symbol": {
+        "kind": "arrow",
+        "angleCcw": 212.4,
+        "approximate": false,
+        "lines": ["True north · compass", "±8° · 212°"]
+      },
+      "detail": "True heading 212°, accuracy ±8°"
+    }
+  },
+  {
+    "name": "a reading 61 s after the scan end is rejected",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z",
+      "heading": 212.4,
+      "headingAccuracy": 8,
+      "headingSource": "true",
+      "headingRecordedAt": "2026-10-17T14:22:41Z"
+    },
+    "rotationCcw": 0,
+    "expected": {
+      "kind": "not_verified",
+      "reason": "rejected",
+      "word": "not verified",
+      "symbol": {
+        "kind": "box",
+        "box": "Orientation: not verified",
+        "caption": "Reading rejected"
+      },
+      "detail": "Compass reading rejected; orientation not verified"
+    }
+  },
+  {
+    "name": "without finishedAt a reading up to 24 h + 60 s after the start is accepted",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "heading": 212.4,
+      "headingAccuracy": 8,
+      "headingSource": "true",
+      "headingRecordedAt": "2026-10-18T14:03:11Z"
+    },
+    "rotationCcw": 0,
+    "expected": {
+      "kind": "verified",
+      "word": "verified",
+      "symbol": {
+        "kind": "arrow",
+        "angleCcw": 212.4,
+        "approximate": false,
+        "lines": ["True north · compass", "±8° · 212°"]
+      },
+      "detail": "True heading 212°, accuracy ±8°"
+    }
+  },
+  {
+    "name": "without finishedAt a reading 24 h + 61 s after the start is rejected",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "heading": 212.4,
+      "headingAccuracy": 8,
+      "headingSource": "true",
+      "headingRecordedAt": "2026-10-18T14:03:12Z"
+    },
+    "rotationCcw": 0,
+    "expected": {
+      "kind": "not_verified",
+      "reason": "rejected",
+      "word": "not verified",
+      "symbol": {
+        "kind": "box",
+        "box": "Orientation: not verified",
+        "caption": "Reading rejected"
+      },
+      "detail": "Compass reading rejected; orientation not verified"
+    }
+  },
+  {
+    "name": "rule 5 comes before rule 6: an inaccurate reading outside the scan is rejected",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z",
+      "heading": 212.4,
+      "headingAccuracy": 42,
+      "headingSource": "true",
+      "headingRecordedAt": "2026-10-17T12:02:11Z"
+    },
+    "rotationCcw": 0,
+    "expected": {
+      "kind": "not_verified",
+      "reason": "rejected",
+      "word": "not verified",
+      "symbol": {
+        "kind": "box",
+        "box": "Orientation: not verified",
+        "caption": "Reading rejected"
+      },
+      "detail": "Compass reading rejected; orientation not verified"
+    }
+  },
+  {
+    "name": "359.6 prints 0, never 360",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z",
+      "heading": 359.6,
+      "headingAccuracy": 8,
+      "headingSource": "true",
+      "headingRecordedAt": "2026-10-17T14:02:20Z"
+    },
+    "rotationCcw": 0,
+    "expected": {
+      "kind": "verified",
+      "word": "verified",
+      "symbol": {
+        "kind": "arrow",
+        "angleCcw": 359.6,
+        "approximate": false,
+        "lines": ["True north · compass", "±8° · 0°"]
+      },
+      "detail": "True heading 0°, accuracy ±8°"
+    }
+  },
+  {
+    "name": "0.4 prints 0",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z",
+      "heading": 0.4,
+      "headingAccuracy": 8,
+      "headingSource": "true",
+      "headingRecordedAt": "2026-10-17T14:02:20Z"
+    },
+    "rotationCcw": 0,
+    "expected": {
+      "kind": "verified",
+      "word": "verified",
+      "symbol": {
+        "kind": "arrow",
+        "angleCcw": 0.4,
+        "approximate": false,
+        "lines": ["True north · compass", "±8° · 0°"]
+      },
+      "detail": "True heading 0°, accuracy ±8°"
+    }
+  },
+  {
+    "name": "212.5 rounds half up to 213",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z",
+      "heading": 212.5,
+      "headingAccuracy": 8,
+      "headingSource": "true",
+      "headingRecordedAt": "2026-10-17T14:02:20Z"
+    },
+    "rotationCcw": 0,
+    "expected": {
+      "kind": "verified",
+      "word": "verified",
+      "symbol": {
+        "kind": "arrow",
+        "angleCcw": 212.5,
+        "approximate": false,
+        "lines": ["True north · compass", "±8° · 213°"]
+      },
+      "detail": "True heading 213°, accuracy ±8°"
+    }
+  },
+  {
+    "name": "drawing: heading 0, not turned, points straight up",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z",
+      "heading": 0,
+      "headingAccuracy": 8,
+      "headingSource": "true",
+      "headingRecordedAt": "2026-10-17T14:02:20Z"
+    },
+    "rotationCcw": 0,
+    "expected": {
+      "kind": "verified",
+      "word": "verified",
+      "symbol": {
+        "kind": "arrow",
+        "angleCcw": 0,
+        "approximate": false,
+        "lines": ["True north · compass", "±8° · 0°"]
+      },
+      "detail": "True heading 0°, accuracy ±8°"
+    }
+  },
+  {
+    "name": "drawing: heading 90, not turned, points left",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z",
+      "heading": 90,
+      "headingAccuracy": 8,
+      "headingSource": "true",
+      "headingRecordedAt": "2026-10-17T14:02:20Z"
+    },
+    "rotationCcw": 0,
+    "expected": {
+      "kind": "verified",
+      "word": "verified",
+      "symbol": {
+        "kind": "arrow",
+        "angleCcw": 90,
+        "approximate": false,
+        "lines": ["True north · compass", "±8° · 90°"]
+      },
+      "detail": "True heading 90°, accuracy ±8°"
+    }
+  },
+  {
+    "name": "drawing: heading 90 on a drawing turned -30 prints 60",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z",
+      "heading": 90,
+      "headingAccuracy": 8,
+      "headingSource": "true",
+      "headingRecordedAt": "2026-10-17T14:02:20Z"
+    },
+    "rotationCcw": -30,
+    "expected": {
+      "kind": "verified",
+      "word": "verified",
+      "symbol": {
+        "kind": "arrow",
+        "angleCcw": 60,
+        "approximate": false,
+        "lines": ["True north · compass", "±8° · 60°"]
+      },
+      "detail": "True heading 90°, accuracy ±8°"
+    }
+  },
+  {
+    "name": "drawing: heading 359.7, not turned, prints 0",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z",
+      "heading": 359.7,
+      "headingAccuracy": 8,
+      "headingSource": "true",
+      "headingRecordedAt": "2026-10-17T14:02:20Z"
+    },
+    "rotationCcw": 0,
+    "expected": {
+      "kind": "verified",
+      "word": "verified",
+      "symbol": {
+        "kind": "arrow",
+        "angleCcw": 359.7,
+        "approximate": false,
+        "lines": ["True north · compass", "±8° · 0°"]
+      },
+      "detail": "True heading 0°, accuracy ±8°"
+    }
+  },
+  {
+    "name": "drawing: heading 350 turned +20 wraps to 10",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z",
+      "heading": 350,
+      "headingAccuracy": 8,
+      "headingSource": "true",
+      "headingRecordedAt": "2026-10-17T14:02:20Z"
+    },
+    "rotationCcw": 20,
+    "expected": {
+      "kind": "verified",
+      "word": "verified",
+      "symbol": {
+        "kind": "arrow",
+        "angleCcw": 10,
+        "approximate": false,
+        "lines": ["True north · compass", "±8° · 10°"]
+      },
+      "detail": "True heading 350°, accuracy ±8°"
+    }
+  },
+  {
+    "name": "drawing: heading 10 turned -20 wraps to 350",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z",
+      "heading": 10,
+      "headingAccuracy": 8,
+      "headingSource": "true",
+      "headingRecordedAt": "2026-10-17T14:02:20Z"
+    },
+    "rotationCcw": -20,
+    "expected": {
+      "kind": "verified",
+      "word": "verified",
+      "symbol": {
+        "kind": "arrow",
+        "angleCcw": 350,
+        "approximate": false,
+        "lines": ["True north · compass", "±8° · 350°"]
+      },
+      "detail": "True heading 10°, accuracy ±8°"
+    }
+  },
+  {
+    "name": "drawing: an approximate arrow turns too and keeps its source",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z",
+      "heading": 100,
+      "headingAccuracy": 18,
+      "headingSource": "true",
+      "headingRecordedAt": "2026-10-17T14:02:20Z"
+    },
+    "rotationCcw": 45,
+    "expected": {
+      "kind": "approximate",
+      "word": "approximate",
+      "symbol": {
+        "kind": "arrow",
+        "angleCcw": 145,
+        "approximate": true,
+        "lines": ["Approx. north · compass", "±18° · true"]
+      },
+      "detail": "Approximate north: true heading 100°, accuracy ±18°"
+    }
+  },
+  {
+    "name": "drawing: a not-verified box does not turn",
+    "capture": {
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z"
+    },
+    "rotationCcw": 90,
+    "expected": {
+      "kind": "not_verified",
+      "reason": "no_reading",
+      "word": "not read",
+      "symbol": {
+        "kind": "box",
+        "box": "Orientation: not verified",
+        "caption": "No compass reading"
+      },
+      "detail": "No compass reading recorded; orientation not verified"
+    }
+  }
+]

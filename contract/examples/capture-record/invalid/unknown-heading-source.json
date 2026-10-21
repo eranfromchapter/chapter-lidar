@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "1.1.0",
+  "visitId": "7c4e1b9a-2d3f-4a68-9b5c-e0f1a2b3c4d5",
+  "hub": {
+    "dealId": "example-deal-0001",
+    "projectName": "12 Example Lane"
+  },
+  "address": {
+    "formatted": "12 Example Lane, Testville, NY 10001",
+    "confirmedOnSite": true,
+    "confirmedAt": "2026-10-17T13:58:20Z"
+  },
+  "operator": {
+    "name": "Test Operator",
+    "userId": "00000000-0000-4000-8000-000000000001"
+  },
+  "device": {
+    "model": "iPhone17,1",
+    "marketingName": "iPhone 16 Pro",
+    "osName": "iOS",
+    "osVersion": "26.0.1",
+    "hasLidar": true
+  },
+  "app": {
+    "version": "1.0.0",
+    "build": "42"
+  },
+  "visitedAt": "2026-10-17T13:55:00Z",
+  "captures": [
+    {
+      "captureId": "3f6c2a9e-8b1d-4c57-9e2a-6d4b1f0c7a35",
+      "areaKey": "floor-1",
+      "label": "Floor 1",
+      "mode": "floor",
+      "units": {
+        "length": "m",
+        "display": "imperial"
+      },
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:21:40Z",
+      "coverageNotes": "Furniture covers the south wall of the living room.",
+      "omittedRooms": [],
+      "inaccessibleRooms": [
+        {
+          "name": "Primary closet",
+          "reason": "locked"
+        }
+      ],
+      "heading": 212.4,
+      "headingAccuracy": 8,
+      "headingSource": "grid",
+      "headingRecordedAt": "2026-10-17T14:02:20Z"
+    },
+    {
+      "captureId": "a81d5f03-6c2e-4b97-8d14-2f9e7b3c5a60",
+      "areaKey": "floor-2",
+      "label": "Floor 2",
+      "mode": "floor",
+      "units": {
+        "length": "m",
+        "display": "imperial"
+      },
+      "capturedAt": "2026-10-17T14:30:05Z",
+      "finishedAt": "2026-10-17T14:44:52Z",
+      "coverageNotes": "",
+      "omittedRooms": [],
+      "inaccessibleRooms": [],
+      "headingIssue": "rejected"
+    }
+  ]
+}

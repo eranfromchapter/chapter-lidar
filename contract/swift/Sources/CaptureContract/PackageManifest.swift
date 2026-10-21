@@ -3,8 +3,15 @@
 /// the manifest does not list itself. Files of one capture carry its `captureId` and `areaKey`;
 /// visit-wide files (`FileRole.visitRoles`) carry neither. A changed package is a new revision
 /// with a new `packageId`.
+///
+/// Reads schema 1.0.0 and 1.1.0 and writes `ManifestSchemaVersion.current`, with one exception:
+/// a manifest read as 1.0.0 that lists a retired role (a package sealed by an app before v2) is
+/// written back as 1.0.0, the only version that allows it (`writtenSchemaVersion`). New
+/// manifests never list a retired role.
 public struct PackageManifest: Hashable, Sendable, Codable {
-  public var schemaVersion: SchemaVersion
+  /// The version this manifest was read as; `.current` for a new manifest. What is written is
+  /// `writtenSchemaVersion`.
+  public var schemaVersion: ManifestSchemaVersion
   public var layoutVersion: LayoutVersion
   public var packageId: LowercaseUUID
   public var visitId: LowercaseUUID
@@ -16,7 +23,7 @@ public struct PackageManifest: Hashable, Sendable, Codable {
   public var files: [FileEntry]
 
   public init(
-    schemaVersion: SchemaVersion = .current,
+    schemaVersion: ManifestSchemaVersion = .current,
     layoutVersion: LayoutVersion = .current,
     packageId: LowercaseUUID,
     visitId: LowercaseUUID,
@@ -33,6 +40,31 @@ public struct PackageManifest: Hashable, Sendable, Codable {
     self.supersedesPackageId = supersedesPackageId
     self.sealedAt = sealedAt
     self.files = files
+  }
+
+  /// The `schemaVersion` this manifest is written with: `current`, or 1.0.0 for a manifest read
+  /// as 1.0.0 that lists a retired role (1.1.0 does not allow those files).
+  public var writtenSchemaVersion: ManifestSchemaVersion {
+    schemaVersion == .v1 && files.contains(where: { $0.role.isRetired }) ? .v1 : .current
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case schemaVersion, layoutVersion, packageId, visitId, revision, supersedesPackageId
+    case sealedAt, files
+  }
+
+  // Decoding is synthesized: `schemaVersion` accepts every `ManifestSchemaVersion`.
+
+  public func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(writtenSchemaVersion, forKey: .schemaVersion)
+    try container.encode(layoutVersion, forKey: .layoutVersion)
+    try container.encode(packageId, forKey: .packageId)
+    try container.encode(visitId, forKey: .visitId)
+    try container.encode(revision, forKey: .revision)
+    try container.encodeIfPresent(supersedesPackageId, forKey: .supersedesPackageId)
+    try container.encode(sealedAt, forKey: .sealedAt)
+    try container.encode(files, forKey: .files)
   }
 
   public struct FileEntry: Hashable, Sendable, Codable {
@@ -89,14 +121,19 @@ public struct PackageManifest: Hashable, Sendable, Codable {
     public var direction: PhotoDirection
     public var subject: PhotoSubject
     public var takenAt: UTCTimestamp
+    /// How `direction` was set (1.1.0). Nil in 1.0.0 documents and for labels written before it
+    /// existed.
+    public var directionSource: PhotoDirectionSource?
 
     public init(
-      room: String, direction: PhotoDirection, subject: PhotoSubject, takenAt: UTCTimestamp
+      room: String, direction: PhotoDirection, subject: PhotoSubject, takenAt: UTCTimestamp,
+      directionSource: PhotoDirectionSource? = nil
     ) {
       self.room = room
       self.direction = direction
       self.subject = subject
       self.takenAt = takenAt
+      self.directionSource = directionSource
     }
   }
 }
