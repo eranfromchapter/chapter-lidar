@@ -125,6 +125,7 @@ export default async function PackagePage({ params, searchParams }: PackagePageP
           title={heading.title}
           verdict={verdict}
           canReview={viewer.canReview}
+          {...(successor === undefined ? {} : { replacedBy: successor })}
         />
         <div className="page-grid">
           <div className="page-col">
@@ -189,8 +190,15 @@ export default async function PackagePage({ params, searchParams }: PackagePageP
                 <FieldControlsCard pkg={pkg} />
               </>
             ) : null}
-            <StationCard pkg={pkg} verdict={verdict} hubFilesUrl={hubFiles} />
-            {viewer.canReview ? <DocumentsCard pkg={pkg} /> : null}
+            <StationCard
+              pkg={pkg}
+              verdict={verdict}
+              hubFilesUrl={hubFiles}
+              {...(successor === undefined ? {} : { replacedBy: successor })}
+            />
+            {viewer.canReview ? (
+              <DocumentsCard pkg={pkg} stopped={successor !== undefined} />
+            ) : null}
           </div>
         </div>
         {viewer.canReview ? null : (

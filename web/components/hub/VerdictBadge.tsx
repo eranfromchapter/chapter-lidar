@@ -12,8 +12,11 @@ const OUTCOME_TONE: Record<Outcome, BadgeTone> = {
   blocked: "danger",
 };
 
-/** Words of a package without a verdict. */
-export function pendingWords(status: PackageStatus): string {
+/** Words of a package without a verdict; an upload the phone stopped is never checked. */
+export function pendingWords(status: PackageStatus, stopped = false): string {
+  if (stopped) {
+    return "Not checked";
+  }
   switch (status) {
     case "checking":
       return "Checks running";
@@ -27,6 +30,8 @@ export function pendingWords(status: PackageStatus): string {
 export interface VerdictBadgeProps {
   readonly status: PackageStatus;
   readonly outcome?: Outcome | undefined;
+  /** An upload the phone stopped and replaced with a new revision ("Not checked", no "yet"). */
+  readonly stopped?: boolean;
   /** Text after the word, for example " · latest". */
   readonly suffix?: string;
   readonly variant?: "soft" | "solid";
@@ -35,13 +40,14 @@ export interface VerdictBadgeProps {
 export function VerdictBadge({
   status,
   outcome,
+  stopped = false,
   suffix = "",
   variant = "soft",
 }: VerdictBadgeProps) {
   if (outcome === undefined) {
     return (
       <Badge tone="neutral" variant={variant}>
-        {pendingWords(status)}
+        {pendingWords(status, stopped)}
         {suffix}
       </Badge>
     );

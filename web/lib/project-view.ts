@@ -2,7 +2,7 @@
 // shared with the package page. Pure functions over station summaries.
 
 import { areaNoun, formatBytes, formatDate, plural, shortId } from "./format";
-import { replacedBy } from "./packages";
+import { replacedBy, uploadStoppedText } from "./packages";
 import { uploadPercent } from "./review";
 import type { PackageSummary } from "./station-types";
 
@@ -21,11 +21,7 @@ export function packageSubLine(
     : "";
   const successor = replacedBy(packages, pkg);
   if (successor !== undefined) {
-    return {
-      prefix,
-      text: `upload stopped · replaced by revision ${successor.revision}`,
-      mono: false,
-    };
+    return { prefix, text: uploadStoppedText(successor), mono: false };
   }
   switch (pkg.status) {
     case "uploading":

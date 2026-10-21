@@ -527,6 +527,32 @@ describe("states without a verdict", () => {
     );
   });
 
+  it("words a stopped upload as stopped everywhere on its page, waiting for nothing", async () => {
+    await renderPackage(states(), IDS.stopped1);
+    const header = document.querySelector(".title-row") as HTMLElement;
+    expect(within(header).getByText("Not checked")).toBeTruthy();
+    expect(header.querySelector(".meta-row")?.textContent).toBe(
+      "upload stopped · replaced by revision 2",
+    );
+    expect(document.body.textContent).not.toContain("uploading since");
+    expect(
+      [...region("Station").querySelectorAll(".station-row")].map((row) => row.textContent),
+    ).toEqual([
+      expect.stringMatching(/^Registered/),
+      "Upload stoppedreplaced by revision 2",
+      "Verdictnot checked",
+      "Not published—",
+    ]);
+    expect(
+      [...region("Documents").querySelectorAll(".doc-row")].map((row) => row.textContent),
+    ).toEqual([
+      "Spatial report PDFnot checked",
+      "verdict.jsonnot checked",
+      "manifest.jsonnot sealed",
+    ]);
+    expect(document.body.textContent).not.toMatch(/after upload|after the checks|after sealing/);
+  });
+
   it("treats verdict_not_ready as checks running", async () => {
     const fixture = contractExampleCase();
     await renderPackage(caseData(fixture, null), fixture.pkg.packageId);

@@ -8,6 +8,7 @@ import { VerdictBadge } from "@/components/hub/VerdictBadge";
 import { HubCell } from "@/components/HubCell";
 import { Phrases } from "@/components/Phrases";
 import { dayLabel, formatDateTime, formatDateTime24 } from "@/lib/format";
+import { replacedBy } from "@/lib/packages";
 import { checkedAt, contentsLine, packageSubLine } from "@/lib/project-view";
 import { capturedText, hubText } from "@/lib/review";
 import { noticeCompactLine } from "@/lib/revision-diff";
@@ -58,6 +59,7 @@ function PackageRow({
   readonly now: Date;
 }) {
   const sub = packageSubLine(pkg, packages);
+  const stopped = replacedBy(packages, pkg) !== undefined;
   const checked = checkedAt(pkg);
   const hub = hubText(pkg);
   return (
@@ -76,7 +78,7 @@ function PackageRow({
         </div>
       </td>
       <td>
-        <VerdictBadge status={pkg.status} outcome={pkg.verdict?.outcome} />
+        <VerdictBadge status={pkg.status} outcome={pkg.verdict?.outcome} stopped={stopped} />
       </td>
       <td>{capturedText(pkg, now)}</td>
       <td className={checked === undefined ? "hub-table__muted" : undefined}>

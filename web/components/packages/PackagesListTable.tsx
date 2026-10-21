@@ -1,6 +1,8 @@
 // The Packages list (web-review §6.2): every package revision the station has, newest first,
-// with its project, verdict, capture, check and HUB state.
+// with its project, verdict, capture, check and HUB state. An upload the phone replaced with a
+// newer revision of the same visit is labelled as on the project and package pages.
 
+import type { ReactNode } from "react";
 import { Button } from "@/components/hub/Button";
 import { Card } from "@/components/hub/Card";
 import { EmptyState } from "@/components/hub/EmptyState";
@@ -8,6 +10,7 @@ import { VerdictBadge } from "@/components/hub/VerdictBadge";
 import { HubCell } from "@/components/HubCell";
 import { Phrases } from "@/components/Phrases";
 import { formatDateTime, formatDateTime24, shortId } from "@/lib/format";
+import { replacedBy, uploadStoppedText } from "@/lib/packages";
 import { capturedText, hubText, projectTitle } from "@/lib/review";
 import type { ReviewPackage } from "@/lib/station-types";
 
@@ -20,30 +23,49 @@ export interface PackagesListTableProps {
 
 const HEADERS = ["Package", "Verdict", "Captured", "Checked", "In the HUB"];
 
-function Row({ pkg, now }: { readonly pkg: ReviewPackage; readonly now: Date }) {
+function Row({
+  pkg,
+  packages,
+  now,
+}: {
+  readonly pkg: ReviewPackage;
+  readonly packages: readonly ReviewPackage[];
+  readonly now: Date;
+}) {
   const title = projectTitle(pkg);
   const hub = hubText(pkg);
   const first = pkg.captures[0];
   const checked = pkg.verdict?.evaluatedAt;
+  const successor = replacedBy(packages, pkg);
+  let detail: ReactNode = null;
+  if (successor !== undefined) {
+    detail = ` · ${uploadStoppedText(successor)}`;
+  } else if (first !== undefined) {
+    detail = (
+      <>
+        {" · "}
+        <span className="mono" title={pkg.captures.map((item) => item.captureId).join(", ")}>
+          capture {shortId(first.captureId)}
+          {pkg.captures.length > 1 ? ` +${pkg.captures.length - 1}` : ""}
+        </span>
+      </>
+    );
+  }
   return (
     <tr data-package={pkg.packageId}>
       <td className="hub-table__name">
         <div className="hub-cell-title">{title}</div>
         <div className="hub-cell-sub">
           Revision {pkg.revision}
-          {first === undefined ? null : (
-            <>
-              {" · "}
-              <span className="mono" title={pkg.captures.map((item) => item.captureId).join(", ")}>
-                capture {shortId(first.captureId)}
-                {pkg.captures.length > 1 ? ` +${pkg.captures.length - 1}` : ""}
-              </span>
-            </>
-          )}
+          {detail}
         </div>
       </td>
       <td>
-        <VerdictBadge status={pkg.status} outcome={pkg.verdict?.outcome} />
+        <VerdictBadge
+          status={pkg.status}
+          outcome={pkg.verdict?.outcome}
+          stopped={successor !== undefined}
+        />
       </td>
       <td>
         <Phrases text={capturedText(pkg, now)} />
@@ -113,7 +135,7 @@ export function PackagesListTable({ packages, query, truncated, now }: PackagesL
           </thead>
           <tbody>
             {packages.map((pkg) => (
-              <Row key={pkg.packageId} pkg={pkg} now={now} />
+              <Row key={pkg.packageId} pkg={pkg} packages={packages} now={now} />
             ))}
           </tbody>
         </table>

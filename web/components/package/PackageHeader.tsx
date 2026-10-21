@@ -9,13 +9,16 @@ import { DownloadIcon } from "@/components/hub/icons";
 import { VerdictBadge } from "@/components/hub/VerdictBadge";
 import { fileDownloadRoute, reportDownloadRoute } from "@/lib/files-view";
 import { formatDate, formatDateTime, formatDateTime24, modeSummary } from "@/lib/format";
-import type { StationPackage } from "@/lib/station-types";
+import { uploadStoppedText } from "@/lib/packages";
+import type { PackageSummary, StationPackage } from "@/lib/station-types";
 
 export interface PackageHeaderProps {
   readonly pkg: StationPackage;
   readonly title: string;
   readonly verdict: Verdict | null;
   readonly canReview: boolean;
+  /** The newer revision that replaced this upload (re-seal after "Upload stopped"). */
+  readonly replacedBy?: Pick<PackageSummary, "revision">;
 }
 
 function publicationBadge(pkg: StationPackage): string | undefined {
@@ -35,11 +38,20 @@ function publicationBadge(pkg: StationPackage): string | undefined {
 function MetaRow({
   pkg,
   verdict,
+  replacedBy,
 }: {
   readonly pkg: StationPackage;
   readonly verdict: Verdict | null;
+  readonly replacedBy: Pick<PackageSummary, "revision"> | undefined;
 }) {
   const record = pkg.captureRecord;
+  if (replacedBy !== undefined) {
+    return (
+      <div className="meta-row meta-row--tight">
+        <span>{uploadStoppedText(replacedBy)}</span>
+      </div>
+    );
+  }
   if (record === undefined) {
     return (
       <div className="meta-row meta-row--tight">
@@ -79,7 +91,7 @@ function MetaRow({
   );
 }
 
-export function PackageHeader({ pkg, title, verdict, canReview }: PackageHeaderProps) {
+export function PackageHeader({ pkg, title, verdict, canReview, replacedBy }: PackageHeaderProps) {
   const published = publicationBadge(pkg);
   const sheets = pkg.files.filter((file) => file.role === "plan_pdf" && file.status === "verified");
   const [sheet] = sheets;
@@ -99,10 +111,15 @@ export function PackageHeader({ pkg, title, verdict, canReview }: PackageHeaderP
             <h2 className="page-title">
               {title} · Revision {pkg.revision}
             </h2>
-            <VerdictBadge status={pkg.status} outcome={verdict?.outcome} variant="solid" />
+            <VerdictBadge
+              status={pkg.status}
+              outcome={verdict?.outcome}
+              stopped={replacedBy !== undefined}
+              variant="solid"
+            />
             {published === undefined ? null : <Badge tone="neutral">{published}</Badge>}
           </div>
-          <MetaRow pkg={pkg} verdict={verdict} />
+          <MetaRow pkg={pkg} verdict={verdict} replacedBy={replacedBy} />
         </div>
         {canReview && (sheet !== undefined || reportReady) ? (
           <div className="title-row__actions">

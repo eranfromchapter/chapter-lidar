@@ -11,7 +11,7 @@ import { LatestVerdictCard } from "@/components/project/LatestVerdictCard";
 import { PackagesTable } from "@/components/project/PackagesTable";
 import { ProjectDecisionLog } from "@/components/project/ProjectDecisionLog";
 import { ProjectHeader } from "@/components/project/ProjectHeader";
-import { RevisionDiffCard } from "@/components/project/RevisionDiffCard";
+import { RevisionDiffCard, type RevisionBase } from "@/components/project/RevisionDiffCard";
 import { Topbar } from "@/components/shell/Topbar";
 import { NoStationRole, stationProblem } from "@/components/StationProblem";
 import type { DecisionEntry } from "@/components/DecisionList";
@@ -50,10 +50,55 @@ interface ProjectData {
   readonly packages: PackageSummary[];
   readonly notices: Map<string, NextRevisionNotice>;
   readonly diffLines: Map<string, string>;
-  readonly revisionCard?: { revision: number; state: string; tiles: ChangeTile[] };
+  readonly revisionCard?: {
+    revision: number;
+    state: string;
+    tiles: ChangeTile[];
+    base?: RevisionBase;
+  };
   readonly latest?: { packageId: string; revision: number; verdict: Verdict };
   readonly decisions: DecisionEntry[];
   readonly hubUrl: string | null;
+}
+
+/**
+ * The revision a new station revision is compared with: the one it supersedes, passing over
+ * uploads the phone stopped (re-seal after "Upload stopped"): such an upload was never checked,
+ * so the revision before it is the one the reviewer knows. "first" when every earlier revision
+ * is a stopped upload (the new revision is the first the station checks), "unknown" when the
+ * station does not have the superseded package.
+ */
+type ComparedRevision =
+  | { readonly kind: "package"; readonly pkg: StationPackage }
+  | { readonly kind: "first" }
+  | { readonly kind: "unknown" };
+
+async function comparedRevision(
+  after: StationPackage,
+  detail: (packageId: string) => Promise<StationPackage>,
+): Promise<ComparedRevision> {
+  const seen = new Set([after.packageId]);
+  let stopped = false;
+  let next = after.supersedesPackageId;
+  while (next !== undefined && !seen.has(next)) {
+    seen.add(next);
+    let before: StationPackage;
+    try {
+      before = await detail(next);
+    } catch (error) {
+      if (error instanceof StationError && error.status === 404) {
+        return { kind: "unknown" };
+      }
+      throw error;
+    }
+    // The station accepts a new revision over an upload only when the phone stopped it.
+    if (before.status !== "uploading") {
+      return { kind: "package", pkg: before };
+    }
+    stopped = true;
+    next = before.supersedesPackageId;
+  }
+  return stopped && next === undefined ? { kind: "first" } : { kind: "unknown" };
 }
 
 async function loadProject(
@@ -136,6 +181,7 @@ async function loadProject(
       revision: notice.revision,
       state: "from the phone, not sealed yet",
       tiles: noticeTiles(notice, baseVerdict, base.captureRecord),
+      base: { revision: noticed.revision, hasVerdict: noticed.verdict !== undefined },
     };
   } else if (
     newestVisit !== undefined &&
@@ -143,25 +189,32 @@ async function loadProject(
     newestVisit.verdict === undefined
   ) {
     const after = await detail(newestVisit.packageId);
-    let tiles: ChangeTile[] = [];
-    if (after.supersedesPackageId !== undefined) {
-      try {
-        const diff = stationDiff(await detail(after.supersedesPackageId), after);
+    const compared = await comparedRevision(after, detail);
+    // A revision that only replaces stopped uploads adds nothing to a checked revision: it is
+    // the first package of the visit the station checks, and the table says so.
+    if (compared.kind !== "first") {
+      let tiles: ChangeTile[] = [];
+      if (compared.kind === "package") {
+        const diff = stationDiff(compared.pkg, after);
         tiles = diff.tiles;
         if (diff.compact.length > 0) {
           diffLines.set(after.packageId, diff.compact);
         }
-      } catch (error) {
-        if (!(error instanceof StationError && error.status === 404)) {
-          throw error;
-        }
       }
+      revisionCard = {
+        revision: newestVisit.revision,
+        state: revisionStateText(newestVisit),
+        tiles,
+        ...(compared.kind === "package"
+          ? {
+              base: {
+                revision: compared.pkg.revision,
+                hasVerdict: compared.pkg.verdict !== undefined,
+              },
+            }
+          : {}),
+      };
     }
-    revisionCard = {
-      revision: newestVisit.revision,
-      state: revisionStateText(newestVisit),
-      tiles,
-    };
   }
 
   let decisions: DecisionEntry[] = [];
@@ -296,6 +349,9 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
                     revision={data.revisionCard.revision}
                     state={data.revisionCard.state}
                     tiles={data.revisionCard.tiles}
+                    {...(data.revisionCard.base === undefined
+                      ? {}
+                      : { base: data.revisionCard.base })}
                   />
                 )}
               </>

@@ -1,7 +1,15 @@
 // web-review §6.1-6.3: verdict tabs, list cells and package words shared by the lists.
 
 import { describe, expect, it } from "vitest";
-import { newerRevisions, newestPerVisit, replacedBy } from "@/lib/packages";
+import { pendingWords } from "@/components/hub/VerdictBadge";
+import { stationSteps } from "@/components/package/StationCard";
+import {
+  newerRevisions,
+  newestPerVisit,
+  replacedBy,
+  replacedByText,
+  uploadStoppedText,
+} from "@/lib/packages";
 import { checkedAt, contentsLine, packageSubLine } from "@/lib/project-view";
 import {
   capturedText,
@@ -154,6 +162,31 @@ describe("project table words", () => {
     expect(packageSubLine(first, stopped).text).toBe("upload stopped · replaced by revision 2");
     expect(newerRevisions(stopped, first).map((pkg) => pkg.revision)).toEqual([2]);
     expect(newestPerVisit(stopped).map((pkg) => pkg.packageId)).toEqual([IDS.stopped2]);
+  });
+
+  it("words a stopped upload one way: badge, lines and station steps", () => {
+    const stopped = deal("4419004");
+    const [second, first] = stopped;
+    if (first === undefined || second === undefined) {
+      throw new Error("the states scenario has two revisions of 7 Stopped Road");
+    }
+    expect(uploadStoppedText(second)).toBe("upload stopped · replaced by revision 2");
+    expect(replacedByText(second)).toBe("replaced by revision 2");
+    expect(pendingWords("uploading", true)).toBe("Not checked");
+    expect(pendingWords("uploading")).toBe("Not checked yet");
+    const steps = stationSteps(first, null, second);
+    expect(steps.map((step) => [step.label, step.note])).toEqual([
+      ["Registered", undefined],
+      ["Upload stopped", "replaced by revision 2"],
+      ["Verdict", "not checked"],
+      ["Not published", undefined],
+    ]);
+    expect(steps.slice(1).every((step) => step.glyph === "dash")).toBe(true);
+    // Without a successor the upload is still waiting for its checks.
+    expect(stationSteps(first, null).map((step) => [step.label, step.note])).toContainEqual([
+      "Checks",
+      "after upload",
+    ]);
   });
 
   it("prefixes the visit day when a project has several visits", () => {

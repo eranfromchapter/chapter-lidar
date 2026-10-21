@@ -998,17 +998,17 @@
   justify-content: flex-end;
 }
 
+/* As drawn: one gap between items and between wrapped lines (2i: 16px, 2j: 14px). */
 .meta-row {
   color: var(--text-muted);
   font-size: 14px;
   display: flex;
-  column-gap: 16px;
-  row-gap: 2px;
+  gap: 16px;
   flex-wrap: wrap;
 }
 
 .meta-row--tight {
-  column-gap: 14px;
+  gap: 14px;
 }
 
 /* Verdict card (§6.4.2) and latest verdict card (§6.3.3) */

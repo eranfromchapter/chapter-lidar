@@ -130,6 +130,87 @@ test("package states", async ({ page, context, request }) => {
   }
 });
 
+test("upload stopped and re-sealed: one wording on every page", async ({
+  page,
+  context,
+  request,
+}) => {
+  await signIn(context, ["bim"]);
+  await useScenario(request, { scenario: "states" });
+  await page.goto("/projects/4419004");
+  await expect(page.getByText("upload stopped · replaced by revision 2")).toBeVisible();
+  // Revision 1 was never checked: nothing for revision 2 to add to, no verdict to keep.
+  await expect(page.getByRole("heading", { name: /What revision/ })).toHaveCount(0);
+  await expect(page.getByText(/keeps its verdict/)).toHaveCount(0);
+  await screenshots(page, "project-upload-stopped");
+  await page.goto("/packages");
+  await expect(
+    page.getByText("Revision 1 · upload stopped · replaced by revision 2"),
+  ).toBeVisible();
+  await screenshots(page, "packages-states");
+  await page.goto(`/packages/${IDS.stopped1}`);
+  const station = page.getByRole("region", { name: "Station" });
+  await expect(station).toContainText("Upload stopped");
+  await expect(station).toContainText("replaced by revision 2");
+  await expect(station).not.toContainText("after upload");
+  await expect(page.locator(".title-row .meta-row")).toHaveText(
+    "upload stopped · replaced by revision 2",
+  );
+});
+
+test("one main landmark while the page streams in", async ({ page, context, request }) => {
+  await signIn(context, ["bim"]);
+  await useScenario(request, { scenario: "states" });
+  for (const path of ["/", "/packages", "/projects/4419004", `/packages/${IDS.westEnd1}`]) {
+    await page.goto(path);
+    // Right after the load event, before the streamed page has replaced the loading state.
+    const early = await page.evaluate(() => ({
+      mains: document.querySelectorAll("main").length,
+      ids: document.querySelectorAll("#main").length,
+    }));
+    expect(early, path).toEqual({ mains: 1, ids: 1 });
+    await settle(page);
+    await expect(page.locator("main")).toHaveCount(1);
+    await expect(page.locator("#main")).toBeVisible();
+  }
+});
+
+test("meta rows wrap with the drawn gap (2i: 16 px, 2j: 14 px)", async ({ page, context }) => {
+  await signIn(context, ["bim"]);
+  await page.setViewportSize({ width: 390, height: 900 });
+  const lineGaps = (selector: string) =>
+    page.locator(selector).evaluate((row) => {
+      const style = getComputedStyle(row);
+      const items = [...row.children].map((child) => child.getBoundingClientRect());
+      const tops = [...new Set(items.map((item) => Math.round(item.top)))].sort((a, b) => a - b);
+      // The space between the lowest item of a line and the top of the next line.
+      const bottomOf = (top: number) =>
+        Math.max(
+          ...items.filter((item) => Math.round(item.top) === top).map((item) => item.bottom),
+        );
+      return {
+        rowGap: style.rowGap,
+        columnGap: style.columnGap,
+        lines: tops.length,
+        between: tops.slice(1).map((top, index) => top - bottomOf(tops[index] ?? 0)),
+      };
+    });
+  await page.goto(`/packages/${IDS.westEnd1}`);
+  await settle(page);
+  const pkg = await lineGaps(".title-row .meta-row");
+  expect(pkg.rowGap).toBe("14px");
+  expect(pkg.columnGap).toBe("14px");
+  expect(pkg.lines).toBeGreaterThan(1);
+  for (const gap of pkg.between) {
+    expect(Math.abs(gap - 14)).toBeLessThanOrEqual(1);
+  }
+  await page.goto(`/projects/${DEALS.westEnd}`);
+  await settle(page);
+  const project = await lineGaps(".title-row .meta-row");
+  expect(project.rowGap).toBe("16px");
+  expect(project.columnGap).toBe("16px");
+});
+
 test("decision log", async ({ page, context }) => {
   await signIn(context, ["bim"]);
   await page.goto("/decisions");

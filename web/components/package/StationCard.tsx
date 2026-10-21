@@ -5,6 +5,7 @@ import { OUTCOME_WORD, type Verdict } from "@chapter/capture-contract";
 import { Card } from "@/components/hub/Card";
 import { OUTCOME_GLYPH, StatusGlyph, type GlyphKind } from "@/components/hub/StatusGlyph";
 import { formatDateTime, formatDayTime, plural } from "@/lib/format";
+import { replacedByText } from "@/lib/packages";
 import type { PackageSummary } from "@/lib/station-types";
 
 export interface StationStep {
@@ -27,11 +28,26 @@ const OUTCOME_COLOR = {
   blocked: "var(--status-danger)",
 } as const;
 
-/** The four steps of a package (registered, checks, verdict, publication). */
-export function stationSteps(pkg: PackageSummary, verdict: Verdict | null): StationStep[] {
+/**
+ * The four steps of a package (registered, checks, verdict, publication). An upload the phone
+ * replaced with `replacedBy` (re-seal after "Upload stopped") has no step left to wait for.
+ */
+export function stationSteps(
+  pkg: PackageSummary,
+  verdict: Verdict | null,
+  replacedBy?: Pick<PackageSummary, "revision">,
+): StationStep[] {
   const steps: StationStep[] = [
     { glyph: "circle", color: SUCCESS, label: "Registered", at: pkg.createdAt },
   ];
+  if (replacedBy !== undefined) {
+    steps.push(
+      { glyph: "dash", color: WAITING, label: "Upload stopped", note: replacedByText(replacedBy) },
+      { glyph: "dash", color: WAITING, label: "Verdict", note: "not checked" },
+      { glyph: "dash", color: WAITING, label: "Not published" },
+    );
+    return steps;
+  }
   switch (pkg.status) {
     case "uploading":
       steps.push({ glyph: "ring", color: WAITING, label: "Checks", note: "after upload" });
@@ -94,10 +110,12 @@ export interface StationCardProps {
   readonly verdict: Verdict | null;
   /** "HUB › Files › Capture › r{n} →" (bim, admin, published and configured). */
   readonly hubFilesUrl?: string | null;
+  /** The newer revision that replaced this upload (re-seal after "Upload stopped"). */
+  readonly replacedBy?: Pick<PackageSummary, "revision">;
 }
 
-export function StationCard({ pkg, verdict, hubFilesUrl }: StationCardProps) {
-  const steps = stationSteps(pkg, verdict);
+export function StationCard({ pkg, verdict, hubFilesUrl, replacedBy }: StationCardProps) {
+  const steps = stationSteps(pkg, verdict, replacedBy);
   let previous: string | undefined;
   return (
     <Card padding="md" label="Station">

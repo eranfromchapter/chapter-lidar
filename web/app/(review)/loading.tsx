@@ -1,5 +1,9 @@
 // Loading state of a review page (web-review §6.7): the topbar without a title and a card of
 // static skeleton rows. No animation.
+//
+// Not a <main>: on a full page load Next.js streams this fallback and the page together, so for
+// a moment both are in the document. The page's <main id="main"> stays the only main landmark
+// and the only element with that id.
 
 import { Card } from "@/components/hub/Card";
 
@@ -11,7 +15,7 @@ export default function Loading() {
       <header className="topbar" aria-busy="true">
         <span className="topbar__title" />
       </header>
-      <main className="page" id="main" aria-busy="true">
+      <div className="page" aria-busy="true">
         <span className="visually-hidden" role="status">
           Loading
         </span>
@@ -24,7 +28,7 @@ export default function Loading() {
             </div>
           ))}
         </Card>
-      </main>
+      </div>
     </>
   );
 }

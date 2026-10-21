@@ -135,6 +135,13 @@ describe("pages outside the data", () => {
     expect(screen.getByRole("status").textContent).toBe("Loading");
   });
 
+  it('loading is not a second main: the streamed page keeps the only <main id="main">', () => {
+    const { container } = render(<ReviewLoading />);
+    expect(container.querySelector("main")).toBeNull();
+    expect(container.querySelector("#main")).toBeNull();
+    expect(container.querySelector(".page")?.getAttribute("aria-busy")).toBe("true");
+  });
+
   it("the configuration page uses the HUB look, the wordmark and Inter", async () => {
     const html = await configErrorResponse().text();
     expect(html).toContain('src="/brand/chapter-wordmark.svg"');

@@ -67,14 +67,23 @@ function MutedRow({ name, detail }: { readonly name: string; readonly detail: st
   );
 }
 
-function reportPending(pkg: StationPackage): string {
+function reportPending(pkg: StationPackage, stopped: boolean): string {
+  if (stopped) {
+    return "not checked";
+  }
   if (pkg.verdict === undefined || pkg.report === undefined) {
     return "after the checks";
   }
   return pkg.report.status === "failed" ? "not generated · ask an admin" : "being generated";
 }
 
-export function DocumentsCard({ pkg }: { readonly pkg: StationPackage }) {
+export interface DocumentsCardProps {
+  readonly pkg: StationPackage;
+  /** An upload the phone stopped and replaced: its documents never come ("not checked"). */
+  readonly stopped?: boolean;
+}
+
+export function DocumentsCard({ pkg, stopped = false }: DocumentsCardProps) {
   const report = pkg.report;
   const sheets = pkg.files.filter((file) => file.role === "plan_pdf" && file.status === "verified");
   const several = sheets.length > 1;
@@ -95,7 +104,7 @@ export function DocumentsCard({ pkg }: { readonly pkg: StationPackage }) {
               href={reportDownloadRoute(pkg.packageId)}
             />
           ) : (
-            <MutedRow name="Spatial report PDF" detail={reportPending(pkg)} />
+            <MutedRow name="Spatial report PDF" detail={reportPending(pkg, stopped)} />
           )}
           {sheets.map((sheet) => (
             <LinkRow
@@ -110,7 +119,7 @@ export function DocumentsCard({ pkg }: { readonly pkg: StationPackage }) {
             />
           ))}
           {pkg.verdict === undefined ? (
-            <MutedRow name="verdict.json" detail="after the checks" />
+            <MutedRow name="verdict.json" detail={stopped ? "not checked" : "after the checks"} />
           ) : (
             <LinkRow
               name="verdict.json"
@@ -119,7 +128,7 @@ export function DocumentsCard({ pkg }: { readonly pkg: StationPackage }) {
             />
           )}
           {pkg.manifestFile === undefined ? (
-            <MutedRow name="manifest.json" detail="after sealing" />
+            <MutedRow name="manifest.json" detail={stopped ? "not sealed" : "after sealing"} />
           ) : (
             <LinkRow
               name="manifest.json"

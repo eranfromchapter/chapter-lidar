@@ -103,6 +103,20 @@ export function replacedBy(
   return newerRevisions(packages, pkg)[0];
 }
 
+/** "replaced by revision {n}", the second half of the upload-stopped wording. */
+export function replacedByText(successor: Pick<PackageSummary, "revision">): string {
+  return `replaced by revision ${successor.revision}`;
+}
+
+/**
+ * The one wording of an upload the phone replaced, on every page that lists or shows it:
+ * "upload stopped · replaced by revision {n}" (the package page's status card and station card
+ * title it "Upload stopped").
+ */
+export function uploadStoppedText(successor: Pick<PackageSummary, "revision">): string {
+  return `upload stopped · ${replacedByText(successor)}`;
+}
+
 /** The newest package of each visit, newest visit first (packages come newest first). */
 export function newestPerVisit(packages: readonly PackageSummary[]): PackageSummary[] {
   const seen = new Map<string, PackageSummary>();

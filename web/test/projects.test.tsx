@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StationRole } from "@/lib/roles";
 import type { ViewerSession } from "@/lib/viewer";
 import type { FakeStationData } from "./support/fake-station";
-import { DEALS, drawnScenario, emptyScenario, IDS } from "./support/scenarios";
+import { DEALS, drawnScenario, emptyScenario, IDS, statesScenario } from "./support/scenarios";
 import { createFakeStation, sessionFor, type FakeStation } from "./support/station";
 
 const state = vi.hoisted(() => ({ session: null as ViewerSession | null }));
@@ -272,6 +272,28 @@ describe("packages page (6.2)", () => {
         .getByRole("link", { name: /^Open/ })
         .getAttribute("href"),
     ).toBe(`/packages/${IDS.westEnd1}`);
+  });
+
+  it("labels an upload the phone replaced as the project and package pages do", async () => {
+    state.session = sessionFor(["bim"], createFakeStation(statesScenario(NOW)));
+    render(await PackagesPage({ searchParams: Promise.resolve({}) }));
+    const row = (packageId: string) =>
+      cells(
+        screen
+          .getAllByRole("row")
+          .find((item) => item.getAttribute("data-package") === packageId) as HTMLElement,
+      );
+    expect(row(IDS.stopped1).slice(0, 2)).toEqual([
+      "7 Stopped RoadRevision 1 · upload stopped · replaced by revision 2",
+      "Not checked",
+    ]);
+    expect(row(IDS.stopped2).slice(0, 2)).toEqual([
+      expect.stringMatching(/^7 Stopped RoadRevision 2 · capture /),
+      "Not checked yet",
+    ]);
+    // An upload in progress that nothing replaced keeps its own words.
+    expect(row(IDS.valley1)[1]).toBe("Not checked yet");
+    expect(row(IDS.valley1)[0]).not.toContain("upload stopped");
   });
 
   it("shows the empty state", async () => {
