@@ -61,6 +61,10 @@
       .onChange(of: entry.editingId) { _, _ in
         if entry.hasMeasurement { focus = firstValueField }
       }
+      // `entry.sheet` names the sheet's container only. Set on the stack itself, the identifier
+      // went to every element inside it and covered the bar's `entry.cancel` and `entry.save`
+      // (and the title); a container keeps its elements' own identifiers.
+      .accessibilityElement(children: .contain)
       .accessibilityIdentifier("entry.sheet")
     }
 
