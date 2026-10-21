@@ -425,8 +425,8 @@
     }
 
     /// Finishes the floor: stops the scan, writes the originals, records the scan's compass
-    /// reading in the capture (or why there is none: never neither, `CompassResult.recorded`),
-    /// maps the capture model.
+    /// reading in the capture (or why there is none; nothing when the session read no compass,
+    /// `CompassResult`), maps the capture model.
     public func finishFloor() async {
       guard let session, var record = builtRecord, !isFinishing else { return }
       isFinishing = true
@@ -434,7 +434,7 @@
       do {
         let sessionResult = try await session.finish()
         record.captures[0].finishedAt = UTCTimestamp(sessionResult.finishedAt)
-        record.captures[0].setCompass(sessionResult.compass.recorded)
+        record.captures[0].setCompass(sessionResult.compass)
         let capture = record.captures[0]
         let directory = originalsDirectory(areaKey: capture.areaKey, captureId: capture.captureId)
         let written = try RawOriginalsWriter.write(sessionResult.originals, to: directory)

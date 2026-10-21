@@ -177,21 +177,29 @@ final class HeadingWindowTests: XCTestCase {
     XCTAssertEqual(window.result(), .none(issue: .rejected), "the field was calibrated at first")
   }
 
-  func testNoPairedSampleIsUnavailable() {
+  /// The phone has a compass (nothing marked it unavailable), but no motion sample was ever
+  /// paired with a frame: the readings could not be matched to the scan. Unavailable would say
+  /// "no compass on the device", which only `markUnavailable()` knows (compass §1.5).
+  func testNoPairedSampleIsRejectedNotUnavailable() {
     var window = HeadingWindow()
     window.addUnpaired()
     XCTAssertEqual(
-      window.result(), .none(issue: .unavailable), "Core Motion delivered nothing near a frame")
+      window.result(), .none(issue: .rejected), "Core Motion delivered nothing near a frame")
     XCTAssertEqual(window.diagnostics.unpaired, 1)
+    XCTAssertEqual(HeadingWindow().result(), .none(issue: .rejected), "no frame at all")
   }
 
-  func testAWindowNeverFedIsUnavailable() {
-    // LiveCaptureSession without a compass service feeds nothing.
-    XCTAssertEqual(HeadingWindow().result(), .none(issue: .unavailable))
+  func testOnlyAPhoneWithoutACompassIsUnavailable() {
+    var window = HeadingWindow()
+    window.markUnavailable()
+    XCTAssertEqual(window.result(), .none(issue: .unavailable))
+    window.addUnpaired()
+    XCTAssertEqual(window.result(), .none(issue: .unavailable))
   }
 
-  /// A capture record 1.1.0 capture with neither a reading nor an issue is one scanned before the
-  /// app read the compass (station orientation.compass): every result names one or the other.
+  /// A capture record 1.1.0 capture with neither a reading nor an issue is one scanned without the
+  /// compass (station orientation.compass): every result of a scan read with the compass names
+  /// one or the other.
   func testEveryResultHasAReadingOrAnIssue() {
     var scenarios: [String: HeadingWindow] = ["never fed": HeadingWindow()]
     func scenario(_ name: String, _ pairs: [CompassPair]) {

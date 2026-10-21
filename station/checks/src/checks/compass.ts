@@ -7,8 +7,9 @@
 //   reason. Its next action is None: a reading cannot be added to a finished scan.
 // A capture scanned before the app read the compass has none of the compass fields (owner question
 // Q-B): every capture of a capture record 1.0.0, and in a 1.1.0 record a capture carried over from
-// a revision written before the compass (the app writes a reading or `headingIssue` for every
-// capture it scans). With COMPASS_LIMITATION_FOR_LEGACY_RECORDS false such a capture is not graded:
+// a revision written before the compass or scanned by a build that does not read it (the app
+// writes a reading or `headingIssue` for every capture it scans with the compass). With
+// COMPASS_LIMITATION_FOR_LEGACY_RECORDS false such a capture is not graded:
 // it gets the info finding of a 1.0.0 record, and the check is not applicable when no capture is
 // graded, so older packages and their revisions keep their verdict; true grades it as above (no
 // compass reading). Without a capture record the check is not applicable and says nothing (checks
@@ -66,8 +67,9 @@ export interface CompassPolicy {
 /**
  * True for a capture scanned before the app read the compass: it has none of the compass fields.
  * Every capture of a 1.0.0 record is one. In a 1.1.0 record it is a capture carried over from a
- * revision written before the compass (or scanned by such an app and sealed by a later one): the
- * app writes the reading, or `headingIssue` when there is none, for every capture it scans.
+ * revision written before the compass (or scanned by such an app, or by a build without the
+ * compass service, and sealed by a later one): the app writes the reading, or `headingIssue` when
+ * there is none, for every capture it scans with the compass.
  */
 export function scannedBeforeCompass(
   capture: Pick<Capture, (typeof COMPASS_FIELDS)[number]>,

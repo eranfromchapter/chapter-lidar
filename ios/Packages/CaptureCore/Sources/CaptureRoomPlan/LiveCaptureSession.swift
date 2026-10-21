@@ -35,8 +35,10 @@
   /// follows as `.compass` events. Pause and resume keep the ARSession, so the reading stays
   /// valid; a new session reads again. At `finish()` the frame check compares the surfaces of
   /// RoomPlan's last live update with the final result and the reading goes into
-  /// `CaptureSessionResult.compass`. Without a compass service the result is no reading, with
-  /// the issue `unavailable` (no compass sample reached the scan).
+  /// `CaptureSessionResult.compass`: a reading, or the issue that left none. Without a compass
+  /// service the session reads no compass: no reading and no issue (`.none(issue: nil)`), so the
+  /// capture carries no compass field, like one an app before the compass scanned. It never
+  /// claims the phone has no compass (`unavailable`) when it simply did not read it.
   @MainActor
   public final class LiveCaptureSession: NSObject, CaptureSession, RoomCaptureSessionDelegate {
     public nonisolated let events: AsyncStream<CaptureSessionEvent>
@@ -398,7 +400,9 @@
       diagnostics.frameYaw = check.frameYaw
       diagnostics.frameMatches = check.matches
       diagnostics.frameConsensus = check.consensus
-      let result = headingWindow.result(frameYaw: check.frameYaw)
+      // No compass service: nothing was read, so nothing is recorded (not `unavailable`).
+      let result: CompassResult =
+        compass == nil ? .none(issue: nil) : headingWindow.result(frameYaw: check.frameYaw)
       Self.log.info(
         "compass: \(String(describing: result), privacy: .public); pairs \(diagnostics.pairs), windows \(diagnostics.windowsAccepted) accepted, \(diagnostics.windowsRejected) rejected")
       return (result, diagnostics)

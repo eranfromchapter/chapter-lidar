@@ -2,23 +2,18 @@ import CaptureContract
 import Foundation
 
 /// What one floor's scan found (compass §3.3 step 9): the heading of the capture's −Z axis with
-/// its accuracy, north and time, or none, with the issue when the phone knows why (§1.5). The
-/// cases of the contract's `CompassResultValue`, which `CaptureRecord.Capture.setCompass(_:)`
-/// writes; `CaptureFlowModel.finishFloor()` is the only caller on the phone.
+/// its accuracy, north and time, or none with the issue that left none (§1.5). The cases of the
+/// contract's `CompassResultValue`, which `CaptureRecord.Capture.setCompass(_:)` writes;
+/// `CaptureFlowModel.finishFloor()` is the only caller on the phone.
+///
+/// A scan read with the compass always gives a reading or an issue (`HeadingWindow.result`).
+/// `.none(issue: nil)` means the session did not read the compass at all (a `LiveCaptureSession`
+/// without a compass service, a replay without a compass script): the capture then carries no
+/// compass field, like one scanned by an app before the compass, which the station does not
+/// grade (`orientation.compass`, owner question Q-B). No issue is made up for it.
 public typealias CompassResult = CompassResultValue
 
 extension CompassResultValue {
-  /// What Finish floor writes into the capture. A capture this app scans always carries a reading
-  /// or `headingIssue`: in a capture record 1.1.0, a capture with neither is one scanned before
-  /// the app read the compass (carried over from an older revision), which the station does not
-  /// grade (`orientation.compass`, owner question Q-B). A session that read no compass and cannot
-  /// say why (`.none(issue: nil)`: a replay without a compass script, a scripted no-reading
-  /// compass) had no compass to read: `unavailable`.
-  public var recorded: CompassResultValue {
-    if case .none(issue: nil) = self { return .none(issue: .unavailable) }
-    return self
-  }
-
   /// The state the shared evaluator gives this result on a capture scanned from `capturedAt` to
   /// `finishedAt` (rules 1–8 of the contract, rule 5 included).
   public func state(capturedAt: UTCTimestamp, finishedAt: UTCTimestamp?) -> CompassState {

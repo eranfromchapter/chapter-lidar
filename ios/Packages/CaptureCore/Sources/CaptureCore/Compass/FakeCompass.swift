@@ -60,7 +60,9 @@ public struct ReplayCompass: Hashable, Sendable {
 /// |---|---|---|---|
 /// | `verified` | 212.4° ±8 true | 212.4° ±8 true | 85° ±8 true ("E") |
 /// | `approximate` | 212.4° ±12 magnetic | 212.4° ±12 magnetic | 85° ±12 magnetic |
-/// | `none` | not calibrated | no reading | none |
+/// | `none` | not calibrated | no reading, `not_calibrated` | none |
+///
+/// The `none` scan records why it has no reading, the same reason its pre-check gave.
 @MainActor
 public final class FakeCompass: CompassProviding {
   public enum Script: String, CaseIterable, Sendable {
@@ -169,7 +171,7 @@ public final class FakeCompass: CompassProviding {
           heading: Self.heading, accuracy: Self.approximateAccuracy, source: .magnetic),
         cameraBearing: Self.heading)
     case .none:
-      return ReplayCompass(reading: nil)
+      return ReplayCompass(reading: nil, issue: .notCalibrated)
     }
   }
 }
