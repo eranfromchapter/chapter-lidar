@@ -5,27 +5,39 @@ import XCTest
 @testable import PlanExport
 
 final class ExportAllTests: XCTestCase {
-  /// The six files exportAll writes today, in today's order. New files may be added, but each of
-  /// these must still be written, under the same name and role and in this order.
-  private let todaysFiles: [(name: String, role: FileRole)] = [
-    ("plan.dxf", .planDXF), ("rooms.csv", .roomsCSV), ("plan.pdf", .planPDF),
-    ("spatial-report.pdf", .spatialReportPDF), ("plan.png", .planPNG), ("plan.svg", .planSVG),
+  /// The five files exportAll writes for a capture, in this order (plan-sheet §2): the plan
+  /// sheet is `plan-sheet.pdf` with role `plan_pdf`, and the phone writes no spatial report.
+  private let fiveFiles: [(name: String, role: FileRole)] = [
+    ("plan.dxf", .planDXF), ("rooms.csv", .roomsCSV), ("plan-sheet.pdf", .planPDF),
+    ("plan.png", .planPNG), ("plan.svg", .planSVG),
   ]
 
-  func testExportAllStillWritesTodaysSixFilesForEveryFixtureCapture() throws {
+  func testExportAllWritesTheFiveFilesForEveryFixtureCapture() throws {
     for capture in try Fixtures.all() {
       let files = try PlanExporter.exportAll(model: capture.model, record: capture.record)
-      // Superset check: other files may come before, between or after today's six.
-      let todays = files.filter { file in todaysFiles.contains { $0.name == file.fileName } }
-      XCTAssertEqual(todays.map(\.fileName), todaysFiles.map(\.name), capture.fixture)
-      XCTAssertEqual(todays.map(\.role), todaysFiles.map(\.role), capture.fixture)
+      XCTAssertEqual(files.map(\.fileName), fiveFiles.map(\.name), capture.fixture)
+      XCTAssertEqual(files.map(\.role), fiveFiles.map(\.role), capture.fixture)
       XCTAssertEqual(Set(files.map(\.fileName)).count, files.count, "file names are unique")
+      XCTAssertEqual(files.first { $0.role == .planPDF }?.mime, "application/pdf")
       for file in files {
         XCTAssertFalse(file.data.isEmpty, file.fileName)
         XCTAssertEqual(file.generator, PlanExportInfo.generator)
         XCTAssertEqual(file.generatorVersion, PlanExportInfo.generatorVersion)
         try Repo.write(file, folder: capture.outputFolder)
       }
+    }
+  }
+
+  func testNoSpatialReportIsWritten() throws {
+    // The spatial report is a station output; its role is retired in manifest 1.1.0.
+    XCTAssertTrue(FileRole.spatialReportPDF.isRetired)
+    for capture in try Fixtures.all() {
+      let files = try PlanExporter.exportAll(model: capture.model, record: capture.record)
+      XCTAssertFalse(files.contains { $0.role.isRetired }, capture.fixture)
+      XCTAssertFalse(files.contains { $0.fileName == "spatial-report.pdf" }, capture.fixture)
+      XCTAssertFalse(files.contains { $0.fileName == "plan.pdf" }, "renamed plan-sheet.pdf")
+      let pdfs = files.filter { $0.mime == "application/pdf" }
+      XCTAssertEqual(pdfs.map(\.fileName), [PlanPDFWriter.fileName], capture.fixture)
     }
   }
 
@@ -63,8 +75,7 @@ final class ExportAllTests: XCTestCase {
     ]
     for (name, model) in [("closet", closet), ("one object", object), ("stray door", stray)] {
       let files = try PlanExporter.exportAll(model: model, record: capture.record)
-      XCTAssertEqual(
-        files.filter { file in todaysFiles.contains { $0.name == file.fileName } }.count, 6, name)
+      XCTAssertEqual(files.map(\.fileName), fiveFiles.map(\.name), name)
       let png = try XCTUnwrap(files.first { $0.fileName == PNGWriter.fileName }, name)
       XCTAssertFalse(png.data.isEmpty, name)
     }

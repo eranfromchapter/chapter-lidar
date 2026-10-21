@@ -22,6 +22,10 @@ public struct PlanExportContext: Hashable, Sendable {
   public var coverageNotes: String
   public var omittedRooms: [CaptureRecord.RoomNote]
   public var inaccessibleRooms: [CaptureRecord.RoomNote]
+  /// The capture's compass reading as its orientation state (`CompassState(capture)`): the north
+  /// symbol of every plan drawn for it. A capture without a reading (any 1.0.0 record) is not
+  /// verified, "No compass reading".
+  public var compass: CompassState
 
   public init(record: CaptureRecord, captureId: LowercaseUUID) throws {
     guard let capture = record.captures.first(where: { $0.captureId == captureId }) else {
@@ -48,6 +52,7 @@ public struct PlanExportContext: Hashable, Sendable {
     coverageNotes = capture.coverageNotes
     omittedRooms = capture.omittedRooms
     inaccessibleRooms = capture.inaccessibleRooms
+    compass = CompassState(capture)
   }
 
   /// Title-block project line: the project name when there is one, with the HUB deal id.

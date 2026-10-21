@@ -5,17 +5,14 @@ import XCTest
 @testable import PlanExport
 
 final class PDFWriterTests: XCTestCase {
-  private func both(_ capture: FixtureCapture) throws -> (plan: PDFFile, report: PDFFile) {
+  /// The plan sheet of a capture, as exportAll writes it (`plan-sheet.pdf`, role `plan_pdf`).
+  private func plan(_ capture: FixtureCapture) throws -> PDFFile {
     let context = try PlanExportContext(record: capture.record, captureId: capture.model.captureId)
     let plan = try PlanPDFWriter.write(model: capture.model, context: context).file
-    let report = try SpatialReportWriter.write(model: capture.model, context: context)
     try Repo.write(plan, folder: capture.outputFolder)
-    try Repo.write(report, folder: capture.outputFolder)
-    XCTAssertEqual(plan.fileName, "plan.pdf")
-    XCTAssertEqual(report.fileName, "spatial-report.pdf")
+    XCTAssertEqual(plan.fileName, "plan-sheet.pdf")
     XCTAssertEqual(plan.role, .planPDF)
-    XCTAssertEqual(report.role, .spatialReportPDF)
-    return (PDFFile(plan.data), PDFFile(report.data))
+    return PDFFile(plan.data)
   }
 
   /// Checks header, trailer and that every xref entry points at its object.
@@ -56,68 +53,26 @@ final class PDFWriterTests: XCTestCase {
     }
   }
 
-  func testBothPDFsAreValidPDF17WithAddressCaptureIdAndRoomLabels() throws {
+  func testPlanSheetIsValidPDF17WithAddressCaptureIdAndRoomLabels() throws {
     for capture in try Fixtures.all() {
-      let (plan, report) = try both(capture)
-      for (name, pdf) in [("plan", plan), ("report", report)] {
-        try assertStructure(pdf)
-        let shown = pdf.shownText()
-        let joined = shown.joined(separator: "\n")
-        let context = "\(capture.fixture) \(capture.truth.areaKey) \(name)"
-        XCTAssertTrue(shown.contains(capture.record.address.formatted), "address in \(context)")
-        XCTAssertTrue(shown.contains { $0.contains(capture.truth.captureId) }, "capture id in \(context)")
-        for room in capture.truth.rooms {
-          XCTAssertTrue(
-            shown.contains { $0.contains(room.label) }, "room label \(room.label) in \(context)")
-        }
-        XCTAssertFalse(joined.isEmpty)
+      let pdf = try plan(capture)
+      try assertStructure(pdf)
+      XCTAssertEqual(pdf.contentStreams.count, 1, "one page")
+      let shown = pdf.shownText()
+      let context = "\(capture.fixture) \(capture.truth.areaKey)"
+      XCTAssertTrue(shown.contains(capture.record.address.formatted), "address in \(context)")
+      XCTAssertTrue(
+        shown.contains { $0.contains(capture.truth.captureId) }, "capture id in \(context)")
+      for room in capture.truth.rooms {
+        XCTAssertTrue(
+          shown.contains { $0.contains(room.label) }, "room label \(room.label) in \(context)")
       }
     }
   }
 
-  func testSpatialReportStatesItIsNotAPhotoSurvey() throws {
-    let capture = try XCTUnwrap(Fixtures.load("two-room-apartment").first)
-    let (_, report) = try both(capture)
-    let shown = report.shownText().joined(separator: " ")
-    XCTAssertTrue(shown.contains("not a photo survey"))
-    XCTAssertTrue(shown.contains("not verified construction quantities"))
-  }
-
-  func testSpatialReportTableHasDimensionsAreaHeightOpeningsAndObjects() throws {
-    let capture = try XCTUnwrap(Fixtures.load("two-room-apartment").first)
-    let (_, report) = try both(capture)
-    let shown = report.shownText()
-    for expected in [
-      "Room", "Width", "Length", "Height", "Floor area", "Doors", "Windows", "Openings",
-      "Recognized objects",
-      "5000 mm", "4000 mm", "2700 mm", "16' 4.85\"", "20.00 m\u{00B2}", "12.00 m\u{00B2}",
-      "sofa", "bed", "Test Operator", "iPhone 16 Pro (iPhone17,1), iOS 26.0.1",
-      "Total reported floor area: 32.00 m\u{00B2} (344.4 sq ft).",
-    ] {
-      XCTAssertTrue(
-        shown.contains { $0.contains(expected) }, "report lacks \(expected)\n\(shown)")
-    }
-  }
-
-  func testSpatialReportObjectFootprintHasOneLinePerUnit() throws {
-    let capture = try XCTUnwrap(Fixtures.load("two-room-apartment").first)
-    let (_, report) = try both(capture)
-    let shown = report.shownText()
-    // The sofa is 2000 mm wide and 900 mm deep, the bed 1600 mm by 2000 mm.
-    for (metric, imperial) in [
-      ("2000 x 900 mm", "6' 6.74\" x 2' 11.43\""), ("1600 x 2000 mm", "5' 2.99\" x 6' 6.74\""),
-    ] {
-      let line = try XCTUnwrap(shown.firstIndex(of: metric), "report lacks \(metric)\n\(shown)")
-      XCTAssertEqual(shown[line + 1], imperial)
-    }
-    // Not the two dimension cells joined, which mixed the units on one line.
-    XCTAssertFalse(shown.contains("6' 6.74\" x 900 mm"))
-  }
-
   func testPlanTitleBlockFields() throws {
     let capture = try XCTUnwrap(Fixtures.load("box-room").first)
-    let (plan, _) = try both(capture)
-    let shown = plan.shownText()
+    let shown = try plan(capture).shownText()
     XCTAssertTrue(shown.contains("Floor plan - Floor 1"))
     XCTAssertTrue(shown.contains(capture.record.address.formatted))
     XCTAssertTrue(shown.contains("Fixture box-room (deal fixture-deal-0001)"))
@@ -125,13 +80,55 @@ final class PDFWriterTests: XCTestCase {
     XCTAssertTrue(shown.contains(capture.truth.captureId))
     XCTAssertTrue(shown.contains("2026-10-17"))
     XCTAssertTrue(shown.contains("Test Operator"))
-    XCTAssertTrue(shown.contains { $0.contains("True north was not captured") || $0.contains("True north") })
+  }
+
+  func testPlanSheetShowsTheCompassStateOfItsCapture() throws {
+    // box-room: a 1.0.0 record, no reading. two-floor-house: Floor 1 verified 212.4 ±8 true,
+    // Floor 2 no reading. two-room-apartment: magnetic ±12, approximate.
+    let unread = ["Orientation: not verified", "No compass reading"]
+    let verified = ["N", "True north \u{00B7} compass", "\u{00B1}8\u{00B0} \u{00B7} 212\u{00B0}"]
+    let approximate = [
+      "N", "Approx. north \u{00B7} compass", "\u{00B1}12\u{00B0} \u{00B7} magnetic",
+    ]
+    let cases: [(fixture: String, floor: Int, texts: [String])] = [
+      ("box-room", 0, unread), ("two-floor-house", 0, verified), ("two-floor-house", 1, unread),
+      ("two-room-apartment", 0, approximate),
+    ]
+    for (fixture, floor, texts) in cases {
+      let capture = try Fixtures.load(fixture)[floor]
+      let shown = try plan(capture).shownText()
+      for text in texts { XCTAssertTrue(shown.contains(text), "\(fixture) \(floor): \(text)") }
+      // The old note and its "UP" arrow are gone: the symbol says what is known.
+      XCTAssertFalse(shown.contains { $0.contains("True north was not captured") }, fixture)
+      XCTAssertFalse(shown.contains("UP"), fixture)
+      XCTAssertFalse(shown.contains("ORIENTATION"), fixture)
+    }
+  }
+
+  func testPlanSheetNorthSymbolFitsItsPanelUnderTheScaleBar() throws {
+    // The block's foot on the title block's bottom edge plus 1.5 mm, its top under the scale
+    // bar (17 mm under the title block's top), its left edge 1.5 mm into the right panel of
+    // the narrowest sheet, Letter portrait.
+    let sheet = PlanSheet(paper: .letter, landscape: false, scaleDenominator: 50)
+    let blockW = sheet.widthMM - 2 * PlanSheet.pageMargin
+    let rightX = PlanSheet.pageMargin + blockW * 0.62
+    for state in [
+      CompassState.verified(heading: 212.4, accuracy: 8),
+      .approximate(heading: 87.5, accuracy: 12, source: .magnetic),
+      .notVerified(.inaccurate, accuracy: 42),
+    ] {
+      let symbol = NorthSymbol(state: state)
+      let size = NorthArrow.blockSizeMM(
+        symbol: symbol, boxMM: PlanPDFWriter.northBoxSize, caption: true)
+      XCTAssertLessThan(
+        PlanPDFWriter.northBottom + size.height, PlanSheet.titleBlockHeight - 17, "\(state)")
+      XCTAssertLessThan(rightX + 1.5 + size.width, sheet.widthMM - PlanSheet.pageMargin)
+    }
   }
 
   func testObjectsAndDimensionStringsAreTextOnThePlan() throws {
     let capture = try XCTUnwrap(Fixtures.load("box-room").first)
-    let (plan, _) = try both(capture)
-    let shown = plan.shownText()
+    let shown = try plan(capture).shownText()
     XCTAssertTrue(shown.contains("4000 mm"))
     XCTAssertTrue(shown.contains("3000 mm"))
     XCTAssertTrue(shown.contains("table"))
@@ -140,33 +137,7 @@ final class PDFWriterTests: XCTestCase {
   func testImperialDisplayUsesFeetInchesDimensions() throws {
     var capture = try XCTUnwrap(Fixtures.load("box-room").first)
     capture.record.captures[0].units.display = .imperial
-    let (plan, _) = try both(capture)
-    XCTAssertTrue(plan.shownText().contains("13' 1.48\""))
-  }
-
-  func testLongReportContinuesOnNewPagesWithRepeatedHeaderAndFooters() throws {
-    var model = Synthetic.room(width: 4, length: 3)
-    model.rooms = (1...60).map { index in
-      CaptureModel.Room(
-        id: "room-\(index)", label: "Room number \(index)",
-        polygon: model.rooms[0].polygon, heightM: 2.5)
-    }
-    let capture = try XCTUnwrap(Fixtures.load("box-room").first)
-    let context = try PlanExportContext(record: capture.record, captureId: capture.model.captureId)
-    let file = try SpatialReportWriter.write(model: model, context: context)
-    let pdf = PDFFile(file.data)
-    try assertStructure(pdf)
-    let pageCount = pdf.contentStreams.count
-    XCTAssertGreaterThan(pageCount, 2)
-    for page in 0..<pageCount {
-      let shown = pdf.shownText(page: page)
-      XCTAssertTrue(shown.contains { $0.contains("page \(page + 1) of \(pageCount)") })
-      XCTAssertTrue(shown.contains { $0.contains(capture.truth.captureId) })
-      // 60 rooms span at least three pages: the table header repeats on the second.
-      if page == 1 { XCTAssertTrue(shown.contains("Floor area"), "table header repeats") }
-    }
-    let all = pdf.shownText().joined(separator: "\n")
-    XCTAssertTrue(all.contains("Room number 60"))
+    XCTAssertTrue(try plan(capture).shownText().contains("13' 1.48\""))
   }
 
   func testTextEncodingEscapesAndWinAnsi() {
@@ -192,18 +163,16 @@ final class PDFWriterTests: XCTestCase {
 
   func testPDFsEmbedInterAndDeclareOnlyTheFontsTheyUse() throws {
     let capture = try XCTUnwrap(Fixtures.load("box-room").first)
-    let (plan, report) = try both(capture)
-    for (name, pdf) in [("plan", plan), ("report", report)] {
-      let fonts = pdf.baseFonts
-      XCTAssertFalse(fonts.contains { $0.hasPrefix("Helvetica") }, name)
-      XCTAssertTrue(fonts.contains("CHAPRA+Inter-Regular"), "\(name): \(fonts)")
-      XCTAssertTrue(fonts.contains("Times-Roman"), "\(name) title in Times: \(fonts)")
-      // Each embedded Inter has a TrueType program, compressed, with its uncompressed length.
-      XCTAssertEqual(
-        pdf.text.components(separatedBy: "/FontFile2 ").count - 1,
-        fonts.filter { $0.contains("+Inter-") }.count, name)
-      XCTAssertTrue(pdf.text.contains("/Length1 \(ChapterBrandAssets.interRegular.data.count)"))
-    }
+    let pdf = try plan(capture)
+    let fonts = pdf.baseFonts
+    XCTAssertFalse(fonts.contains { $0.hasPrefix("Helvetica") })
+    XCTAssertTrue(fonts.contains("CHAPRA+Inter-Regular"), "\(fonts)")
+    XCTAssertTrue(fonts.contains("Times-Roman"), "title in Times: \(fonts)")
+    // Each embedded Inter has a TrueType program, compressed, with its uncompressed length.
+    XCTAssertEqual(
+      pdf.text.components(separatedBy: "/FontFile2 ").count - 1,
+      fonts.filter { $0.contains("+Inter-") }.count)
+    XCTAssertTrue(pdf.text.contains("/Length1 \(ChapterBrandAssets.interRegular.data.count)"))
     // The program is a TrueType font (version 1.0 header) once inflated.
     let font = ChapterBrandAssets.interRegular.data
     XCTAssertEqual(Array(font.prefix(4)), [0, 1, 0, 0])
@@ -236,5 +205,25 @@ final class PDFWriterTests: XCTestCase {
         error as? PlanExportError,
         .captureNotInRecord(captureId: capture.model.captureId.rawValue))
     }
+  }
+
+  func testContextCarriesTheCompassStateOfItsCapture() throws {
+    func compass(_ fixture: String, _ floor: Int) throws -> CompassState {
+      let capture = try Fixtures.load(fixture)[floor]
+      return try PlanExportContext(record: capture.record, captureId: capture.model.captureId)
+        .compass
+    }
+    XCTAssertEqual(try compass("box-room", 0), .notVerified(.noReading, accuracy: nil))
+    XCTAssertEqual(try compass("two-floor-house", 0), .verified(heading: 212.4, accuracy: 8))
+    XCTAssertEqual(try compass("two-floor-house", 1), .notVerified(.noReading, accuracy: nil))
+    XCTAssertEqual(
+      try compass("two-room-apartment", 0),
+      .approximate(heading: 87.5, accuracy: 12, source: .magnetic))
+    // The state is the contract's evaluator on the record's capture.
+    var capture = try Fixtures.load("two-floor-house")[0]
+    capture.record.captures[0].headingAccuracy = 31
+    XCTAssertEqual(
+      try PlanExportContext(record: capture.record, captureId: capture.model.captureId).compass,
+      .notVerified(.inaccurate, accuracy: 31))
   }
 }

@@ -100,8 +100,8 @@ public enum SVGWriter {
 }
 
 /// PNG plan preview at 300 dpi: the plan at its sheet scale (1:50, 1:100, ...) rasterised at
-/// 300 pixels per paper inch, 8-bit RGB in the Chapter tones of plan.pdf and plan.svg, with a
-/// `pHYs` chunk. Labels are drawn from the outlines of the Inter fonts plan.pdf embeds.
+/// 300 pixels per paper inch, 8-bit RGB in the Chapter tones of plan-sheet.pdf and plan.svg,
+/// with a `pHYs` chunk. Labels are drawn from the outlines of the Inter fonts the PDFs embed.
 public enum PNGWriter {
   public static let fileName = "plan.png"
   public static let dpi = 300
@@ -163,9 +163,10 @@ public enum PNGWriter {
 
 /// Everything PlanExport writes for one capture.
 public enum PlanExporter {
-  /// DXF, CSV, plan PDF, Spatial Report PDF, PNG and SVG for one capture (one floor or area),
-  /// in that order. `record` supplies the title-block metadata; the capture is found in it by
-  /// the model's `captureId`.
+  /// The five files of one capture (one floor or area), in this order: `plan.dxf`, `rooms.csv`,
+  /// the plan sheet `plan-sheet.pdf` (role `plan_pdf`), `plan.png` and `plan.svg`. `record`
+  /// supplies the title-block metadata and the compass reading; the capture is found in it by
+  /// the model's `captureId`. No spatial report: the station makes it after its checks.
   public static func exportAll(model: CaptureModel, record: CaptureRecord) throws
     -> [ExportedFile]
   {
@@ -174,7 +175,6 @@ public enum PlanExporter {
       try DXFWriter.write(model: model),
       try CSVWriter.write(model: model),
       try PlanPDFWriter.write(model: model, context: context).file,
-      try SpatialReportWriter.write(model: model, context: context),
       try PNGWriter.write(model: model, displayUnits: context.displayUnits),
       try SVGWriter.write(model: model, displayUnits: context.displayUnits),
     ]

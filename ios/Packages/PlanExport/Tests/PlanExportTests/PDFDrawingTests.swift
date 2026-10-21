@@ -130,9 +130,13 @@ final class PDFDrawingTests: XCTestCase {
     let context = try PlanExportContext(record: capture.record, captureId: capture.model.captureId)
     let plan = PDFFile(try PlanPDFWriter.write(model: capture.model, context: context).file.data)
     let stream = try XCTUnwrap(plan.contentStreams.first)
-    for op in [" g\n", " G\n", " d\n", " W n"] {
-      XCTAssertFalse(stream.contains(op), "plan.pdf uses \(op)")
+    for op in [" g\n", " G\n", " W n"] {
+      XCTAssertFalse(stream.contains(op), "plan-sheet.pdf uses \(op)")
     }
+    // The only dashes are the north symbol's: this capture's reading is approximate, so its
+    // 28 pt ring is dashed 1.6 / 1.6 of 28/32 pt; the arrow is solid.
+    let dashes = Set(stream.split(separator: "\n").filter { $0.hasSuffix(" d") })
+    XCTAssertEqual(dashes, ["[1.400 1.400] 0.000 d", "[] 0.000 d"])
     XCTAssertTrue(stream.contains("0.1373 0.1216 0.1255 rg"), "brand black")
     XCTAssertEqual(ChapterBrand.tone(0), ChapterBrand.ink)
     XCTAssertEqual(ChapterBrand.tone(1), .white)
