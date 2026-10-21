@@ -70,32 +70,40 @@ struct VisitView: View {
           }
           .onChange(of: model.step) { _, step in visit.captureStepChanged(step) }
         }
+      // The photo step (viewfinder, then Label a photo with an inline bar), Field controls and
+      // Before you leave set their own titles and toolbars (pushed screens, phone-field §2), each
+      // in a stack of its own until the app's navigation pushes them.
       case .photos:
         if let model = visit.photoModel {
-          PhotoStep(
-            model: model, source: visit.services.photoSource,
-            onDone: { visit.photosDone() },
-            onRenameRooms: renameAction(captureId: model.capture.ref.captureId))
+          NavigationStack {
+            PhotoStep(
+              model: model, source: visit.services.photoSource,
+              onDone: { visit.photosDone() },
+              onRenameRooms: renameAction(captureId: model.capture.ref.captureId))
+          }
         }
       case .controls:
         if let model = visit.controlsModel {
-          FieldControlsView(model: model)
-            .overlay(alignment: .topTrailing) {
-              Button("Continue") { visit.controlsDone() }
-                .font(Typo.sans(15, weight: .semibold)).foregroundStyle(Palette.ink)
-                .frame(minHeight: Control.minTouch)
-                .padding(.horizontal, 20)
-                .accessibilityIdentifier("controls.continue")
-            }
+          NavigationStack {
+            FieldControlsView(model: model)
+              .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                  Button("Continue") { visit.controlsDone() }
+                    .accessibilityIdentifier("controls.continue")
+                }
+              }
+          }
         }
       case .checklist:
         if let report = visit.checklist {
-          BeforeYouLeaveView(
-            report: report, onTakePhoto: { visit.checklistTakePhoto($0) },
-            onAddControls: { _ in visit.checklistAddControls() },
-            onConfirmNoRoomsSkipped: { visit.checklistConfirmNoRoomsSkipped() },
-            onRenameRooms: renameAction(captureId: nil),
-            onFinish: { visit.checklistFinished() })
+          NavigationStack {
+            BeforeYouLeaveView(
+              report: report, onTakePhoto: { visit.checklistTakePhoto($0) },
+              onAddControls: { _ in visit.checklistAddControls() },
+              onConfirmNoRoomsSkipped: { visit.checklistConfirmNoRoomsSkipped() },
+              onRenameRooms: renameAction(captureId: nil),
+              onFinish: { visit.checklistFinished() })
+          }
         }
       case .packageReady:
         NavigationStack {

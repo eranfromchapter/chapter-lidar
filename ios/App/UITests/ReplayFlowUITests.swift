@@ -30,6 +30,12 @@ final class ReplayFlowUITests: XCTestCase {
     app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", label)).firstMatch
   }
 
+  /// The element with this accessibility identifier, of any type (a wrapping text field is a
+  /// text view).
+  private func field(_ identifier: String) -> XCUIElement {
+    app.descendants(matching: .any).matching(identifier: identifier).firstMatch
+  }
+
   /// Keeps a screenshot in the result bundle, to look at the screen after the run.
   private func attachScreenshot(_ name: String) {
     let shot = XCTAttachment(screenshot: app.screenshot())
@@ -100,53 +106,65 @@ final class ReplayFlowUITests: XCTestCase {
     // No photo yet: "Before you leave" will ask for one.
     tap(app.buttons["Done"])
 
-    // Field controls: long distance A and B, one ceiling height (tape, ft-in).
+    // Field controls (phone-field §4): the LiDAR scan fills the minimum set and each row takes
+    // an optional tape check (feet and inches as two fields): long distance A and B, and one
+    // ceiling height, measured in the room by its name (a later rename moves the control with
+    // it).
     XCTAssertTrue(app.staticTexts["Field controls"].waitForExistence(timeout: 10))
-    tap(button("Long distance A"))
-    type("Entry wall", into: app.textFields["From (for example Kitchen east wall)"])
-    type("Back wall", into: app.textFields["To (for example Living west wall)"])
-    type("12 4", into: app.textFields["Value"])
-    tap(button("Save measurement"))
-    tap(button("Long distance B"))
-    type("Left wall", into: app.textFields["From (for example Kitchen east wall)"])
-    type("Right wall", into: app.textFields["To (for example Living west wall)"])
-    type("10 2", into: app.textFields["Value"])
-    tap(button("Save measurement"))
-    tap(button("Ceiling heights"))
-    // Measured in the room by its name now; a later rename moves the control with it.
-    type("Shower", into: app.textFields["Room"])
-    type("8 1", into: app.textFields["Value"])
-    tap(button("Save measurement"))
+    // The entry sheet's identifier covers its bar's buttons, so Save is found by its label.
+    func saveEntry() {
+      tap(app.buttons["Save"])
+      XCTAssertTrue(field("entry.sheet").waitForNonExistence(timeout: 10), "sheet stays open")
+    }
+    tap(app.buttons["controls.row.floor-1.distanceA"])
+    type("Entry wall", into: field("entry.from"))
+    type("Back wall", into: field("entry.to"))
+    type("13", into: field("entry.feet"))
+    type("1", into: field("entry.inches"))
+    saveEntry()
+    tap(app.buttons["controls.row.floor-1.distanceB"])
+    type("Left wall", into: field("entry.from"))
+    type("Right wall", into: field("entry.to"))
+    type("9", into: field("entry.feet"))
+    type("10", into: field("entry.inches"))
+    saveEntry()
+    tap(app.buttons["controls.row.floor-1.ceilingHeight"])
+    tap(app.buttons["entry.room.Shower"])
+    type("8", into: field("entry.feet"))
+    type("10", into: field("entry.inches"))
+    saveEntry()
+    attachScreenshot("4b Field controls")
     tap(app.buttons["controls.continue"])
 
-    // Before you leave: "Skipped rooms recorded" is open until "No rooms skipped", and the
+    // Before you leave: "Skipped rooms recorded" is open until "All rooms scanned", and the
     // renamed room has no photo yet.
     XCTAssertTrue(app.staticTexts["Before you leave"].waitForExistence(timeout: 10))
-    tap(button("No rooms skipped"))
+    tap(app.buttons["checklist.allRoomsScanned"])
     XCTAssertTrue(app.staticTexts["Shower has no photo"].waitForExistence(timeout: 10))
     XCTAssertTrue(app.buttons["checklist.renameRooms"].exists)
     attachScreenshot("5 Checklist, Shower has no photo")
 
     // "Take photo" opens the camera for that room: the title says which.
-    tap(app.buttons["Take photo"])
-    waitForLabel(app.staticTexts["photo.title"], "Shower \u{00B7} Photo 1 of Floor 1")
+    tap(app.buttons["checklist.takePhoto"])
+    waitForLabel(app.staticTexts["photo.title"], "Shower \u{00B7} Photo 1 \u{00B7} Floor 1")
     waitForLabel(coverage, "Still needs a photo: Shower")
     attachScreenshot("6 Viewfinder for Shower")
 
-    // The fixture photo: the labeling screen keeps the room in its title, and the Room chip is
-    // Shower, chosen and marked as still needing a photo.
+    // The fixture photo: on the labeling screen (titled with the photo and the floor) the Room
+    // chip is Shower, chosen and marked as still needing a photo. "Rename rooms" is in the room
+    // picker ("More").
     tap(app.buttons["Take photo"], timeout: 20)
-    waitForLabel(app.staticTexts["photo.labelTitle"], "Shower \u{00B7} Photo 1 of Floor 1")
-    let shower = button("Shower")
+    waitForLabel(app.staticTexts["photo.labelTitle"], "Photo 1 \u{00B7} Floor 1")
+    let shower = app.buttons["photo.room.Shower"]
     XCTAssertTrue(shower.waitForExistence(timeout: 10))
     XCTAssertEqual(shower.value as? String, "needs photo")
     XCTAssertTrue(shower.isSelected)
     XCTAssertFalse(button("Room 1").exists, "the old name is gone from the chips")
-    XCTAssertTrue(app.buttons["photo.renameRooms"].exists)
+    XCTAssertTrue(app.buttons["photo.moreRooms"].exists)
     attachScreenshot("7 Labeling with renamed chips")
-    tap(app.buttons["N"])
-    tap(button("General"))
-    tap(button("Save and take next"))
+    tap(app.buttons["photo.direction.N"])
+    tap(app.buttons["photo.subject.general"])
+    tap(app.buttons["photo.save"])
     waitForLabel(coverage, "Every room has a photo")
     tap(app.buttons["Done"])
 
