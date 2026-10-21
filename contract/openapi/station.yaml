@@ -1218,11 +1218,12 @@ components:
     PackageSummaryFields:
       description: |
         The fields of a package summary, shared by PackageSummary, Package and ReviewPackage.
-        Open on its own; each of those closes it (unevaluatedProperties false). Properties
-        added in 1.1.0 are optional; `updatedAt`, `captures` and `totals` are sent in every
-        response of a 1.1.0 station.
+        Open on its own; each of those closes it (unevaluatedProperties false). Of the
+        properties added in 1.1.0, `updatedAt`, `captures` and `totals` are in every response
+        of a 1.1.0 station; the others are optional.
       type: object
-      required: [packageId, visitId, dealId, revision, status, createdAt]
+      required:
+        [packageId, visitId, dealId, revision, status, createdAt, updatedAt, captures, totals]
       properties:
         packageId:
           $ref: "#/components/schemas/Uuid"
