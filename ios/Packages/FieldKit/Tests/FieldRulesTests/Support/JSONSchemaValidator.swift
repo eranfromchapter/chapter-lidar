@@ -45,6 +45,12 @@ struct JSONSchemaValidator {
     return try validate(instance, against: root, path: "$")
   }
 
+  /// The same against one definition of the schema, `#/$defs/<name>` (a manifest photo entry).
+  func validate(data: Data, definition name: String) throws -> [String] {
+    let instance = try JSONSerialization.jsonObject(with: data)
+    return try validate(instance, against: try resolve("#/$defs/\(name)"), path: "$")
+  }
+
   func validate(_ instance: Any, against schema: [String: Any], path: String) throws -> [String] {
     for key in schema.keys
     where !Self.annotationKeywords.contains(key) && !Self.assertionKeywords.contains(key) {

@@ -1,10 +1,17 @@
 #if canImport(SwiftUI) && canImport(UIKit)
   import CaptureContract
+  import ChapterUI
   import FieldRules
   import SwiftUI
 
-  /// Field controls (design screen-field, 2): the list of required controls with their values
-  /// (or "■ Missing"), the "New measurement" card with a unit menu, and "Save measurement".
+  /// "Field controls" (design v2, artboard 2d-2; phone-field §4): the minimum set of every floor
+  /// as one guided list, with what lies between two floors after each floor that has a next one.
+  /// A row opens the entry sheet (`ControlEntrySheet`). Under the manual policy the bar shows
+  /// `4 of 9 required`; under the standard policy (shipping) the scan's values fill the rows and
+  /// nothing is missing.
+  ///
+  /// Pushed by the app (system back, large title). `model.focus(rowId:)` scrolls to a row and
+  /// opens its sheet (Before you leave "Add").
   public struct FieldControlsView: View {
     @Bindable var model: FieldControlsModel
 
@@ -13,222 +20,190 @@
     }
 
     public var body: some View {
-      ScrollView {
-        VStack(alignment: .leading, spacing: 14) {
-          Text("Field controls")
-            .font(FieldTheme.title30())
-          Text(
-            model.measurementsFromScan
-              ? "Measured by the LiDAR scan. Tap a row to add an optional tape or laser check."
-              : "Tape or laser only. Never copy numbers from the scan.")
-            .font(.system(size: 15))
-            .foregroundStyle(FieldTheme.muted)
-
-          if model.floors.count > 1 { floorPicker }
-
-          if model.floors.isEmpty {
-            Text("No floor has been captured yet.")
-              .font(.system(size: 15))
-              .foregroundStyle(FieldTheme.muted)
-          } else {
-            list
+      ScrollViewReader { proxy in
+        ScrollView {
+          VStack(alignment: .leading, spacing: 0) {
+            Text(model.subtitle)
+              .chapterTextStyle(.footnote)
+              .foregroundStyle(FieldTheme.Color.muted)
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .fixedSize(horizontal: false, vertical: true)
+              .padding(.top, FieldTheme.Metric.subtitleTop)
+              .accessibilityIdentifier("controls.subtitle")
+            content
+              .padding(.top, 10)
           }
-
-          if let kind = model.activeKind { entryCard(kind) }
+          .padding(.horizontal, FieldTheme.Metric.screenPadding)
+          .padding(.bottom, FieldTheme.Metric.screenPadding)
+          .chapterContentWidth()
         }
+        .onAppear { scroll(proxy) }
+        .onChange(of: model.scrollTarget) { _, _ in scroll(proxy) }
       }
-      .safeAreaInset(edge: .bottom) {
-        // Shown only while a measurement is being entered: with the scan's values, entering
-        // one is optional and "Continue" (top right) moves on.
-        if model.activeKind != nil {
-          PrimaryButton(title: "Save measurement", isEnabled: model.canSave) {
-            model.saveEntry()
-          }
-          .padding(.top, FieldTheme.space8)
-        }
-      }
-      .fieldScreen()
-    }
-
-    private var floorPicker: some View {
-      FlowLayout {
-        ForEach(Array(model.floors.enumerated()), id: \.element.id) { index, floor in
-          ChoiceChip(title: floor.label, isSelected: model.selectedFloorIndex == index) {
-            model.selectedFloorIndex = index
-            model.cancelEntry()
+      .navigationTitle("Field controls")
+      .navigationBarTitleDisplayMode(.large)
+      .toolbar {
+        if let progress = model.progress {
+          PlainToolbarItem(placement: .topBarTrailing) {
+            Text(progress.text)
+              .chapterTextStyle(.footnote)
+              .foregroundStyle(FieldTheme.Color.muted)
+              .lineLimit(1)
+              .accessibilityIdentifier("controls.progress")
           }
         }
       }
-    }
-
-    private var list: some View {
-      let rows = model.rows
-      return VStack(spacing: 0) {
-        ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
-          Button {
-            model.beginEntry(row.kind)
-          } label: {
-            HStack {
-              VStack(alignment: .leading, spacing: 2) {
-                Text(row.title).font(FieldTheme.rowTitle)
-                Text(row.subtitle).font(FieldTheme.caption).foregroundStyle(FieldTheme.muted)
-              }
-              Spacer(minLength: FieldTheme.space8)
-              valueView(row)
-            }
-            .padding(.horizontal, FieldTheme.space16)
-            .padding(.vertical, 14)
-            .frame(minHeight: FieldTheme.chipHeight)
-            .contentShape(Rectangle())
-          }
-          .buttonStyle(.plain)
-          if index < rows.count - 1 {
-            Rectangle().fill(FieldTheme.nude).frame(height: 1)
-          }
-        }
+      .chapterBackChevronOnly()
+      .chapterScreenBackground()
+      .sheet(item: $model.entry) { entry in
+        ControlEntrySheet(
+          entry: entry, onCancel: { model.cancelEntry() }, onSave: { model.saveEntry() },
+          onEditRecorded: { model.edit(recordedId: $0) })
       }
-      .background(FieldTheme.surface)
-      .clipShape(RoundedRectangle(cornerRadius: FieldTheme.cardRadius))
-      .overlay(
-        RoundedRectangle(cornerRadius: FieldTheme.cardRadius)
-          .stroke(FieldTheme.line, lineWidth: 1))
     }
 
     @ViewBuilder
-    private func valueView(_ row: ControlRowContent) -> some View {
-      if row.isMissing {
-        Text("\u{25A0} Missing")
-          .font(.system(size: 15))
-          .foregroundStyle(FieldTheme.blocked)
-      } else if row.valueLines.isEmpty {
-        Text("Optional")
-          .font(.system(size: 15))
-          .foregroundStyle(FieldTheme.muted)
+    private var content: some View {
+      if let message = model.emptyMessage {
+        Text(message)
+          .chapterTextStyle(.subhead)
+          .foregroundStyle(FieldTheme.Color.muted)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .accessibilityIdentifier("controls.empty")
       } else {
-        VStack(alignment: .trailing, spacing: 0) {
-          ForEach(Array(row.valueLines.enumerated()), id: \.offset) { index, line in
-            Text(line)
-              .font(.system(size: 15))
-              .foregroundStyle(index == 0 ? FieldTheme.ink : FieldTheme.muted)
-          }
-        }
-        .multilineTextAlignment(.trailing)
-      }
-    }
-
-    // MARK: New measurement card
-
-    private func entryCard(_ kind: ControlKind) -> some View {
-      VStack(alignment: .leading, spacing: FieldTheme.space8) {
-        FieldCaption(text: "New measurement \u{00B7} \(kind.entryTitle)")
-
-        switch kind {
-        case .distanceA, .distanceB:
-          wordField("From (for example Kitchen east wall)", text: $model.fromText)
-          wordField("To (for example Living west wall)", text: $model.toText)
-        case .ceilingHeight:
-          wordField("Room", text: $model.roomText)
-          wordField("Where in the room (optional)", text: $model.locationText)
-        case .opening:
-          wordField("Room", text: $model.roomText)
-          wordField("Which opening (for example Entry door)", text: $model.labelText)
-        case .floorToFloor:
-          wordField("Where measured (for example At stair)", text: $model.locationText)
-          if model.floors.count > 2 { upperFloorPicker }
-        case .landmark:
-          wordField("What it is (for example Stair newel post)", text: $model.labelText)
-          FieldCaption(text: "Visible from")
-          FlowLayout {
-            ForEach(model.floors) { floor in
-              ChoiceChip(
-                title: floor.label, isSelected: model.landmarkFloorIDs.contains(floor.ref.captureId)
-              ) {
-                model.toggleLandmarkFloor(floor.ref.captureId)
+        let sections = model.sections
+        VStack(alignment: .leading, spacing: FieldMetric.controlSectionGap) {
+          ForEach(sections) { section in
+            ChapterSection(
+              header: section.header,
+              footer: section.id == sections.last?.id ? model.footnote : nil,
+              headerStyle: .compact
+            ) {
+              ForEach(section.rows) { row in
+                ControlRowView(row: row) { model.open(row) }
+                  .id(row.id)
               }
             }
           }
         }
-
-        if kind != .landmark {
-          valueRow(label: kind == .opening ? "Width" : "Value", text: $model.entry.text)
-          if kind == .opening {
-            TextField("Height (optional)", text: $model.heightText)
-              .keyboardType(.numbersAndPunctuation)
-              .fieldBox(fontSize: 20)
-          }
-          methodRow
-          Text(hint)
-            .font(FieldTheme.caption)
-            .foregroundStyle(
-              model.entry.errorMessage == nil ? FieldTheme.muted : FieldTheme.blocked)
-        }
-
-        if let message = model.errorMessage {
-          Text(message).font(FieldTheme.caption).foregroundStyle(FieldTheme.blocked)
-        }
-      }
-      .padding(FieldTheme.space16)
-      .overlay(
-        RoundedRectangle(cornerRadius: FieldTheme.cardRadius)
-          .stroke(FieldTheme.ink, lineWidth: 1))
-    }
-
-    private var hint: String {
-      if let message = model.entry.errorMessage { return message }
-      if let both = model.entry.bothUnits { return "Stored in mm. \(both)" }
-      return "Stored in mm. Shown in both units."
-    }
-
-    private func wordField(_ placeholder: String, text: Binding<String>) -> some View {
-      TextField(placeholder, text: text)
-        .fieldBox(fontSize: 15)
-    }
-
-    private func valueRow(label: String, text: Binding<String>) -> some View {
-      HStack(spacing: FieldTheme.space8) {
-        TextField(label, text: text)
-          .keyboardType(.numbersAndPunctuation)
-          .fieldBox(fontSize: 20)
-        Menu {
-          ForEach(UnitChoice.offered, id: \.self) { unit in
-            Button(UnitChoice.title(unit)) { model.entry.unit = unit }
-          }
-        } label: {
-          Text("\(UnitChoice.title(model.entry.unit)) \u{25BE}")
-            .font(FieldTheme.chip)
-            .foregroundStyle(FieldTheme.ink)
-            .frame(width: 88, height: FieldTheme.fieldHeight)
-            .background(FieldTheme.nude)
-            .clipShape(RoundedRectangle(cornerRadius: FieldTheme.cardRadius))
-        }
-        .accessibilityLabel("Unit")
       }
     }
 
-    /// Records which instrument was used (the contract requires it). Manual entry only.
-    private var methodRow: some View {
-      HStack(spacing: FieldTheme.space8) {
-        ChoiceChip(title: "Tape", isSelected: model.entry.method == .tape) {
-          model.entry.method = .tape
-        }
-        ChoiceChip(title: "Laser", isSelected: model.entry.method == .laser) {
-          model.entry.method = .laser
-        }
+    private func scroll(_ proxy: ScrollViewProxy) {
+      guard let target = model.scrollTarget else { return }
+      DispatchQueue.main.async {
+        withAnimation { proxy.scrollTo(target, anchor: .center) }
+        model.scrollTarget = nil
       }
     }
+  }
 
-    private var upperFloorPicker: some View {
-      VStack(alignment: .leading, spacing: FieldTheme.space8) {
-        FieldCaption(text: "Upper floor")
-        FlowLayout {
-          ForEach(Array(model.floors.enumerated()), id: \.element.id) { index, floor in
-            if index != model.selectedFloorIndex {
-              ChoiceChip(title: floor.label, isSelected: model.upperFloorIndex == index) {
-                model.upperFloorIndex = index
-              }
+  /// One row of the list (phone-field §4.2): the status glyph, title over subtitle, the values
+  /// (millimetres over feet and inches in SF Mono, and the scan's value), the chevron. Two-line
+  /// rows are at least 60 pt (50 of content, padding 5), one-line rows 42. At accessibility
+  /// text sizes the values go under the titles, so nothing is cut. The row is one accessibility
+  /// element.
+  struct ControlRowView: View {
+    let row: ControlRow
+    let action: () -> Void
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// The glyph grows with the text (10 pt at the default size).
+    @ScaledMetric(relativeTo: .body) private var glyphSize = FieldTheme.Metric.statusGlyph
+
+    var body: some View {
+      Button(action: action) {
+        HStack(spacing: FieldTheme.Metric.rowGap) {
+          StatusGlyph(row.status.glyph, size: glyphSize)
+          if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 4) {
+              titles
+              values(alignment: .leading)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+          } else {
+            titles
+            values(alignment: .trailing).fixedSize()
           }
+          Chevron()
         }
+        .frame(maxWidth: .infinity, minHeight: minContentHeight, alignment: .leading)
+        .padding(.horizontal, FieldTheme.Metric.rowPadding)
+        .padding(.vertical, verticalPadding)
+      }
+      .buttonStyle(FieldRowButtonStyle())
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel(row.accessibilityLabel)
+      .accessibilityAddTraits(.isButton)
+      .accessibilityIdentifier(row.accessibilityIdentifier)
+    }
+
+    /// Two-line rows: 50 pt of content and 5 above and below (60 in all, as drawn); compact rows:
+    /// 42 in all.
+    private var verticalPadding: CGFloat {
+      row.isCompact
+        ? FieldMetric.controlRowCompactVerticalPadding : FieldMetric.controlRowVerticalPadding
+    }
+
+    private var minContentHeight: CGFloat {
+      row.isCompact
+        ? FieldMetric.controlRowCompactHeight - 2 * FieldMetric.controlRowCompactVerticalPadding
+        : FieldMetric.controlRowHeight
+    }
+
+    private var titles: some View {
+      VStack(alignment: .leading, spacing: FieldTheme.Metric.rowTitleGap) {
+        Text(row.title)
+          .chapterTextStyle(.body)
+          .foregroundStyle(FieldTheme.Color.ink)
+        if let subtitle = row.subtitle {
+          Text(subtitle)
+            .chapterTextStyle(.footnote)
+            .foregroundStyle(FieldTheme.Color.muted)
+        }
+      }
+      .multilineTextAlignment(.leading)
+      .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func values(alignment: HorizontalAlignment) -> some View {
+      VStack(alignment: alignment, spacing: FieldTheme.Metric.rowTitleGap) {
+        if let value = row.valuePrimary {
+          Text(value)
+            .chapterTextStyle(.subhead)
+            .foregroundStyle(row.valueTone.color)
+        }
+        if let secondary = row.valueSecondary {
+          Text(secondary)
+            .chapterTextStyle(.mono13)
+            .foregroundStyle(FieldTheme.Color.muted)
+        }
+        if let extra = row.extraLine {
+          Text(extra)
+            .chapterTextStyle(.footnote)
+            .foregroundStyle(FieldTheme.Color.muted)
+        }
+      }
+      .multilineTextAlignment(alignment == .leading ? .leading : .trailing)
+    }
+  }
+
+  extension ControlStatus {
+    /// ● done, ■ missing, ○ optional.
+    var glyph: StatusKind {
+      switch self {
+      case .done: .done
+      case .missing: .missing
+      case .optional: .waiting
+      }
+    }
+  }
+
+  extension ControlValueTone {
+    var color: Color {
+      switch self {
+      case .ink: FieldTheme.Color.ink
+      case .blocked: FieldTheme.Color.blocked
+      case .muted: FieldTheme.Color.muted
       }
     }
   }

@@ -1,13 +1,14 @@
 import Foundation
 
-/// Which Room chips the labeling screen shows before "More…".
+/// Which Room chips the labeling screen shows before `More`.
 public enum RoomChips {
-  /// How many rooms are shown before "More…".
-  public static let shownBeforeMore = 3
+  /// How many rooms are shown before `More` (artboard 2d-1: Kitchen, Living, Bath 1, Bedroom 1).
+  public static let shownBeforeMore = 4
 
-  /// The first `shownBeforeMore` rooms, and the room the operator came for (`target`: "Take
-  /// photo" on "Closet has no photo") after them when it is further down the list, so that
-  /// room's chip is on screen and chosen, not behind "More…". The order of the list is kept.
+  /// The first `shownBeforeMore` rooms, then `target` when it is further down the list: pass the
+  /// selected room (it stays selected for the next photo) or the room the operator came for
+  /// ("Take photo" on "Closet has no photo"), so its chip is on screen, not behind `More`. The
+  /// order of the list is kept.
   public static func primary(_ rooms: [String], target: String?) -> [String] {
     var shown = Array(rooms.prefix(shownBeforeMore))
     if let target,
@@ -19,7 +20,7 @@ public enum RoomChips {
     return shown
   }
 
-  /// The rooms behind "More…": every room not in `primary(_:target:)`, in order.
+  /// The rooms behind `More`: every room not in `primary(_:target:)`, in order.
   public static func more(_ rooms: [String], target: String?) -> [String] {
     let shown = primary(rooms, target: target)
     return rooms.filter { !shown.contains($0) }

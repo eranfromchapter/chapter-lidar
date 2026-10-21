@@ -2,13 +2,18 @@
 // FieldKit: labeled site photos, independent field controls and the before-leaving checklist.
 //
 // Targets
-// - FieldRules: pure Swift + Foundation (checklist rules, unit conversion, field-controls model).
+// - FieldRules: pure Swift + Foundation (checklist rules, unit conversion, field-controls model,
+//   the Field controls list, photo labels and the compass pre-fill rules).
 // - PhotoStore: pure Swift + Foundation (photo records, original-bytes store, SHA-256).
-// - FieldKitUI: SwiftUI + AVFoundation screens. Every file is wrapped in `#if canImport(...)`, so
-//   the target is empty on Linux and the whole package builds and tests there.
+// - FieldKitUI: SwiftUI + AVFoundation screens (design v2, artboard 2d) on ChapterUI's tokens and
+//   components. Every file is wrapped in `#if canImport(...)`, so the target is empty on Linux and
+//   macOS (ChapterUI is too) and the whole package builds and tests there.
+// - FieldKitUISnapshotTests: the screens drawn with ChapterUISnapshotTesting on the iPhone 17 Pro
+//   simulator (iOS only; an empty target elsewhere).
 //
 // There is deliberately no `.apple-only` marker: scripts/swift-test.sh runs FieldRulesTests and
-// PhotoStoreTests on Linux; the macOS runner (ios.yml, job FieldKit) builds the UI for iOS.
+// PhotoStoreTests on Linux; the macOS runner (ios.yml, job FieldKit) builds the UI for iOS and
+// runs every test target, the snapshots included, on the simulator.
 import PackageDescription
 
 let package = Package(
@@ -21,7 +26,8 @@ let package = Package(
     .library(name: "FieldKit", targets: ["FieldRules", "PhotoStore", "FieldKitUI"])
   ],
   dependencies: [
-    .package(path: "../../../contract/swift")
+    .package(path: "../../../contract/swift"),
+    .package(path: "../ChapterUI"),
   ],
   targets: [
     .target(
@@ -41,6 +47,7 @@ let package = Package(
         "FieldRules",
         "PhotoStore",
         .product(name: "CaptureContract", package: "swift"),
+        .product(name: "ChapterUI", package: "ChapterUI"),
       ]
     ),
     .testTarget(
@@ -60,6 +67,19 @@ let package = Package(
         "FieldRules",
         .product(name: "CaptureContract", package: "swift"),
       ]
+    ),
+    .testTarget(
+      name: "FieldKitUISnapshotTests",
+      dependencies: [
+        "FieldKitUI",
+        "FieldRules",
+        "PhotoStore",
+        .product(name: "CaptureContract", package: "swift"),
+        .product(name: "ChapterUI", package: "ChapterUI"),
+        .product(name: "ChapterUISnapshotTesting", package: "ChapterUI"),
+      ],
+      // Reference PNGs; the tests read them from the source tree (#filePath).
+      exclude: ["__Snapshots__"]
     ),
   ]
 )

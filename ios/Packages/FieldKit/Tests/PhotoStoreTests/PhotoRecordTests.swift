@@ -190,6 +190,65 @@ final class PhotoRecordTests: XCTestCase {
     XCTAssertEqual(try Data(contentsOf: root.appendingPathComponent(record.path)), original)
   }
 
+  // MARK: directionSource (manifest 1.1.0)
+
+  func testDirectionSourceIsSavedAndSurvivesReopening() throws {
+    let files = InMemoryPhotoFileStore()
+    let store = try PhotoRecordStore(files: files)
+    var draft = PhotoLabelDraft(room: "Kitchen")
+    draft.applyCompass(.east)
+    draft.subject = .cabinetry
+    let fromCompass = try store.save(
+      original: jpegBytes(seed: 1), capture: floor1, draft: draft, takenAt: takenAt)
+    XCTAssertEqual(fromCompass.labels.directionSource, .compass)
+    draft = draft.forNextPhoto()
+    draft.chooseDirection(.north)
+    draft.subject = .general
+    let chosen = try store.save(
+      original: jpegBytes(seed: 2), capture: floor1, draft: draft, takenAt: takenAt)
+    XCTAssertEqual(chosen.labels.directionSource, .manual)
+
+    let index = String(
+      decoding: try files.read(relativePath: PhotoRecordStore.indexPath), as: UTF8.self)
+    XCTAssertTrue(index.contains("\"directionSource\" : \"compass\""))
+    XCTAssertTrue(index.contains("\"directionSource\" : \"manual\""))
+    XCTAssertEqual(
+      try PhotoRecordStore(files: files).records.map(\.labels.directionSource), [.compass, .manual])
+  }
+
+  func testAnIndexWrittenBeforeDirectionSourceStillLoads() throws {
+    let files = InMemoryPhotoFileStore()
+    let path = "Site Photos/floor-1/\(floor1.captureId.rawValue)/photo-0001.jpg"
+    let original = jpegBytes()
+    try files.write(original, toRelativePath: path, replacingExisting: false)
+    let legacy = """
+      [
+        {
+          "areaKey" : "floor-1",
+          "bytes" : \(original.count),
+          "captureId" : "\(floor1.captureId.rawValue)",
+          "format" : "jpeg",
+          "labels" : {
+            "direction" : "E",
+            "room" : "Kitchen",
+            "subject" : "cabinetry",
+            "takenAt" : "2026-10-17T14:30:00Z"
+          },
+          "path" : "\(path)",
+          "sequence" : 1,
+          "sha256" : "\(SHA256.hexDigest(of: original))"
+        }
+      ]
+      """
+    try files.write(
+      Data(legacy.utf8), toRelativePath: PhotoRecordStore.indexPath, replacingExisting: true)
+    let store = try PhotoRecordStore(files: files)
+    XCTAssertEqual(store.records.count, 1)
+    XCTAssertNil(store.records[0].labels.directionSource)
+    XCTAssertEqual(store.records[0].direction, .east)
+    XCTAssertTrue(store.isIntact(store.records[0]))
+  }
+
   func testFormatDetection() {
     XCTAssertEqual(PhotoFormat.detect(jpegBytes()), .jpeg)
     XCTAssertEqual(PhotoFormat.detect(heicBytes()), .heic)

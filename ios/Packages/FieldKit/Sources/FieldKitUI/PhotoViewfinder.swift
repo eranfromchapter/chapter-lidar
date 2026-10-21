@@ -1,11 +1,13 @@
 #if canImport(SwiftUI) && canImport(UIKit)
+  import ChapterUI
   import FieldRules
   import SwiftUI
 
-  /// The photo step's camera screen: the live preview, a header with the title ("Shower · Photo
-  /// 16 of Room Mexico"), "Rooms" (rename the capture's rooms) and "Done", the rooms that still
-  /// need a photo, and the shutter. The viewfinder is not part of the frozen design (the design
-  /// shows only the labeling screen), so it uses the plain tokens and nothing else.
+  /// The photo step's camera screen (phone-field §3.1; not drawn in v1 or v2, so it keeps its
+  /// layout in the v2 type): the live preview, a header with the title (`Shower · Photo 16 ·
+  /// Floor 1`), "Rooms" (rename the capture's rooms) and "Done", the rooms that still need a
+  /// photo, and the shutter. The navigation bar is hidden while it shows. The camera heading
+  /// provider runs while it is on screen, so the shutter can sample where the camera points.
   ///
   /// `preview` is what the camera sees: the app's camera preview, or a stand-in in UI tests.
   public struct PhotoViewfinder<Preview: View>: View {
@@ -28,104 +30,117 @@
 
     public var body: some View {
       ZStack {
-        FieldTheme.ink.ignoresSafeArea()
+        FieldTheme.Color.ink.ignoresSafeArea()
         preview.ignoresSafeArea()
         VStack(spacing: 0) {
           header
-            .padding(.horizontal, 20)
-            .padding(.top, FieldTheme.space8)
-            .padding(.bottom, FieldTheme.space16)
+            .padding(.horizontal, FieldTheme.Metric.screenPadding)
+            .padding(.top, 8)
+            .padding(.bottom, FieldTheme.Metric.screenPadding)
             .background(alignment: .top) { headerScrim }
 
           Spacer()
 
           if let message = cameraError ?? model.errorMessage {
             Text(message)
-              .font(FieldTheme.caption)
-              .padding(FieldTheme.space12)
-              .foregroundStyle(FieldTheme.blocked)
-              .background(FieldTheme.surface)
-              .clipShape(RoundedRectangle(cornerRadius: FieldTheme.chipRadius))
-              .padding(.horizontal, 20)
-              .padding(.bottom, FieldTheme.space8)
+              .chapterTextStyle(.footnote)
+              .padding(FieldTheme.Metric.rowGap)
+              .foregroundStyle(FieldTheme.Color.blocked)
+              .background(FieldTheme.Color.surface)
+              .clipShape(RoundedRectangle(cornerRadius: FieldTheme.Metric.chipRadius))
+              .padding(.horizontal, FieldTheme.Metric.screenPadding)
+              .padding(.bottom, 8)
           }
 
           // On the coverage line's dark pill, and the shutter with a soft shadow: both stay
           // visible over a bright scene.
-          Text("Keep personal items and people out of the frame.")
-            .font(FieldTheme.caption)
-            .foregroundStyle(FieldTheme.surface)
+          Text("Keep people and personal items out of the frame.")
+            .chapterTextStyle(.footnote)
+            .foregroundStyle(FieldTheme.Color.surface)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(FieldTheme.ink.opacity(0.72))
-            .clipShape(RoundedRectangle(cornerRadius: FieldTheme.chipRadius))
-            .padding(.bottom, FieldTheme.space8)
+            .background(FieldTheme.Color.ink.opacity(0.72))
+            .clipShape(RoundedRectangle(cornerRadius: FieldTheme.Metric.chipRadius))
+            .padding(.bottom, 8)
 
           Button {
             Task { await model.takePhoto() }
           } label: {
             Circle()
-              .fill(FieldTheme.surface)
+              .fill(FieldTheme.Color.surface)
               .frame(width: 72, height: 72)
-              .overlay(Circle().stroke(FieldTheme.line, lineWidth: 4))
-              .shadow(color: FieldTheme.ink.opacity(0.35), radius: 6, y: 1)
+              .overlay(Circle().stroke(FieldTheme.Color.line, lineWidth: 4))
+              .shadow(color: FieldTheme.Color.ink.opacity(0.35), radius: 6, y: 1)
           }
           .buttonStyle(.plain)
           .disabled(model.isCapturing || cameraError != nil)
           .accessibilityLabel("Take photo")
-          .padding(.bottom, FieldTheme.space24)
+          .accessibilityIdentifier("photo.shutter")
+          .padding(.bottom, 24)
         }
       }
+      .toolbar(.hidden, for: .navigationBar)
+      .onAppear { model.startHeading() }
+      .onDisappear { model.stopHeading() }
     }
 
     private var header: some View {
-      VStack(alignment: .leading, spacing: FieldTheme.space8) {
-        HStack(alignment: .center, spacing: FieldTheme.space8) {
+      VStack(alignment: .leading, spacing: 8) {
+        HStack(alignment: .center, spacing: 8) {
           Text(model.headerTitle)
-            .font(FieldTheme.headline)
-            .foregroundStyle(FieldTheme.surface)
+            .chapterTextStyle(.navTitle)
+            .foregroundStyle(FieldTheme.Color.surface)
             .lineLimit(2)
             .minimumScaleFactor(0.85)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityAddTraits(.isHeader)
             .accessibilityIdentifier("photo.title")
           if let onRenameRooms {
             // Light text on its own dark fill, like the coverage pill, so it reads over white
             // shower tiles as well as in a dark room.
-            Button("Rooms", action: onRenameRooms)
-              .font(FieldTheme.chip)
-              .padding(.horizontal, 14)
-              .frame(minHeight: FieldTheme.chipHeight)
-              .foregroundStyle(FieldTheme.surface)
-              .background(FieldTheme.ink.opacity(0.72))
-              .clipShape(RoundedRectangle(cornerRadius: FieldTheme.chipRadius))
-              .overlay(
-                RoundedRectangle(cornerRadius: FieldTheme.chipRadius)
-                  .stroke(FieldTheme.surface, lineWidth: 1))
-              .contentShape(Rectangle())
-              .accessibilityHint("Rename the rooms of \(model.capture.label)")
-              .accessibilityIdentifier("photo.rooms")
+            Button(action: onRenameRooms) {
+              Text("Rooms")
+                .chapterTextStyle(.subhead)
+                .foregroundStyle(FieldTheme.Color.surface)
+                .padding(.horizontal, 14)
+                .frame(minHeight: FieldTheme.Metric.touchTarget)
+                .background(FieldTheme.Color.ink.opacity(0.72))
+                .clipShape(RoundedRectangle(cornerRadius: FieldTheme.Metric.chipRadius))
+                .overlay(
+                  RoundedRectangle(cornerRadius: FieldTheme.Metric.chipRadius)
+                    .stroke(FieldTheme.Color.surface, lineWidth: 1))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Rename the rooms of \(model.capture.label)")
+            .accessibilityIdentifier("photo.rooms")
           }
-          Button("Done", action: onDone)
-            .font(FieldTheme.chip)
-            .padding(.horizontal, 14)
-            .frame(minHeight: FieldTheme.chipHeight)
-            .foregroundStyle(FieldTheme.ink)
-            .background(FieldTheme.surface)
-            .clipShape(RoundedRectangle(cornerRadius: FieldTheme.chipRadius))
+          Button(action: onDone) {
+            Text("Done")
+              .chapterTextStyle(.subhead)
+              .foregroundStyle(FieldTheme.Color.ink)
+              .padding(.horizontal, 14)
+              .frame(minHeight: FieldTheme.Metric.touchTarget)
+              .background(FieldTheme.Color.surface)
+              .clipShape(RoundedRectangle(cornerRadius: FieldTheme.Metric.chipRadius))
+              .contentShape(Rectangle())
+          }
+          .buttonStyle(.plain)
+          .accessibilityIdentifier("photo.done")
         }
         coverageLine
       }
     }
 
     /// A dark band behind the header, from the top of the screen, fading out below it: the
-    /// light title ("Shower · Photo 16 of Room Mexico") reads over a bright scene, such as the
-    /// white tiles of the shower the operator is standing in.
+    /// light title reads over a bright scene, such as the white tiles of the shower the operator
+    /// is standing in.
     private var headerScrim: some View {
       LinearGradient(
         stops: [
-          .init(color: FieldTheme.ink.opacity(0.78), location: 0),
-          .init(color: FieldTheme.ink.opacity(0.66), location: 0.7),
-          .init(color: FieldTheme.ink.opacity(0), location: 1),
+          .init(color: FieldTheme.Color.ink.opacity(0.78), location: 0),
+          .init(color: FieldTheme.Color.ink.opacity(0.66), location: 0.7),
+          .init(color: FieldTheme.Color.ink.opacity(0), location: 1),
         ],
         startPoint: .top, endPoint: .bottom
       )
@@ -143,12 +158,12 @@
       } icon: {
         Image(systemName: coverage.isComplete ? "checkmark.circle.fill" : "camera.circle")
       }
-      .font(FieldTheme.caption)
-      .foregroundStyle(FieldTheme.surface)
+      .chapterTextStyle(.footnote)
+      .foregroundStyle(FieldTheme.Color.surface)
       .padding(.horizontal, 10)
       .padding(.vertical, 6)
-      .background(FieldTheme.ink.opacity(0.72))
-      .clipShape(RoundedRectangle(cornerRadius: FieldTheme.chipRadius))
+      .background(FieldTheme.Color.ink.opacity(0.72))
+      .clipShape(RoundedRectangle(cornerRadius: FieldTheme.Metric.chipRadius))
       .accessibilityElement(children: .ignore)
       .accessibilityLabel(coverage.text)
       .accessibilityIdentifier("photo.coverage")

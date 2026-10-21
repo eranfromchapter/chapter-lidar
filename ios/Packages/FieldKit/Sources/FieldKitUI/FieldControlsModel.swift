@@ -4,310 +4,542 @@
   import Foundation
   import Observation
 
-  /// One row of the Field controls list.
-  public struct ControlRowContent: Identifiable, Hashable, Sendable {
-    public var kind: ControlKind
-    public var title: String
-    public var subtitle: String
-    /// Right-hand lines, for example `["7 518 mm", "24′ 8″"]`.
-    public var valueLines: [String]
-    /// Shown as "■ Missing" in the blocked colour.
-    public var isMissing: Bool
-
-    public var id: ControlKind { kind }
-  }
-
-  /// State of the "Field controls" screen. Edits the visit's `FieldControls`; every saved
-  /// measurement is passed to `persist`, which the app wires to `FieldControlsFile.write`.
+  /// State of "Field controls" (design v2, artboard 2d-2): the guided list of every floor's
+  /// minimum set and what lies between floors (`ControlsList`), and the entry sheet of the row
+  /// the operator tapped (`entry`). Every saved measurement is passed to `persist`, which the app
+  /// wires to `FieldControlsFile.write`; nothing is kept when that fails.
   @MainActor @Observable
   public final class FieldControlsModel {
-    /// Floors and areas that need controls (every capture except exterior), in capture order.
+    /// Every capture of the visit, exterior included, as the app gave them.
+    public let captures: [FieldCaptureOption]
+    /// The floors and areas that need controls (every capture except exterior), by capture time.
     public let floors: [FieldCaptureOption]
+    public let policy: ChecklistPolicy
+    /// The visit is sealed (and not in revision mode): rows open their sheet with every field
+    /// disabled and no Save (phone-field addendum B4).
+    public let isReadOnly: Bool
+    /// The sealed revision, for the read-only footnote.
+    public let sealedRevision: Int
     public private(set) var editor: FieldControlsEditor
-    public var selectedFloorIndex = 0
-    public private(set) var activeKind: ControlKind?
+    /// The open entry sheet; nil when none.
+    public var entry: ControlEntryModel?
+    /// The row to scroll into view (`focus(rowId:)`); the list clears it once it scrolled.
+    public var scrollTarget: String?
 
-    public var entry = MeasurementEntryDraft()
-    public var heightText = ""
-    public var fromText = ""
-    public var toText = ""
-    public var roomText = ""
-    public var labelText = ""
-    public var locationText = ""
-    public var upperFloorIndex = 0
-    public var landmarkFloorIDs: Set<LowercaseUUID> = []
-    public private(set) var errorMessage: String?
-
-    private let policy: ChecklistPolicy
     private let persist: @MainActor (FieldControls) throws -> Void
     private let now: @Sendable () -> UTCTimestamp
 
     public init(
       captures: [FieldCaptureOption],
       controls: FieldControls,
-      policy: ChecklistPolicy = .standard,
+      policy: ChecklistPolicy = .shipping,
+      isReadOnly: Bool = false,
+      sealedRevision: Int = 1,
       persist: @escaping @MainActor (FieldControls) throws -> Void,
       now: @escaping @Sendable () -> UTCTimestamp = { UTCTimestamp.now() }
     ) {
-      let ordered = captures.enumerated()
-        .filter { $0.element.mode != .exterior }
-        .sorted { ($0.element.capturedAt, $0.offset) < ($1.element.capturedAt, $1.offset) }
-        .map(\.element)
-      self.floors = ordered
+      self.captures = captures
+      let ordered = ControlsList.floors(captures.map(\.controlsFloor)).map(\.id)
+      self.floors = ordered.compactMap { id in captures.first { $0.id == id } }
       self.editor = FieldControlsEditor(controls: controls)
       self.policy = policy
+      self.isReadOnly = isReadOnly
+      self.sealedRevision = sealedRevision
       self.persist = persist
       self.now = now
     }
 
     public var controls: FieldControls { editor.controls }
 
-    public var selectedFloor: FieldCaptureOption? {
-      floors.indices.contains(selectedFloorIndex) ? floors[selectedFloorIndex] : nil
+    // MARK: List
+
+    public var sections: [ControlSection] {
+      ControlsList.sections(
+        floors: captures.map(\.controlsFloor), controls: editor.controls, policy: policy)
     }
 
-    /// The floor above the selected one, when there is one.
-    private var nextFloor: FieldCaptureOption? {
-      floors.indices.contains(selectedFloorIndex + 1) ? floors[selectedFloorIndex + 1] : nil
+    /// `4 of 9 required`, shown only under the manual policy.
+    public var progress: ControlsProgress? {
+      guard policy.manualControlsRequired else { return nil }
+      return ControlsList.progress(
+        floors: captures.map(\.controlsFloor), controls: editor.controls, policy: policy)
     }
 
-    // MARK: Rows
+    /// The line under the title.
+    public var subtitle: String {
+      policy.manualControlsRequired
+        ? "Tape or laser only. Never copy numbers from the scan."
+        : "Measured by the LiDAR scan. Tap a row to add an optional tape or laser check."
+    }
 
-    public var rows: [ControlRowContent] {
-      guard let floor = selectedFloor else { return [] }
-      let id = floor.ref.captureId
-      let controls = editor.controls
-      let scan = floor.scan
-      // Under the standard policy the LiDAR scan provides the measurements and tape or laser
-      // checks are optional, so nothing shows as missing.
-      let required = policy.manualControlsRequired
-      let fromScan = "From the LiDAR scan \u{00B7} tap to check with tape"
-      var rows: [ControlRowContent] = []
+    /// What the screen says instead of the list when there is nothing to measure.
+    public var emptyMessage: String? { ControlsList.emptyMessage(captures.map(\.controlsFloor)) }
 
-      for (kind, axis) in [(ControlKind.distanceA, DistanceAxis.a), (.distanceB, .b)] {
-        let scanned = axis == .a ? scan?.distanceAMm : scan?.distanceBMm
-        if let item = controls.distances.first(where: {
-          $0.capture.captureId == id && $0.axis == axis
-        }) {
-          rows.append(
-            ControlRowContent(
-              kind: kind, title: kind.rowTitle, subtitle: "\(item.from) \u{2192} \(item.to)",
-              valueLines: Self.lines(item.measurement) + Self.scanLine(scanned), isMissing: false))
-        } else if let scanned {
-          rows.append(
-            ControlRowContent(
-              kind: kind, title: kind.rowTitle, subtitle: fromScan,
-              valueLines: Self.lines(scanned), isMissing: false))
-        } else {
-          rows.append(
-            ControlRowContent(
-              kind: kind, title: kind.rowTitle, subtitle: "Not measured yet", valueLines: [],
-              isMissing: required))
+    /// The footnote after the last card.
+    public var footnote: String {
+      isReadOnly
+        ? ReadOnlyText.sealed(revision: sealedRevision)
+        : "Stored in mm, shown in both units. Tap a row to add or change it."
+    }
+
+    /// The row with this id (`floor-1.distanceA`), if the list has it.
+    public func row(_ id: String) -> ControlRow? {
+      sections.lazy.flatMap(\.rows).first { $0.id == id }
+    }
+
+    // MARK: Opening the entry sheet
+
+    /// Before you leave "Add": scrolls the row into view and opens its sheet. The sheet is
+    /// presented when the list appears if it is not on screen yet.
+    public func focus(rowId: String) {
+      scrollTarget = rowId
+      if let row = row(rowId) { open(row) }
+    }
+
+    /// "Add" on Before you leave's "Minimum field controls": the row of its first gap.
+    public func focusFirstGap(of item: ChecklistItem) {
+      for gap in item.gaps {
+        if let id = ControlsList.rowId(for: gap, floors: captures.map(\.controlsFloor)) {
+          focus(rowId: id)
+          return
         }
       }
-
-      let ceilings = controls.ceilingHeights.filter { $0.capture.captureId == id }
-      let scannedHeights = scan?.ceilingHeights.map(\.heightMm) ?? []
-      if let low = ceilings.map(\.measurement.valueMm).min(),
-        let high = ceilings.map(\.measurement.valueMm).max()
-      {
-        let rooms = Set(ceilings.map(\.room)).count
-        rows.append(
-          ControlRowContent(
-            kind: .ceilingHeight, title: ControlKind.ceilingHeight.rowTitle,
-            subtitle: "\(rooms) \(rooms == 1 ? "room" : "rooms")",
-            valueLines: [LengthFormatter.millimetreRange(low, high)], isMissing: false))
-      } else if let low = scannedHeights.min(), let high = scannedHeights.max() {
-        let rooms = scannedHeights.count
-        rows.append(
-          ControlRowContent(
-            kind: .ceilingHeight, title: ControlKind.ceilingHeight.rowTitle,
-            subtitle: "From the LiDAR scan \u{00B7} \(rooms) \(rooms == 1 ? "room" : "rooms")",
-            valueLines: [
-              LengthFormatter.millimetreRange(low, high),
-              low == high
-                ? LengthFormatter.feetInches(low)
-                : "\(LengthFormatter.feetInches(low)) \u{2013} \(LengthFormatter.feetInches(high))",
-            ], isMissing: false))
-      } else {
-        rows.append(
-          ControlRowContent(
-            kind: .ceilingHeight, title: ControlKind.ceilingHeight.rowTitle,
-            subtitle: "Not measured yet", valueLines: [], isMissing: required))
-      }
-
-      let openings = controls.openings.filter { $0.capture.captureId == id }
-      if openings.isEmpty, let scan {
-        rows.append(
-          ControlRowContent(
-            kind: .opening, title: ControlKind.opening.rowTitle,
-            subtitle: "From the LiDAR scan \u{00B7} \(scan.openingsSummary)",
-            valueLines: [String(scan.doors + scan.windows + scan.openings)], isMissing: false))
-      } else {
-        rows.append(
-          ControlRowContent(
-            kind: .opening, title: ControlKind.opening.rowTitle,
-            subtitle: openings.isEmpty
-              ? "Doors and windows" : openings.map(\.label).joined(separator: ", "),
-            valueLines: [String(openings.count)], isMissing: false))
-      }
-
-      if let upper = nextFloor {
-        let pair: Set<LowercaseUUID> = [id, upper.ref.captureId]
-        let levels = controls.floorToFloor.filter {
-          Set([$0.lower.captureId, $0.upper.captureId]) == pair
-        }
-        if let level = levels.first {
-          rows.append(
-            ControlRowContent(
-              kind: .floorToFloor, title: ControlKind.floorToFloor.rowTitle,
-              subtitle: levels.map(\.location).joined(separator: ", "),
-              valueLines: Self.lines(level.measurement), isMissing: false))
-        } else {
-          rows.append(
-            ControlRowContent(
-              kind: .floorToFloor, title: ControlKind.floorToFloor.rowTitle,
-              subtitle: "To \(upper.label)", valueLines: [], isMissing: required))
-        }
-        let shared = controls.landmarks.filter {
-          pair.isSubset(of: Set($0.captures.map(\.captureId)))
-        }.count
-        rows.append(
-          ControlRowContent(
-            kind: .landmark, title: ControlKind.landmark.rowTitle,
-            subtitle: "Visible from two floors",
-            valueLines: shared == 0
-              ? [] : ["\(shared) of \(policy.minimumLandmarksPerFloorPair)"],
-            isMissing: required && shared == 0))
-      }
-      return rows
     }
 
-    /// True when the scan provides the measurements and tape or laser checks are optional.
-    public var measurementsFromScan: Bool { !policy.manualControlsRequired }
-
-    private static func lines(_ valueMm: Double) -> [String] {
-      [LengthFormatter.millimetres(valueMm), LengthFormatter.feetInches(valueMm)]
-    }
-
-    /// "Scan 7 512 mm" under a tape or laser value, when the scan has the same quantity.
-    private static func scanLine(_ valueMm: Double?) -> [String] {
-      valueMm.map { ["Scan \(LengthFormatter.millimetres($0))"] } ?? []
-    }
-
-    private static func lines(_ measurement: FieldControls.Measurement) -> [String] {
-      [
-        LengthFormatter.millimetres(measurement.valueMm),
-        LengthFormatter.feetInches(measurement.valueMm),
-      ]
-    }
-
-    // MARK: Entry
-
-    /// Opens the "New measurement" card for a row.
-    public func beginEntry(_ kind: ControlKind) {
-      activeKind = kind
-      errorMessage = nil
-      let unit = entry.unit
-      entry = MeasurementEntryDraft(unit: unit)
-      heightText = ""
-      fromText = ""
-      toText = ""
-      roomText = ""
-      labelText = ""
-      locationText = kind == .floorToFloor ? "At stair" : ""
-      upperFloorIndex = min(selectedFloorIndex + 1, max(floors.count - 1, 0))
-      landmarkFloorIDs = []
-      if kind == .landmark, let floor = selectedFloor {
-        landmarkFloorIDs.insert(floor.ref.captureId)
-        if let upper = nextFloor { landmarkFloorIDs.insert(upper.ref.captureId) }
-      }
-    }
-
-    public func cancelEntry() {
-      activeKind = nil
-      errorMessage = nil
-    }
-
-    public func toggleLandmarkFloor(_ id: LowercaseUUID) {
-      if landmarkFloorIDs.contains(id) {
-        landmarkFloorIDs.remove(id)
-      } else {
-        landmarkFloorIDs.insert(id)
-      }
-    }
-
-    /// True when the card has everything its kind needs.
-    public var canSave: Bool {
-      guard let kind = activeKind else { return false }
-      func filled(_ text: String) -> Bool {
-        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-      }
-      switch kind {
+    /// A row was tapped: single-value rows (A, B, floor to floor) open prefilled when recorded;
+    /// list rows (ceiling heights, openings, landmarks) open a new entry under the list of what
+    /// is recorded.
+    public func open(_ row: ControlRow) {
+      let entry = ControlEntryModel(
+        kind: row.kind, target: row.target, rowId: row.id, rooms: rooms(of: row.target),
+        floors: floors, isReadOnly: isReadOnly,
+        value: MeasurementEntryDraft(unit: defaultUnit(for: row.target), method: defaultMethod))
+      entry.targetLabels = labels(of: row.target)
+      switch row.kind {
       case .distanceA, .distanceB:
-        return entry.bothUnits != nil && filled(fromText) && filled(toText)
-      case .ceilingHeight:
-        return entry.bothUnits != nil && filled(roomText)
-      case .opening:
-        return entry.bothUnits != nil && filled(roomText) && filled(labelText)
+        if case .floor(let id) = row.target,
+          let item = editor.controls.distances.first(where: {
+            $0.capture.captureId == id && $0.axis == (row.kind == .distanceA ? .a : .b)
+          })
+        {
+          entry.load(distance: item, defaultUnit: defaultUnit(for: row.target))
+        }
       case .floorToFloor:
-        return entry.bothUnits != nil && filled(locationText)
-          && upperFloorIndex != selectedFloorIndex
-          && floors.indices.contains(upperFloorIndex)
+        if case .pair(let lower, let upper) = row.target,
+          let item = editor.controls.floorToFloor.first(where: {
+            Set([$0.lower.captureId, $0.upper.captureId]) == Set([lower, upper])
+          })
+        {
+          entry.load(floorToFloor: item, defaultUnit: defaultUnit(for: row.target))
+        } else {
+          entry.location = "At the stair"
+        }
       case .landmark:
-        return filled(labelText) && landmarkFloorIDs.count >= 2
+        if case .pair(let lower, let upper) = row.target {
+          entry.landmarkFloors = [lower, upper]
+        }
+      case .ceilingHeight, .opening:
+        break
+      }
+      entry.recorded = recorded(for: row)
+      self.entry = entry
+    }
+
+    /// Loads a recorded entry of a list row into the open sheet (§5.6).
+    public func edit(recordedId id: String) {
+      guard let entry else { return }
+      let unit = defaultUnit(for: entry.target)
+      if let item = editor.controls.ceilingHeights.first(where: { $0.id == id }) {
+        entry.load(ceiling: item, defaultUnit: unit)
+      } else if let item = editor.controls.openings.first(where: { $0.id == id }) {
+        entry.load(opening: item, defaultUnit: unit)
+      } else if let item = editor.controls.landmarks.first(where: { $0.id == id }) {
+        entry.load(landmark: item)
       }
     }
 
-    /// Saves the entry into the controls, then passes the whole document to `persist`.
-    /// On any failure nothing is kept and `errorMessage` says why.
+    /// Cancel or swipe down: nothing is kept.
+    public func cancelEntry() {
+      entry = nil
+    }
+
+    // MARK: Saving
+
+    /// Saves the open entry into a copy of the controls (removing the entry it replaces when
+    /// its id changes), passes the whole document to `persist`, then keeps it and closes the
+    /// sheet. On any failure nothing is kept, the sheet stays and its footnote says why.
     public func saveEntry() {
-      guard let kind = activeKind, let floor = selectedFloor else { return }
+      guard let entry, !isReadOnly, entry.canSave else { return }
       var next = editor
       do {
         let recordedAt = now()
-        switch kind {
-        case .distanceA, .distanceB:
-          try next.setDistance(
-            capture: floor.ref, axis: kind == .distanceA ? .a : .b, from: fromText, to: toText,
-            measurement: entry.measurement(recordedAt: recordedAt))
-        case .ceilingHeight:
-          try next.setCeilingHeight(
-            capture: floor.ref, room: roomText, location: locationText,
-            measurement: entry.measurement(recordedAt: recordedAt))
-        case .opening:
-          let hasHeight = !heightText.trimmingCharacters(in: .whitespaces).isEmpty
-          let height: FieldControls.Measurement? =
-            try hasHeight
-            ? FieldMeasurement.make(
-              text: heightText, unit: entry.unit, method: entry.method, recordedAt: recordedAt)
-            : nil
-          try next.setOpening(
-            capture: floor.ref, room: roomText, label: labelText,
-            width: entry.measurement(recordedAt: recordedAt), height: height)
-        case .floorToFloor:
-          guard floors.indices.contains(upperFloorIndex) else { return }
-          try next.setFloorToFloor(
-            lower: floor.ref, upper: floors[upperFloorIndex].ref, location: locationText,
-            measurement: entry.measurement(recordedAt: recordedAt))
-        case .landmark:
-          try next.setLandmark(
-            label: labelText,
-            captures: floors.filter { landmarkFloorIDs.contains($0.ref.captureId) }.map(\.ref))
+        let id: String
+        switch (entry.kind, entry.target) {
+        case (.distanceA, .floor(let floor)), (.distanceB, .floor(let floor)):
+          id = try next.setDistance(
+            capture: try ref(floor), axis: entry.kind == .distanceA ? .a : .b, from: entry.from,
+            to: entry.to, measurement: entry.value.measurement(recordedAt: recordedAt))
+        case (.ceilingHeight, .floor(let floor)):
+          id = try next.setCeilingHeight(
+            capture: try ref(floor), room: entry.room, location: entry.location,
+            measurement: entry.value.measurement(recordedAt: recordedAt))
+        case (.opening, .floor(let floor)):
+          var height: FieldControls.Measurement?
+          if !entry.height.isEmpty { height = try entry.height.measurement(recordedAt: recordedAt) }
+          id = try next.setOpening(
+            capture: try ref(floor), room: entry.room, label: entry.label,
+            width: entry.value.measurement(recordedAt: recordedAt), height: height)
+        case (.floorToFloor, .pair(let lower, let upper)):
+          id = try next.setFloorToFloor(
+            lower: try ref(lower), upper: try ref(upper), location: entry.location,
+            measurement: entry.value.measurement(recordedAt: recordedAt))
+        case (.landmark, _):
+          let kept = entry.editingId.flatMap { old in
+            editor.controls.landmarks.first { $0.id == old }
+          }
+          id = try next.setLandmark(
+            label: entry.label, description: kept?.description,
+            captures: floors.filter { entry.landmarkFloors.contains($0.id) }.map(\.ref),
+            photoPaths: kept?.photoPaths)
+        default:
+          return
         }
+        if let old = entry.editingId, old != id { next.remove(id: old) }
         try persist(next.controls)
         editor = next
-        activeKind = nil
-        errorMessage = nil
+        self.entry = nil
       } catch let error as LengthParseError {
-        errorMessage = error.message
+        entry.errorMessage = error.message
       } catch let error as FieldControlsEditError {
-        errorMessage = error.description
-      } catch let error as FieldControlsFileError {
-        errorMessage = error.description
+        entry.errorMessage = error.description
       } catch {
-        errorMessage = "The measurement could not be saved: \(error.localizedDescription)"
+        entry.errorMessage = "The measurement could not be saved: \(userMessage(for: error))"
       }
+    }
+
+    // MARK: Helpers
+
+    private struct UnknownCapture: Error, CustomStringConvertible {
+      var description: String { "The floor is no longer part of this visit." }
+    }
+
+    private func ref(_ id: LowercaseUUID) throws -> FieldControls.CaptureRef {
+      guard let capture = captures.first(where: { $0.id == id }) else { throw UnknownCapture() }
+      return capture.ref
+    }
+
+    private func rooms(of target: ControlTarget) -> [String] {
+      guard case .floor(let id) = target else { return [] }
+      return PhotoCoverage.rooms(captures.first { $0.id == id }?.rooms ?? [])
+    }
+
+    private func labels(of target: ControlTarget) -> [String] {
+      switch target {
+      case .floor(let id):
+        return captures.first { $0.id == id }.map { [$0.label] } ?? []
+      case .pair(let lower, let upper):
+        return [lower, upper].compactMap { id in captures.first { $0.id == id }?.label }
+      }
+    }
+
+    /// Every measurement of the visit, newest last.
+    private var measurements: [FieldControls.Measurement] {
+      let controls = editor.controls
+      var all = controls.distances.map(\.measurement) + controls.ceilingHeights.map(\.measurement)
+      all += controls.openings.flatMap { [$0.width, $0.height].compactMap { $0 } }
+      all += controls.floorToFloor.map(\.measurement)
+      return all.sorted { $0.recordedAt < $1.recordedAt }
+    }
+
+    /// The unit last used in this visit; else feet and inches for an imperial capture,
+    /// millimetres for a metric one.
+    private func defaultUnit(for target: ControlTarget) -> EnteredUnit {
+      if let last = measurements.last(where: { UnitChoice.offered.contains($0.enteredUnit) }) {
+        return last.enteredUnit
+      }
+      let id: LowercaseUUID
+      switch target {
+      case .floor(let floor): id = floor
+      case .pair(let lower, _): id = lower
+      }
+      return UnitChoice.defaultUnit(for: captures.first { $0.id == id }?.displayUnits ?? .imperial)
+    }
+
+    /// The instrument last used in this visit, else tape.
+    private var defaultMethod: MeasurementMethod { measurements.last?.method ?? .tape }
+
+    /// The `RECORDED …` list of a list row (§5.6).
+    private func recorded(for row: ControlRow) -> [RecordedControl] {
+      let controls = editor.controls
+      switch (row.kind, row.target) {
+      case (.ceilingHeight, .floor(let id)):
+        return controls.ceilingHeights.filter { $0.capture.captureId == id }.map {
+          RecordedControl(
+            id: $0.id, title: $0.room, subtitle: $0.location,
+            valuePrimary: LengthFormatter.millimetres($0.measurement.valueMm),
+            valueSecondary: LengthFormatter.feetInches($0.measurement.valueMm))
+        }
+      case (.opening, .floor(let id)):
+        return controls.openings.filter { $0.capture.captureId == id }.map { opening in
+          let width = LengthFormatter.millimetres(opening.width.valueMm)
+          let size = opening.height.map {
+            "\(width) \u{00D7} \(LengthFormatter.millimetres($0.valueMm))"
+          }
+          return RecordedControl(
+            id: opening.id, title: "\(opening.room) \u{00B7} \(opening.label)",
+            subtitle: size ?? width, valuePrimary: nil, valueSecondary: nil)
+        }
+      case (.landmark, .pair(let lower, let upper)):
+        let pair: Set<LowercaseUUID> = [lower, upper]
+        return controls.landmarks.filter { pair.isSubset(of: Set($0.captures.map(\.captureId))) }
+          .map { landmark in
+            let names = landmark.captures.compactMap { ref in
+              captures.first { $0.id == ref.captureId }?.label
+            }
+            return RecordedControl(
+              id: landmark.id, title: landmark.label, subtitle: names.joined(separator: ", "),
+              valuePrimary: nil, valueSecondary: nil)
+          }
+      default:
+        return []
+      }
+    }
+  }
+
+  /// One recorded entry in the `RECORDED …` list of the entry sheet.
+  public struct RecordedControl: Hashable, Sendable, Identifiable {
+    public var id: String
+    public var title: String
+    public var subtitle: String?
+    public var valuePrimary: String?
+    public var valueSecondary: String?
+  }
+
+  /// The words and value of the open entry sheet (phone-field §5, artboard 2d-3).
+  @MainActor @Observable
+  public final class ControlEntryModel: Identifiable {
+    public enum Field: Hashable, Sendable {
+      case from
+      case to
+      case room
+      case location
+      case label
+      case firstValue
+    }
+
+    public let id = UUID()
+    public let kind: ControlKind
+    public let target: ControlTarget
+    /// The list row that opened the sheet.
+    public let rowId: String
+    /// The floor's rooms, offered as chips (ceiling height, opening); empty: a text field.
+    public let rooms: [String]
+    /// Every floor of the visit, offered as "Visible from" chips (landmark).
+    public let floors: [FieldCaptureOption]
+    public let isReadOnly: Bool
+    /// The floor (or the two floors) of the row: `Floor 1`, or `Floor 1`, `Floor 2`.
+    public var targetLabels: [String] = []
+    /// The control being edited; nil for a new entry.
+    public private(set) var editingId: String?
+    /// What the sheet's title adds when a list entry is edited: `Kitchen`, `Entry door`.
+    public private(set) var editingName: String?
+
+    public var from = ""
+    public var to = ""
+    public var room = ""
+    public var location = ""
+    public var label = ""
+    public var landmarkFloors: Set<LowercaseUUID> = []
+    public var value: MeasurementEntryDraft
+    /// An opening's height (value fields only, in the width's unit).
+    public var height: MeasurementEntryDraft
+    /// Why the last Save failed.
+    public var errorMessage: String?
+    /// The `RECORDED …` list (ceiling heights, openings, landmarks).
+    public internal(set) var recorded: [RecordedControl] = []
+
+    init(
+      kind: ControlKind, target: ControlTarget, rowId: String, rooms: [String],
+      floors: [FieldCaptureOption], isReadOnly: Bool, value: MeasurementEntryDraft
+    ) {
+      self.kind = kind
+      self.target = target
+      self.rowId = rowId
+      self.rooms = rooms
+      self.floors = floors
+      self.isReadOnly = isReadOnly
+      self.value = value
+      self.height = MeasurementEntryDraft(unit: value.unit, method: value.method)
+    }
+
+    /// `Floor to floor`, `Ceiling height · Kitchen` while a recorded one is edited.
+    public var title: String {
+      guard let editingName else { return kind.entryTitle }
+      return "\(kind.entryTitle) \u{00B7} \(editingName)"
+    }
+
+    /// `Recorded on Floor 1`, `Recorded between Floor 1 and Floor 2`; nil when nothing is.
+    public var recordedCaption: String? {
+      guard !recorded.isEmpty else { return nil }
+      if targetLabels.count == 2 {
+        return "Recorded between \(targetLabels[0]) and \(targetLabels[1])"
+      }
+      return "Recorded on \(targetLabels.first ?? "")"
+    }
+
+    /// The caption of the value card: `Width` for an opening, else `Measurement`.
+    public var measurementCaption: String { kind == .opening ? "Width" : "Measurement" }
+
+    public var hasMeasurement: Bool { kind != .landmark }
+
+    private static func filled(_ text: String) -> Bool {
+      !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// The words the kind needs are there.
+    public var wordsComplete: Bool {
+      switch kind {
+      case .distanceA, .distanceB: return Self.filled(from) && Self.filled(to)
+      case .ceilingHeight: return Self.filled(room)
+      case .opening: return Self.filled(room) && Self.filled(label)
+      case .floorToFloor: return Self.filled(location)
+      case .landmark: return Self.filled(label) && landmarkFloors.count >= 2
+      }
+    }
+
+    /// Save is enabled: the words are there and the value parses (an opening's height too,
+    /// when typed). Never while read-only.
+    public var canSave: Bool {
+      guard !isReadOnly, wordsComplete else { return false }
+      guard hasMeasurement else { return true }
+      guard case .success = value.result else { return false }
+      if kind == .opening, !height.isEmpty, case .failure = height.result { return false }
+      return true
+    }
+
+    /// The footnote under the value card (§5.3) and whether it is an error.
+    public var footnote: (text: String, isError: Bool) {
+      if let errorMessage { return (errorMessage, true) }
+      guard hasMeasurement else {
+        return ("Pick something you can see from both floors, for example the stair newel post.", false)
+      }
+      let prefix = kind == .distanceB ? "At a right angle to A. " : ""
+      if let error = value.errorMessage ?? (kind == .opening ? height.errorMessage : nil) {
+        return (prefix + error, true)
+      }
+      let rest = "Shown in both units everywhere. Tape or laser only."
+      if let stored = value.storedText { return ("\(prefix)Stored as \(stored). \(rest)", false) }
+      return ("\(prefix)Stored in mm. \(rest)", false)
+    }
+
+    /// The unit segment changed: the value fields are cleared (nothing is converted).
+    public func chooseUnit(_ unit: EnteredUnit) {
+      guard unit != value.unit else { return }
+      value = value.cleared(unit: unit)
+      height = height.cleared(unit: unit)
+    }
+
+    public func chooseMethod(_ method: MeasurementMethod) {
+      value.method = method
+      height.method = method
+    }
+
+    public func toggleLandmarkFloor(_ id: LowercaseUUID) {
+      if landmarkFloors.contains(id) {
+        landmarkFloors.remove(id)
+      } else {
+        landmarkFloors.insert(id)
+      }
+    }
+
+    /// The field focused when the sheet opens: the value when the words are prefilled or
+    /// optional (floor to floor, a chosen room, an edit), else the first empty word field; nil
+    /// when the next step is a chip.
+    public var initialFocus: Field? {
+      guard !isReadOnly else { return nil }
+      if editingId != nil { return hasMeasurement ? .firstValue : nil }
+      switch kind {
+      case .distanceA, .distanceB:
+        if !Self.filled(from) { return .from }
+        return Self.filled(to) ? .firstValue : .to
+      case .ceilingHeight:
+        if Self.filled(room) { return .firstValue }
+        return rooms.isEmpty ? .room : nil
+      case .opening:
+        if !Self.filled(room) { return rooms.isEmpty ? .room : nil }
+        return Self.filled(label) ? .firstValue : .label
+      case .floorToFloor:
+        return .firstValue
+      case .landmark:
+        return Self.filled(label) ? nil : .label
+      }
+    }
+
+    /// Where Return in a word field goes: From → To, a typed room → where in the room (ceiling)
+    /// or which opening, else the first value field; nil (the keyboard goes) for a landmark,
+    /// whose next step is a chip.
+    public func focus(after field: Field) -> Field? {
+      switch (kind, field) {
+      case (.distanceA, .from), (.distanceB, .from): return .to
+      case (.ceilingHeight, .room): return .location
+      case (.opening, .room): return .label
+      default: return hasMeasurement ? .firstValue : nil
+      }
+    }
+
+    /// Words as one line: a line break (Return, or pasted) becomes one space between the words
+    /// around it and nothing at either end.
+    public static func oneLine(_ text: String) -> String {
+      guard text.contains(where: \.isNewline) else { return text }
+      return text.split(whereSeparator: \.isNewline)
+        .map { $0.trimmingCharacters(in: .whitespaces) }
+        .filter { !$0.isEmpty }
+        .joined(separator: " ")
+    }
+
+    // MARK: Loading recorded controls
+
+    func load(distance: FieldControls.Distance, defaultUnit: EnteredUnit) {
+      editingId = distance.id
+      from = distance.from
+      to = distance.to
+      value = .editing(distance.measurement, defaultUnit: defaultUnit)
+    }
+
+    func load(floorToFloor: FieldControls.FloorToFloor, defaultUnit: EnteredUnit) {
+      editingId = floorToFloor.id
+      location = floorToFloor.location
+      value = .editing(floorToFloor.measurement, defaultUnit: defaultUnit)
+    }
+
+    func load(ceiling: FieldControls.CeilingHeight, defaultUnit: EnteredUnit) {
+      editingId = ceiling.id
+      editingName = ceiling.room
+      room = ceiling.room
+      location = ceiling.location ?? ""
+      value = .editing(ceiling.measurement, defaultUnit: defaultUnit)
+      errorMessage = nil
+    }
+
+    func load(opening: FieldControls.Opening, defaultUnit: EnteredUnit) {
+      editingId = opening.id
+      editingName = opening.label
+      room = opening.room
+      label = opening.label
+      value = .editing(opening.width, defaultUnit: defaultUnit)
+      height =
+        opening.height.map { .editing($0, defaultUnit: value.unit) }
+        ?? MeasurementEntryDraft(unit: value.unit, method: value.method)
+      if height.unit != value.unit { height = height.cleared(unit: value.unit) }
+      errorMessage = nil
+    }
+
+    func load(landmark: FieldControls.Landmark) {
+      editingId = landmark.id
+      editingName = landmark.label
+      label = landmark.label
+      landmarkFloors = Set(landmark.captures.map(\.captureId))
+      errorMessage = nil
     }
   }
 #endif

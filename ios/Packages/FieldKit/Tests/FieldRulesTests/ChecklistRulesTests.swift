@@ -77,10 +77,10 @@ final class ChecklistRulesTests: XCTestCase {
         .missingFloorToFloor(lower: "Floor 1", upper: "Floor 2"),
         .missingLandmarks(lower: "Floor 1", upper: "Floor 2", have: 1, need: 2),
       ])
-    XCTAssertEqual(report.failedItems.map(\.id), [.photoPerRoom, .minimumControls])
+    XCTAssertEqual(report.blockingItems.map(\.id), [.photoPerRoom, .minimumControls])
     XCTAssertEqual(report.item(.photoPerRoom).detail, "Bath 2 has no photo")
     XCTAssertEqual(
-      report.item(.minimumControls).detail, "Floor to floor missing \u{00B7} 1 of 2 landmarks")
+      report.item(.minimumControls).detail, "Floor to floor \u{00B7} 1 of 2 landmarks")
     XCTAssertEqual(report.finishButtonTitle, "Fix 2 items to finish")
     XCTAssertTrue(report.item(.floorsLabeled).passed)
     XCTAssertTrue(report.item(.skippedRoomsRecorded).passed)
@@ -96,7 +96,7 @@ final class ChecklistRulesTests: XCTestCase {
     input.record.captures[1].label = "  "
     let report = ChecklistRules.evaluate(input, policy: .manualControls)
     XCTAssertEqual(report.gaps, [.unlabeledCapture(areaKey: "floor-2")])
-    XCTAssertEqual(report.failedItems.map(\.id), [.floorsLabeled])
+    XCTAssertEqual(report.blockingItems.map(\.id), [.floorsLabeled])
 
     input.record.captures = []
     XCTAssertTrue(ChecklistRules.evaluate(input, policy: .manualControls).gaps.contains(.noCaptures))
@@ -110,7 +110,7 @@ final class ChecklistRulesTests: XCTestCase {
     input.noRoomsSkippedConfirmed = true
     let confirmed = ChecklistRules.evaluate(input, policy: .manualControls)
     XCTAssertTrue(confirmed.canFinish)
-    XCTAssertEqual(confirmed.item(.skippedRoomsRecorded).detail, "No rooms skipped")
+    XCTAssertEqual(confirmed.item(.skippedRoomsRecorded).detail, "All rooms scanned")
 
     input.noRoomsSkippedConfirmed = false
     input.record.captures[0].omittedRooms = [CaptureRecord.RoomNote(name: "Attic")]
@@ -131,14 +131,14 @@ final class ChecklistRulesTests: XCTestCase {
     let confirmed = ChecklistRules.evaluate(input, policy: .manualControls).item(.skippedRoomsRecorded)
     XCTAssertTrue(confirmed.passed)
     XCTAssertEqual(confirmed.gaps, [])
-    XCTAssertEqual(confirmed.detail, "No rooms skipped")
+    XCTAssertEqual(confirmed.detail, "All rooms scanned")
 
     // No notes, not confirmed: the row fails with exactly that gap.
     input.noRoomsSkippedConfirmed = false
     let unconfirmed = ChecklistRules.evaluate(input, policy: .manualControls).item(.skippedRoomsRecorded)
     XCTAssertFalse(unconfirmed.passed)
     XCTAssertEqual(unconfirmed.gaps, [.skippedRoomsNotRecorded])
-    XCTAssertEqual(unconfirmed.detail, "Record skipped rooms, or confirm none were skipped")
+    XCTAssertEqual(unconfirmed.detail, "Record rooms not scanned, or confirm there are none")
 
     // A note without a reason still fails, even when confirmed.
     input.noRoomsSkippedConfirmed = true
@@ -301,19 +301,23 @@ final class ChecklistRulesTests: XCTestCase {
     input.record.captures[0].inaccessibleRooms = []
     let report = ChecklistRules.evaluate(input, policy: .manualControls)
     XCTAssertEqual(
-      report.failedItems.map(\.id), [.skippedRoomsRecorded, .photoPerRoom, .minimumControls])
+      report.blockingItems.map(\.id), [.skippedRoomsRecorded, .photoPerRoom, .minimumControls])
+    // In the order of the Field controls list: Floor 1, between, Floor 2.
     XCTAssertEqual(
       report.item(.minimumControls).gaps,
       [
         .missingDistance(capture: "Floor 1", axis: .a),
         .missingDistance(capture: "Floor 1", axis: .b),
         .missingCeilingHeight(capture: "Floor 1"),
+        .missingFloorToFloor(lower: "Floor 1", upper: "Floor 2"),
+        .missingLandmarks(lower: "Floor 1", upper: "Floor 2", have: 0, need: 2),
         .missingDistance(capture: "Floor 2", axis: .a),
         .missingDistance(capture: "Floor 2", axis: .b),
         .missingCeilingHeight(capture: "Floor 2"),
-        .missingFloorToFloor(lower: "Floor 1", upper: "Floor 2"),
-        .missingLandmarks(lower: "Floor 1", upper: "Floor 2", have: 0, need: 2),
       ])
+    XCTAssertEqual(
+      report.item(.minimumControls).detail,
+      "Floor 1 set \u{00B7} Floor to floor \u{00B7} 0 of 2 landmarks \u{00B7} Floor 2 set")
     XCTAssertEqual(report.finishButtonTitle, "Fix 3 items to finish")
 
     input.record.captures[0].inaccessibleRooms = [
@@ -339,21 +343,20 @@ final class ChecklistRulesTests: XCTestCase {
     XCTAssertEqual(draft.missing, [.room, .direction, .subject])
     XCTAssertNil(draft.labels(takenAt: Fixtures.t0))
     draft.room = "  Kitchen "
-    draft.direction = .east
+    draft.chooseDirection(.east)
     XCTAssertEqual(draft.missing, [.subject])
     draft.subject = .cabinetry
     XCTAssertTrue(draft.isComplete)
     XCTAssertEqual(
       draft.labels(takenAt: Fixtures.t0),
       PackageManifest.PhotoLabels(
-        room: "Kitchen", direction: .east, subject: .cabinetry, takenAt: Fixtures.t0))
+        room: "Kitchen", direction: .east, subject: .cabinetry, takenAt: Fixtures.t0,
+        directionSource: .manual))
     let next = draft.forNextPhoto()
     XCTAssertEqual(next.room, "  Kitchen ")
     XCTAssertEqual(next.missing, [.direction, .subject])
-    // Six chips as in the design, equipment behind More; together every contract subject.
-    XCTAssertEqual(PhotoSubject.primaryChoices.count, 6)
-    XCTAssertEqual(
-      Set(PhotoSubject.primaryChoices + PhotoSubject.moreChoices), Set(PhotoSubject.allCases))
+    // All seven subjects as chips (design v2: no More), together every contract subject.
+    XCTAssertEqual(Set(PhotoSubject.primaryChoices), Set(PhotoSubject.allCases))
   }
 
   // MARK: LiDAR-filled controls (standard policy)
