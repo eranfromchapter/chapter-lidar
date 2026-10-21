@@ -156,6 +156,34 @@ targets:
       - package: ChapterUI
         product: ChapterUISnapshotTesting
 
+  # The package screens' snapshot tests (phone-package §13.4, critique R-18d): the app's
+  # PackageScreens.swift compiled with its tests (it uses AppCore and ChapterUI only), hosted by
+  # ChapterUI's empty host app like the boards above; run by scheme ChapterUISnapshots.
+  PackageScreensSnapshotTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: App/PackageScreensTests
+        excludes: ["__Snapshots__"]
+      - path: App/Sources/App/Views/PackageScreens.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hellochapter.capture.packagescreenstests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "6.0"
+    dependencies:
+      - target: ChapterUISnapshotHost
+      - package: AppCore
+        product: AppCore
+      - package: CaptureContract
+        product: CaptureContract
+      - package: PackageKit
+        product: PackageKit
+      - package: ChapterUI
+        product: ChapterUI
+      - package: ChapterUI
+        product: ChapterUISnapshotTesting
+
 schemes:
   App:
     build:
@@ -177,8 +205,10 @@ schemes:
       targets:
         ChapterUISnapshotHost: [test]
         ChapterUIHostedSnapshotTests: [test]
+        PackageScreensSnapshotTests: [test]
     test:
       config: Debug
       gatherCoverageData: false
       targets:
         - ChapterUIHostedSnapshotTests
+        - PackageScreensSnapshotTests

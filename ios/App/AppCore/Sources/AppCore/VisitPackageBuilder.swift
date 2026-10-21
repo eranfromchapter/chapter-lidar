@@ -50,13 +50,18 @@ public struct VisitPackagePlan: Sendable {
 ///
 /// Per capture (in capture order): the raw originals `roomplan.json` and `depth-samples.bin`
 /// exactly as the scan wrote them; `capture-model.json` mapped from `roomplan.json` with the
-/// visit's ids; the PlanExport files (DXF, CSV, plan PDF, Spatial Report PDF, PNG, SVG) derived
-/// from the capture model; and, when the scan recorded them, the MeshExport files (`mesh.glb`,
-/// `mesh.obj` + `mesh.mtl` from the scene mesh, `points.las` derived from `depth-samples.bin`).
-/// Visit-wide: `capture-record.json` and `field-controls.json`. Then every saved photo, with its
-/// recorded SHA-256 and size as the expected fingerprint (assembly fails if a photo changed).
+/// visit's ids; the PlanExport files (DXF, CSV, the plan sheet PDF, PNG, SVG) derived from the
+/// capture model; and, when the scan recorded them, the MeshExport files (`mesh.glb`, `mesh.obj` +
+/// `mesh.mtl` from the scene mesh, `points.las` derived from `depth-samples.bin`). Visit-wide:
+/// `capture-record.json` and `field-controls.json`. Then every saved photo, with its recorded
+/// SHA-256 and size as the expected fingerprint (assembly fails if a photo changed).
 ///
-/// Generated files go into a new `drafts/<id>/` folder; originals are only read.
+/// No Spatial Report PDF: the spatial report is made by the station after its checks, and a
+/// manifest 1.1.0 package never holds the retired role (a PlanExport that still writes the phone
+/// report has it left out here).
+///
+/// Generated files go into a new `drafts/<id>/` folder; originals are only read. A later
+/// revision is built by `revisionPlan(base:…)` (RevisionBuilder.swift).
 public struct VisitPackageBuilder: Sendable {
   public let workspace: VisitWorkspace
   /// App version, used as generatorVersion of the files CaptureCore and FieldKit wrote.
@@ -122,37 +127,23 @@ public struct VisitPackageBuilder: Sendable {
     roomNames: VisitRoomNames = VisitRoomNames(),
     draftId: UUID = UUID(), packageId: LowercaseUUID = LowercaseUUID()
   ) throws -> VisitPackagePlan {
+    try build(
+      PackageDraft(visitId: record.visitId, packageId: packageId), record: record, photos: photos,
+      controls: controls, roomNames: roomNames, draftId: draftId)
+  }
+
+  /// Every file of the visit into `start` (a draft with no files yet).
+  func build(
+    _ start: PackageDraft, record: CaptureRecord, photos: [PhotoRecord], controls: FieldControls,
+    roomNames: VisitRoomNames, draftId: UUID
+  ) throws -> VisitPackagePlan {
     guard !record.captures.isEmpty else { throw VisitPackageError.noCaptures }
-    let draftFolder = workspace.draftsRoot.appendingPathComponent(
-      draftId.uuidString.lowercased(), isDirectory: true)
-    var draft = PackageDraft(visitId: record.visitId, packageId: packageId)
+    let draftFolder = self.draftFolder(draftId)
+    var draft = start
 
     // Visit-wide documents.
-    let recordURL = try write(
-      try encode(record),
-      to: draftFolder.appendingPathComponent(
-        "\(PackageFolder.sourceRegister.name)/\(record.visitId.rawValue)/\(PackageLayout.captureRecordFileName)"
-      ))
-    try draft.add(
-      PackageFileInput(
-        source: recordURL, role: .captureRecord, fileName: PackageLayout.captureRecordFileName,
-        mime: "application/json", generator: AppGenerators.captureCore,
-        generatorVersion: appVersion))
-
-    let controlsURL: URL
-    do {
-      controlsURL = try FieldControlsFile.write(
-        controls, intoPackageRoot: workspace.controlsRoot,
-        knownCaptures: record.captures.map {
-          FieldControls.CaptureRef(captureId: $0.captureId, areaKey: $0.areaKey)
-        })
-    } catch {
-      throw VisitPackageError.fieldControls(String(describing: error))
-    }
-    try draft.add(
-      PackageFileInput(
-        source: controlsURL, role: .fieldControls, fileName: FieldControlsFile.fileName,
-        mime: "application/json", generator: AppGenerators.fieldKit, generatorVersion: appVersion))
+    try draft.add(try recordInput(record, draftFolder: draftFolder))
+    try draft.add(try controlsInput(controls, record: record))
 
     // Per capture.
     for capture in record.captures {
@@ -164,28 +155,65 @@ public struct VisitPackageBuilder: Sendable {
     // Photos, with the fingerprint recorded when each was saved.
     let captureIds = Set(record.captures.map(\.captureId))
     for photo in photos where captureIds.contains(photo.captureId) {
-      try draft.add(
-        PackageFileInput(
-          source: url(under: workspace.photosRoot, path: photo.path), role: .photo,
-          fileName: String(photo.path.split(separator: "/").last ?? ""),
-          capture: CaptureRef(captureId: photo.captureId, areaKey: photo.areaKey), mime: photo.mime,
-          generator: AppGenerators.fieldKit, generatorVersion: appVersion, photo: photo.labels,
-          expected: FileDigest(sha256: photo.sha256, bytes: photo.bytes)))
+      try draft.add(photoInput(photo))
     }
 
     let review = try PackageReview.make(draft: draft, record: record, controls: controls)
     return VisitPackagePlan(draft: draft, record: record, review: review, draftFolder: draftFolder)
   }
 
-  private func addCapture(
+  /// A new `drafts/<id>/` folder for one build's generated files.
+  func draftFolder(_ draftId: UUID) -> URL {
+    workspace.draftsRoot.appendingPathComponent(draftId.uuidString.lowercased(), isDirectory: true)
+  }
+
+  /// `capture-record.json`, written into the draft folder.
+  func recordInput(_ record: CaptureRecord, draftFolder: URL) throws -> PackageFileInput {
+    let recordURL = try write(
+      try encode(record),
+      to: draftFolder.appendingPathComponent(
+        "\(PackageFolder.sourceRegister.name)/\(record.visitId.rawValue)/\(PackageLayout.captureRecordFileName)"
+      ))
+    return PackageFileInput(
+      source: recordURL, role: .captureRecord, fileName: PackageLayout.captureRecordFileName,
+      mime: "application/json", generator: AppGenerators.captureCore, generatorVersion: appVersion)
+  }
+
+  /// `field-controls.json`, written into the visit's controls folder (FieldControlsFile).
+  func controlsInput(_ controls: FieldControls, record: CaptureRecord) throws -> PackageFileInput {
+    let controlsURL: URL
+    do {
+      controlsURL = try FieldControlsFile.write(
+        controls, intoPackageRoot: workspace.controlsRoot,
+        knownCaptures: record.captures.map {
+          FieldControls.CaptureRef(captureId: $0.captureId, areaKey: $0.areaKey)
+        })
+    } catch {
+      throw VisitPackageError.fieldControls(String(describing: error))
+    }
+    return PackageFileInput(
+      source: controlsURL, role: .fieldControls, fileName: FieldControlsFile.fileName,
+      mime: "application/json", generator: AppGenerators.fieldKit, generatorVersion: appVersion)
+  }
+
+  /// A saved photo with its labels and the fingerprint recorded when it was saved (assembly fails
+  /// if the photo changed since).
+  func photoInput(_ photo: PhotoRecord) -> PackageFileInput {
+    PackageFileInput(
+      source: url(under: workspace.photosRoot, path: photo.path), role: .photo,
+      fileName: String(photo.path.split(separator: "/").last ?? ""),
+      capture: CaptureRef(captureId: photo.captureId, areaKey: photo.areaKey), mime: photo.mime,
+      generator: AppGenerators.fieldKit, generatorVersion: appVersion, photo: photo.labels,
+      expected: FileDigest(sha256: photo.sha256, bytes: photo.bytes))
+  }
+
+  func addCapture(
     _ capture: CaptureRecord.Capture, record: CaptureRecord, names: [RoomName], draftFolder: URL,
     to draft: inout PackageDraft
   ) throws {
     let ref = CaptureRef(captureId: capture.captureId, areaKey: capture.areaKey)
     let originals = originalsDirectory(of: capture)
-    let exports = draftFolder.appendingPathComponent(
-      "\(PackageFolder.originalExports.name)/\(capture.areaKey)/\(capture.captureId.rawValue)",
-      isDirectory: true)
+    let exports = exportsFolder(of: capture, in: draftFolder)
 
     let roomPlanPath = try draft.add(
       PackageFileInput(
@@ -201,32 +229,59 @@ public struct VisitPackageBuilder: Sendable {
         generatorVersion: appVersion))
 
     let model = try captureModel(of: capture, visitId: record.visitId, names: names)
+    let modelPath = try draft.add(
+      try modelInput(model, capture: capture, exports: exports, roomPlanPath: roomPlanPath))
+    for input in try planInputs(
+      model, capture: capture, record: record, exports: exports, modelPath: modelPath)
+    {
+      try draft.add(input)
+    }
+
+    try addMeshExports(
+      capture, ref: ref, originals: originals, depthURL: depthURL, depthPath: depthPath,
+      exports: exports, to: &draft)
+  }
+
+  /// Folder of one capture's generated files in a draft folder.
+  func exportsFolder(of capture: CaptureRecord.Capture, in draftFolder: URL) -> URL {
+    draftFolder.appendingPathComponent(
+      "\(PackageFolder.originalExports.name)/\(capture.areaKey)/\(capture.captureId.rawValue)",
+      isDirectory: true)
+  }
+
+  /// `capture-model.json` of one capture, written into `exports`.
+  func modelInput(
+    _ model: CaptureModel, capture: CaptureRecord.Capture, exports: URL, roomPlanPath: String
+  ) throws -> PackageFileInput {
     let modelURL = try write(
       try encode(model), to: exports.appendingPathComponent(PackageLayout.captureModelFileName))
-    let modelPath = try draft.add(
-      PackageFileInput(
-        source: modelURL, role: .captureModel, fileName: PackageLayout.captureModelFileName,
-        capture: ref, mime: "application/json", generator: AppGenerators.captureCore,
-        generatorVersion: appVersion, derivedFrom: [roomPlanPath]))
+    return PackageFileInput(
+      source: modelURL, role: .captureModel, fileName: PackageLayout.captureModelFileName,
+      capture: CaptureRef(captureId: capture.captureId, areaKey: capture.areaKey),
+      mime: "application/json", generator: AppGenerators.captureCore,
+      generatorVersion: appVersion, derivedFrom: [roomPlanPath])
+  }
 
+  /// The PlanExport files of one capture model, written into `exports`. The retired phone report
+  /// is left out, whatever PlanExport writes.
+  func planInputs(
+    _ model: CaptureModel, capture: CaptureRecord.Capture, record: CaptureRecord, exports: URL,
+    modelPath: String
+  ) throws -> [PackageFileInput] {
     let planFiles: [ExportedFile]
     do {
       planFiles = try PlanExporter.exportAll(model: model, record: record)
     } catch {
       throw VisitPackageError.planExport(label: capture.label, reason: String(describing: error))
     }
-    for file in planFiles {
+    return try planFiles.filter { !$0.role.isRetired }.map { file in
       let fileURL = try write(file.data, to: exports.appendingPathComponent(file.fileName))
-      try draft.add(
-        PackageFileInput(
-          source: fileURL, role: file.role, fileName: file.fileName, capture: ref, mime: file.mime,
-          generator: file.generator, generatorVersion: file.generatorVersion,
-          derivedFrom: [modelPath]))
+      return PackageFileInput(
+        source: fileURL, role: file.role, fileName: file.fileName,
+        capture: CaptureRef(captureId: capture.captureId, areaKey: capture.areaKey),
+        mime: file.mime, generator: file.generator, generatorVersion: file.generatorVersion,
+        derivedFrom: [modelPath])
     }
-
-    try addMeshExports(
-      capture, ref: ref, originals: originals, depthURL: depthURL, depthPath: depthPath,
-      exports: exports, to: &draft)
   }
 
   /// GLB, OBJ + MTL from the recorded scene mesh (when there is one) and LAS from the depth
@@ -312,7 +367,7 @@ public struct VisitPackageBuilder: Sendable {
 
   // MARK: Files
 
-  private func encode<T: Encodable>(_ value: T) throws -> Data {
+  func encode<T: Encodable>(_ value: T) throws -> Data {
     do {
       return try CaptureContractJSON.makeEncoder(prettyPrinted: true).encode(value)
     } catch {
@@ -321,7 +376,7 @@ public struct VisitPackageBuilder: Sendable {
   }
 
   /// Writes a generated file into the draft folder; never over an existing file.
-  private func write(_ data: Data, to url: URL) throws -> URL {
+  func write(_ data: Data, to url: URL) throws -> URL {
     do {
       try FileManager.default.createDirectory(
         at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -332,7 +387,7 @@ public struct VisitPackageBuilder: Sendable {
     }
   }
 
-  private func url(under root: URL, path: String) -> URL {
+  func url(under root: URL, path: String) -> URL {
     var url = root
     for segment in path.split(separator: "/") {
       url.appendPathComponent(String(segment))

@@ -4,7 +4,8 @@ import Foundation
 // Codable mirrors of the upload schemas in contract/openapi/station.yaml (UploadFileDeclaration,
 // UploadSessionRequest, UploadSession, UploadSessionFile, UploadTarget, FileStatus,
 // FileCheckResult, PackageStatus, PackageFile, VerdictSummary, Package). Optional fields are
-// omitted when nil, never null. Encode with CaptureContractJSON.makeEncoder().
+// omitted when nil, never null; fields of the station's answers the uploader does not use are
+// not mirrored (decoding ignores them). Encode with CaptureContractJSON.makeEncoder().
 
 /// Server-side state of one declared file (FileStatus).
 public enum FileStatus: String, CaseIterable, Codable, Sendable {
@@ -142,11 +143,18 @@ public struct UploadSessionFile: Hashable, Sendable, Codable {
   public var status: FileStatus
   /// Present for every file that is not verified.
   public var upload: UploadTarget?
+  /// The superseded revision (`supersedesPackageId`) when the station verified the file at once
+  /// because that revision holds the same verified file; no upload target is granted then.
+  public var carriedOverFrom: LowercaseUUID?
 
-  public init(path: String, status: FileStatus, upload: UploadTarget? = nil) {
+  public init(
+    path: String, status: FileStatus, upload: UploadTarget? = nil,
+    carriedOverFrom: LowercaseUUID? = nil
+  ) {
     self.path = path
     self.status = status
     self.upload = upload
+    self.carriedOverFrom = carriedOverFrom
   }
 }
 
@@ -157,17 +165,21 @@ public struct UploadSession: Hashable, Sendable, Codable {
   public var dealId: String
   public var revision: Int
   public var status: PackageStatus
+  /// When the station registered the package (the session was first opened). Stations before
+  /// 1.1.0 omit it.
+  public var createdAt: UTCTimestamp?
   public var files: [UploadSessionFile]
 
   public init(
     packageId: LowercaseUUID, visitId: LowercaseUUID, dealId: String, revision: Int,
-    status: PackageStatus, files: [UploadSessionFile]
+    status: PackageStatus, createdAt: UTCTimestamp? = nil, files: [UploadSessionFile]
   ) {
     self.packageId = packageId
     self.visitId = visitId
     self.dealId = dealId
     self.revision = revision
     self.status = status
+    self.createdAt = createdAt
     self.files = files
   }
 }

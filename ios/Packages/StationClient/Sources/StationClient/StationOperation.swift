@@ -16,6 +16,7 @@ public enum StationOperation: String, CaseIterable, Sendable {
   case getVerdict
   case listModelingDecisions
   case createModelingDecision
+  case putNextRevisionNotice
 
   /// The document's server URL: the API base path relative to the station host.
   public static let serverBasePath = "/v1"
@@ -31,6 +32,8 @@ public enum StationOperation: String, CaseIterable, Sendable {
       return "GET"
     case .createUploadSession, .completeFile, .sealPackage, .createModelingDecision:
       return "POST"
+    case .putNextRevisionNotice:
+      return "PUT"
     }
   }
 
@@ -48,6 +51,7 @@ public enum StationOperation: String, CaseIterable, Sendable {
     case .getVerdict: return "/packages/{packageId}/verdict"
     case .listModelingDecisions, .createModelingDecision:
       return "/packages/{packageId}/modeling-decisions"
+    case .putNextRevisionNotice: return "/packages/{packageId}/next-revision"
     }
   }
 

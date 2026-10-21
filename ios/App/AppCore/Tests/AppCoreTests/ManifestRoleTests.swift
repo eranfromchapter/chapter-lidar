@@ -8,14 +8,17 @@ import XCTest
 @testable import AppCore
 
 /// Every manifest role a visit package carries today is still produced (floorplan report plan,
-/// phase 1). Later phases add files; none of today's may go.
+/// phase 1). Later phases add files; none of today's may go, except the roles the contract
+/// retires (`FileRole.retiredRoles`: the phone's spatial report, design v2), which no package may
+/// hold any more.
 final class ManifestRoleTests: XCTestCase {
   /// The roles the app writes today. New roles may be added to this list, but none removed.
-  /// (`texture` is a contract role the app has never written.)
+  /// (`texture` is a contract role the app has never written; `spatial_report_pdf` is retired:
+  /// the station makes the spatial report.)
   private let todaysRoles: Set<FileRole> = [
     .captureRecord, .fieldControls,
     .rawRoomplanJSON, .rawDepth, .captureModel,
-    .planDXF, .roomsCSV, .planPDF, .spatialReportPDF, .planPNG, .planSVG,
+    .planDXF, .roomsCSV, .planPDF, .planPNG, .planSVG,
     .meshGLB, .meshOBJ, .meshMTL, .pointCloudLAS,
     .photo,
   ]
@@ -50,6 +53,10 @@ final class ManifestRoleTests: XCTestCase {
     XCTAssertTrue(
       todaysRoles.isSubset(of: roles),
       "missing roles: \(todaysRoles.subtracting(roles).map(\.rawValue).sorted())")
+    XCTAssertTrue(
+      roles.isDisjoint(with: FileRole.retiredRoles),
+      "retired roles in the draft: \(roles.filter(\.isRetired).map(\.rawValue).sorted())")
+    XCTAssertTrue(todaysRoles.isDisjoint(with: FileRole.retiredRoles))
     // Every capture still has each per-capture role.
     for capture in visit.record.captures {
       let captureRoles = Set(

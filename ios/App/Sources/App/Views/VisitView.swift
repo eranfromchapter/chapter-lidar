@@ -28,7 +28,8 @@ struct VisitView: View {
       RoomNamesSheet(draft: draft) { visit.renameRooms($0) }
     }
     .overlay(alignment: .bottom) {
-      if let message = visit.message {
+      // The package screens show their errors inline (phone-package §3.2).
+      if let message = visit.message, visit.upload == nil, visit.flow.step != .packageReady {
         Text("\u{25A0} \(message)")
           .font(Typo.caption).foregroundStyle(Palette.blocked)
           .padding(12)
@@ -42,7 +43,20 @@ struct VisitView: View {
   @ViewBuilder
   private var content: some View {
     if let upload = visit.upload {
-      UploadingView(snapshot: upload, onNewCapture: { visit.startNewCapture() })
+      // Package status and Verdict received (phone-package §4, §5), in a stack of their own
+      // until the app's navigation pushes them; "New capture" stands in for the Captures home.
+      NavigationStack {
+        PackageStatusView(
+          packageId: upload.packageId, snapshot: upload,
+          actions: PackageStatusActions(openInHub: { UIApplication.shared.open($0) })
+        )
+        .toolbar {
+          ToolbarItem(placement: .topBarLeading) {
+            Button("New capture") { visit.startNewCapture() }
+              .accessibilityIdentifier("package.newCapture")
+          }
+        }
+      }
     } else {
       switch visit.flow.step {
       case .captureRecord, .scan:
@@ -84,11 +98,30 @@ struct VisitView: View {
             onFinish: { visit.checklistFinished() })
         }
       case .packageReady:
-        PackageReadyView(visit: visit)
+        NavigationStack {
+          PackageReadyView(
+            state: packageReadyState,
+            actions: PackageReadyActions(
+              scanAnother: { visit.addMoreRooms() }, seal: { visit.sealAndUpload() }))
+        }
       case .uploading:
         ProgressView()
       }
     }
+  }
+
+  /// Package ready's state from the visit: the plan's review once built, the build or seal error
+  /// inline.
+  private var packageReadyState: PackageReadyState {
+    let record = visit.flow.record
+    return PackageReadyState(
+      buildingSubtitle: PackageReview.buildingSubtitle(
+        address: record?.address.formatted ?? "",
+        captureCountText: record.map(CaptureCountText.make) ?? "", revision: 1),
+      review: visit.plan?.review,
+      buildError: visit.plan == nil && !visit.isBuilding ? visit.message : nil,
+      isSealing: visit.isSealing,
+      sealError: visit.plan == nil ? nil : visit.message.map { SealFailureText.make(reason: $0) })
   }
 
   /// Opens "Rename rooms" for one capture, or every capture when `captureId` is nil; nil (no

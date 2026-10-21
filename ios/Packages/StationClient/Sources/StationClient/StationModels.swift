@@ -210,11 +210,18 @@ public struct UploadSessionFile: Hashable, Sendable, Codable {
   public var status: FileStatus
   /// Present for every file that is not verified.
   public var upload: UploadTarget?
+  /// Present when the file is verified because revision N-1 (`supersedesPackageId`) holds the
+  /// same verified file; no upload target is granted then (station 1.1.0).
+  public var carriedOverFrom: LowercaseUUID?
 
-  public init(path: String, status: FileStatus, upload: UploadTarget? = nil) {
+  public init(
+    path: String, status: FileStatus, upload: UploadTarget? = nil,
+    carriedOverFrom: LowercaseUUID? = nil
+  ) {
     self.path = path
     self.status = status
     self.upload = upload
+    self.carriedOverFrom = carriedOverFrom
   }
 }
 
@@ -225,17 +232,21 @@ public struct UploadSession: Hashable, Sendable, Codable {
   public var dealId: String
   public var revision: Int
   public var status: PackageStatus
+  /// When the station registered the package (the session was first opened). Shown as
+  /// "Registered" on the phone. Stations before 1.1.0 omit it.
+  public var createdAt: UTCTimestamp?
   public var files: [UploadSessionFile]
 
   public init(
     packageId: LowercaseUUID, visitId: LowercaseUUID, dealId: String, revision: Int,
-    status: PackageStatus, files: [UploadSessionFile]
+    status: PackageStatus, createdAt: UTCTimestamp? = nil, files: [UploadSessionFile]
   ) {
     self.packageId = packageId
     self.visitId = visitId
     self.dealId = dealId
     self.revision = revision
     self.status = status
+    self.createdAt = createdAt
     self.files = files
   }
 }
@@ -288,10 +299,13 @@ public struct PackageFile: Hashable, Sendable, Codable {
   public var status: FileStatus
   /// Time of the last server-side check. Omitted while pending.
   public var checkedAt: UTCTimestamp?
+  /// Present when the file was verified by carry-over from that package (revision N-1).
+  public var carriedOverFrom: LowercaseUUID?
 
   public init(
     path: String, role: FileRole, captureId: LowercaseUUID? = nil, areaKey: String? = nil,
-    sha256: String, bytes: Int64, status: FileStatus, checkedAt: UTCTimestamp? = nil
+    sha256: String, bytes: Int64, status: FileStatus, checkedAt: UTCTimestamp? = nil,
+    carriedOverFrom: LowercaseUUID? = nil
   ) {
     self.path = path
     self.role = role
@@ -301,6 +315,151 @@ public struct PackageFile: Hashable, Sendable, Codable {
     self.bytes = bytes
     self.status = status
     self.checkedAt = checkedAt
+    self.carriedOverFrom = carriedOverFrom
+  }
+}
+
+/// components.schemas.CheckRunSummary: the latest check run of a package. Omitted before the
+/// seal.
+public struct CheckRunSummary: Hashable, Sendable, Codable {
+  public enum Status: String, CaseIterable, Hashable, Sendable, Codable {
+    /// Sealed, no run yet.
+    case queued
+    case running
+    case completed
+    /// The station could not finish the checks (it retries).
+    case failed
+  }
+
+  public var status: Status
+  public var startedAt: UTCTimestamp?
+  /// Present when completed or failed.
+  public var finishedAt: UTCTimestamp?
+  /// Rules run. Present when completed.
+  public var rules: Int?
+
+  public init(
+    status: Status, startedAt: UTCTimestamp? = nil, finishedAt: UTCTimestamp? = nil,
+    rules: Int? = nil
+  ) {
+    self.status = status
+    self.startedAt = startedAt
+    self.finishedAt = finishedAt
+    self.rules = rules
+  }
+}
+
+/// components.schemas.PublicationSummary: HUB publication of this revision. Omitted when
+/// nothing was queued.
+public struct PublicationSummary: Hashable, Sendable, Codable {
+  public enum Status: String, CaseIterable, Hashable, Sendable, Codable {
+    case pending
+    case publishing
+    case published
+    case publishFailed = "publish_failed"
+  }
+
+  public var status: Status
+  /// Present exactly when published.
+  public var publishedAt: UTCTimestamp?
+  /// The revision's HUB folder, `Capture/{visitId}/r{revision}`.
+  public var hubFolder: String
+
+  public init(status: Status, publishedAt: UTCTimestamp? = nil, hubFolder: String) {
+    self.status = status
+    self.publishedAt = publishedAt
+    self.hubFolder = hubFolder
+  }
+}
+
+/// components.schemas.PackageLinks: web pages of a package.
+public struct PackageLinks: Hashable, Sendable, Codable {
+  /// The package page of the review screen.
+  public var review: URL
+  /// The HUB page of the deal. Omitted when the station has no HUB deal URL configured.
+  public var hub: URL?
+
+  public init(review: URL, hub: URL? = nil) {
+    self.review = review
+    self.hub = hub
+  }
+}
+
+/// components.schemas.NextRevisionChange: one row of what the next revision adds, changes or
+/// removes, worded as the phone shows it.
+public struct NextRevisionChange: Hashable, Sendable, Codable {
+  public enum Kind: String, CaseIterable, Hashable, Sendable, Codable {
+    case added
+    case changed
+    case removed
+  }
+
+  public enum Subject: String, CaseIterable, Hashable, Sendable, Codable {
+    case capture
+    case roomNames = "room_names"
+    case fieldControl = "field_control"
+    case photos
+    case retiredFile = "retired_file"
+  }
+
+  public var kind: Kind
+  public var subject: Subject
+  /// 1 to 200 characters.
+  public var title: String
+  /// 1 to 300 characters.
+  public var detail: String
+  /// A next action of the base verdict, verbatim, that this change answers.
+  public var answersNextAction: String?
+  /// Instrument of a field-control change.
+  public var method: MeasurementMethod?
+
+  public init(
+    kind: Kind, subject: Subject, title: String, detail: String, answersNextAction: String? = nil,
+    method: MeasurementMethod? = nil
+  ) {
+    self.kind = kind
+    self.subject = subject
+    self.title = title
+    self.detail = detail
+    self.answersNextAction = answersNextAction
+    self.method = method
+  }
+}
+
+/// components.schemas.NextRevisionNoticeInput: what the phone sends; the station adds
+/// `updatedBy`.
+public struct NextRevisionNoticeInput: Hashable, Sendable, Codable {
+  /// The revision being prepared, the package's revision + 1 (at least 2).
+  public var revision: Int
+  /// When the phone last changed the revision.
+  public var updatedAt: UTCTimestamp
+  /// At most 50.
+  public var changes: [NextRevisionChange]
+
+  public init(revision: Int, updatedAt: UTCTimestamp, changes: [NextRevisionChange]) {
+    self.revision = revision
+    self.updatedAt = updatedAt
+    self.changes = changes
+  }
+}
+
+/// components.schemas.NextRevisionNotice: the next revision as the phone last described it,
+/// present on a sealed package while its next revision is in progress on the phone.
+public struct NextRevisionNotice: Hashable, Sendable, Codable {
+  public var revision: Int
+  public var updatedAt: UTCTimestamp
+  /// Name of the signed-in user who sent the notice (set by the station).
+  public var updatedBy: String?
+  public var changes: [NextRevisionChange]
+
+  public init(
+    revision: Int, updatedAt: UTCTimestamp, updatedBy: String? = nil,
+    changes: [NextRevisionChange]
+  ) {
+    self.revision = revision
+    self.updatedAt = updatedAt
+    self.updatedBy = updatedBy
+    self.changes = changes
   }
 }
 
@@ -331,11 +490,19 @@ public struct PackageSummary: Hashable, Sendable, Codable {
   public var sealedAt: UTCTimestamp?
   /// Present when status is verdict_ready.
   public var verdict: VerdictSummary?
+  /// The latest check run (station 1.1.0). Omitted before the seal.
+  public var checks: CheckRunSummary?
+  /// HUB publication of this revision (station 1.1.0). Omitted when nothing was queued.
+  public var publication: PublicationSummary?
+  /// Web pages of the package (station 1.1.0).
+  public var links: PackageLinks?
 
   public init(
     packageId: LowercaseUUID, visitId: LowercaseUUID, dealId: String, revision: Int,
     supersedesPackageId: LowercaseUUID? = nil, status: PackageStatus, createdAt: UTCTimestamp,
-    sealedAt: UTCTimestamp? = nil, verdict: VerdictSummary? = nil
+    sealedAt: UTCTimestamp? = nil, verdict: VerdictSummary? = nil,
+    checks: CheckRunSummary? = nil, publication: PublicationSummary? = nil,
+    links: PackageLinks? = nil
   ) {
     self.packageId = packageId
     self.visitId = visitId
@@ -346,6 +513,9 @@ public struct PackageSummary: Hashable, Sendable, Codable {
     self.createdAt = createdAt
     self.sealedAt = sealedAt
     self.verdict = verdict
+    self.checks = checks
+    self.publication = publication
+    self.links = links
   }
 }
 
@@ -376,12 +546,22 @@ public struct Package: Hashable, Sendable, Codable {
   public var captureRecord: CaptureRecord?
   /// Present when status is verdict_ready.
   public var verdict: VerdictSummary?
+  /// The latest check run (station 1.1.0). Omitted before the seal.
+  public var checks: CheckRunSummary?
+  /// HUB publication of this revision (station 1.1.0). Omitted when nothing was queued.
+  public var publication: PublicationSummary?
+  /// Web pages of the package (station 1.1.0).
+  public var links: PackageLinks?
+  /// The next revision while the phone prepares it (station 1.1.0, `putNextRevisionNotice`).
+  public var nextRevision: NextRevisionNotice?
 
   public init(
     packageId: LowercaseUUID, visitId: LowercaseUUID, dealId: String, revision: Int,
     supersedesPackageId: LowercaseUUID? = nil, status: PackageStatus, createdAt: UTCTimestamp,
     sealedAt: UTCTimestamp? = nil, files: [PackageFile], manifest: PackageManifest? = nil,
-    captureRecord: CaptureRecord? = nil, verdict: VerdictSummary? = nil
+    captureRecord: CaptureRecord? = nil, verdict: VerdictSummary? = nil,
+    checks: CheckRunSummary? = nil, publication: PublicationSummary? = nil,
+    links: PackageLinks? = nil, nextRevision: NextRevisionNotice? = nil
   ) {
     self.packageId = packageId
     self.visitId = visitId
@@ -395,6 +575,10 @@ public struct Package: Hashable, Sendable, Codable {
     self.manifest = manifest
     self.captureRecord = captureRecord
     self.verdict = verdict
+    self.checks = checks
+    self.publication = publication
+    self.links = links
+    self.nextRevision = nextRevision
   }
 }
 

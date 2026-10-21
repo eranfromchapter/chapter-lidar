@@ -19,11 +19,13 @@
       let package = Bundle.main.resourceURL!.appendingPathComponent("package", isDirectory: true)
       let captureDirectory = firstDirectory(containing: "roomplan.json", under: package)
       let photo = firstFile(withExtension: "jpg", under: package)
-      let storage = UITestBlobStorage()
+      // -ChapterUITestVerdict, -ChapterUITestOffline, -ChapterUITestRefuse (phone-package §9.1).
+      let options = UITestStationOptions(arguments: ProcessInfo.processInfo.arguments)
+      let storage = UITestBlobStorage(offlineSeconds: options.offlineSeconds)
       let station = StationAPI(
         configuration: try! StationClientConfiguration(stationURL: UITestStationTransport.stationURL),
         tokenProvider: UITestTokenProvider(),
-        transport: UITestStationTransport(storage: storage))
+        transport: UITestStationTransport(storage: storage, options: options))
       let version = ProcessInfo.processInfo.operatingSystemVersion
       let osVersion = "\(version.majorVersion).\(version.minorVersion).\(version.patchVersion)"
       return AppServices(

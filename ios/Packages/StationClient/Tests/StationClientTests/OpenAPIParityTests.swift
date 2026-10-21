@@ -102,10 +102,9 @@ final class OpenAPIParityTests: XCTestCase {
   }
 
   /// Operations of station.yaml (1.1.0) that the phone client does not call: the review
-  /// screen's lists, archive and report link, and the next-revision notice until the phone
-  /// sends it. The parity checks below cover every other operation.
+  /// screen's lists, archive and report link. The parity checks below cover every other
+  /// operation.
   static let notInClient: Set<String> = [
-    "putNextRevisionNotice",
     "getSpatialReportLink",
     "requestPackageArchive",
     "getPackageArchive",
@@ -143,7 +142,7 @@ final class OpenAPIParityTests: XCTestCase {
     XCTAssertEqual(
       client.subtracting(documented), [], "client operations not in station.yaml")
     XCTAssertEqual(document.operations.count, StationOperation.allCases.count)
-    XCTAssertEqual(StationOperation.allCases.count, 12)
+    XCTAssertEqual(StationOperation.allCases.count, 13)
   }
 
   func testSecurityAndSuccessStatusesMatchDocument() throws {
@@ -190,6 +189,7 @@ final class OpenAPIParityTests: XCTestCase {
       case "getVerdict": body = verdict
       case "listModelingDecisions": body = Fixtures.decisions
       case "createModelingDecision": body = Fixtures.decision
+      case "putNextRevisionNotice": body = Fixtures.nextRevisionNotice
       default: return .respond(.problem(500, code: "no_fixture"))
       }
       return .respond(.json(operation.successStatuses.min() ?? 200, body))
@@ -224,6 +224,8 @@ final class OpenAPIParityTests: XCTestCase {
       ModelingDecisionInput(
         element: "Floor 1 kitchen north wall", decision: "Wall length from tape distance A",
         sources: [DecisionSource(path: "Field Measurements/field-controls.json")]))
+    _ = try await client.putNextRevisionNotice(
+      packageId: packageId, Fixtures.nextRevisionNoticeInput)
 
     XCTAssertEqual(unmatched.items, [], "client sent requests that are not in station.yaml")
     XCTAssertEqual(

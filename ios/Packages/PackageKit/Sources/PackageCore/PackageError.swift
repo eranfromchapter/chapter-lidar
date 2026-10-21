@@ -1,3 +1,4 @@
+import CaptureContract
 import Foundation
 
 /// Why a package could not be laid out, assembled, sealed or opened. Nothing here is ever fixed up
@@ -47,6 +48,9 @@ public enum PackageError: Error, Equatable, Sendable, CustomStringConvertible {
   case notSealed(String)
   /// The manifest could not be decoded.
   case invalidManifest(String)
+  /// The role is retired (`FileRole.isRetired`, manifest 1.1.0): a package sealed by this app
+  /// never holds it. The spatial report is made by the station, not packaged.
+  case retiredRole(FileRole)
 
   public var description: String {
     switch self {
@@ -82,6 +86,8 @@ public enum PackageError: Error, Equatable, Sendable, CustomStringConvertible {
       return "\(operation) failed for \(path): \(reason)"
     case .notSealed(let reason): return "not a sealed package: \(reason)"
     case .invalidManifest(let reason): return "invalid manifest: \(reason)"
+    case .retiredRole(let role):
+      return "role \(role.rawValue) is retired; a new package never holds it"
     }
   }
 }

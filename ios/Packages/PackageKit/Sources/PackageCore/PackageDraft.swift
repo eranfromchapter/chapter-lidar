@@ -76,10 +76,23 @@ public struct PackageDraft: Sendable {
     supersedesPackageId = nil
   }
 
-  private init(
-    visitId: LowercaseUUID, packageId: LowercaseUUID, revision: Int,
-    supersedesPackageId: LowercaseUUID
-  ) {
+  /// A draft of any revision with no files yet, for building a revision from the visit's files
+  /// rather than from the sealed one (re-seal after a failed upload). Revision 1 names no
+  /// superseded package; a later revision names one, which must differ from `packageId`.
+  public init(
+    visitId: LowercaseUUID, packageId: LowercaseUUID = LowercaseUUID(), revision: Int,
+    supersedesPackageId: LowercaseUUID?
+  ) throws {
+    guard revision >= 1 else {
+      throw PackageError.invalidRevision("revision must be at least 1")
+    }
+    guard (revision == 1) == (supersedesPackageId == nil) else {
+      throw PackageError.invalidRevision(
+        "supersedesPackageId is required exactly when revision is greater than 1")
+    }
+    guard supersedesPackageId != packageId else {
+      throw PackageError.invalidRevision("supersedesPackageId must differ from packageId")
+    }
     self.packageId = packageId
     self.visitId = visitId
     self.revision = revision
@@ -90,6 +103,9 @@ public struct PackageDraft: Sendable {
   /// `supersedesPackageId` set to the sealed package. Every file of the sealed package is carried
   /// over from it (read only, with its fingerprint as the expected one); add or replace files
   /// before assembling. The sealed package itself is never changed.
+  ///
+  /// Files with a retired role (the phone's spatial report of a manifest 1.0.0 package) are not
+  /// carried over: the next revision is a manifest 1.1.0 package, which never holds them.
   public static func nextRevision(
     of sealed: SealedPackage, packageId: LowercaseUUID = LowercaseUUID()
   ) throws -> PackageDraft {
@@ -97,10 +113,11 @@ public struct PackageDraft: Sendable {
     guard packageId != previous.packageId else {
       throw PackageError.invalidRevision("a new revision needs a new packageId")
     }
-    var draft = PackageDraft(
+    var draft = try PackageDraft(
       visitId: previous.visitId, packageId: packageId, revision: previous.revision + 1,
       supersedesPackageId: previous.packageId)
-    for file in previous.files {
+    let retired = Set(previous.files.filter { $0.role.isRetired }.map(\.path))
+    for file in previous.files where !file.role.isRetired {
       let capture: CaptureRef?
       if let captureId = file.captureId, let areaKey = file.areaKey {
         capture = CaptureRef(captureId: captureId, areaKey: areaKey)
@@ -111,7 +128,7 @@ public struct PackageDraft: Sendable {
       let input = PackageFileInput(
         source: sealed.url(for: file.path), role: file.role, fileName: fileName, capture: capture,
         mime: file.mime, generator: file.generator, generatorVersion: file.generatorVersion,
-        derivedFrom: file.derivedFrom, photo: file.photo,
+        derivedFrom: file.derivedFrom.filter { !retired.contains($0) }, photo: file.photo,
         expected: FileDigest(sha256: file.sha256, bytes: file.bytes))
       try draft.add(input)
     }
@@ -135,6 +152,9 @@ public struct PackageDraft: Sendable {
   /// Replaces the file at an existing package path (same role, name and capture) with new
   /// content or metadata. Only drafts can change: a sealed package never does.
   public mutating func replace(_ input: PackageFileInput) throws {
+    guard !input.role.isRetired else {
+      throw PackageError.retiredRole(input.role)
+    }
     let path = try self.path(role: input.role, fileName: input.fileName, capture: input.capture)
     guard let index = entries.firstIndex(where: { $0.path == path }) else {
       throw PackageError.unknownPath(path)
@@ -143,8 +163,24 @@ public struct PackageDraft: Sendable {
     entries[index] = Entry(path: path, input: input)
   }
 
+  /// Removes the file at `path` from the draft (a carried-over file a revision no longer has,
+  /// for example a plan export written under another name now). Files derived from it must be
+  /// removed or replaced first.
+  public mutating func remove(path: String) throws {
+    guard let index = entries.firstIndex(where: { $0.path == path }) else {
+      throw PackageError.unknownPath(path)
+    }
+    if let dependant = entries.first(where: { $0.input.derivedFrom.contains(path) }) {
+      throw PackageError.invalidDerivedFrom(path: dependant.path, source: path)
+    }
+    entries.remove(at: index)
+  }
+
   /// Checks `input` against the manifest rules and the files before it; returns its path.
   private func check(_ input: PackageFileInput, replacing index: Int?) throws -> String {
+    guard !input.role.isRetired else {
+      throw PackageError.retiredRole(input.role)
+    }
     let path = try self.path(role: input.role, fileName: input.fileName, capture: input.capture)
     let earlier = index.map { Array(entries[..<$0]) } ?? entries
     if index == nil, entries.contains(where: { $0.path == path }) {

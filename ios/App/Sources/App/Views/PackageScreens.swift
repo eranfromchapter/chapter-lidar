@@ -1,226 +1,995 @@
 import AppCore
-import CaptureUI
+import CaptureContract
+import ChapterUI
 import SwiftUI
+import UIKit
 
-private typealias Palette = ChapterTokens.Palette
-private typealias Space = ChapterTokens.Space
-private typealias Typo = ChapterTokens.Typography
-private typealias Control = ChapterTokens.Control
-private typealias Radius = ChapterTokens.Radius
+// The package screens of design v2 (artboard 2f, build spec phone-package §3–§6): Package ready,
+// Package status (Uploading, Paused, Uploaded, Upload stopped), Verdict received and Revision n.
+//
+// Every screen is a pushed screen of the app's NavigationStack (critique R-18c): the large title
+// in Times New Roman, the right caption in the bar, the subtitle as the first content line and
+// the buttons in the bottom action bar. The screens only draw state and call actions: the app
+// (VisitModel / AppModel) owns the flow, the builders and the uploads. They depend on AppCore,
+// CaptureContract and ChapterUI only, so the snapshot tests compile this file on its own
+// (ios/App/PackageScreensTests).
 
-/// screen-package, 1: "Package ready" — folder layout, sizes, seal.
+// MARK: - Screen A · Package ready
+
+/// What Package ready shows (§3.2).
+struct PackageReadyState: Equatable {
+  /// "618 Valley Street · 2 floors · revision 1" while the plans are written.
+  var buildingSubtitle: String
+  /// The draft's review once the plans are written.
+  var review: PackageReview?
+  /// The builder's error ("The plans of Floor 2 could not be written: …").
+  var buildError: String?
+  var isSealing = false
+  /// "The package could not be sealed: … Nothing was uploaded." (`SealFailureText`).
+  var sealError: String?
+
+  var isBuilding: Bool { review == nil && buildError == nil }
+}
+
+struct PackageReadyActions {
+  /// "Scan another floor or room" (`VisitFlow.addFloor()`).
+  var scanAnother: () -> Void = {}
+  /// "Seal and upload".
+  var seal: () -> Void = {}
+  /// "Try again" after the build failed (`VisitModel.rebuildPlan()`); no button when nil.
+  var tryAgain: (() -> Void)?
+}
+
+/// Screen A (§3): the real file list of revision 1, then seal and upload.
 struct PackageReadyView: View {
-  let visit: VisitModel
-  @State private var reviewing: ScanItem?
+  let state: PackageReadyState
+  let actions: PackageReadyActions
+  /// The open "Original Exports" group (accordion); the first capture starts open.
+  @State private var expansion: Expansion = .first
+
+  enum Expansion: Equatable {
+    case first
+    case group(String)
+    case none
+  }
+
+  init(state: PackageReadyState, actions: PackageReadyActions = PackageReadyActions()) {
+    self.state = state
+    self.actions = actions
+  }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 14) {
-      Text("Package ready").font(Typo.serif(30)).foregroundStyle(Palette.ink)
-        .accessibilityAddTraits(.isHeader)
-      if let review = visit.plan?.review {
-        Text(review.subtitle).font(Typo.sans(15)).foregroundStyle(Palette.muted)
-        ScrollView { folders(review) }
-        HStack(alignment: .top, spacing: 10) {
-          Image(systemName: "lock").font(.system(size: 14)).foregroundStyle(Palette.ink)
-          Text(review.sealNote).font(Typo.caption).foregroundStyle(Palette.ink)
-        }
-        .padding(.horizontal, Space.s4).padding(.vertical, 14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Palette.nude, in: RoundedRectangle(cornerRadius: Radius.card))
-      } else if visit.isBuilding {
-        ProgressView("Writing plans and 3D files…").frame(maxWidth: .infinity)
-      }
-      Spacer(minLength: 0)
-      // Look at the scan here first; uploading to the HUB is a separate choice below.
-      let scans = visit.scanItems
-      if !scans.isEmpty {
-        Text("Review before you upload").font(Typo.caption).foregroundStyle(Palette.muted)
-        ScanList(items: scans) { reviewing = $0 }
-      }
-      Button { visit.addMoreRooms() } label: {
-        Text("Add more rooms").font(Typo.body).foregroundStyle(Palette.ink)
-          .frame(maxWidth: .infinity, minHeight: Control.primaryHeight)
-          .overlay(RoundedRectangle(cornerRadius: Radius.card).stroke(Palette.ink, lineWidth: 1))
-      }
-      .buttonStyle(.plain)
-      .disabled(visit.isSealing)
-      Button { visit.sealAndUpload() } label: {
-        Text(visit.isSealing ? "Sealing…" : "Seal and upload")
-          .font(Typo.headline).foregroundStyle(Palette.surface)
-          .frame(maxWidth: .infinity, minHeight: Control.primaryHeight)
-          .background(
-            visit.plan == nil ? Palette.line : Palette.ink,
-            in: RoundedRectangle(cornerRadius: Radius.card))
-      }
-      .buttonStyle(.plain)
-      .disabled(visit.plan == nil || visit.isSealing)
-    }
-    .padding(.horizontal, 20)
-    .padding(.top, Space.s2)
-    .padding(.bottom, 28)
-    .sheet(item: $reviewing) { ScanViewer(item: $0) }
-  }
-
-  private func folders(_ review: PackageReview) -> some View {
-    VStack(spacing: 0) {
-      ForEach(Array(review.captures.enumerated()), id: \.offset) { index, group in
-        VStack(alignment: .leading, spacing: 6) {
-          Text("Original Exports \u{00B7} \(group.label)").font(Typo.sans(15, weight: .semibold))
-          if index == 0 {
-            Text(group.kinds).font(Typo.caption).foregroundStyle(Palette.muted)
+    ScrollView {
+      VStack(alignment: .leading, spacing: 10) {
+        PackageSubtitle(state.review?.subtitle ?? state.buildingSubtitle)
+          .padding(.top, ChapterTheme.Metric.subtitleTop)
+        if let review = state.review {
+          exports(review)
+          ChapterCard {
+            SummaryRow(title: "Site Photos", detail: review.photosText)
+            SummaryRow(title: "Field Measurements", detail: review.controlsText)
+            SummaryRow(title: "Capture record", detail: review.compassText)
+            SummaryRow(title: "Source Register", detail: review.manifestText)
           }
-          Text(group.countText).font(Typo.caption)
+          InfoNote(review.sealNote)
+          if let error = state.sealError {
+            ErrorLine(text: "\(error) Try again.")
+          }
+        } else if let error = state.buildError {
+          buildFailed(error)
+        } else {
+          ProgressView {
+            Text("Writing plans and 3D files\u{2026}")
+              .chapterTextStyle(.subhead)
+              .foregroundStyle(ChapterTheme.Color.muted)
+          }
+          .frame(maxWidth: .infinity)
+          .padding(.top, 40)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, Space.s4).padding(.vertical, 14)
-        divider
       }
-      row("Site Photos", review.photosText)
-      divider
-      row("Field Measurements", review.controlsText)
-      divider
-      row("Source Register", review.manifestText)
+      .padding(.horizontal, ChapterTheme.Metric.screenPadding)
+      .padding(.bottom, ChapterTheme.Metric.sectionGap)
+      .chapterContentWidth()
     }
-    .foregroundStyle(Palette.ink)
-    .background(Palette.surface, in: RoundedRectangle(cornerRadius: Radius.card))
-    .overlay(RoundedRectangle(cornerRadius: Radius.card).stroke(Palette.line, lineWidth: 1))
+    .packageHeader(title: "Package ready", caption: "Step 3 of 3")
+    .chapterBackChevronOnly()
+    .navigationBarBackButtonHidden(state.isSealing)
+    .chapterScreenBackground()
+    .chapterActionBar {
+      Button("Scan another floor or room", action: actions.scanAnother)
+        .buttonStyle(.chapter(.tinted))
+        .disabled(state.isSealing)
+        .accessibilityIdentifier("package.scanAnother")
+      Button(state.isSealing ? "Sealing\u{2026}" : "Seal and upload", action: actions.seal)
+        .buttonStyle(.chapter(.primary))
+        .disabled(state.review == nil || state.isSealing)
+        .accessibilityIdentifier("package.seal")
+    }
   }
 
-  private var divider: some View { Rectangle().fill(Palette.nude).frame(height: 1) }
-
-  private func row(_ title: String, _ value: String) -> some View {
-    HStack {
-      Text(title).font(Typo.sans(15, weight: .semibold))
-      Spacer()
-      Text(value).font(Typo.sans(15))
+  private func isExpanded(_ group: PackageReview.ExportGroup, in review: PackageReview) -> Bool {
+    switch expansion {
+    case .first: return group.areaKey == review.exportGroups.first?.areaKey
+    case .group(let key): return group.areaKey == key
+    case .none: return false
     }
-    .padding(.horizontal, Space.s4).padding(.vertical, 14)
+  }
+
+  /// Card 1: one disclosure group per capture, in capture order.
+  private func exports(_ review: PackageReview) -> some View {
+    ChapterCard {
+      ForEach(review.exportGroups, id: \.areaKey) { group in
+        let expanded = isExpanded(group, in: review)
+        ExportGroupHeader(group: group, isExpanded: expanded) {
+          withAnimation(.easeInOut(duration: 0.2)) {
+            expansion = expanded ? .none : .group(group.areaKey)
+          }
+        }
+        if expanded {
+          ForEach(group.rows, id: \.kind) { row in
+            ExportSubRow(row: row, areaKey: group.areaKey)
+          }
+        }
+      }
+    }
+  }
+
+  private func buildFailed(_ error: String) -> some View {
+    VStack(alignment: .leading, spacing: 10) {
+      ChapterCard {
+        HStack(alignment: .top, spacing: ChapterTheme.Metric.statusGlyphGap) {
+          StatusGlyph(.missing).padding(.top, 5)
+          Text(error)
+            .chapterTextStyle(.subhead)
+            .foregroundStyle(ChapterTheme.Color.blocked)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, ChapterTheme.Metric.rowPadding)
+        .padding(.vertical, 12)
+        .accessibilityElement(children: .combine)
+      }
+      SectionFooter("Nothing was sealed. Scan the floor again or try again.")
+      if let tryAgain = actions.tryAgain {
+        Button("Try again", action: tryAgain)
+          .buttonStyle(.chapter(.tinted))
+          .accessibilityIdentifier("package.tryAgain")
+      }
+    }
+  }
+}
+
+/// "Original Exports · Floor 1 · 13 files · 312 MB", the whole row the button.
+private struct ExportGroupHeader: View {
+  let group: PackageReview.ExportGroup
+  let isExpanded: Bool
+  let action: () -> Void
+
+  var body: some View {
+    Button(action: action) {
+      HStack(spacing: ChapterTheme.Metric.rowGap) {
+        TitleDetail {
+          Text(group.title)
+            .chapterTextStyle(.bodyEmphasis)
+            .foregroundStyle(ChapterTheme.Color.ink)
+            .multilineTextAlignment(.leading)
+        } detail: {
+          Text(group.countText)
+            .chapterTextStyle(.subhead)
+            .foregroundStyle(ChapterTheme.Color.muted)
+            .monospacedDigit()
+        }
+        if !isExpanded { Chevron() }
+      }
+      .padding(.horizontal, ChapterTheme.Metric.rowPadding)
+      .padding(.vertical, 4)
+      .frame(maxWidth: .infinity, minHeight: 46, alignment: .leading)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel(Text(group.accessibilityLabel))
+    .accessibilityValue(Text(isExpanded ? "expanded" : "collapsed"))
+    .accessibilityHint(Text("Shows the file kinds"))
+    .accessibilityIdentifier("package.floor.\(group.areaKey)")
+  }
+}
+
+/// "Plan DXF · rooms CSV · plan sheet PDF, PNG, SVG  5".
+private struct ExportSubRow: View {
+  let row: PackageReview.ExportRow
+  let areaKey: String
+
+  var body: some View {
+    HStack(spacing: ChapterTheme.Metric.rowGap) {
+      Text(row.label)
+        .chapterTextStyle(.subhead)
+        .foregroundStyle(ChapterTheme.Color.ink)
+        .frame(maxWidth: .infinity, alignment: .leading)
+      Text("\(row.count)")
+        .chapterTextStyle(.footnote)
+        .foregroundStyle(ChapterTheme.Color.muted)
+        .monospacedDigit()
+    }
+    .padding(.leading, 32)
+    .padding(.trailing, ChapterTheme.Metric.rowPadding)
+    .padding(.vertical, 4)
+    .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
+    .accessibilityElement(children: .combine)
+    .accessibilityIdentifier("package.floor.\(areaKey).\(row.kind.rawValue)")
+  }
+}
+
+extension View {
+  /// The bar of a package screen: the large title and the right caption (critique R-18c), with
+  /// what the system bar does not do on its own (phone-package §2.2, §13.4):
+  /// - a title too long for one line wraps to two (tail truncation after that), from iOS 26 on
+  ///   (`ToolbarItemPlacement.largeTitle`); a title that fits keeps the system large title, as
+  ///   drawn. Earlier systems truncate it on one line.
+  /// - the caption keeps its whole width when the bar has room ("Revision 1", not "Re…": the bar
+  ///   keeps room for the inline title, which a large title hides), and is cut only where the back
+  ///   button starts.
+  fileprivate func packageHeader(title: String, caption: String) -> some View {
+    modifier(PackageHeader(title: title, caption: caption))
+  }
+}
+
+private struct PackageHeader: ViewModifier {
+  let title: String
+  let caption: String
+  /// The screen's width, once laid out.
+  @State private var width: CGFloat = 0
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+  /// The system back button (the 44 pt pill on iOS 26) and the gap after it.
+  private static let backWidth: CGFloat = 44 + 12
+  /// The caption's room before the screen is measured.
+  private static let unmeasuredCaptionWidth: CGFloat = 160
+
+  func body(content: Content) -> some View {
+    content
+      .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+      .navigationTitle(title)
+      .navigationBarTitleDisplayMode(.large)
+      .toolbar {
+        if #available(iOS 26.0, *) {
+          if !titleFitsOneLine {
+            ToolbarItem(placement: .largeTitle) {
+              Text(title)
+                .chapterTextStyle(.largeTitle)
+                .foregroundStyle(ChapterTheme.Color.ink)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityAddTraits(.isHeader)
+            }
+          }
+        }
+        PlainToolbarItem(placement: .topBarTrailing) {
+          UpToWidth(maxWidth: captionWidth).callAsFunction {
+            Text(caption)
+              .chapterTextStyle(.footnote)
+              .foregroundStyle(ChapterTheme.Color.muted)
+              .lineLimit(1)
+          }
+        }
+      }
+  }
+
+  /// The title in the large-title font fits between the bar's margins (16 pt each side).
+  private var titleFitsOneLine: Bool {
+    guard width > 0 else { return true }
+    let traits = UITraitCollection(
+      preferredContentSizeCategory: UIContentSizeCategory(dynamicTypeSize))
+    let font = ChapterTheme.TextStyle.largeTitle.uiFont(compatibleWith: traits)
+    let needed = (title as NSString).size(withAttributes: [.font: font]).width
+    return needed.rounded(.up) <= width - 2 * ChapterTheme.Metric.screenPadding
+  }
+
+  private var captionWidth: CGFloat {
+    guard width > 0 else { return Self.unmeasuredCaptionWidth }
+    return max(0, width - 2 * ChapterTheme.Metric.screenPadding - Self.backWidth)
+  }
+}
+
+/// Lays its content out at its own width up to `maxWidth`, whatever width is proposed (a bar
+/// item is proposed what the bar has left, which can be far less than it has room for).
+private struct UpToWidth: Layout {
+  let maxWidth: CGFloat
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    guard let content = subviews.first else { return .zero }
+    let width = min(content.sizeThatFits(.unspecified).width, maxWidth)
+    return CGSize(
+      width: width, height: content.sizeThatFits(ProposedViewSize(width: width, height: nil)).height)
+  }
+
+  func placeSubviews(
+    in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+  ) {
+    subviews.first?.place(
+      at: bounds.origin, proposal: ProposedViewSize(width: bounds.width, height: bounds.height))
+  }
+}
+
+/// The subtitle under the large title, as the first content line (ChapterUI's `ScreenSubtitle`):
+/// subhead 15/20 muted, up to 3 lines, and every line at accessibility text sizes (the Revision n
+/// subtitle is three sentences).
+private struct PackageSubtitle: View {
+  let text: String
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+  init(_ text: String) {
+    self.text = text
+  }
+
+  var body: some View {
+    Text(text)
+      .chapterTextStyle(.subhead)
+      .foregroundStyle(ChapterTheme.Color.muted)
+      .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 3)
+      .fixedSize(horizontal: false, vertical: true)
+      .frame(maxWidth: .infinity, alignment: .leading)
+  }
+}
+
+/// A title and its detail side by side; at accessibility text sizes the detail goes under the
+/// title (as ChapterUI's `ValueRow`), so nothing is clipped. Side by side, `keeps` gets its
+/// width first and the other side wraps: the detail by default ("13 files · 268 MB" stays on
+/// one line, a long floor title wraps), the title for Package ready's second card.
+private struct TitleDetail<Title: View, Detail: View>: View {
+  enum Keeps {
+    case title
+    case detail
+  }
+
+  var keeps: Keeps = .detail
+  @ViewBuilder let title: Title
+  @ViewBuilder let detail: Detail
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+  var body: some View {
+    if dynamicTypeSize.isAccessibilitySize {
+      VStack(alignment: .leading, spacing: ChapterTheme.Metric.rowTitleGap) {
+        title
+        detail
+      }
+      .multilineTextAlignment(.leading)
+      .frame(maxWidth: .infinity, alignment: .leading)
+    } else {
+      HStack(spacing: ChapterTheme.Metric.rowGap) {
+        title
+          .frame(maxWidth: keeps == .detail ? .infinity : nil, alignment: .leading)
+          .layoutPriority(keeps == .title ? 1 : 0)
+        detail
+          .multilineTextAlignment(.trailing)
+          .frame(maxWidth: keeps == .title ? .infinity : nil, alignment: .trailing)
+          .layoutPriority(keeps == .detail ? 1 : 0)
+      }
+    }
+  }
+}
+
+/// A row of Package ready's second card: title SemiBold 17, detail 15 muted, min 42.
+private struct SummaryRow: View {
+  let title: String
+  let detail: String
+
+  var body: some View {
+    TitleDetail(keeps: .title) {
+      Text(title)
+        .chapterTextStyle(.bodyEmphasis)
+        .foregroundStyle(ChapterTheme.Color.ink)
+    } detail: {
+      Text(detail)
+        .chapterTextStyle(.subhead)
+        .foregroundStyle(ChapterTheme.Color.muted)
+    }
+    .padding(.horizontal, ChapterTheme.Metric.rowPadding)
+    .padding(.vertical, 4)
+    .frame(maxWidth: .infinity, minHeight: 42)
     .accessibilityElement(children: .combine)
   }
 }
 
-/// screen-package, 2: "Uploading" with the station status.
-struct UploadingView: View {
-  let snapshot: UploadSnapshot
-  let onNewCapture: () -> Void
+/// ■ and an error in #8B2E2E, footnote 13/17.
+private struct ErrorLine: View {
+  let text: String
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 14) {
-      HStack {
-        Text("Uploading").font(Typo.serif(30)).foregroundStyle(Palette.ink)
-          .accessibilityAddTraits(.isHeader)
-        Spacer()
-        Button("New capture", action: onNewCapture)
-          .font(Typo.sans(15)).foregroundStyle(Palette.ink)
-          .frame(minHeight: Control.minTouch)
-      }
-      progressCard
-      categories
-      Text("STATION").font(Typo.caption).tracking(2).foregroundStyle(Palette.muted)
-      VStack(alignment: .leading, spacing: 10) {
-        ForEach(snapshot.station.steps, id: \.title) { step in
-          HStack(spacing: 12) {
-            Text(step.done ? "\u{25CF}" : "\u{25CB}")
-              .foregroundStyle(step.done ? Palette.ready : Palette.muted)
-            Text(step.title).foregroundStyle(step.done ? Palette.ink : Palette.muted)
-          }
-          .font(Typo.sans(15))
-          .accessibilityElement(children: .ignore)
-          .accessibilityLabel("\(step.title), \(step.done ? "done" : "not yet")")
-          .accessibilityIdentifier("station.\(step.title)")
-        }
-      }
-      Spacer(minLength: 0)
-      if let verdict = snapshot.verdict { verdictCard(verdict) }
-      Text("Files stay on this phone until the station confirms each one.")
-        .font(Typo.caption).foregroundStyle(Palette.muted)
-        .frame(maxWidth: .infinity, alignment: .center)
-        .multilineTextAlignment(.center)
+    HStack(alignment: .top, spacing: ChapterTheme.Metric.statusGlyphGap) {
+      StatusGlyph(.missing).padding(.top, 3)
+      Text(text)
+        .chapterTextStyle(.footnote)
+        .foregroundStyle(ChapterTheme.Color.blocked)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
     }
-    .padding(.horizontal, 20)
-    .padding(.top, Space.s2)
-    .padding(.bottom, 28)
+    .accessibilityElement(children: .combine)
+  }
+}
+
+// MARK: - Screen B · Package status, Screen C · Verdict received
+
+/// What Package status and Verdict received know besides the upload snapshot.
+struct PackageStatusOptions: Equatable {
+  /// The footer button of Verdict received (§5.1).
+  enum Revision: Equatable {
+    /// "Add to this capture": the latest revision, its visit on this phone.
+    case add
+    /// "Continue revision {n}": a revision is in progress.
+    case continueRevision(Int)
+    /// Superseded, or the visit is not on this phone.
+    case hidden
   }
 
-  private var progressCard: some View {
+  /// The operator allowed the verdict notification.
+  var notificationsAllowed = true
+  /// The visit's originals are on this phone, so Upload stopped can re-seal.
+  var canReseal = true
+  /// "Sealing…" on the re-seal button.
+  var isResealing = false
+  /// The re-seal failed (`SealFailureText`).
+  var resealError: String?
+  var revision: Revision = .add
+  /// The newest revision on this phone, for a superseded one ("Revision 2 replaces this
+  /// revision.").
+  var latestRevision: Int?
+  /// "Today" and the time zone of the times (the phone's).
+  var now = Date()
+  var timeZone = TimeZone.current
+}
+
+/// The screens' actions. A button whose action is nil is not shown.
+struct PackageStatusActions {
+  /// "Try again" (`UploadCoordinator.retry()`).
+  var retry: (() -> Void)?
+  /// "Re-seal" in the alert (full rebuild as revision n+1).
+  var reseal: (() -> Void)?
+  /// "Add to this capture" or "Continue revision n".
+  var addToCapture: (() -> Void)?
+  /// "Open in the HUB", with the deal's HUB link (opened in Safari). Shown only when the station
+  /// sends `links.hub`.
+  var openInHub: ((URL) -> Void)?
+}
+
+/// Screen B (§4) for one package; once the verdict is known, Screen C (§5) on the same route.
+///
+/// The route is the package (`PackageStatusView(packageId:)`, the entry of a notification tap and
+/// of the Captures home rows): the app passes the snapshot of that package's coordinator, or its
+/// cached status, as it changes. A snapshot of another package is never drawn under this route
+/// (the screen waits for its own), so a late update of the previous package cannot show here.
+struct PackageStatusView: View {
+  let packageId: LowercaseUUID
+  /// The package's latest snapshot; nil until the app has one.
+  let snapshot: UploadSnapshot?
+  let options: PackageStatusOptions
+  let actions: PackageStatusActions
+  @State private var confirmReseal = false
+
+  init(
+    packageId: LowercaseUUID, snapshot: UploadSnapshot?,
+    options: PackageStatusOptions = PackageStatusOptions(),
+    actions: PackageStatusActions = PackageStatusActions()
+  ) {
+    self.packageId = packageId
+    self.snapshot = snapshot
+    self.options = options
+    self.actions = actions
+  }
+
+  var body: some View {
+    if let snapshot = shown, snapshot.phase == .verdict {
+      VerdictView(snapshot: snapshot, options: options, actions: actions)
+    } else if let snapshot = shown {
+      status(snapshot)
+    } else {
+      ProgressView()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .chapterScreenBackground()
+    }
+  }
+
+  private func status(_ snapshot: UploadSnapshot) -> some View {
+    let isStopped: Bool
+    if case .stopped = snapshot.phase { isStopped = true } else { isStopped = false }
+    return ScrollView {
+      VStack(alignment: .leading, spacing: 14) {
+        PackageSubtitle(snapshot.subtitle)
+          .padding(.top, ChapterTheme.Metric.subtitleTop)
+        ProgressCard(
+          snapshot: snapshot,
+          stoppedNote: snapshot.stoppedNote(
+            canRetry: actions.retry != nil, canReseal: canReseal,
+            scansOnPhone: options.canReseal),
+          resealError: options.resealError)
+        ChapterSection(header: "Files") {
+          ForEach(snapshot.progress.rows, id: \.category) { row in
+            CategoryRow(row: row)
+          }
+        }
+        ChapterSection(
+          header: "Station", footer: snapshot.footnote(notificationsAllowed: options.notificationsAllowed)
+        ) {
+          ForEach(snapshot.timeline(now: options.now, timeZone: options.timeZone).rows, id: \.id) {
+            StationRow(row: $0, minHeight: 44)
+          }
+        }
+      }
+      .padding(.horizontal, ChapterTheme.Metric.screenPadding)
+      .padding(.bottom, ChapterTheme.Metric.sectionGap)
+      .chapterContentWidth()
+    }
+    .packageHeader(title: snapshot.title, caption: snapshot.navigationCaption)
+    .chapterBackChevronOnly()
+    .chapterScreenBackground()
+    .safeAreaInset(edge: .bottom, spacing: 0) {
+      if isStopped && (actions.retry != nil || canReseal) {
+        ChapterActionBar {
+          if let retry = actions.retry {
+            Button("Try again", action: retry)
+              .buttonStyle(.chapter(.tinted))
+              .disabled(options.isResealing)
+              .accessibilityIdentifier("upload.retry")
+          }
+          if canReseal {
+            Button(options.isResealing ? "Sealing\u{2026}" : snapshot.resealTitle) {
+              confirmReseal = true
+            }
+            .buttonStyle(.chapter(.primary))
+            .disabled(options.isResealing)
+            .accessibilityIdentifier("upload.reseal")
+          }
+        }
+      }
+    }
+    .alert(snapshot.resealAlertTitle, isPresented: $confirmReseal) {
+      Button("Cancel", role: .cancel) {}
+      Button("Re-seal") { actions.reseal?() }
+    } message: {
+      Text(snapshot.resealAlertMessage)
+    }
+  }
+
+  /// The snapshot, when it is this route's package.
+  private var shown: UploadSnapshot? {
+    snapshot?.packageId == packageId ? snapshot : nil
+  }
+
+  /// Re-seal needs the visit's originals on the phone and an action that does it.
+  private var canReseal: Bool { options.canReseal && actions.reseal != nil }
+}
+
+/// The progress card: bytes and percent, the 8 pt bar and the state's caption.
+private struct ProgressCard: View {
+  let snapshot: UploadSnapshot
+  /// Upload stopped: the muted line, naming the buttons the screen shows.
+  let stoppedNote: String
+  /// The re-seal failed.
+  let resealError: String?
+
+  var body: some View {
     VStack(alignment: .leading, spacing: 8) {
       HStack {
-        Text(snapshot.progress.bytesText).font(Typo.sans(15, weight: .semibold))
-        Spacer()
-        Text(snapshot.progress.percentText).font(Typo.sans(15))
+        Text(snapshot.progress.bytesText)
+          .chapterTextStyle(.bodyEmphasis)
+        Spacer(minLength: ChapterTheme.Metric.rowGap)
+        Text(snapshot.progress.percentText)
+          .chapterTextStyle(.body)
       }
-      GeometryReader { proxy in
-        ZStack(alignment: .leading) {
-          RoundedRectangle(cornerRadius: 5).fill(Palette.nude)
-          RoundedRectangle(cornerRadius: 5).fill(Palette.ink)
-            .frame(width: proxy.size.width * snapshot.progress.fraction)
+      .monospacedDigit()
+      .foregroundStyle(ChapterTheme.Color.ink)
+      .accessibilityElement(children: .combine)
+      ProgressBar(
+        fraction: snapshot.progress.fraction, height: ChapterTheme.Metric.progressBarHeightLarge)
+      if case .stopped(let message) = snapshot.phase {
+        ErrorLine(text: message)
+        caption(stoppedNote)
+        if let error = resealError {
+          ErrorLine(text: error)
         }
-      }
-      .frame(height: 10)
-      .accessibilityHidden(true)
-      Text(snapshot.caption).font(Typo.caption)
-        .foregroundStyle(isFailure ? Palette.blocked : Palette.muted)
-    }
-    .foregroundStyle(Palette.ink)
-    .padding(Space.s4)
-    .background(Palette.surface, in: RoundedRectangle(cornerRadius: Radius.card))
-    .overlay(RoundedRectangle(cornerRadius: Radius.card).stroke(Palette.line, lineWidth: 1))
-  }
-
-  private var isFailure: Bool {
-    if case .failed = snapshot.activity { return true }
-    return false
-  }
-
-  private var categories: some View {
-    VStack(spacing: 0) {
-      ForEach(Array(snapshot.progress.rows.enumerated()), id: \.offset) { index, row in
-        HStack {
-          Text(row.category.rawValue)
-          Spacer()
-          Text(row.status.text).foregroundStyle(color(row.status))
-        }
-        .font(Typo.sans(15))
-        .padding(.horizontal, Space.s4).padding(.vertical, 14)
-        .accessibilityElement(children: .combine)
-        if index < snapshot.progress.rows.count - 1 {
-          Rectangle().fill(Palette.nude).frame(height: 1)
-        }
+      } else {
+        caption(snapshot.caption)
       }
     }
-    .foregroundStyle(Palette.ink)
-    .background(Palette.surface, in: RoundedRectangle(cornerRadius: Radius.card))
-    .overlay(RoundedRectangle(cornerRadius: Radius.card).stroke(Palette.line, lineWidth: 1))
-  }
-
-  private func color(_ status: UploadProgressSummary.Status) -> Color {
-    switch status {
-    case .verified: return Palette.ready
-    case .uploading: return Palette.ink
-    case .waiting: return Palette.muted
-    }
-  }
-
-  private func verdictColors(_ verdict: VerdictDisplay) -> (tint: Color, text: Color) {
-    switch verdict.outcome {
-    case .ready: return (Palette.ready, Palette.ready)
-    case .limited: return (Palette.limited, Palette.limitedText)
-    case .blocked: return (Palette.blocked, Palette.blocked)
-    }
-  }
-
-  private func verdictCard(_ verdict: VerdictDisplay) -> some View {
-    let colors = verdictColors(verdict)
-    let tint = colors.tint
-    let text = colors.text
-    return VStack(alignment: .leading, spacing: 6) {
-      Text(verdict.title).font(Typo.sans(15, weight: .semibold)).foregroundStyle(text)
-      Text(verdict.nextAction.map { "\(verdict.summary) \($0)" } ?? verdict.summary)
-        .font(Typo.caption).foregroundStyle(Palette.ink)
-    }
+    .padding(.vertical, 14)
+    .padding(.horizontal, ChapterTheme.Metric.rowPadding)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(Space.s4)
-    .background(Palette.surface, in: RoundedRectangle(cornerRadius: Radius.card))
-    .overlay(RoundedRectangle(cornerRadius: Radius.card).stroke(tint, lineWidth: 2))
+    .background(ChapterTheme.Color.surface)
+    .clipShape(RoundedRectangle(cornerRadius: ChapterTheme.Metric.cardRadius))
+    .overlay(
+      RoundedRectangle(cornerRadius: ChapterTheme.Metric.cardRadius)
+        .strokeBorder(ChapterTheme.Color.line, lineWidth: ChapterTheme.Metric.cardBorder))
+    .accessibilityIdentifier("upload.progress")
+  }
+
+  private func caption(_ text: String) -> some View {
+    Text(text)
+      .chapterTextStyle(.footnote)
+      .foregroundStyle(ChapterTheme.Color.muted)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .fixedSize(horizontal: false, vertical: true)
+  }
+}
+
+/// "Meshes · Uploading · 41%": the category and its status, word and shape.
+private struct CategoryRow: View {
+  let row: UploadProgressSummary.Row
+
+  var body: some View {
+    TitleDetail {
+      Text(row.category.rawValue)
+        .chapterTextStyle(.body)
+        .foregroundStyle(ChapterTheme.Color.ink)
+    } detail: {
+      status
+    }
+    .padding(.horizontal, ChapterTheme.Metric.rowPadding)
+    .padding(.vertical, 4)
+    .frame(maxWidth: .infinity, minHeight: 48)
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(Text(row.accessibilityLabel))
+    .accessibilityIdentifier("upload.category.\(row.category.identifier)")
+  }
+
+  @ViewBuilder
+  private var status: some View {
+    switch row.status {
+    case .confirmed: StatusLabel(kind: .done, word: row.status.text)
+    case .waiting: StatusLabel(kind: .waiting, word: row.status.text)
+    case .stopped: StatusLabel(kind: .missing, word: row.status.text)
+    case .uploading:
+      Text(row.status.text)
+        .chapterTextStyle(.subhead)
+        .foregroundStyle(ChapterTheme.Color.ink)
+        .monospacedDigit()
+    }
+  }
+}
+
+/// One row of the Station card: shape, title, detail.
+private struct StationRow: View {
+  let row: StationTimeline.Row
+  let minHeight: CGFloat
+  /// The glyph grows with the title at larger text sizes (10 pt at the default size).
+  @ScaledMetric(relativeTo: .body) private var glyphSize = ChapterTheme.Metric.statusGlyph
+
+  var body: some View {
+    HStack(spacing: ChapterTheme.Metric.rowGap) {
+      StatusGlyph(kind, size: glyphSize)
+      TitleDetail {
+        Text(row.title)
+          .chapterTextStyle(.body)
+          .foregroundStyle(titleColor)
+      } detail: {
+        Text(row.detail)
+          .chapterTextStyle(.subhead)
+          .foregroundStyle(row.state == .problem ? kind.textColor : ChapterTheme.Color.muted)
+          .monospacedDigit()
+      }
+    }
+    .padding(.horizontal, ChapterTheme.Metric.rowPadding)
+    .padding(.vertical, 4)
+    .frame(maxWidth: .infinity, minHeight: minHeight)
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(Text(row.accessibilityLabel))
+    .accessibilityIdentifier("station.\(row.id.rawValue)")
+  }
+
+  private var kind: StatusKind {
+    switch row.shape {
+    case .filled: return .done
+    case .triangle: return .partly
+    case .square: return .missing
+    case .ring: return .waiting
+    }
+  }
+
+  private var titleColor: Color {
+    switch row.state {
+    case .done, .problem: return ChapterTheme.Color.ink
+    case .pending, .inProgress: return ChapterTheme.Color.muted
+    }
+  }
+}
+
+/// Screen C (§5): the verdict as word and shape, one sentence, the next visit, the station's
+/// timeline; details are in the HUB.
+struct VerdictView: View {
+  let snapshot: UploadSnapshot
+  let options: PackageStatusOptions
+  let actions: PackageStatusActions
+
+  init(
+    snapshot: UploadSnapshot, options: PackageStatusOptions = PackageStatusOptions(),
+    actions: PackageStatusActions = PackageStatusActions()
+  ) {
+    self.snapshot = snapshot
+    self.options = options
+    self.actions = actions
+  }
+
+  var body: some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: 10) {
+        if let subtitle = snapshot.verdictSubtitle(timeZone: options.timeZone) {
+          PackageSubtitle(subtitle)
+            .padding(.top, ChapterTheme.Metric.subtitleTop)
+        }
+        if let verdict = snapshot.verdict {
+          VerdictCard(verdict: verdict, published: snapshot.isPublished)
+          if !verdict.shownNextVisit.isEmpty {
+            ChapterSection(header: "For the next visit", footer: verdict.moreNextVisitText) {
+              ForEach(Array(verdict.shownNextVisit.enumerated()), id: \.offset) { index, next in
+                NextVisitRow(next: next, index: index)
+              }
+            }
+          }
+        }
+        ChapterSection(header: "Station", footer: supersededText) {
+          ForEach(snapshot.timeline(now: options.now, timeZone: options.timeZone).rows, id: \.id) {
+            StationRow(row: $0, minHeight: 40)
+          }
+        }
+      }
+      .padding(.horizontal, ChapterTheme.Metric.screenPadding)
+      .padding(.bottom, ChapterTheme.Metric.sectionGap)
+      .chapterContentWidth()
+    }
+    .packageHeader(title: snapshot.title, caption: snapshot.navigationCaption)
+    .chapterBackChevronOnly()
+    .chapterScreenBackground()
+    .safeAreaInset(edge: .bottom, spacing: 0) {
+      if revisionTitle != nil || hubLink != nil {
+        ChapterActionBar {
+          if let title = revisionTitle, let addToCapture = actions.addToCapture {
+            Button(title, action: addToCapture)
+              .buttonStyle(.chapter(.tinted))
+              .accessibilityIdentifier("verdict.addToCapture")
+          }
+          if let link = hubLink, let openInHub = actions.openInHub {
+            Button("Open in the HUB") { openInHub(link) }
+              .buttonStyle(.chapter(.primary))
+              .accessibilityIdentifier("verdict.openHub")
+          }
+        }
+      }
+    }
+  }
+
+  /// "Add to this capture" / "Continue revision n", or nil (superseded, not on this phone, or
+  /// no action).
+  private var revisionTitle: String? {
+    guard !snapshot.isSuperseded, actions.addToCapture != nil else { return nil }
+    switch options.revision {
+    case .add: return "Add to this capture"
+    case .continueRevision(let revision): return "Continue revision \(revision)"
+    case .hidden: return nil
+    }
+  }
+
+  /// The deal's HUB page; nil (no button) until the station has one configured (critique Q-C),
+  /// or without an action.
+  private var hubLink: URL? {
+    actions.openInHub == nil ? nil : snapshot.station?.links?.openInHub
+  }
+
+  private var supersededText: String? {
+    guard snapshot.isSuperseded, let latest = options.latestRevision else { return nil }
+    return "Revision \(latest) replaces this revision."
+  }
+}
+
+/// The verdict card: 14 pt glyph and word in the outcome colour, the sentence, a 2 pt border.
+private struct VerdictCard: View {
+  let verdict: VerdictStatus
+  let published: Bool
+  /// The glyph grows with the word at larger text sizes (14 pt at the default size).
+  @ScaledMetric(relativeTo: .title3) private var glyphSize = ChapterTheme.Metric.verdictGlyph
+
+  var body: some View {
+    let sentence = verdict.sentence(published: published)
+    VStack(alignment: .leading, spacing: 4) {
+      HStack(spacing: 8) {
+        StatusGlyph(kind, size: glyphSize)
+        Text(verdict.word)
+          .chapterTextStyle(.verdictWord)
+          .foregroundStyle(kind.textColor)
+      }
+      Text(sentence)
+        .chapterTextStyle(.subhead)
+        .foregroundStyle(ChapterTheme.Color.ink)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+    .padding(.vertical, 12)
+    .padding(.horizontal, ChapterTheme.Metric.rowPadding)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(
+      ChapterTheme.Color.surface,
+      in: RoundedRectangle(cornerRadius: ChapterTheme.Metric.cardRadius)
+    )
+    .overlay(
+      RoundedRectangle(cornerRadius: ChapterTheme.Metric.cardRadius)
+        .strokeBorder(kind.glyphColor, lineWidth: 2))
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(Text("Verdict: \(verdict.word). \(sentence)"))
+    .accessibilityIdentifier("verdict.card")
+  }
+
+  private var kind: StatusKind {
+    switch verdict.outcome {
+    case .ready: return .done
+    case .limited: return .partly
+    case .blocked: return .missing
+    }
+  }
+}
+
+/// A next action verbatim over its reason.
+private struct NextVisitRow: View {
+  let next: VerdictStatus.NextVisit
+  let index: Int
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: ChapterTheme.Metric.rowTitleGap) {
+      Text(next.action)
+        .chapterTextStyle(.body)
+        .foregroundStyle(ChapterTheme.Color.ink)
+        .lineLimit(3)
+      if let reason = next.reason {
+        Text(reason)
+          .chapterTextStyle(.footnote)
+          .foregroundStyle(ChapterTheme.Color.muted)
+          .lineLimit(2)
+      }
+    }
+    .padding(.horizontal, ChapterTheme.Metric.rowPadding)
+    .padding(.vertical, 5)
+    .frame(maxWidth: .infinity, minHeight: 50, alignment: .leading)
+    .accessibilityElement(children: .combine)
+    .accessibilityIdentifier("verdict.next.\(index)")
+  }
+}
+
+// MARK: - Screen D · Revision n
+
+/// What Revision n knows besides the changes.
+struct RevisionReviewState: Equatable {
+  var changes: RevisionChanges
+  /// The project title (critique R-29), the bar's right caption.
+  var projectTitle: String
+  var isSealing = false
+  /// "The package could not be sealed: … Nothing was uploaded." (`SealFailureText`).
+  var sealError: String?
+}
+
+struct RevisionReviewActions {
+  /// "Keep editing": back to the Capture overview, revision mode.
+  var keepEditing: () -> Void = {}
+  /// "Seal revision n and upload".
+  var seal: () -> Void = {}
+}
+
+/// Screen D (§6): what revision n changes and what stays, then seal it.
+struct RevisionReviewView: View {
+  let state: RevisionReviewState
+  let actions: RevisionReviewActions
+
+  init(state: RevisionReviewState, actions: RevisionReviewActions = RevisionReviewActions()) {
+    self.state = state
+    self.actions = actions
+  }
+
+  private var changes: RevisionChanges { state.changes }
+
+  var body: some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: 14) {
+        PackageSubtitle(changes.subtitle)
+          .padding(.top, ChapterTheme.Metric.subtitleTop)
+        ChapterSection(header: "What changed") {
+          if changes.rows.isEmpty {
+            Text(changes.nothingChangedText)
+              .chapterTextStyle(.body)
+              .foregroundStyle(ChapterTheme.Color.muted)
+              .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+              .padding(.horizontal, ChapterTheme.Metric.rowPadding)
+          }
+          ForEach(Array(changes.rows.enumerated()), id: \.offset) { _, row in
+            ChangeRow(row: row)
+          }
+          TitleDetail {
+            Text("Manifest")
+              .chapterTextStyle(.body)
+              .foregroundStyle(ChapterTheme.Color.ink)
+          } detail: {
+            Text(changes.manifestDetail)
+              .chapterTextStyle(.subhead)
+              .foregroundStyle(ChapterTheme.Color.muted)
+              .monospacedDigit()
+          }
+          .padding(.horizontal, ChapterTheme.Metric.rowPadding)
+          .padding(.vertical, 4)
+          .frame(maxWidth: .infinity, minHeight: 48)
+          .accessibilityElement(children: .combine)
+          .accessibilityIdentifier("revision.manifest")
+        }
+        if let title = changes.unchangedTitle {
+          ChapterSection(
+            header: "Unchanged", footer: changes.hasNoChanges ? nil : changes.footnote
+          ) {
+            VStack(alignment: .leading, spacing: ChapterTheme.Metric.rowTitleGap) {
+              Text(title)
+                .chapterTextStyle(.body)
+                .foregroundStyle(ChapterTheme.Color.ink)
+              Text(changes.unchangedSubtitle)
+                .chapterTextStyle(.footnote)
+                .foregroundStyle(ChapterTheme.Color.muted)
+            }
+            .padding(.horizontal, ChapterTheme.Metric.rowPadding)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("revision.unchanged")
+          }
+        } else if !changes.hasNoChanges {
+          SectionFooter(changes.footnote)
+        }
+        if let error = state.sealError {
+          ErrorLine(text: error)
+        }
+      }
+      .padding(.horizontal, ChapterTheme.Metric.screenPadding)
+      .padding(.bottom, ChapterTheme.Metric.sectionGap)
+      .chapterContentWidth()
+    }
+    .packageHeader(title: changes.title, caption: state.projectTitle)
+    .chapterBackChevronOnly()
+    .navigationBarBackButtonHidden(state.isSealing)
+    .chapterScreenBackground()
+    .chapterActionBar {
+      Button("Keep editing", action: actions.keepEditing)
+        .buttonStyle(.chapter(.tinted))
+        .disabled(state.isSealing)
+        .accessibilityIdentifier("revision.keepEditing")
+      Button(state.isSealing ? "Sealing\u{2026}" : changes.sealButtonTitle, action: actions.seal)
+        .buttonStyle(.chapter(.primary))
+        .disabled(changes.hasNoChanges || state.isSealing)
+        .accessibilityIdentifier("revision.seal")
+    }
+  }
+}
+
+/// One "What changed" row: the 22 pt plus, equals or minus glyph and two lines.
+private struct ChangeRow: View {
+  let row: RevisionChanges.Row
+
+  var body: some View {
+    HStack(spacing: ChapterTheme.Metric.rowGap) {
+      glyph
+      VStack(alignment: .leading, spacing: ChapterTheme.Metric.rowTitleGap) {
+        Text(row.title)
+          .chapterTextStyle(.body)
+          .foregroundStyle(ChapterTheme.Color.ink)
+        Text(row.detail)
+          .chapterTextStyle(.footnote)
+          .foregroundStyle(ChapterTheme.Color.muted)
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    .padding(.horizontal, ChapterTheme.Metric.rowPadding)
+    .padding(.vertical, 8)
+    .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(Text(row.accessibilityLabel))
+  }
+
+  @ViewBuilder
+  private var glyph: some View {
+    switch row.kind {
+    case .added: PlusGlyph(accessibilityLabel: nil)
+    case .changed: EqualsGlyph(accessibilityLabel: nil)
+    case .removed: MinusGlyph(accessibilityLabel: nil)
+    }
   }
 }

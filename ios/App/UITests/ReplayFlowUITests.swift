@@ -1,9 +1,9 @@
 import XCTest
 
 /// Replays the bundled box-room capture through every screen of the frozen design:
-/// capture record -> scan (replay) -> photos -> controls -> checklist -> package ready (and the
-/// scan's Floorplan) -> uploading -> station status "Checks queued". Uses the Debug-only stub
-/// station. On the way the room is renamed twice, from the viewfinder ("Rooms") and from the
+/// capture record -> scan (replay) -> photos -> controls -> checklist -> package ready ->
+/// uploading -> station status, checks queued -> the scan's Floorplan (from "My scans"). Uses the
+/// Debug-only stub station. On the way the room is renamed twice, from the viewfinder ("Rooms") and from the
 /// checklist ("Rename rooms"), and the photo (and the ceiling height measured in it) follows the
 /// name.
 final class ReplayFlowUITests: XCTestCase {
@@ -170,17 +170,57 @@ final class ReplayFlowUITests: XCTestCase {
     attachScreenshot("10 Checklist after renaming again")
     tap(button("Finish capture"))
 
-    // Package ready, then seal and upload.
+    // Package ready (phone-package §3, §13.3 test 1): the real file list, no phone report. (Its
+    // floor rows list the files; the scan's Floorplan is reviewed below, from "My scans".)
     XCTAssertTrue(app.staticTexts["Package ready"].waitForExistence(timeout: 30))
-    XCTAssertTrue(app.staticTexts["Source Register"].waitForExistence(timeout: 30))
+    XCTAssertTrue(app.staticTexts["Step 3 of 3"].exists)
+    let floor = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'package.floor.'"))
+      .firstMatch
+    XCTAssertTrue(floor.waitForExistence(timeout: 30))
+    XCTAssertTrue(floor.label.hasPrefix("Original Exports, "), floor.label)
+    XCTAssertEqual(floor.value as? String, "expanded")
+    let plans = app.descendants(matching: .any)
+      .matching(NSPredicate(format: "identifier ENDSWITH '.plans'")).firstMatch
+    XCTAssertTrue(
+      plans.label.hasPrefix("Plan DXF \u{00B7} rooms CSV \u{00B7} plan sheet PDF"), plans.label)
+    func texts(containing text: String) -> XCUIElementQuery {
+      app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", text))
+    }
+    XCTAssertTrue(texts(containing: "revision 1").firstMatch.exists)
+    XCTAssertTrue(texts(containing: "The station makes the spatial report.").firstMatch.exists)
+    XCTAssertEqual(texts(containing: "Spatial Report").count, 0)
+    attachScreenshot("11 Package ready")
 
-    // Review the scan first: the Floorplan, its units and Download (PDF and PNG).
+    tap(app.buttons["package.seal"])
+
+    // Package status (§4): registered, uploaded, the checks queued at the stub station. (The
+    // in-process station confirms the small package at once, so "Uploading" may never show.)
+    let checks = app.descendants(matching: .any)["station.checks"]
+    XCTAssertTrue(checks.waitForExistence(timeout: 30))
+    let deadline = Date().addingTimeInterval(60)
+    while Date() < deadline, (checks.label as String?) != "Checks, not yet, queued" {
+      Thread.sleep(forTimeInterval: 0.5)
+    }
+    XCTAssertEqual(checks.label, "Checks, not yet, queued")
+    XCTAssertTrue(app.staticTexts["Uploaded"].exists)
+    XCTAssertTrue(
+      app.descendants(matching: .any)["station.registered"].label.hasPrefix("Registered, done, "))
+    XCTAssertEqual(
+      app.descendants(matching: .any)["station.published"].label, "Published to the HUB, not yet")
+    attachScreenshot("12 Uploaded")
+
+    // The scan's Floorplan, its units and Download (PDF and PNG). Package ready no longer opens
+    // the scan, so until the Capture overview's floor rows do, it is opened from "My scans" on
+    // the next visit's New capture.
+    tap(app.buttons["package.newCapture"])
+    XCTAssertTrue(app.staticTexts["New capture"].waitForExistence(timeout: 20))
+    tap(app.buttons["account.myScans"])
     tap(button("Floor 1"))
     let page = app.descendants(matching: .any)["floorplan.page"]
     XCTAssertTrue(page.waitForExistence(timeout: 30), "floor plan page")
     let download = app.descendants(matching: .any)["floorplan.download"]
     waitForLabel(download, "Download floor plan, PDF and PNG")
-    attachScreenshot("Floorplan")
+    attachScreenshot("13 Floorplan")
     let units = app.buttons["floorplan.units"]
     XCTAssertTrue(units.waitForExistence(timeout: 10))
     XCTAssertEqual(units.label, "Units, feet and inches")
@@ -188,26 +228,8 @@ final class ReplayFlowUITests: XCTestCase {
     tap(app.buttons["Metric (m)"])
     waitForLabel(units, "Units, metres")
     waitForLabel(download, "Download floor plan, PDF and PNG")
-    attachScreenshot("Floorplan, metric")
+    attachScreenshot("14 Floorplan, metric")
     XCTAssertTrue(page.exists)
     XCTAssertTrue(app.buttons["scan.view3D"].exists)
-    tap(app.buttons["Done"])
-    XCTAssertTrue(app.staticTexts["Package ready"].waitForExistence(timeout: 10))
-
-    tap(button("Seal and upload"))
-
-    // Uploading and station status.
-    XCTAssertTrue(app.staticTexts["Uploading"].waitForExistence(timeout: 30))
-    let queued = app.descendants(matching: .any)["station.Checks queued"]
-    let deadline = Date().addingTimeInterval(60)
-    while Date() < deadline, (queued.label as String?) != "Checks queued, done" {
-      Thread.sleep(forTimeInterval: 0.5)
-    }
-    XCTAssertEqual(queued.label, "Checks queued, done")
-    XCTAssertEqual(
-      app.descendants(matching: .any)["station.Registered"].label, "Registered, done")
-    XCTAssertEqual(
-      app.descendants(matching: .any)["station.Published to the HUB"].label,
-      "Published to the HUB, not yet")
   }
 }

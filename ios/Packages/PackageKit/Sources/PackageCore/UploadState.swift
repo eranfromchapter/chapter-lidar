@@ -44,6 +44,10 @@ public struct FileUploadState: Hashable, Sendable, Codable {
 
 /// Upload progress of one sealed package, saved as JSON next to the package after every confirmed
 /// step so a killed app resumes from the last confirmed block.
+///
+/// Format 2 adds `registeredAt`, `supersededBy` and `carriedOver`; a format 1 file (written by
+/// app builds before v2) is read as format 2 without them, so its upload resumes after the app
+/// update.
 public struct UploadState: Hashable, Sendable, Codable {
   /// Format version of this file.
   public var formatVersion: Int
@@ -56,8 +60,20 @@ public struct UploadState: Hashable, Sendable, Codable {
   public var files: [FileUploadState]
   /// The station's answer to sealing. Set once the station registered the package.
   public var sealResult: PackageSealResult?
+  /// When the station registered the package (opened its upload session): the station's
+  /// `createdAt` from the first session answer, else the phone's time of that answer. Shown as
+  /// "Registered" (critique R-16). Nil before the station answered.
+  public var registeredAt: UTCTimestamp?
+  /// The package that replaced this one after a failed upload (re-sealed as the next revision).
+  /// A superseded package is never resumed; nothing of it is deleted.
+  public var supersededBy: LowercaseUUID?
+  /// Paths the station verified at once because the superseded revision holds the same verified
+  /// file (`carriedOverFrom` in the session answer). They are never uploaded by this package.
+  public var carriedOver: Set<String>
 
-  public static let currentFormatVersion = 1
+  public static let currentFormatVersion = 2
+  /// Format versions this build reads.
+  public static let readableFormatVersions: ClosedRange<Int> = 1...currentFormatVersion
 
   public init(package: SealedPackage, dealId: String) {
     formatVersion = Self.currentFormatVersion
@@ -68,6 +84,46 @@ public struct UploadState: Hashable, Sendable, Codable {
       FileUploadState(path: $0.path, sha256: $0.sha256, bytes: $0.bytes)
     }
     sealResult = nil
+    registeredAt = nil
+    supersededBy = nil
+    carriedOver = []
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case formatVersion, packageId, manifestSha256, dealId, files, sealResult, registeredAt
+    case supersededBy, carriedOver
+  }
+
+  /// Reads format 1 and 2 as format 2 (format 1 has none of the new fields). Any other version
+  /// is kept as read, so the uploader refuses it (`PackageUploadError.stateMismatch`).
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    let version = try container.decode(Int.self, forKey: .formatVersion)
+    formatVersion = Self.readableFormatVersions.contains(version) ? Self.currentFormatVersion : version
+    packageId = try container.decode(LowercaseUUID.self, forKey: .packageId)
+    manifestSha256 = try container.decode(String.self, forKey: .manifestSha256)
+    dealId = try container.decode(String.self, forKey: .dealId)
+    files = try container.decode([FileUploadState].self, forKey: .files)
+    sealResult = try container.decodeIfPresent(PackageSealResult.self, forKey: .sealResult)
+    registeredAt = try container.decodeIfPresent(UTCTimestamp.self, forKey: .registeredAt)
+    supersededBy = try container.decodeIfPresent(LowercaseUUID.self, forKey: .supersededBy)
+    carriedOver = Set(try container.decodeIfPresent([String].self, forKey: .carriedOver) ?? [])
+  }
+
+  /// `carriedOver` is written sorted, so the same state always gives the same bytes.
+  public func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(formatVersion, forKey: .formatVersion)
+    try container.encode(packageId, forKey: .packageId)
+    try container.encode(manifestSha256, forKey: .manifestSha256)
+    try container.encode(dealId, forKey: .dealId)
+    try container.encode(files, forKey: .files)
+    try container.encodeIfPresent(sealResult, forKey: .sealResult)
+    try container.encodeIfPresent(registeredAt, forKey: .registeredAt)
+    try container.encodeIfPresent(supersededBy, forKey: .supersededBy)
+    if !carriedOver.isEmpty {
+      try container.encode(carriedOver.sorted(), forKey: .carriedOver)
+    }
   }
 
   /// Every file is verified by the station.

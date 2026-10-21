@@ -73,7 +73,7 @@ final class StationBridgeTests: XCTestCase {
       XCTFail("expected offline")
     } catch {
       XCTAssertFalse(error is StationProblem, "offline must not look like a station refusal")
-      XCTAssertEqual(UploadErrorKind.of(error), .transient)
+      XCTAssertEqual(UploadErrorKind.of(error), .transient(.offline))
     }
   }
 
@@ -121,13 +121,29 @@ final class StationBridgeTests: XCTestCase {
   func testFatalErrorsStopTheUpload() {
     XCTAssertEqual(
       UploadErrorKind.of(PackageUploadError.localFileChanged(path: "x")),
-      .fatal("x changed on the phone after sealing. It was not uploaded."))
-    XCTAssertEqual(UploadErrorKind.of(BlobTransportError.network("lost")), .transient)
-    XCTAssertEqual(UploadErrorKind.of(BlobTransportError.http(status: 503, code: nil)), .transient)
+      .fatal("x changed on the phone after sealing. It was not uploaded.", path: "x"))
+    XCTAssertEqual(UploadErrorKind.of(BlobTransportError.network("lost")), .transient(.offline))
+    XCTAssertEqual(
+      UploadErrorKind.of(BlobTransportError.http(status: 503, code: nil)),
+      .transient(.stationUnavailable))
     if case .fatal = UploadErrorKind.of(StationProblem(status: 422, code: "bad")) {
     } else {
       XCTFail("422 is fatal")
     }
+  }
+
+  func testCarriedOverFilesAndTheRegistrationTimeCrossTheBridge() throws {
+    let previous = LowercaseUUID()
+    let session = try StationBridge.convert(
+      StationAPIUploadSession(
+        packageId: LowercaseUUID(), visitId: LowercaseUUID(), dealId: "D-1", revision: 2,
+        status: .uploading, createdAt: UTCTimestamp(secondsSince1970: 1_800_000_000),
+        files: [
+          StationAPIUploadSessionFile(path: "a", status: .verified, carriedOverFrom: previous),
+          StationAPIUploadSessionFile(path: "b", status: .pending),
+        ]))
+    XCTAssertEqual(session.createdAt, UTCTimestamp(secondsSince1970: 1_800_000_000))
+    XCTAssertEqual(session.files.map(\.carriedOverFrom), [previous, nil])
   }
 }
 
@@ -137,33 +153,8 @@ final class SummaryTests: XCTestCase {
     XCTAssertEqual(ByteText.format(1_500), "1.5 KB")
     XCTAssertEqual(ByteText.format(12), "12 bytes")
     XCTAssertEqual(ByteText.progress(512_000_000, of: 768_000_000), "512 of 768 MB")
-  }
-
-  func testStationStepsNeverClaimHubPublication() {
-    for stage in StationPackageStage.allCases {
-      let steps = StationSteps.make(registered: true, stage: stage)
-      XCTAssertEqual(steps.steps.map(\.title), ["Registered", "Checks queued", "Verdict", "Published to the HUB"])
-      XCTAssertFalse(steps.steps[3].done)
-    }
-    XCTAssertEqual(
-      StationSteps.make(registered: false, stage: nil).steps.map(\.done), [false, false, false, false])
-    XCTAssertEqual(
-      StationSteps.make(registered: true, stage: .verdictReady).steps.map(\.done),
-      [true, true, true, false])
-  }
-
-  func testCategoriesFollowTheDesignRows() {
-    XCTAssertEqual(UploadProgressSummary.Category.of(.photo), .sitePhotos)
-    XCTAssertEqual(UploadProgressSummary.Category.of(.meshMTL), .meshes)
-    XCTAssertEqual(UploadProgressSummary.Category.of(.rawDepth), .pointClouds)
-    XCTAssertEqual(UploadProgressSummary.Category.of(.planDXF), .plansAndReports)
-    XCTAssertEqual(UploadProgressSummary.Status.verified.text, "\u{25CF} Verified")
-  }
-
-  func testVerdictCarriesWordAndShape() {
-    XCTAssertEqual(VerdictDisplay(outcome: .limited, summary: "s").title, "\u{25B2} Limited")
-    XCTAssertEqual(VerdictDisplay(outcome: .ready, summary: "s").title, "\u{25CF} Ready")
-    XCTAssertEqual(VerdictDisplay(outcome: .blocked, summary: "s").title, "\u{25A0} Blocked")
+    XCTAssertEqual(ByteText.spoken(312_000_000), "312 megabytes")
+    XCTAssertEqual(ByteText.spoken(3_200_000), "3.2 megabytes")
   }
 
   /// The UI-test stubs exist only in Debug builds of AppCore (`swift test` builds Debug). The
