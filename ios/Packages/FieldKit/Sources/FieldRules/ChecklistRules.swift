@@ -290,6 +290,19 @@ public enum ChecklistRules {
       compass: compass)
   }
 
+  /// The caption at the right of Before you leave's navigation bar (phone-field §6.1): the HUB
+  /// project name, else the address up to its first comma (`618 Valley Street`).
+  public static func propertyCaption(_ record: CaptureRecord) -> String {
+    if let name = record.hub.projectName?.trimmingCharacters(in: .whitespacesAndNewlines),
+      !name.isEmpty
+    {
+      return name
+    }
+    let address = record.address.formatted
+    let street = address.split(separator: ",", maxSplits: 1).first.map(String.init) ?? address
+    return street.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
   struct Wording {
     var showCapture: Bool
     var showPair: Bool

@@ -284,6 +284,17 @@ final class ChecklistV2Tests: XCTestCase {
       "Floor 1 verified \u{00B7} Floor 2 not read")
   }
 
+  func testThePropertyCaption() throws {
+    var record = try artboardInput().record
+    record.address.formatted = "618 Valley Street, Philadelphia, PA 19123"
+    XCTAssertEqual(ChecklistRules.propertyCaption(record), "618 Valley Street")
+    record.hub.projectName = " Valley Street rowhouse "
+    XCTAssertEqual(ChecklistRules.propertyCaption(record), "Valley Street rowhouse")
+    record.hub.projectName = "  "
+    record.address.formatted = "Unit 4"
+    XCTAssertEqual(ChecklistRules.propertyCaption(record), "Unit 4")
+  }
+
   // MARK: NoRoomsSkippedConfirmation in visit.json
 
   func testTheConfirmationIsCodableAndByteStable() throws {
