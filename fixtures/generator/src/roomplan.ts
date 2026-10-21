@@ -32,10 +32,15 @@ export function transformOf(x: V3, y: V3, z: V3, t: V3): Transform {
 }
 
 const CATEGORY_KEY: Record<string, string> = {
+  bathtub: "bathtub",
   bed: "bed",
+  sink: "sink",
   sofa: "sofa",
   stairs: "stairs",
+  storage: "storage",
+  stove: "stove",
   table: "table",
+  toilet: "toilet",
 };
 
 /** RoomPlan section label (CapturedRoom.Section.Label) for a room name. */

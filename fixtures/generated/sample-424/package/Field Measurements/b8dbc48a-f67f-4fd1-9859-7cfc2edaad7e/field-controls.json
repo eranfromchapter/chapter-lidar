@@ -1,0 +1,476 @@
+{
+  "schemaVersion": "1.0.0",
+  "visitId": "b8dbc48a-f67f-4fd1-9859-7cfc2edaad7e",
+  "distances": [
+    {
+      "id": "floor-1-distance-a",
+      "capture": { "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9", "areaKey": "floor-1" },
+      "axis": "A",
+      "from": "Living Room west wall",
+      "to": "Living Room east wall",
+      "measurement": {
+        "valueMm": 3488,
+        "enteredUnit": "m",
+        "enteredText": "3.488",
+        "method": "laser",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-distance-b",
+      "capture": { "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9", "areaKey": "floor-1" },
+      "axis": "B",
+      "from": "Living Room north wall",
+      "to": "Living Room south wall",
+      "measurement": {
+        "valueMm": 6001,
+        "enteredUnit": "mm",
+        "enteredText": "6001",
+        "method": "laser",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    }
+  ],
+  "ceilingHeights": [
+    {
+      "id": "floor-1-ceiling-room-1",
+      "capture": { "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9", "areaKey": "floor-1" },
+      "room": "Bedroom 1",
+      "location": "Centre of room",
+      "measurement": {
+        "valueMm": 2504,
+        "enteredUnit": "cm",
+        "enteredText": "250.4",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-ceiling-room-2",
+      "capture": { "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9", "areaKey": "floor-1" },
+      "room": "Closet",
+      "location": "Centre of room",
+      "measurement": {
+        "valueMm": 2487,
+        "enteredUnit": "cm",
+        "enteredText": "248.7",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-ceiling-room-3",
+      "capture": { "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9", "areaKey": "floor-1" },
+      "room": "Living Room",
+      "location": "Centre of room",
+      "measurement": {
+        "valueMm": 2484,
+        "enteredUnit": "cm",
+        "enteredText": "248.4",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-ceiling-room-4",
+      "capture": { "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9", "areaKey": "floor-1" },
+      "room": "Room 2",
+      "location": "Centre of room",
+      "measurement": {
+        "valueMm": 2474,
+        "enteredUnit": "cm",
+        "enteredText": "247.4",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-ceiling-room-5",
+      "capture": { "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9", "areaKey": "floor-1" },
+      "room": "Bedroom 2",
+      "location": "Centre of room",
+      "measurement": {
+        "valueMm": 2474,
+        "enteredUnit": "cm",
+        "enteredText": "247.4",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-ceiling-room-6",
+      "capture": { "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9", "areaKey": "floor-1" },
+      "room": "Room 4",
+      "location": "Centre of room",
+      "measurement": {
+        "valueMm": 2474,
+        "enteredUnit": "cm",
+        "enteredText": "247.4",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-ceiling-room-7",
+      "capture": { "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9", "areaKey": "floor-1" },
+      "room": "Bathroom 2",
+      "location": "Centre of room",
+      "measurement": {
+        "valueMm": 2449,
+        "enteredUnit": "cm",
+        "enteredText": "244.9",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-ceiling-room-8",
+      "capture": { "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9", "areaKey": "floor-1" },
+      "room": "Bathroom 1",
+      "location": "Centre of room",
+      "measurement": {
+        "valueMm": 2479,
+        "enteredUnit": "cm",
+        "enteredText": "247.9",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-ceiling-room-9",
+      "capture": { "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9", "areaKey": "floor-1" },
+      "room": "Room 5",
+      "location": "Centre of room",
+      "measurement": {
+        "valueMm": 2464,
+        "enteredUnit": "cm",
+        "enteredText": "246.4",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-ceiling-room-10",
+      "capture": { "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9", "areaKey": "floor-1" },
+      "room": "Room 1",
+      "location": "Centre of room",
+      "measurement": {
+        "valueMm": 2504,
+        "enteredUnit": "cm",
+        "enteredText": "250.4",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-ceiling-room-11",
+      "capture": { "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9", "areaKey": "floor-1" },
+      "room": "Kitchen",
+      "location": "Centre of room",
+      "measurement": {
+        "valueMm": 2525,
+        "enteredUnit": "cm",
+        "enteredText": "252.5",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-ceiling-room-12",
+      "capture": { "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9", "areaKey": "floor-1" },
+      "room": "Room 3",
+      "location": "Centre of room",
+      "measurement": {
+        "valueMm": 2510,
+        "enteredUnit": "cm",
+        "enteredText": "251",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    }
+  ],
+  "openings": [
+    {
+      "id": "floor-1-opening-window-1",
+      "capture": { "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9", "areaKey": "floor-1" },
+      "room": "Bedroom 1",
+      "label": "Bedroom 1 window",
+      "width": {
+        "valueMm": 1964,
+        "enteredUnit": "mm",
+        "enteredText": "1964",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      },
+      "height": {
+        "valueMm": 1600,
+        "enteredUnit": "mm",
+        "enteredText": "1600",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-opening-window-2",
+      "capture": { "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9", "areaKey": "floor-1" },
+      "room": "Living Room",
+      "label": "Living Room window",
+      "width": {
+        "valueMm": 1854,
+        "enteredUnit": "mm",
+        "enteredText": "1854",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      },
+      "height": {
+        "valueMm": 1600,
+        "enteredUnit": "mm",
+        "enteredText": "1600",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-opening-door-1",
+      "capture": { "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9", "areaKey": "floor-1" },
+      "room": "Living Room",
+      "label": "Entry door",
+      "width": {
+        "valueMm": 723,
+        "enteredUnit": "mm",
+        "enteredText": "723",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      },
+      "height": {
+        "valueMm": 2100,
+        "enteredUnit": "mm",
+        "enteredText": "2100",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-opening-opening-1",
+      "capture": { "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9", "areaKey": "floor-1" },
+      "room": "Living Room",
+      "label": "Living Room to Room 2 passage",
+      "width": {
+        "valueMm": 1006,
+        "enteredUnit": "mm",
+        "enteredText": "1006",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      },
+      "height": {
+        "valueMm": 2100,
+        "enteredUnit": "mm",
+        "enteredText": "2100",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-opening-opening-2",
+      "capture": { "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9", "areaKey": "floor-1" },
+      "room": "Living Room",
+      "label": "Living Room to Room 1 passage",
+      "width": {
+        "valueMm": 848,
+        "enteredUnit": "mm",
+        "enteredText": "848",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      },
+      "height": {
+        "valueMm": 2100,
+        "enteredUnit": "mm",
+        "enteredText": "2100",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-opening-door-2",
+      "capture": { "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9", "areaKey": "floor-1" },
+      "room": "Closet",
+      "label": "Closet door",
+      "width": {
+        "valueMm": 700,
+        "enteredUnit": "mm",
+        "enteredText": "700",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      },
+      "height": {
+        "valueMm": 2100,
+        "enteredUnit": "mm",
+        "enteredText": "2100",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-opening-door-3",
+      "capture": { "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9", "areaKey": "floor-1" },
+      "room": "Bedroom 1",
+      "label": "Bedroom 1 door",
+      "width": {
+        "valueMm": 700,
+        "enteredUnit": "mm",
+        "enteredText": "700",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      },
+      "height": {
+        "valueMm": 2100,
+        "enteredUnit": "mm",
+        "enteredText": "2100",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-opening-door-4",
+      "capture": { "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9", "areaKey": "floor-1" },
+      "room": "Bathroom 2",
+      "label": "Bathroom 2 door",
+      "width": {
+        "valueMm": 700,
+        "enteredUnit": "mm",
+        "enteredText": "700",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      },
+      "height": {
+        "valueMm": 2100,
+        "enteredUnit": "mm",
+        "enteredText": "2100",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-opening-door-5",
+      "capture": { "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9", "areaKey": "floor-1" },
+      "room": "Bathroom 1",
+      "label": "Bathroom 1 door",
+      "width": {
+        "valueMm": 700,
+        "enteredUnit": "mm",
+        "enteredText": "700",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      },
+      "height": {
+        "valueMm": 2100,
+        "enteredUnit": "mm",
+        "enteredText": "2100",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-opening-opening-3",
+      "capture": { "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9", "areaKey": "floor-1" },
+      "room": "Kitchen",
+      "label": "Kitchen passage",
+      "width": {
+        "valueMm": 707,
+        "enteredUnit": "mm",
+        "enteredText": "707",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      },
+      "height": {
+        "valueMm": 2100,
+        "enteredUnit": "mm",
+        "enteredText": "2100",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-opening-door-6",
+      "capture": { "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9", "areaKey": "floor-1" },
+      "room": "Kitchen",
+      "label": "Kitchen door",
+      "width": {
+        "valueMm": 700,
+        "enteredUnit": "mm",
+        "enteredText": "700",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      },
+      "height": {
+        "valueMm": 2100,
+        "enteredUnit": "mm",
+        "enteredText": "2100",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-opening-door-7",
+      "capture": { "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9", "areaKey": "floor-1" },
+      "room": "Bedroom 2",
+      "label": "Bedroom 2 door",
+      "width": {
+        "valueMm": 707,
+        "enteredUnit": "mm",
+        "enteredText": "707",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      },
+      "height": {
+        "valueMm": 2100,
+        "enteredUnit": "mm",
+        "enteredText": "2100",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-opening-opening-4",
+      "capture": { "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9", "areaKey": "floor-1" },
+      "room": "Room 4",
+      "label": "Room 4 passage",
+      "width": {
+        "valueMm": 628,
+        "enteredUnit": "mm",
+        "enteredText": "628",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      },
+      "height": {
+        "valueMm": 2100,
+        "enteredUnit": "mm",
+        "enteredText": "2100",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    },
+    {
+      "id": "floor-1-opening-door-8",
+      "capture": { "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9", "areaKey": "floor-1" },
+      "room": "Room 1",
+      "label": "Room 1 door",
+      "width": {
+        "valueMm": 848,
+        "enteredUnit": "mm",
+        "enteredText": "848",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      },
+      "height": {
+        "valueMm": 2100,
+        "enteredUnit": "mm",
+        "enteredText": "2100",
+        "method": "tape",
+        "recordedAt": "2026-10-17T15:00:00Z"
+      }
+    }
+  ],
+  "floorToFloor": [],
+  "landmarks": []
+}

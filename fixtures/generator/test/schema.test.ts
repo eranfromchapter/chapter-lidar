@@ -8,6 +8,7 @@ import { readdirSync } from "node:fs";
 import { describe, it } from "node:test";
 import {
   LAYOUT,
+  RETIRED_ROLES,
   formatErrors,
   validateCaptureModel,
   validateCaptureRecord,
@@ -16,13 +17,17 @@ import {
   type Role,
 } from "@chapter/capture-contract";
 import { DEFECT_IDS } from "../src/broken.js";
+import { sampleSpecs } from "../src/generate.js";
 import { buildPackage } from "../src/package.js";
-import { fixtureSpecs } from "../src/shapes.js";
+import { SAMPLE_424_NAME } from "../src/sample424.js";
+import { LEGACY_NAME, fixtureSpecs, legacySpecs } from "../src/shapes.js";
 import {
   glbPositions,
   listFiles,
   loadBroken,
   loadGood,
+  loadLegacy,
+  loadSample,
   parseDxf,
   readGlb,
   readIndex,
@@ -31,6 +36,7 @@ import {
 
 const GOOD = ["box-room", "l-shaped-room", "two-room-apartment", "two-floor-house"];
 
+/** Every role a v2 package holds: all roles except the retired spatial_report_pdf. */
 const ALL_ROLES: Role[] = [
   "capture_record",
   "raw_roomplan_json",
@@ -39,7 +45,6 @@ const ALL_ROLES: Role[] = [
   "plan_dxf",
   "rooms_csv",
   "plan_pdf",
-  "spatial_report_pdf",
   "plan_png",
   "plan_svg",
   "mesh_glb",
@@ -66,8 +71,9 @@ function validateContractFiles(fixture: LoadedFixture): void {
 }
 
 describe("generated fixtures validate against the contract schemas", () => {
-  it("lists the four good fixtures and every broken fixture", () => {
+  it("lists the four good fixtures, every broken fixture, the legacy package and the samples", () => {
     const index = readIndex();
+    assert.equal(index.generatedFormatVersion, "1.1.0");
     assert.deepEqual(
       index.fixtures.map((fixture) => fixture.name),
       GOOD,
@@ -76,6 +82,22 @@ describe("generated fixtures validate against the contract schemas", () => {
       index.broken.map((fixture) => fixture.defectId),
       [...DEFECT_IDS],
     );
+    assert.deepEqual(
+      index.legacy.map((fixture) => [fixture.name, fixture.legacy]),
+      [[LEGACY_NAME, true]],
+    );
+    assert.deepEqual(
+      index.samples.map((fixture) => fixture.name),
+      [SAMPLE_424_NAME],
+    );
+    for (const fixture of [...index.fixtures, ...index.samples]) {
+      assert.equal(fixture.legacy, undefined, fixture.name);
+    }
+  });
+
+  it(`${LEGACY_NAME} and ${SAMPLE_424_NAME}: record, controls, models and manifest validate`, () => {
+    validateContractFiles(loadLegacy(LEGACY_NAME));
+    validateContractFiles(loadSample(SAMPLE_424_NAME));
   });
 
   for (const name of GOOD) {
@@ -180,14 +202,98 @@ describe("every good fixture is a complete intake package", () => {
     });
   }
 
-  it("regenerating from the shapes gives the same manifest as the committed one", async () => {
-    for (const spec of fixtureSpecs()) {
-      const pkg = await buildPackage(spec);
-      const committed = loadGood(spec.name).manifest;
+  it("v2 packages: manifest 1.1.0, the plan sheet as plan-sheet.pdf, no retired role", () => {
+    for (const fixture of [...GOOD.map(loadGood), loadSample(SAMPLE_424_NAME)]) {
+      assert.equal(fixture.manifest.schemaVersion, "1.1.0", fixture.name);
+      for (const file of fixture.manifest.files) {
+        assert.ok(!(RETIRED_ROLES as readonly string[]).includes(file.role), file.path);
+        if (file.role === "plan_pdf") {
+          assert.ok(file.path.endsWith("/plan-sheet.pdf"), file.path);
+        }
+        assert.ok(!file.path.endsWith("/plan.pdf") && !file.path.endsWith("/spatial-report.pdf"));
+      }
+    }
+  });
+
+  it("capture records are 1.1.0 exactly when a capture carries a compass reading", () => {
+    const expected: Record<string, ["1.0.0" | "1.1.0", Array<Record<string, unknown>>]> = {
+      "box-room": ["1.0.0", [{}]],
+      "l-shaped-room": ["1.0.0", [{}]],
+      "two-room-apartment": [
+        "1.1.0",
+        [
+          {
+            heading: 87.5,
+            headingAccuracy: 12,
+            headingSource: "magnetic",
+            headingRecordedAt: "2026-10-17T14:02:23Z",
+          },
+        ],
+      ],
+      "two-floor-house": [
+        "1.1.0",
+        [
+          {
+            heading: 212.4,
+            headingAccuracy: 8,
+            headingSource: "true",
+            headingRecordedAt: "2026-10-17T14:02:20Z",
+          },
+          {},
+        ],
+      ],
+    };
+    const compassOf = (capture: Record<string, unknown>) =>
+      Object.fromEntries(Object.entries(capture).filter(([key]) => key.startsWith("heading")));
+    for (const name of GOOD) {
+      const { record } = loadGood(name);
+      const [version, captures] = expected[name] as (typeof expected)[string];
+      assert.equal(record.schemaVersion, version, name);
       assert.deepEqual(
-        committed.files.map((f) => f.sha256),
-        pkg.manifest.files.map((f) => f.sha256),
+        record.captures.map((capture) => compassOf(capture as unknown as Record<string, unknown>)),
+        captures,
+        name,
       );
+    }
+  });
+
+  it(`${LEGACY_NAME}: the box room as sealed before v2 (manifest 1.0.0, plan.pdf, spatial report)`, () => {
+    const legacy = loadLegacy(LEGACY_NAME);
+    const box = loadGood("box-room");
+    assert.equal(legacy.manifest.schemaVersion, "1.0.0");
+    assert.equal(legacy.record.schemaVersion, "1.0.0");
+    assert.notEqual(legacy.manifest.visitId, box.manifest.visitId);
+    const names = (fixture: typeof box) =>
+      fixture.manifest.files.map((file) => `${file.role} ${file.path.split("/").pop() ?? ""}`);
+    const legacyNames = names(legacy);
+    assert.ok(legacyNames.includes("plan_pdf plan.pdf"));
+    assert.ok(legacyNames.includes("spatial_report_pdf spatial-report.pdf"));
+    assert.deepEqual(
+      legacyNames
+        .filter((name) => !name.startsWith("spatial_report_pdf"))
+        .map((name) => name.replace("plan.pdf", "plan-sheet.pdf")),
+      names(box),
+    );
+    for (const file of legacy.manifest.files) {
+      assert.equal(file.photo?.directionSource, undefined);
+    }
+    // The same rooms, so the station judges it like the box room.
+    assert.deepEqual(
+      [...legacy.models.values()].map((model) => model.rooms),
+      [...box.models.values()].map((model) => model.rooms),
+    );
+  });
+
+  it("regenerating from the shapes gives the same manifest as the committed one", async () => {
+    const specs = [
+      ...fixtureSpecs().map((spec) => ({ spec, load: loadGood })),
+      ...legacySpecs().map((spec) => ({ spec, load: loadLegacy })),
+      ...sampleSpecs().map((spec) => ({ spec, load: loadSample })),
+    ];
+    for (const { spec, load } of specs) {
+      const pkg = await buildPackage(spec);
+      const committed = load(spec.name).manifest;
+      assert.deepEqual(committed, pkg.manifest, spec.name);
     }
   });
 });
@@ -347,7 +453,9 @@ describe("fixture folder", () => {
       "broken",
       "index.json",
       "l-shaped-room",
+      "legacy-1.0.0",
       "roomplan-only",
+      "sample-424",
       "two-floor-house",
       "two-room-apartment",
     ]);

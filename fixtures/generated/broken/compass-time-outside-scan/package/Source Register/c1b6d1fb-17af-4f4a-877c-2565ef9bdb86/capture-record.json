@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "1.1.0",
+  "visitId": "c1b6d1fb-17af-4f4a-877c-2565ef9bdb86",
+  "hub": { "dealId": "fixture-deal-0001", "projectName": "Fixture box-room" },
+  "address": {
+    "formatted": "100 Example Street, Testville, NY 00000",
+    "confirmedOnSite": true,
+    "confirmedAt": "2026-10-17T13:58:20Z"
+  },
+  "operator": { "name": "Test Operator", "userId": "00000000-0000-4000-8000-000000000001" },
+  "device": {
+    "model": "iPhone17,1",
+    "marketingName": "iPhone 16 Pro",
+    "osName": "iOS",
+    "osVersion": "26.0.1",
+    "hasLidar": true
+  },
+  "app": { "version": "1.0.0", "build": "fixture" },
+  "visitedAt": "2026-10-17T13:55:00Z",
+  "captures": [
+    {
+      "captureId": "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+      "areaKey": "floor-1",
+      "label": "Floor 1",
+      "mode": "room",
+      "units": { "length": "m", "display": "metric" },
+      "capturedAt": "2026-10-17T14:02:11Z",
+      "finishedAt": "2026-10-17T14:20:40Z",
+      "coverageNotes": "",
+      "omittedRooms": [],
+      "inaccessibleRooms": [],
+      "heading": 212.4,
+      "headingAccuracy": 8,
+      "headingSource": "true",
+      "headingRecordedAt": "2026-10-17T12:02:11Z"
+    }
+  ]
+}

@@ -8,7 +8,13 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import type { CaptureModel, FieldControls } from "@chapter/capture-contract";
-import { CONTROL_FACTOR, DEFECT_IDS, INCHES_PER_METRE, type DefectJson } from "../src/broken.js";
+import {
+  COMPASS_EARLY_SECONDS,
+  CONTROL_FACTOR,
+  DEFECT_IDS,
+  INCHES_PER_METRE,
+  type DefectJson,
+} from "../src/broken.js";
 import { OTHER_PLACEHOLDER_ADDRESS, PLACEHOLDER_ADDRESS } from "../src/spec.js";
 import {
   generatedDir,
@@ -71,6 +77,7 @@ describe("broken fixtures", () => {
         "missing-gltf-bin",
         "las-bad-header",
         "dimensions-3pct-off",
+        "compass-time-outside-scan",
       ],
       [...DEFECT_IDS],
     );
@@ -276,5 +283,27 @@ describe("broken fixtures", () => {
     assert.deepEqual(rest(broken.controls), rest(base.controls));
     // The scan geometry is the good geometry.
     assert.deepEqual([...broken.models.values()][0], baseModel);
+  });
+
+  it("compass-time-outside-scan: a 1.1.0 record whose compass reading predates the scan by 2 h", () => {
+    const broken = loadBroken("compass-time-outside-scan");
+    const defect = defectOf("compass-time-outside-scan");
+    assert.equal(defect.role, "capture_record");
+    assert.equal(base.record.schemaVersion, "1.0.0");
+    assert.equal(broken.record.schemaVersion, "1.1.0");
+    const [capture] = broken.record.captures;
+    assert.ok(capture !== undefined);
+    assert.equal(capture.heading, 212.4);
+    assert.equal(capture.headingAccuracy, 8);
+    assert.equal(capture.headingSource, "true");
+    assert.equal(
+      Date.parse(capture.capturedAt) - Date.parse(capture.headingRecordedAt ?? ""),
+      COMPASS_EARLY_SECONDS * 1000,
+    );
+    assert.equal(defect.details.headingRecordedAt, capture.headingRecordedAt);
+    // Nothing else of the record changed.
+    const { heading, headingAccuracy, headingSource, headingRecordedAt, ...others } = capture;
+    assert.ok(heading && headingAccuracy && headingSource && headingRecordedAt);
+    assert.deepEqual({ ...broken.record, schemaVersion: "1.0.0", captures: [others] }, base.record);
   });
 });

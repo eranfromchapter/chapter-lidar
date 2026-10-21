@@ -1,0 +1,535 @@
+{
+  "schemaVersion": "1.1.0",
+  "layoutVersion": "1.0.0",
+  "packageId": "5d236b10-70f2-42f9-8f3f-7e56547a3146",
+  "visitId": "b8dbc48a-f67f-4fd1-9859-7cfc2edaad7e",
+  "revision": 1,
+  "sealedAt": "2026-10-17T15:10:00Z",
+  "files": [
+    {
+      "path": "Source Register/b8dbc48a-f67f-4fd1-9859-7cfc2edaad7e/capture-record.json",
+      "role": "capture_record",
+      "sha256": "a6d0b94d1e0f60b68c2c93941e60e27effcc8f575e9f24e24d9c7724780c76f3",
+      "bytes": 1304,
+      "mime": "application/json",
+      "generator": "chapter-fixtures/CaptureRecord",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": []
+    },
+    {
+      "path": "Field Measurements/b8dbc48a-f67f-4fd1-9859-7cfc2edaad7e/field-controls.json",
+      "role": "field_controls",
+      "sha256": "28e8f846ead791f64cbbc768b7f375a45fa71c6fc24774ba860a592d2b9c0df7",
+      "bytes": 13819,
+      "mime": "application/json",
+      "generator": "chapter-fixtures/FieldControls",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": []
+    },
+    {
+      "path": "Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/roomplan.json",
+      "role": "raw_roomplan_json",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "sha256": "1fffa2ba4b6508dca522a775fb1217bcd883b17e03bd73936d9f921145645fbe",
+      "bytes": 90326,
+      "mime": "application/json",
+      "generator": "chapter-fixtures/CaptureCore",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": []
+    },
+    {
+      "path": "Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/depth-samples.bin",
+      "role": "raw_depth",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "sha256": "638695a397d84189968eb0e0fe72c76c9686e0100d816377b50d05e4ef82e624",
+      "bytes": 103904,
+      "mime": "application/octet-stream",
+      "generator": "chapter-fixtures/CaptureCore",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": []
+    },
+    {
+      "path": "Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/capture-model.json",
+      "role": "capture_model",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "sha256": "ce498e2a582e6fc7b24c8041b7ec7d50b1d03b786047c82d4942d754d8cdf8e5",
+      "bytes": 21354,
+      "mime": "application/json",
+      "generator": "chapter-fixtures/CaptureCore",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": ["Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/roomplan.json"]
+    },
+    {
+      "path": "Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/plan.dxf",
+      "role": "plan_dxf",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "sha256": "07cd3bf2400541036e3dc54cbb54f979057166f7bae9346d7d625113a2439fac",
+      "bytes": 22617,
+      "mime": "image/vnd.dxf",
+      "generator": "chapter-fixtures/PlanExport",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": [
+        "Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/capture-model.json"
+      ]
+    },
+    {
+      "path": "Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/rooms.csv",
+      "role": "rooms_csv",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "sha256": "6f7686675a3938f777ae4b6a00b88d42e2584e1a0ed5eef3b9265e4d3010af48",
+      "bytes": 1395,
+      "mime": "text/csv",
+      "generator": "chapter-fixtures/PlanExport",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": [
+        "Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/capture-model.json"
+      ]
+    },
+    {
+      "path": "Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/plan-sheet.pdf",
+      "role": "plan_pdf",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "sha256": "27263ed4f78b78ed085adb8efc10236c070764033a50054e00818b1887ebbc96",
+      "bytes": 7730,
+      "mime": "application/pdf",
+      "generator": "chapter-fixtures/PlanExport",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": [
+        "Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/capture-model.json"
+      ]
+    },
+    {
+      "path": "Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/plan.png",
+      "role": "plan_png",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "sha256": "ad3602c37423d52a3f05d68b4a8f12775a270a3e6ca2e0a41ab6c0c48be4b147",
+      "bytes": 6404,
+      "mime": "image/png",
+      "generator": "chapter-fixtures/PlanExport",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": [
+        "Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/capture-model.json"
+      ]
+    },
+    {
+      "path": "Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/plan.svg",
+      "role": "plan_svg",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "sha256": "74bf5a70bebbe82bafe9471a3d6a6cc432b9b02c82f6a2edd79db38e866b3de7",
+      "bytes": 9741,
+      "mime": "image/svg+xml",
+      "generator": "chapter-fixtures/PlanExport",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": [
+        "Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/capture-model.json"
+      ]
+    },
+    {
+      "path": "Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/mesh.glb",
+      "role": "mesh_glb",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "sha256": "bfe55a021c5f44ca3f5842595942282ab657db2d40e53036cc2fbfe5ee7fe692",
+      "bytes": 15328,
+      "mime": "model/gltf-binary",
+      "generator": "chapter-fixtures/MeshExport",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": [
+        "Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/capture-model.json"
+      ]
+    },
+    {
+      "path": "Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/mesh.obj",
+      "role": "mesh_obj",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "sha256": "6f0bb0bf20b8cf7d55701e60fd76fd48b516c2f183917fd044b5ea6cae7d743d",
+      "bytes": 51259,
+      "mime": "model/obj",
+      "generator": "chapter-fixtures/MeshExport",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": [
+        "Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/capture-model.json"
+      ]
+    },
+    {
+      "path": "Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/mesh.mtl",
+      "role": "mesh_mtl",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "sha256": "1fa61206ef881a24e37e69c39fd69fd3c235e4397aa983023797fe95a3b2b2ea",
+      "bytes": 187,
+      "mime": "model/mtl",
+      "generator": "chapter-fixtures/MeshExport",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": [
+        "Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/capture-model.json"
+      ]
+    },
+    {
+      "path": "Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/mesh-texture.png",
+      "role": "texture",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "sha256": "fce106d0b5a970527d4c47ca7f2a1aca5e166cbed3da6437f880e2682b97f70b",
+      "bytes": 120,
+      "mime": "image/png",
+      "generator": "chapter-fixtures/MeshExport",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": []
+    },
+    {
+      "path": "Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/points.las",
+      "role": "point_cloud_las",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "sha256": "8dc01ca94ca771484c1d09dd349949690236cc062b28736693e57c6fa9a0ebf3",
+      "bytes": 234123,
+      "mime": "application/vnd.las",
+      "generator": "chapter-fixtures/MeshExport",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": [
+        "Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/depth-samples.bin"
+      ]
+    },
+    {
+      "path": "Site Photos/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/photo-0001.jpg",
+      "role": "photo",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "sha256": "8cc6cb2294aaa8aa124fbe0fe3d62b4deadc69dbf0f577c38b92d812bef9d343",
+      "bytes": 220,
+      "mime": "image/jpeg",
+      "generator": "chapter-fixtures/FieldKit",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": [],
+      "photo": {
+        "room": "Bedroom 1",
+        "direction": "N",
+        "subject": "general",
+        "takenAt": "2026-10-17T14:07:11Z"
+      }
+    },
+    {
+      "path": "Site Photos/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/photo-0002.jpg",
+      "role": "photo",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "sha256": "3c9e19aa08a946ed02e44278313b04242f390111db5b31c810738cb83cafe2db",
+      "bytes": 221,
+      "mime": "image/jpeg",
+      "generator": "chapter-fixtures/FieldKit",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": [],
+      "photo": {
+        "room": "Closet",
+        "direction": "N",
+        "subject": "general",
+        "takenAt": "2026-10-17T14:08:11Z"
+      }
+    },
+    {
+      "path": "Site Photos/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/photo-0003.jpg",
+      "role": "photo",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "sha256": "91a406d5d4b68fa399c27bdc3c111b7f821e819471de99b391935afa41098028",
+      "bytes": 220,
+      "mime": "image/jpeg",
+      "generator": "chapter-fixtures/FieldKit",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": [],
+      "photo": {
+        "room": "Living Room",
+        "direction": "N",
+        "subject": "general",
+        "takenAt": "2026-10-17T14:09:11Z",
+        "directionSource": "compass"
+      }
+    },
+    {
+      "path": "Site Photos/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/photo-0004.jpg",
+      "role": "photo",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "sha256": "5fdf340f9b9455937baa5f881bc20540440abed1945ed852bde1d436ca6f40e6",
+      "bytes": 220,
+      "mime": "image/jpeg",
+      "generator": "chapter-fixtures/FieldKit",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": [],
+      "photo": {
+        "room": "Living Room",
+        "direction": "E",
+        "subject": "opening",
+        "takenAt": "2026-10-17T14:10:11Z",
+        "directionSource": "compass"
+      }
+    },
+    {
+      "path": "Site Photos/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/photo-0005.jpg",
+      "role": "photo",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "sha256": "b15a5f33af362aae1c0e08d4bb2e16cdcaa5e87d24edcea4e911d5cffae7deed",
+      "bytes": 221,
+      "mime": "image/jpeg",
+      "generator": "chapter-fixtures/FieldKit",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": [],
+      "photo": {
+        "room": "Living Room",
+        "direction": "S",
+        "subject": "general",
+        "takenAt": "2026-10-17T14:11:11Z",
+        "directionSource": "manual"
+      }
+    },
+    {
+      "path": "Site Photos/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/photo-0006.jpg",
+      "role": "photo",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "sha256": "700edb840215829c999caae19e7d0e199253f65d2187d65c92f1943be78bcfe9",
+      "bytes": 220,
+      "mime": "image/jpeg",
+      "generator": "chapter-fixtures/FieldKit",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": [],
+      "photo": {
+        "room": "Living Room",
+        "direction": "W",
+        "subject": "ceiling",
+        "takenAt": "2026-10-17T14:12:11Z",
+        "directionSource": "manual"
+      }
+    },
+    {
+      "path": "Site Photos/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/photo-0007.jpg",
+      "role": "photo",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "sha256": "80aaf5ca8f22730a00df03d5c1aad8291a582e1d7563ac3e8e0672b2e128b104",
+      "bytes": 221,
+      "mime": "image/jpeg",
+      "generator": "chapter-fixtures/FieldKit",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": [],
+      "photo": {
+        "room": "Living Room",
+        "direction": "N",
+        "subject": "opening",
+        "takenAt": "2026-10-17T14:13:11Z",
+        "directionSource": "compass"
+      }
+    },
+    {
+      "path": "Site Photos/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/photo-0008.jpg",
+      "role": "photo",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "sha256": "b1ccdf1c1905e2af58af9f89eb845b6a0b2a3e884bf0219199dabec39e036e6e",
+      "bytes": 220,
+      "mime": "image/jpeg",
+      "generator": "chapter-fixtures/FieldKit",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": [],
+      "photo": {
+        "room": "Living Room",
+        "direction": "E",
+        "subject": "fixture",
+        "takenAt": "2026-10-17T14:14:11Z",
+        "directionSource": "compass"
+      }
+    },
+    {
+      "path": "Site Photos/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/photo-0009.jpg",
+      "role": "photo",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "sha256": "fd0e2e00a69979cd0ad117154aa81b6542fbec04074393d05d6f2e197e560e2c",
+      "bytes": 218,
+      "mime": "image/jpeg",
+      "generator": "chapter-fixtures/FieldKit",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": [],
+      "photo": {
+        "room": "Living Room",
+        "direction": "S",
+        "subject": "defect",
+        "takenAt": "2026-10-17T14:15:11Z",
+        "directionSource": "manual"
+      }
+    },
+    {
+      "path": "Site Photos/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/photo-0010.jpg",
+      "role": "photo",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "sha256": "95d0b8c33355b5066f8626f75526e1085e9a7f96ba8386595881ea3a27fabb8c",
+      "bytes": 220,
+      "mime": "image/jpeg",
+      "generator": "chapter-fixtures/FieldKit",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": [],
+      "photo": {
+        "room": "Room 2",
+        "direction": "N",
+        "subject": "general",
+        "takenAt": "2026-10-17T14:16:11Z"
+      }
+    },
+    {
+      "path": "Site Photos/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/photo-0011.jpg",
+      "role": "photo",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "sha256": "e6544b05a496fffad787f056e3654b531cdbddfea79dd03e0f914fce7774a2ad",
+      "bytes": 220,
+      "mime": "image/jpeg",
+      "generator": "chapter-fixtures/FieldKit",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": [],
+      "photo": {
+        "room": "Bedroom 2",
+        "direction": "N",
+        "subject": "general",
+        "takenAt": "2026-10-17T14:17:11Z"
+      }
+    },
+    {
+      "path": "Site Photos/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/photo-0012.jpg",
+      "role": "photo",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "sha256": "8ffca4f387925267b7e35c5d08b353cafc2f932f9fe96021663a8718f21ce3b4",
+      "bytes": 220,
+      "mime": "image/jpeg",
+      "generator": "chapter-fixtures/FieldKit",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": [],
+      "photo": {
+        "room": "Room 4",
+        "direction": "N",
+        "subject": "general",
+        "takenAt": "2026-10-17T14:18:11Z"
+      }
+    },
+    {
+      "path": "Site Photos/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/photo-0013.jpg",
+      "role": "photo",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "sha256": "e49706792893a60f2f8b06bf4019f60c250f3074064f39ec6f54ee079291bedf",
+      "bytes": 220,
+      "mime": "image/jpeg",
+      "generator": "chapter-fixtures/FieldKit",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": [],
+      "photo": {
+        "room": "Bathroom 2",
+        "direction": "N",
+        "subject": "general",
+        "takenAt": "2026-10-17T14:19:11Z"
+      }
+    },
+    {
+      "path": "Site Photos/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/photo-0014.jpg",
+      "role": "photo",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "sha256": "740c5e3fdf13d641c01cf4e5e356dc05d44ee273d8e8fb962756df48cdeb9733",
+      "bytes": 220,
+      "mime": "image/jpeg",
+      "generator": "chapter-fixtures/FieldKit",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": [],
+      "photo": {
+        "room": "Bathroom 1",
+        "direction": "N",
+        "subject": "general",
+        "takenAt": "2026-10-17T14:20:11Z"
+      }
+    },
+    {
+      "path": "Site Photos/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/photo-0015.jpg",
+      "role": "photo",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "sha256": "d75449eb83a7a87bd27902e5d2d206c8d82f3fd9fca4d0426deac11349871660",
+      "bytes": 219,
+      "mime": "image/jpeg",
+      "generator": "chapter-fixtures/FieldKit",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": [],
+      "photo": {
+        "room": "Room 5",
+        "direction": "N",
+        "subject": "general",
+        "takenAt": "2026-10-17T14:21:11Z"
+      }
+    },
+    {
+      "path": "Site Photos/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/photo-0016.jpg",
+      "role": "photo",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "sha256": "228f078ced7d5e99002a0166fd1b5d53ec6609b0b8787345cc2dc01d829fb0ac",
+      "bytes": 221,
+      "mime": "image/jpeg",
+      "generator": "chapter-fixtures/FieldKit",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": [],
+      "photo": {
+        "room": "Room 1",
+        "direction": "N",
+        "subject": "general",
+        "takenAt": "2026-10-17T14:22:11Z"
+      }
+    },
+    {
+      "path": "Site Photos/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/photo-0017.jpg",
+      "role": "photo",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "sha256": "9848c41060ba3d559d55f70c76f5da15460cab40292d99608a88845bfb008313",
+      "bytes": 220,
+      "mime": "image/jpeg",
+      "generator": "chapter-fixtures/FieldKit",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": [],
+      "photo": {
+        "room": "Kitchen",
+        "direction": "N",
+        "subject": "general",
+        "takenAt": "2026-10-17T14:23:11Z"
+      }
+    },
+    {
+      "path": "Site Photos/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/photo-0018.jpg",
+      "role": "photo",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "sha256": "35e37a1a2817d522679c691c0dca520b8351288c24589f69ee34cebd9c851c7e",
+      "bytes": 219,
+      "mime": "image/jpeg",
+      "generator": "chapter-fixtures/FieldKit",
+      "generatorVersion": "1.0.0",
+      "derivedFrom": [],
+      "photo": {
+        "room": "Room 3",
+        "direction": "N",
+        "subject": "general",
+        "takenAt": "2026-10-17T14:24:11Z"
+      }
+    }
+  ]
+}

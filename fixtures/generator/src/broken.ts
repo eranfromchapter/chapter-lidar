@@ -3,6 +3,7 @@
 // (these are not fingerprint-mismatch defects).
 
 import type { CaptureModel, FieldControls } from "@chapter/capture-contract";
+import { secondsAfter } from "./controls.js";
 import { jsonBytes } from "./json.js";
 import { meshFromModel } from "./mesh.js";
 import { buildManifest, type GeneratedPackage, type PackageFile } from "./package.js";
@@ -19,7 +20,11 @@ export const DEFECT_IDS = [
   "missing-gltf-bin",
   "las-bad-header",
   "dimensions-3pct-off",
+  "compass-time-outside-scan",
 ] as const;
+
+/** The compass-time-outside-scan reading was taken this long before the scan started. */
+export const COMPASS_EARLY_SECONDS = 2 * 60 * 60;
 
 export type DefectId = (typeof DEFECT_IDS)[number];
 
@@ -267,6 +272,39 @@ export async function buildBrokenFixtures(base: GeneratedPackage): Promise<Broke
       }),
     },
     () => jsonBytes(scaleControlDistances(base.controls, CONTROL_FACTOR)),
+  );
+
+  const scan = base.record.captures[0];
+  if (scan === undefined) {
+    throw new Error("Base fixture has no capture in its record");
+  }
+  const reading = {
+    heading: 212.4,
+    headingAccuracy: 8,
+    headingSource: "true" as const,
+    headingRecordedAt: secondsAfter(scan.capturedAt, -COMPASS_EARLY_SECONDS),
+  };
+  await derive(
+    "compass-time-outside-scan",
+    "Compass reading taken outside the scan",
+    "capture_record",
+    "capture-record.json written as 1.1.0 with a true-north compass reading (212.4°, ±8°) whose headingRecordedAt is 2 h before the capture's capturedAt, so it cannot belong to the scan.",
+    {
+      capturedAt: scan.capturedAt,
+      finishedAt: scan.finishedAt,
+      ...reading,
+    },
+    () =>
+      jsonBytes({
+        ...base.record,
+        schemaVersion: "1.1.0",
+        captures: atLeast(
+          base.record.captures.map((capture, index) =>
+            index === 0 ? { ...capture, ...reading } : capture,
+          ),
+          1,
+        ),
+      }),
   );
 
   // Keep the declared order.

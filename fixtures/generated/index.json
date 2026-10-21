@@ -1,5 +1,5 @@
 {
-  "generatedFormatVersion": "1.0.0",
+  "generatedFormatVersion": "1.1.0",
   "fixtures": [
     {
       "name": "box-room",
@@ -90,6 +90,35 @@
       "defect": "broken/dimensions-3pct-off/defect.json",
       "packageRoot": "broken/dimensions-3pct-off/package",
       "manifest": "broken/dimensions-3pct-off/package/Source Register/c1b6d1fb-17af-4f4a-877c-2565ef9bdb86/manifest.json"
+    },
+    {
+      "defectId": "compass-time-outside-scan",
+      "title": "Compass reading taken outside the scan",
+      "baseFixture": "box-room",
+      "defect": "broken/compass-time-outside-scan/defect.json",
+      "packageRoot": "broken/compass-time-outside-scan/package",
+      "manifest": "broken/compass-time-outside-scan/package/Source Register/c1b6d1fb-17af-4f4a-877c-2565ef9bdb86/manifest.json"
+    }
+  ],
+  "legacy": [
+    {
+      "name": "legacy-1.0.0",
+      "description": "The box room sealed by an app before v2: manifest 1.0.0 with plan.pdf and spatial-report.pdf (role spatial_report_pdf, retired in manifest 1.1.0), capture record 1.0.0.",
+      "legacy": true,
+      "truth": "legacy-1.0.0/truth.json",
+      "packageRoot": "legacy-1.0.0/package",
+      "manifest": "legacy-1.0.0/package/Source Register/11acffc6-9ff2-43ae-aefd-ed16d21a3b9c/manifest.json",
+      "visitId": "11acffc6-9ff2-43ae-aefd-ed16d21a3b9c"
+    }
+  ],
+  "samples": [
+    {
+      "name": "sample-424",
+      "description": "The 424 sample apartment of the design artboards, traced: one floor, 12 rooms (5 unlabeled Room N), 14 objects, 8 doors, 4 passages, 2 windows; Primary closet not scanned (locked), Storage room could not be entered; 7 photos of the Living Room, one of every other room; compass verified (212.4°, ±8°, true north).",
+      "truth": "sample-424/truth.json",
+      "packageRoot": "sample-424/package",
+      "manifest": "sample-424/package/Source Register/b8dbc48a-f67f-4fd1-9859-7cfc2edaad7e/manifest.json",
+      "visitId": "b8dbc48a-f67f-4fd1-9859-7cfc2edaad7e"
     }
   ]
 }

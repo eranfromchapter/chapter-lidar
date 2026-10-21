@@ -1,0 +1,71 @@
+{
+  "fixture": "legacy-1.0.0",
+  "description": "The box room sealed by an app before v2: manifest 1.0.0 with plan.pdf and spatial-report.pdf (role spatial_report_pdf, retired in manifest 1.1.0), capture record 1.0.0.",
+  "units": "m",
+  "hub": { "dealId": "fixture-deal-0001", "address": "100 Example Street, Testville, NY 00000" },
+  "visitId": "11acffc6-9ff2-43ae-aefd-ed16d21a3b9c",
+  "notes": [
+    "Walls are scanned surfaces with thickness 0; wall centrelines coincide with room outlines.",
+    "Lengths are exact; generated geometry equals these values to 0.1 mm or better.",
+    "Depth samples and the LAS file carry seeded uniform noise of up to 5 mm per axis."
+  ],
+  "captures": [
+    {
+      "captureId": "a2144f44-8ab6-4b8d-8cef-1df6a876bc47",
+      "areaKey": "floor-1",
+      "label": "Floor 1",
+      "frame": { "rotYDeg": 0, "translateM": [0, 0, 0] },
+      "boundsM": { "min": [0, 0, 0], "max": [4, 2.7, 3] },
+      "rooms": [
+        {
+          "id": "room-1",
+          "label": "Test Room",
+          "widthM": 4,
+          "lengthM": 3,
+          "heightM": 2.7,
+          "areaM2": 12,
+          "perimeterM": 14
+        }
+      ],
+      "walls": [
+        { "id": "wall-1", "lengthM": 3, "heightM": 2.7 },
+        { "id": "wall-2", "lengthM": 4, "heightM": 2.7 },
+        { "id": "wall-3", "lengthM": 3, "heightM": 2.7 },
+        { "id": "wall-4", "lengthM": 4, "heightM": 2.7 }
+      ],
+      "openings": [
+        {
+          "id": "door-1",
+          "kind": "door",
+          "wallId": "wall-4",
+          "offsetM": 3,
+          "bottomM": 0,
+          "widthM": 0.9,
+          "heightM": 2.1
+        },
+        {
+          "id": "window-1",
+          "kind": "window",
+          "wallId": "wall-2",
+          "offsetM": 2,
+          "bottomM": 0.9,
+          "widthM": 1.2,
+          "heightM": 1.2
+        }
+      ],
+      "objects": [
+        {
+          "id": "object-1",
+          "category": "table",
+          "centerM": [2, 0.375, 1.5],
+          "sizeM": [1.2, 0.75, 0.8]
+        }
+      ],
+      "controlDistances": [
+        { "axis": "A", "from": "Test Room west wall", "to": "Test Room east wall", "lengthM": 4 },
+        { "axis": "B", "from": "Test Room north wall", "to": "Test Room south wall", "lengthM": 3 }
+      ]
+    }
+  ],
+  "landmarks": []
+}

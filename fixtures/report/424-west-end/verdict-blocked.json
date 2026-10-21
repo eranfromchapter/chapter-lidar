@@ -1,0 +1,263 @@
+{
+  "schemaVersion": "1.0.0",
+  "verdictId": "6a1f3c2e-9b4d-4e7a-8c5f-0d2e4b6a8c12",
+  "packageId": "5d236b10-70f2-42f9-8f3f-7e56547a3146",
+  "visitId": "b8dbc48a-f67f-4fd1-9859-7cfc2edaad7e",
+  "revision": 1,
+  "outcome": "blocked",
+  "task": "Preliminary existing-condition plans",
+  "summary": "Blocked: 2 blockers prevent preliminary existing-condition plans; 2 limitations also listed. Resolve the blockers and re-upload.",
+  "evaluatedAt": "2026-10-17T15:20:44Z",
+  "evaluator": {
+    "name": "chapter-capture-station/checks",
+    "version": "1.1.0"
+  },
+  "checks": [
+    {
+      "ruleId": "manifest.fingerprints",
+      "title": "Fingerprints",
+      "status": "failed"
+    },
+    {
+      "ruleId": "files.parseable",
+      "title": "Files nonempty and readable",
+      "status": "passed"
+    },
+    {
+      "ruleId": "property.address",
+      "title": "Property match",
+      "status": "failed"
+    },
+    {
+      "ruleId": "units.scale",
+      "title": "Units and scale",
+      "status": "passed"
+    },
+    {
+      "ruleId": "orientation.up",
+      "title": "Up direction and orientation",
+      "status": "passed"
+    },
+    {
+      "ruleId": "orientation.compass",
+      "title": "Orientation (compass)",
+      "status": "passed"
+    },
+    {
+      "ruleId": "companions.resolve",
+      "title": "Mesh companions",
+      "status": "passed"
+    },
+    {
+      "ruleId": "dxf.content",
+      "title": "DXF content type",
+      "status": "passed"
+    },
+    {
+      "ruleId": "las.header",
+      "title": "LAS header",
+      "status": "passed"
+    },
+    {
+      "ruleId": "coverage.rooms",
+      "title": "Coverage",
+      "status": "failed"
+    },
+    {
+      "ruleId": "geometry.plausibility",
+      "title": "Plausibility",
+      "status": "passed"
+    },
+    {
+      "ruleId": "floors.registration",
+      "title": "Floor registration",
+      "status": "not_applicable"
+    },
+    {
+      "ruleId": "evidence.independence",
+      "title": "Independence of evidence",
+      "status": "passed"
+    }
+  ],
+  "findings": [
+    {
+      "ruleId": "manifest.fingerprints",
+      "severity": "blocker",
+      "message": "File does not match its manifest fingerprint; it changed after sealing.",
+      "filePath": "Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/rooms.csv",
+      "measured": "1395 bytes, sha256 21a7178bd83637e8c12d5e8b78901fb02c34237104387a69f4488aa7f7d3503f",
+      "nextAction": "Re-upload the original sealed package; do not edit files after sealing.",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "expected": "1395 bytes, sha256 6f7686675a3938f777ae4b6a00b88d42e2584e1a0ed5eef3b9265e4d3010af48"
+    },
+    {
+      "ruleId": "property.address",
+      "severity": "blocker",
+      "message": "Capture record address does not match the HUB project address.",
+      "filePath": "Source Register/b8dbc48a-f67f-4fd1-9859-7cfc2edaad7e/capture-record.json",
+      "measured": "recorded \"200 Sample Avenue, Testville, NY 00000\"",
+      "nextAction": "Confirm the property with the sales team; correct the HUB project link or recapture at the confirmed address.",
+      "expected": "HUB \"100 Example Street, Testville, NY 00000\" (after normalization)"
+    },
+    {
+      "ruleId": "coverage.rooms",
+      "severity": "limitation",
+      "message": "Primary closet not captured (omitted by the operator: locked).",
+      "filePath": "Source Register/b8dbc48a-f67f-4fd1-9859-7cfc2edaad7e/capture-record.json",
+      "measured": "Primary closet: omitted by the operator",
+      "nextAction": "Scan or measure Primary closet on the next visit if it is in scope.",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "expected": "every room in scope captured"
+    },
+    {
+      "ruleId": "coverage.rooms",
+      "severity": "limitation",
+      "message": "Storage room not captured (inaccessible).",
+      "filePath": "Source Register/b8dbc48a-f67f-4fd1-9859-7cfc2edaad7e/capture-record.json",
+      "measured": "Storage room: inaccessible",
+      "nextAction": "Scan or measure Storage room on the next visit if it is in scope.",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "expected": "every room in scope captured"
+    },
+    {
+      "ruleId": "files.parseable",
+      "severity": "info",
+      "message": "Every file is nonempty and reads as the format of its role.",
+      "filePath": "Source Register/b8dbc48a-f67f-4fd1-9859-7cfc2edaad7e/manifest.json",
+      "measured": "33 of 33 files readable",
+      "nextAction": "None",
+      "expected": "nonempty and readable per role"
+    },
+    {
+      "ruleId": "units.scale",
+      "severity": "info",
+      "message": "Plan geometry of Floor 1 agrees with the field-control distances.",
+      "filePath": "Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/capture-model.json",
+      "measured": "floor-1-distance-a (axis A, Living Room): model 3495.0 mm vs control 3488.0 mm, +7.0 mm (+0.20%); floor-1-distance-b (axis B, Living Room): model 6005.1 mm vs control 6001.0 mm, +4.1 mm (+0.07%)",
+      "nextAction": "None",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "expected": "within max(1% of control, 25.4 mm); over that up to 3% is a limitation; over 3% blocks the floor"
+    },
+    {
+      "ruleId": "orientation.up",
+      "severity": "info",
+      "message": "Up direction and units of Floor 1 agree with the known heights.",
+      "filePath": "Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/capture-model.json",
+      "measured": "mesh.glb: +Y up (extents X 10.527 m, Y 2.525 m, Z 8.468 m; horizontal floor faces 73.97 m2 at Y 0.000 m); points.las: Z extent 2.535 m; plan.dxf: millimetres ($INSUNITS 4)",
+      "nextAction": "None",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "expected": "field-control ceiling 2.525 m, capture model room height 2.525 m"
+    },
+    {
+      "ruleId": "orientation.compass",
+      "severity": "info",
+      "message": "True north from the compass.",
+      "filePath": "Source Register/b8dbc48a-f67f-4fd1-9859-7cfc2edaad7e/capture-record.json",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "measured": "True heading 212°, accuracy ±8°",
+      "expected": "a compass reading at scan start, true north, accuracy ±10° or better",
+      "nextAction": "None"
+    },
+    {
+      "ruleId": "companions.resolve",
+      "severity": "info",
+      "message": "Every mesh companion of Floor 1 resolves by relative path.",
+      "filePath": "Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/capture-model.json",
+      "measured": "mesh.glb buffer 0 (embedded); mesh.obj -> mesh.mtl; mesh.mtl -> mesh-texture.png",
+      "nextAction": "None",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "expected": "companions resolve by relative path"
+    },
+    {
+      "ruleId": "dxf.content",
+      "severity": "info",
+      "message": "Plan DXF holds plan entities only.",
+      "filePath": "Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/plan.dxf",
+      "measured": "LINE 72, ARC 8, LWPOLYLINE 26, TEXT 24",
+      "nextAction": "None",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "expected": "plan entities only"
+    },
+    {
+      "ruleId": "las.header",
+      "severity": "info",
+      "message": "LAS header matches its point data.",
+      "filePath": "Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/points.las",
+      "measured": "LAS 1.4, point format 7, 6493 points, header count 6493; extents match",
+      "nextAction": "None",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "expected": "counts and extents equal the data"
+    },
+    {
+      "ruleId": "coverage.rooms",
+      "severity": "info",
+      "message": "Every captured room of Floor 1 has at least one photo.",
+      "filePath": "Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/capture-model.json",
+      "measured": "12 of 12 rooms photographed; 18 photos",
+      "nextAction": "None",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "expected": "at least one photo per captured room"
+    },
+    {
+      "ruleId": "coverage.rooms",
+      "severity": "info",
+      "message": "Coverage note for Floor 1 recorded by the operator.",
+      "filePath": "Source Register/b8dbc48a-f67f-4fd1-9859-7cfc2edaad7e/capture-record.json",
+      "measured": "Room 4: the ceiling was only partly captured.",
+      "nextAction": "None",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1"
+    },
+    {
+      "ruleId": "geometry.plausibility",
+      "severity": "info",
+      "message": "Ceiling heights, door widths and window sills of Floor 1 are plausible.",
+      "filePath": "Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/capture-model.json",
+      "measured": "ceilings 2.504 m, 2.487 m, 2.484 m, 2.474 m, 2.449 m, 2.479 m, 2.464 m, 2.525 m, 2.510 m; doors 0.723 m, 0.700 m, 0.707 m, 0.848 m; sills 0.700 m",
+      "nextAction": "None",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "expected": "ceiling 2.0-6.0 m, door width 0.6-1.5 m, sill >= 0"
+    },
+    {
+      "ruleId": "floors.registration",
+      "severity": "info",
+      "message": "One capture in this visit; no floor registration is needed.",
+      "filePath": "Source Register/b8dbc48a-f67f-4fd1-9859-7cfc2edaad7e/capture-record.json",
+      "measured": "1 capture",
+      "nextAction": "None"
+    },
+    {
+      "ruleId": "evidence.independence",
+      "severity": "info",
+      "message": "Exports of Floor 1 come from one scan; their agreement is not counted as an independent measurement. Only field controls are independent evidence.",
+      "filePath": "Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/capture-model.json",
+      "measured": "9 exports of one capture (capture-model.json, plan.dxf, rooms.csv, plan-sheet.pdf, plan.png, plan.svg, mesh.glb, mesh.obj, points.las); independent controls: 2 distances, 12 ceiling heights, 14 openings",
+      "nextAction": "None",
+      "captureId": "33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
+      "areaKey": "floor-1",
+      "expected": "scale and heights checked against field controls only"
+    }
+  ],
+  "limitations": [
+    "Floor 1: Primary closet not captured (omitted by the operator: locked).",
+    "Floor 1: Storage room not captured (inaccessible)."
+  ],
+  "nextActions": [
+    "Re-upload the original sealed package; do not edit files after sealing.",
+    "Confirm the property with the sales team; correct the HUB project link or recapture at the confirmed address.",
+    "Scan or measure Primary closet on the next visit if it is in scope.",
+    "Scan or measure Storage room on the next visit if it is in scope."
+  ],
+  "statement": "This verdict is an automated check of the intake package. It does not certify any property model or measurement."
+}
