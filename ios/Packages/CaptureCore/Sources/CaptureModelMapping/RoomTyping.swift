@@ -97,26 +97,74 @@ public enum RoomTyping {
     return rules.first(where: { !$0.categories.isDisjoint(with: present) })?.type
   }
 
-  /// The room type the operator's own name for a floor or area says, for example "Office",
-  /// "Kitchen" or "Primary bedroom"; nil when the name names no room ("Floor 1", "Apartment").
-  /// Whole words, ignoring case; the first match in this order wins, so "Hall bath" is a
-  /// bathroom and "Living / dining" a living room.
+  /// The room type the operator's own name for a floor, an area or a room says, for example
+  /// "Office", "Kitchen", "Primary bedroom" or "Shower"; nil when the name names no room
+  /// ("Floor 1", "Apartment", "Room Mexico"). Whole words, ignoring case.
+  ///
+  /// The last word that names a type wins, because English puts the kind of room last: "Hall
+  /// bath" is a bathroom, "Bedroom closet", "Kitchen pantry" and "Bathroom closet" are closets,
+  /// "Bedroom hall" is a hallway. A room of two parts ("Living / dining", "Kitchen & dining",
+  /// "Bath and laundry") takes the type of its first part that names one. RoomPlan has no shower
+  /// or bathtub-only room: a shower or a tub is a bathroom, and a pantry or a storage room a
+  /// closet.
   public static func areaType(_ label: String) -> RoomType? {
-    let words = Set(
-      label.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init))
-    let rules: [(words: Set<String>, type: RoomType)] = [
-      (["bathroom", "bath", "wc", "toilet", "powder", "ensuite", "restroom", "washroom"], .bathroom),
-      (["bedroom", "nursery"], .bedroom),
-      (["kitchen", "kitchenette"], .kitchen),
-      (["closet", "wardrobe"], .closet),
-      (["laundry"], .laundry),
-      (["utility", "mechanical", "boiler"], .utility),
-      (["office", "study"], .office),
-      (["living", "lounge", "family", "den"], .livingRoom),
-      (["dining"], .diningRoom),
-      (["hall", "hallway", "corridor", "entry", "foyer", "entrance"], .hallway),
+    for part in nameParts(label) {
+      if let type = part.reversed().lazy.compactMap({ typeWords[$0] }).first { return type }
+    }
+    return nil
+  }
+
+  /// The words that name a room type (`areaType(_:)`), lower case.
+  static let typeWords: [String: RoomType] = {
+    let lists: [(RoomType, [String])] = [
+      (
+        .bathroom,
+        [
+          "bathroom", "bath", "wc", "toilet", "powder", "ensuite", "restroom", "washroom", "shower",
+          "tub", "bathtub", "lavatory",
+        ]
+      ),
+      (.bedroom, ["bedroom", "nursery"]),
+      (.kitchen, ["kitchen", "kitchenette"]),
+      (.closet, ["closet", "wardrobe", "pantry", "storage", "cupboard"]),
+      (.laundry, ["laundry"]),
+      (.utility, ["utility", "mechanical", "boiler"]),
+      (.office, ["office", "study"]),
+      (.livingRoom, ["living", "lounge", "family", "den"]),
+      (.diningRoom, ["dining"]),
+      (.hallway, ["hall", "hallway", "corridor", "entry", "foyer", "entrance", "vestibule", "passage"]),
     ]
-    return rules.first(where: { !$0.words.isDisjoint(with: words) })?.type
+    var words: [String: RoomType] = [:]
+    for (type, list) in lists {
+      for word in list { words[word] = type }
+    }
+    return words
+  }()
+
+  /// The words of a name, lower case, in the parts of a room of two or more parts: split at
+  /// "/", "&", "+", "," and the word "and". "Living / dining" is [["living"], ["dining"]].
+  static func nameParts(_ label: String) -> [[String]] {
+    var parts: [[String]] = [[]]
+    var word = ""
+    func endWord() {
+      guard !word.isEmpty else { return }
+      if word == "and" {
+        parts.append([])
+      } else {
+        parts[parts.count - 1].append(word)
+      }
+      word = ""
+    }
+    for character in label.lowercased() {
+      if character.isLetter {
+        word.append(character)
+      } else {
+        endWord()
+        if "/&+,".contains(character) { parts.append([]) }
+      }
+    }
+    endWord()
+    return parts
   }
 
   /// The operator names the room when a capture has a single room: if `captureLabel` names a
@@ -126,6 +174,30 @@ public enum RoomTyping {
   public static func namedByOperator(_ results: [Result], captureLabel: String) -> [Result] {
     guard results.count == 1, let type = areaType(captureLabel) else { return results }
     return [.typed(type, .operator)]
+  }
+
+  /// The types after the operator renamed rooms: a room whose override (`overrides[i]`, as for
+  /// `labels(for:captureLabel:overrides:)`) differs from the label the room would get without
+  /// it, and names a room type (`areaType(_:)`), takes that type with source `operator`: the
+  /// operator stood in it, so "Shower" makes a bathroom of what the shape alone called a closet,
+  /// and "Bedroom closet" a closet (the kind of room is the name's last word that names one). A
+  /// name that names no type ("Guest suite"), a blank one, or one equal to the derived label
+  /// (compared as labels are compared for uniqueness) leaves the room's own result.
+  ///
+  /// Labels are numbered from `results`, not from this, so renaming one room never renumbers
+  /// the others: call `labels(for:captureLabel:overrides:)` with the same `results`.
+  public static func renamedByOperator(
+    _ results: [Result], captureLabel: String, overrides: [String]
+  ) -> [Result] {
+    guard overrides.contains(where: { !isBlank($0) }) else { return results }
+    let derived = labels(for: results, captureLabel: captureLabel)
+    return results.indices.map { index in
+      guard overrides.indices.contains(index), !isBlank(overrides[index]),
+        key(overrides[index]) != key(derived[index]),
+        let type = areaType(overrides[index])
+      else { return results[index] }
+      return .typed(type, .operator)
+    }
   }
 
   /// The label of a room of `type`; nil for `other`, which is labelled like a room of unknown

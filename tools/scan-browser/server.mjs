@@ -48,6 +48,8 @@ const FLOORPLAN_INPUT_MAX_BYTES = 64 * 1024 * 1024;
 /** Cached floor plans older than this are removed when a new one is written. */
 const FLOORPLAN_CACHE_DAYS = 30;
 const FLOORPLAN_FILES = ["floorplan.png", "floorplan.pdf", "floorplan.svg"];
+/** The app's per-visit room names (AppCore VisitRoomNames), at the visit folder's root. */
+const ROOM_NAMES_FILE = "room-names.json";
 
 export const BUNDLE_ID = "com.hellochapter.capture";
 export const REMOTE_ROOT = "Library/Application Support/FieldTestVisits";
@@ -511,6 +513,15 @@ async function analyzeVisit(visitRel) {
     }
   }
 
+  // The operator's room names (the app's <visit>/room-names.json), per capture id; the raw
+  // scan's Floorplan is drawn with them, as the phone draws it.
+  let roomNames = null;
+  const roomNamesFile = files.find((f) => f.parts.length === 1 && f.parts[0] === ROOM_NAMES_FILE);
+  if (roomNamesFile) {
+    const parsed = await readJson(path.join(abs, ...roomNamesFile.parts), 1024 * 1024);
+    if (parsed.value && typeof parsed.value === "object") roomNames = parsed.value;
+  }
+
   let photoRecords = [];
   if (photoRecordsFile) {
     const parsed = await readJson(path.join(abs, ...photoRecordsFile.parts));
@@ -562,6 +573,7 @@ async function analyzeVisit(visitRel) {
     photoRecords,
     record,
     recordPath,
+    roomNames,
   };
 }
 
@@ -1731,7 +1743,7 @@ function floorplanSources(a, c) {
       id: "roomplan",
       label: "Raw scan (as on the phone)",
       path: rel(raw.file),
-      detail: `roomplan.json of ${where}, mapped now with the current code (as the phone's scan viewer does)`,
+      detail: `roomplan.json of ${where}, mapped now with the current code and the operator's room names (as the phone's scan viewer does)`,
     });
   }
   const model = captureModelSource(a, c);
@@ -1750,15 +1762,60 @@ function floorplanSources(a, c) {
   return out;
 }
 
-/** Address and units as the capture record gives them (imperial when it does not say). */
+/** "room-mexico" -> "Room Mexico", as the phone titles a scan whose capture record it lacks. */
+export function areaTitle(areaKey) {
+  return String(areaKey)
+    .split(/[-_]/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+/**
+ * The operator's names for the rooms of one capture, from the parsed room-names.json of its
+ * visit ({ version, captures: { <captureId>: [{ roomId, derivedLabel, name, footprint? }] } }):
+ * well-formed entries only, with just those fields; [] when there are none.
+ */
+export function roomNamesForCapture(value, captureId) {
+  const list = value?.captures?.[captureId];
+  if (!Array.isArray(list)) return [];
+  const text = (v, max) =>
+    typeof v === "string" && v.trim().length > 0 && v.length <= max ? v : null;
+  const out = [];
+  for (const entry of list.slice(0, 500)) {
+    if (!entry || typeof entry !== "object") continue;
+    const roomId = text(entry.roomId, 128);
+    const derivedLabel = text(entry.derivedLabel, 200);
+    const name = text(entry.name, 200);
+    if (!roomId || !derivedLabel || !name) continue;
+    const item = { roomId, derivedLabel, name };
+    const f = entry.footprint;
+    if (f && typeof f === "object") {
+      const n = [f.areaM2, f.centerX, f.centerZ];
+      if (!n.every((x) => typeof x === "number" && Number.isFinite(x))) continue;
+      item.footprint = { areaM2: f.areaM2, centerX: f.centerX, centerZ: f.centerZ };
+    }
+    out.push(item);
+  }
+  return out;
+}
+
+/**
+ * Address and units as the capture record gives them (imperial when it does not say), and what
+ * the raw scan is mapped with, as the phone's scan viewer maps it: the capture's label (from the
+ * capture record, else the area key as the phone titles it) and the operator's room names.
+ */
 function floorplanOptions(a, c) {
   const rec = recordCaptures(a.record).find((r) => r.captureId === c.captureId);
   const formatted = a.record?.address?.formatted;
   const address = typeof formatted === "string" ? formatted.trim().slice(0, 300) : "";
+  const recorded = typeof rec?.label === "string" ? rec.label.trim().slice(0, 200) : "";
   return {
     title: "Floorplan",
     address: address || null,
     units: rec?.units?.display === "metric" ? "metric" : "imperial",
+    label: recorded || areaTitle(c.areaKey) || "Scan",
+    roomNames: roomNamesForCapture(a.roomNames, c.captureId),
   };
 }
 
@@ -1950,6 +2007,12 @@ async function renderFloorplan({ key, bytes, source, options, version, downloadN
     await fsp.writeFile(input, bytes, { mode: 0o600 });
     const args = [input, tmp, "--units", options.units, "--title", options.title];
     if (options.address) args.push("--address", options.address);
+    if (options.label) args.push("--label", options.label);
+    if (options.roomNames?.length) {
+      const names = path.join(inputDir, "room-names.json");
+      await fsp.writeFile(names, JSON.stringify(options.roomNames), { mode: 0o600 });
+      args.push("--room-names", names);
+    }
     const r = await withRenderSlot(() =>
       run(PLAN_RENDER_BIN, args, { timeoutMs: RENDER_TIMEOUT_MS }),
     );

@@ -8,9 +8,12 @@
   /// Subject, then "Save and take next".
   public struct PhotoLabelingView: View {
     @Bindable var model: PhotoLabelingModel
+    let onRenameRooms: (() -> Void)?
 
-    public init(model: PhotoLabelingModel) {
+    /// `onRenameRooms`, when given, adds "Rename rooms" next to the Room caption.
+    public init(model: PhotoLabelingModel, onRenameRooms: (() -> Void)? = nil) {
       self.model = model
+      self.onRenameRooms = onRenameRooms
     }
 
     // The labels scroll and "Save and take next" stays pinned at the bottom: with "More…" open,
@@ -18,10 +21,16 @@
     public var body: some View {
       ScrollView {
         VStack(alignment: .leading, spacing: FieldTheme.space16) {
-          HStack {
-            Text(model.title).font(FieldTheme.headline)
+          HStack(alignment: .firstTextBaseline) {
+            // "Closet · Photo 7 of Room Mexico" when opened for the Closet from the checklist,
+            // as on the viewfinder.
+            Text(model.headerTitle)
+              .font(FieldTheme.headline)
+              .fixedSize(horizontal: false, vertical: true)
+              .accessibilityIdentifier("photo.labelTitle")
             Spacer()
             Text("Original kept").font(FieldTheme.caption).foregroundStyle(FieldTheme.muted)
+              .fixedSize()
           }
 
           photo
@@ -66,12 +75,24 @@
         .accessibilityLabel("Photo just taken")
     }
 
+    /// Room chips, a dot on each room that still needs a photo (the checklist's rule), and
+    /// "Rename rooms" for a room the scan named wrong ("Closet" that is a shower).
     private var roomSection: some View {
       VStack(alignment: .leading, spacing: FieldTheme.space8) {
-        FieldCaption(text: "Room")
+        HStack(alignment: .center) {
+          FieldCaption(text: "Room")
+          Spacer()
+          if let onRenameRooms {
+            InlineAction(title: "Rename rooms", action: onRenameRooms)
+              .accessibilityIdentifier("photo.renameRooms")
+          }
+        }
+        .frame(minHeight: onRenameRooms == nil ? nil : FieldTheme.chipHeight)
         FlowLayout {
           ForEach(model.primaryRooms, id: \.self) { room in
-            ChoiceChip(title: room, isSelected: model.draft.room == room) {
+            ChoiceChip(
+              title: room, isSelected: model.draft.room == room, needsPhoto: model.needsPhoto(room)
+            ) {
               model.chooseRoom(room)
             }
           }
@@ -82,7 +103,10 @@
         if model.showsAllRooms {
           FlowLayout {
             ForEach(model.otherRooms, id: \.self) { room in
-              ChoiceChip(title: room, isSelected: model.draft.room == room) {
+              ChoiceChip(
+                title: room, isSelected: model.draft.room == room,
+                needsPhoto: model.needsPhoto(room)
+              ) {
                 model.chooseRoom(room)
               }
             }
@@ -92,7 +116,28 @@
             .submitLabel(.done)
             .onSubmit { model.useOtherRoom() }
         }
+        if !model.coverage.rooms.isEmpty {
+          coverageLine
+        }
       }
+    }
+
+    /// "Still needs a photo: Shower" under the chips, its dot the chips' dot.
+    private var coverageLine: some View {
+      Label {
+        Text(model.coverage.text)
+      } icon: {
+        if model.coverage.isComplete {
+          Image(systemName: "checkmark.circle")
+        } else {
+          Circle().fill(FieldTheme.blocked).frame(width: 7, height: 7)
+        }
+      }
+      .font(FieldTheme.caption)
+      .foregroundStyle(FieldTheme.muted)
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel(model.coverage.text)
+      .accessibilityIdentifier("photo.labelCoverage")
     }
 
     private var directionSection: some View {

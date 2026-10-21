@@ -1,6 +1,7 @@
 import AppCore
 import CaptureContract
 import CaptureCore
+import CaptureModelMapping
 import FieldKitUI
 import FieldRules
 import Foundation
@@ -22,6 +23,9 @@ final class VisitModel {
   private(set) var isSealing = false
   private(set) var message: String? = nil
   private(set) var upload: UploadSnapshot? = nil
+  /// The rooms of every capture with the operator's names (kept in the visit's
+  /// `room-names.json`). Observed: a rename redraws the checklist and the photo step.
+  private(set) var rooms: VisitRooms
 
   @ObservationIgnored let services: AppServices
   @ObservationIgnored let workspace: VisitWorkspace
@@ -31,7 +35,6 @@ final class VisitModel {
   @ObservationIgnored private let builder: VisitPackageBuilder
   @ObservationIgnored private let appInfo: CaptureRecord.AppInfo
   @ObservationIgnored private var controls: FieldControls? = nil
-  @ObservationIgnored private var rooms: [LowercaseUUID: [String]] = [:]
   @ObservationIgnored private var scans: [LowercaseUUID: ScanMeasurements?] = [:]
   @ObservationIgnored private var uploadPackageId: LowercaseUUID? = nil
 
@@ -48,6 +51,8 @@ final class VisitModel {
       CaptureRecord.AppInfo.from(bundle: .main)
       ?? CaptureRecord.AppInfo(version: "0.0.0", build: "0")
     builder = VisitPackageBuilder(workspace: workspace, appVersion: appInfo.version)
+    // Names already given in this visit's folder (none for a new visit).
+    rooms = VisitRooms(builder: builder)
     captureModel = makeCaptureModel(draft: newDraft())
   }
 
@@ -79,7 +84,8 @@ final class VisitModel {
   /// Where every visit on this phone is kept ("My scans").
   var visitsRoot: URL? { app?.visitsRoot }
 
-  /// This visit's scans, in capture order, for review before upload.
+  /// This visit's scans, in capture order, for review before upload, with the operator's room
+  /// names.
   var scanItems: [ScanItem] {
     let address = flow.record?.address.formatted
     return (flow.record?.captures ?? []).compactMap { capture in
@@ -89,7 +95,8 @@ final class VisitModel {
           .appendingPathComponent(capture.areaKey, isDirectory: true)
           .appendingPathComponent(capture.captureId.rawValue, isDirectory: true),
         title: capture.label, address: address, displayUnits: capture.units.display,
-        capturedAt: capture.capturedAt.date)
+        capturedAt: capture.capturedAt.date,
+        roomNames: rooms.names.names(for: capture.captureId))
     }
   }
 
@@ -101,8 +108,9 @@ final class VisitModel {
       if controls == nil {
         controls = FieldControlsEditor(visitId: record.visitId).controls
       }
-      let model = try? builder.captureModel(of: capture, visitId: record.visitId)
-      rooms[capture.captureId] = model?.rooms.map(\.label) ?? []
+      // The capture model with the visit's room names (a new capture has none yet; the scan's
+      // own model in `result` never has them, so it is mapped here).
+      let model = try? rooms.load(capture, visitId: record.visitId)
       scans[capture.captureId] = model.map(ScanMeasurements.init(model:))
       openPhotos(captureId: capture.captureId, room: nil)
       message = nil
@@ -117,7 +125,77 @@ final class VisitModel {
     FieldCaptureOption(
       ref: FieldControls.CaptureRef(captureId: capture.captureId, areaKey: capture.areaKey),
       label: capture.label, mode: capture.mode, capturedAt: capture.capturedAt,
-      rooms: rooms[capture.captureId] ?? [], scan: scans[capture.captureId] ?? nil)
+      rooms: rooms.labels(of: capture.captureId), scan: scans[capture.captureId] ?? nil)
+  }
+
+  // MARK: Room names
+
+  /// The "Rename rooms" sheet: the rooms of `captureId` (from the photo step), or of every
+  /// capture (from the checklist), each marked when it still needs a photo. From the photo
+  /// step it opens at the room the camera was opened for, else at the first room without a
+  /// photo; from the checklist at the first room "A photo for every room" names ("Closet has no
+  /// photo"). Nil when there is no room to rename.
+  func roomNamingDraft(captureId: LowercaseUUID?) -> RoomNamingDraft? {
+    let captures = flow.captures.filter { captureId == nil || $0.captureId == captureId }
+    var focus: (captureId: LowercaseUUID, room: String)?
+    if let captureId {
+      if let model = photoModel, model.capture.ref.captureId == captureId,
+        let room = model.targetRoom ?? model.coverage.roomsWithoutPhoto.first
+      {
+        focus = (captureId, room)
+      }
+    } else if let item = checklist?.item(.photoPerRoom) {
+      for gap in item.gaps {
+        guard case .roomWithoutPhoto(let captureLabel, let room) = gap,
+          let capture = flow.captures.first(where: { $0.label == captureLabel })
+        else { continue }
+        focus = (capture.captureId, room)
+        break
+      }
+    }
+    let draft = rooms.draft(for: captures, photos: photoStore.records, focus: focus)
+    return draft.isEmpty ? nil : draft
+  }
+
+  /// Saves the sheet's names: the visit's `room-names.json`, the capture models (and so the
+  /// Floorplan, reports and checklist), the photos already labeled with an old name, and the
+  /// field controls measured in a renamed room (`field-controls.json`). The photo step's chips
+  /// follow at once. Returns an error message for the sheet, nil when saved.
+  func renameRooms(_ renames: [RoomRename]) -> String? {
+    guard let record = flow.record, !renames.isEmpty else { return nil }
+    let before = rooms.rooms
+    let refs = flow.captures.map {
+      FieldControls.CaptureRef(captureId: $0.captureId, areaKey: $0.areaKey)
+    }
+    let root = workspace.controlsRoot
+    do {
+      let result = try rooms.rename(
+        renames, captures: record.captures, visitId: record.visitId, photos: photoStore,
+        controls: controls,
+        writeControls: { next in
+          try FieldControlsFile.write(next, intoPackageRoot: root, knownCaptures: refs)
+        })
+      for (captureId, model) in result.models {
+        scans[captureId] = ScanMeasurements(model: model)
+      }
+      if let next = result.controls {
+        controls = next
+        // The controls screen is rebuilt from the controls whenever it opens; one built
+        // already gets the new rooms and names now.
+        if controlsModel != nil { openControls() }
+      }
+      if let photoModel {
+        let captureId = photoModel.capture.ref.captureId
+        photoModel.roomsRenamed(
+          rooms: rooms.labels(of: captureId),
+          renames: VisitRooms.labelChanges(
+            before: before[captureId] ?? [], after: rooms.rooms[captureId] ?? []))
+      }
+      message = nil
+      return nil
+    } catch {
+      return "The names could not be saved: \(String(describing: error))"
+    }
   }
 
   private func openPhotos(captureId: LowercaseUUID, room: String?) {
@@ -159,10 +237,14 @@ final class VisitModel {
 
   var checklist: ChecklistReport? {
     guard let record = flow.record, let controls else { return nil }
+    var capturedRooms: [LowercaseUUID: [String]] = [:]
+    for capture in record.captures {
+      capturedRooms[capture.captureId] = rooms.labels(of: capture.captureId)
+    }
     return ChecklistRules.evaluate(
       ChecklistInput(
-        record: record, capturedRooms: rooms, photos: photoStore.records, controls: controls,
-        noRoomsSkippedConfirmed: flow.noRoomsSkippedConfirmed))
+        record: record, capturedRooms: capturedRooms, photos: photoStore.records,
+        controls: controls, noRoomsSkippedConfirmed: flow.noRoomsSkippedConfirmed))
   }
 
   /// "No rooms skipped" on the checklist. The tap is kept in `flow` (observed), so the checklist
@@ -213,9 +295,13 @@ final class VisitModel {
     message = nil
     let builder = self.builder
     let photos = photoStore.records
+    let roomNames = rooms.names
     Task {
       let result = await Task.detached {
-        Result { try builder.plan(record: record, photos: photos, controls: controls) }
+        Result {
+          try builder.plan(
+            record: record, photos: photos, controls: controls, roomNames: roomNames)
+        }
       }.value
       isBuilding = false
       switch result {

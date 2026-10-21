@@ -244,14 +244,19 @@ extension CaptureModelMapper {
     var model = CaptureModel(
       visitId: context.visitId, captureId: context.captureId, areaKey: context.areaKey,
       label: context.label, refs: context.refs)
+    let typings = split.rooms.map(\.typing)
     let labels = RoomTyping.labels(
-      for: split.rooms.map(\.typing), captureLabel: context.label, overrides: context.roomLabels)
+      for: typings, captureLabel: context.label, overrides: context.roomLabels)
+    // A room the operator renamed ("Shower" for what the shape called a closet) takes the type
+    // the name says; the labels above keep the scan's numbering.
+    let types = RoomTyping.renamedByOperator(
+      typings, captureLabel: context.label, overrides: context.roomLabels)
     for (index, splitRoom) in split.rooms.enumerated() {
       model.rooms.append(
         CaptureModel.Room(
           id: "room-\(index + 1)", label: labels[index],
           polygon: splitRoom.polygon.map(\.contractVec3), heightM: splitRoom.heightM.cleaned,
-          type: splitRoom.typing.type, typeSource: splitRoom.typing.source))
+          type: types[index].type, typeSource: types[index].source))
     }
     for (index, piece) in split.wallPieces.enumerated() {
       let surface = room.walls[piece.sourceWall]

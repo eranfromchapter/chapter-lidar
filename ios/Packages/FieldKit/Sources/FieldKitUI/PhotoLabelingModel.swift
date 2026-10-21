@@ -9,7 +9,8 @@
   /// A photo is taken, shown, labeled with room, direction and subject, then saved unchanged.
   @MainActor @Observable
   public final class PhotoLabelingModel {
-    public let capture: FieldCaptureOption
+    /// The capture; its rooms change when the operator renames them (`roomsRenamed`).
+    public private(set) var capture: FieldCaptureOption
     public let store: PhotoRecordStore
 
     /// The photo just taken, not yet saved: the original bytes exactly as the camera delivered.
@@ -23,6 +24,12 @@
     public private(set) var errorMessage: String?
     /// Photos saved so far in this capture (drives the "Photo 14" counter).
     public private(set) var savedCount: Int
+    /// The room the operator came for when the camera was opened from the checklist ("Take
+    /// photo" on "Shower has no photo"); nil otherwise.
+    public private(set) var targetRoom: String?
+    /// Which rooms of this capture still need a photo: the checklist's rule
+    /// (`PhotoCoverage`), kept up to date as photos are saved and rooms renamed.
+    public private(set) var coverage: PhotoCoverage.Status
 
     private let capturePhoto: @Sendable () async throws -> Data
     private let now: @Sendable () -> UTCTimestamp
@@ -44,6 +51,10 @@
       self.capturePhoto = capturePhoto
       self.now = now
       self.savedCount = store.records(captureId: capture.ref.captureId).count
+      let target = initialRoom?.trimmingCharacters(in: .whitespacesAndNewlines)
+      self.targetRoom = target?.isEmpty == false ? target : nil
+      self.coverage = PhotoCoverage.status(
+        rooms: capture.rooms, photos: store.records(captureId: capture.ref.captureId))
     }
 
     /// Number shown in "Photo 14 of Floor 1": the photo being labeled, or the next to take.
@@ -51,9 +62,20 @@
 
     public var title: String { "Photo \(photoNumber) of \(capture.label)" }
 
-    /// Room chips: up to three rooms, then More.
-    public var primaryRooms: [String] { Array(capture.rooms.prefix(3)) }
-    public var otherRooms: [String] { Array(capture.rooms.dropFirst(3)) }
+    /// The title of the viewfinder and the labeling screen: "Shower · Photo 16 of Room Mexico"
+    /// when the camera was opened for a room from the checklist, else `title`.
+    public var headerTitle: String {
+      guard let targetRoom else { return title }
+      return "\(targetRoom) \u{00B7} \(title)"
+    }
+
+    /// Room chips: up to three rooms, and the room the operator came for when it is further
+    /// down the list (`RoomChips`), then More.
+    public var primaryRooms: [String] { RoomChips.primary(capture.rooms, target: targetRoom) }
+    public var otherRooms: [String] { RoomChips.more(capture.rooms, target: targetRoom) }
+
+    /// True when the checklist still asks a photo of `room`.
+    public func needsPhoto(_ room: String) -> Bool { coverage.needsPhoto(room) }
 
     public var canSave: Bool { pendingOriginal != nil && draft.isComplete }
 
@@ -103,6 +125,7 @@
         showsMoreSubjects = false
         savedCount = store.records(captureId: capture.ref.captureId).count
         errorMessage = nil
+        refreshCoverage()
       } catch {
         errorMessage = userMessage(for: error)
       }
@@ -112,6 +135,26 @@
     public func discardPending() {
       pendingOriginal = nil
       takenAt = nil
+    }
+
+    /// The operator renamed rooms of this capture (the photo already labeled with an old name
+    /// was relabeled by the app): the Room chips become `rooms`, and the chosen room and the
+    /// room the operator came for follow their new names. A photo being labeled is kept.
+    public func roomsRenamed(rooms: [String], renames: [(from: String, to: String)]) {
+      func renamed(_ room: String?) -> String? {
+        guard let room else { return nil }
+        let key = PhotoCoverage.key(room)
+        return renames.first { PhotoCoverage.key($0.from) == key }?.to ?? room
+      }
+      capture.rooms = rooms
+      draft.room = renamed(draft.room)
+      targetRoom = renamed(targetRoom)
+      refreshCoverage()
+    }
+
+    private func refreshCoverage() {
+      coverage = PhotoCoverage.status(
+        rooms: capture.rooms, photos: store.records(captureId: capture.ref.captureId))
     }
   }
 #endif

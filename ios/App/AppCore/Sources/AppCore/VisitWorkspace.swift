@@ -10,6 +10,9 @@ import Foundation
 ///   models, plan and mesh exports). A new draft folder per build; nothing is overwritten.
 /// - `packages/<packageId>/`: sealed, read-only packages, with `<packageId>.upload-state.json`
 ///   next to each.
+/// - `room-names.json`: the operator's names for rooms of the captures (`VisitRoomNames`).
+///   App-private: it is not in the package, whose capture models and photo labels carry the
+///   names.
 ///
 /// Nothing in the app deletes any of these folders (there is no delete in v1).
 public struct VisitWorkspace: Equatable, Sendable {
@@ -32,6 +35,8 @@ public struct VisitWorkspace: Equatable, Sendable {
   public var controlsRoot: URL { folder("controls") }
   public var draftsRoot: URL { folder("drafts") }
   public var packagesRoot: URL { folder("packages") }
+  /// The operator's room names (`VisitRoomNames`).
+  public var roomNamesURL: URL { root.appendingPathComponent(VisitRoomNames.fileName) }
 
   /// Where a package is assembled and sealed.
   public func packageURL(packageId: String) -> URL {

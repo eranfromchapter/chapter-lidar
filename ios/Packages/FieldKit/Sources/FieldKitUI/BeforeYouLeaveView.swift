@@ -8,11 +8,16 @@
   /// "No rooms skipped" appears on the skipped-rooms row only when no room note exists and the
   /// operator has not confirmed yet, and only when `onConfirmNoRoomsSkipped` is given. The caller
   /// records the tap (`NoRoomsSkippedConfirmation.confirm(for:)`) and rebuilds the report.
+  ///
+  /// "Rename rooms" sits on the photo row, failed or passed, when `onRenameRooms` is given: a room
+  /// the scan named wrong ("Closet" that is a shower) is renamed instead of photographed under
+  /// the wrong name.
   public struct BeforeYouLeaveView: View {
     let report: ChecklistReport
     let onTakePhoto: (ChecklistItem) -> Void
     let onAddControls: (ChecklistItem) -> Void
     let onConfirmNoRoomsSkipped: (() -> Void)?
+    let onRenameRooms: (() -> Void)?
     let onFinish: () -> Void
 
     public init(
@@ -20,12 +25,14 @@
       onTakePhoto: @escaping (ChecklistItem) -> Void,
       onAddControls: @escaping (ChecklistItem) -> Void,
       onConfirmNoRoomsSkipped: (() -> Void)? = nil,
+      onRenameRooms: (() -> Void)? = nil,
       onFinish: @escaping () -> Void
     ) {
       self.report = report
       self.onTakePhoto = onTakePhoto
       self.onAddControls = onAddControls
       self.onConfirmNoRoomsSkipped = onConfirmNoRoomsSkipped
+      self.onRenameRooms = onRenameRooms
       self.onFinish = onFinish
     }
 
@@ -63,10 +70,25 @@
         VStack(alignment: .leading, spacing: item.passed ? 2 : 6) {
           Text(item.title).font(FieldTheme.rowTitle)
           Text(item.detail).font(FieldTheme.caption).foregroundStyle(FieldTheme.muted)
+          if item.passed, item.id == .photoPerRoom, let onRenameRooms {
+            // The 44 pt target reaches into the row's padding, so the row stays as compact as
+            // the others.
+            InlineAction(title: "Rename rooms", action: onRenameRooms)
+              .padding(.leading, -FieldTheme.space4)
+              .padding(.vertical, -FieldTheme.space8)
+              .padding(.top, FieldTheme.space4)
+              .accessibilityIdentifier("checklist.renameRooms")
+          }
           if !item.passed {
             switch item.id {
             case .photoPerRoom:
-              OutlineButton(title: "Take photo") { onTakePhoto(item) }
+              HStack(spacing: FieldTheme.space12) {
+                OutlineButton(title: "Take photo") { onTakePhoto(item) }
+                if let onRenameRooms {
+                  InlineAction(title: "Rename rooms", action: onRenameRooms)
+                    .accessibilityIdentifier("checklist.renameRooms")
+                }
+              }
             case .minimumControls:
               OutlineButton(title: "Add controls") { onAddControls(item) }
             case .skippedRoomsRecorded:

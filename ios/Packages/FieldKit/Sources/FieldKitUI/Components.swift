@@ -65,10 +65,15 @@
   }
 
   /// A selectable chip: ink with light text when selected, nude otherwise. At least 44 pt tall.
+  /// `needsPhoto` puts a small dot in the chip's top right corner (blocked red, light on the
+  /// selected chip) and "needs photo" in the accessibility value: a room the checklist still
+  /// asks a photo of. The dot sits in the chip's padding, so the chip is as wide as without it
+  /// and the chips wrap as they do without dots.
   struct ChoiceChip: View {
     let title: String
     let isSelected: Bool
     var horizontalPadding: CGFloat = 14
+    var needsPhoto = false
     let action: () -> Void
 
     var body: some View {
@@ -79,10 +84,40 @@
           .frame(minHeight: FieldTheme.chipHeight)
           .foregroundStyle(isSelected ? FieldTheme.surface : FieldTheme.ink)
           .background(isSelected ? FieldTheme.ink : FieldTheme.nude)
+          .overlay(alignment: .topTrailing) {
+            if needsPhoto {
+              Circle()
+                .fill(isSelected ? FieldTheme.surface : FieldTheme.blocked)
+                .frame(width: 7, height: 7)
+                .padding(5)
+                .accessibilityHidden(true)
+            }
+          }
           .clipShape(RoundedRectangle(cornerRadius: FieldTheme.chipRadius))
       }
       .buttonStyle(.plain)
       .accessibilityAddTraits(isSelected ? .isSelected : [])
+      .accessibilityValue(needsPhoto ? Text("needs photo") : Text(""))
+    }
+  }
+
+  /// A quiet text action with an icon, at least 44 pt tall: "Rename rooms" next to a checklist
+  /// row's main action and above the Room chips.
+  struct InlineAction: View {
+    let title: String
+    var systemImage = "pencil"
+    let action: () -> Void
+
+    var body: some View {
+      Button(action: action) {
+        Label(title, systemImage: systemImage)
+          .font(FieldTheme.chip)
+          .foregroundStyle(FieldTheme.ink)
+          .padding(.horizontal, FieldTheme.space4)
+          .frame(minHeight: FieldTheme.chipHeight)
+          .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
     }
   }
 

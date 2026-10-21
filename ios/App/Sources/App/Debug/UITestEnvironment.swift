@@ -66,24 +66,28 @@
     }
   }
 
-  /// Stand-in for the camera viewfinder in UI tests: "Take photo" returns the fixture photo, then
-  /// the real labeling screen (PhotoLabelingView) is shown.
+  /// The camera viewfinder in UI tests: the real viewfinder screen (`PhotoViewfinder`: title,
+  /// Rooms, Done, the rooms that still need a photo, the shutter) over a stand-in for the camera
+  /// image; "Take photo" returns the fixture photo, then the real labeling screen is shown.
   struct UITestViewfinder: View {
     let model: PhotoLabelingModel
     let onDone: () -> Void
+    let onRenameRooms: (() -> Void)?
 
     var body: some View {
       if model.pendingOriginal == nil {
-        VStack(spacing: 24) {
-          Text(model.title).font(ChapterTokens.Typography.headline)
-          Button("Take photo") { Task { await model.takePhoto() } }
-            .frame(minHeight: 52)
-          Button("Done", action: onDone).frame(minHeight: 44)
+        PhotoViewfinder(model: model, onDone: onDone, onRenameRooms: onRenameRooms) {
+          ZStack {
+            LinearGradient(
+              colors: [Color(white: 0.30), Color(white: 0.16)], startPoint: .top,
+              endPoint: .bottom)
+            Label("Simulator: the fixture photo stands in for the camera", systemImage: "camera")
+              .font(ChapterTokens.Typography.caption)
+              .foregroundStyle(Color.white.opacity(0.7))
+          }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(ChapterTokens.Palette.ground)
       } else {
-        PhotoLabelingView(model: model)
+        PhotoLabelingView(model: model, onRenameRooms: onRenameRooms)
       }
     }
   }

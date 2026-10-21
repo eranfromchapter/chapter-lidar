@@ -137,6 +137,101 @@ public struct FieldControlsEditor: Hashable, Sendable {
     return controls != before
   }
 
+  // MARK: Room renames
+
+  /// Follows a rename of rooms of capture `captureId`, so the controls keep naming the capture
+  /// model's rooms. `labels` are the capture's room labels before the rename and `renames` the
+  /// labels that changed (old label to new), as the capture model has them. Labels are compared
+  /// as the station's scale check compares them (`labelKey(_:)`).
+  /// - A ceiling height or an opening whose room is an old label gets the new label, and the id
+  ///   it would get if it were measured now, unless another control already has that id.
+  /// - A long distance's From or To that starts with a room label (the longest of `labels` that
+  ///   does, as the scale check reads it) that was renamed starts with the new label instead:
+  ///   "Closet west wall" becomes "Shower west wall". A text that would grow past 200
+  ///   characters is left as it is.
+  /// All renames apply at once to the labels as they were, so two rooms can swap names. Other
+  /// captures' controls, floor-to-floor levels and landmarks are not touched. Returns true when
+  /// a control changed.
+  @discardableResult
+  public mutating func renameRooms(
+    captureId: LowercaseUUID, labels: [String], renames: [(from: String, to: String)]
+  ) -> Bool {
+    var targets: [String: String] = [:]
+    for rename in renames {
+      let from = Self.labelKey(rename.from)
+      let to = rename.to.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !from.isEmpty, !to.isEmpty, targets[from] == nil else { continue }
+      targets[from] = to
+    }
+    guard !targets.isEmpty else { return false }
+    let roomKeys = Set((labels + renames.map(\.from)).map(Self.labelKey).filter { !$0.isEmpty })
+    let before = controls
+
+    func renamedRoom(_ room: String) -> String? {
+      guard let to = targets[Self.labelKey(room)], to != room else { return nil }
+      return to
+    }
+    /// The text with its leading room label renamed, or nil when it names no renamed room.
+    func renamedPlace(_ text: String) -> String? {
+      let subject = Self.labelKey(text)
+      var best = ""
+      for key in roomKeys
+      where key.count > best.count && (subject == key || subject.hasPrefix(key + " ")) {
+        best = key
+      }
+      guard !best.isEmpty, let to = targets[best] else { return nil }
+      let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+      let words = trimmed.split(whereSeparator: \.isWhitespace)
+      let count = best.split(separator: " ").count
+      guard words.count >= count else { return nil }
+      let result = words.count == count ? to : to + " " + trimmed[words[count].startIndex...]
+      guard result != text, result.count <= 200 else { return nil }
+      return result
+    }
+    func taken(_ id: String, except old: String) -> Bool {
+      id != old
+        && (controls.distances.contains { $0.id == id }
+          || controls.ceilingHeights.contains { $0.id == id }
+          || controls.openings.contains { $0.id == id }
+          || controls.floorToFloor.contains { $0.id == id }
+          || controls.landmarks.contains { $0.id == id })
+    }
+
+    for index in controls.distances.indices
+    where controls.distances[index].capture.captureId == captureId {
+      if let from = renamedPlace(controls.distances[index].from) {
+        controls.distances[index].from = from
+      }
+      if let to = renamedPlace(controls.distances[index].to) { controls.distances[index].to = to }
+    }
+    for index in controls.ceilingHeights.indices
+    where controls.ceilingHeights[index].capture.captureId == captureId {
+      let item = controls.ceilingHeights[index]
+      guard let room = renamedRoom(item.room) else { continue }
+      var id = "\(item.capture.areaKey)-ceiling-\(Self.slug(room))"
+      if let location = item.location { id += "-\(Self.slug(location))" }
+      controls.ceilingHeights[index].room = room
+      if !taken(id, except: item.id) { controls.ceilingHeights[index].id = id }
+    }
+    for index in controls.openings.indices
+    where controls.openings[index].capture.captureId == captureId {
+      let item = controls.openings[index]
+      guard let room = renamedRoom(item.room) else { continue }
+      let id = "\(item.capture.areaKey)-opening-\(Self.slug(room))-\(Self.slug(item.label))"
+      controls.openings[index].room = room
+      if !taken(id, except: item.id) { controls.openings[index].id = id }
+    }
+    return controls != before
+  }
+
+  /// A room label as the station's scale check compares labels (`normalizeLabel` in
+  /// station/checks scale.ts): compatibility forms folded (NFKC), lower case, runs of white
+  /// space as one space, none at either end.
+  public static func labelKey(_ text: String) -> String {
+    text.precomposedStringWithCompatibilityMapping.lowercased()
+      .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+  }
+
   // MARK: Helpers
 
   private static func upsert<Item>(

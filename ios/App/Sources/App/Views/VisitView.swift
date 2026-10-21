@@ -1,8 +1,10 @@
 import AppCore
+import CaptureContract
 import CaptureCore
 import CaptureRoomPlan
 import CaptureUI
 import FieldKitUI
+import FieldRules
 import SwiftUI
 
 private typealias Palette = ChapterTokens.Palette
@@ -14,11 +16,16 @@ private typealias Radius = ChapterTokens.Radius
 /// The visit's screens in the order of the frozen design.
 struct VisitView: View {
   let visit: VisitModel
+  /// "Rename rooms", from the photo step (that capture) or the checklist (every capture).
+  @State private var renaming: RoomNamingDraft?
 
   var body: some View {
     ZStack {
       Palette.ground.ignoresSafeArea()
       content
+    }
+    .sheet(item: $renaming) { draft in
+      RoomNamesSheet(draft: draft) { visit.renameRooms($0) }
     }
     .overlay(alignment: .bottom) {
       if let message = visit.message {
@@ -50,7 +57,10 @@ struct VisitView: View {
         }
       case .photos:
         if let model = visit.photoModel {
-          PhotoStep(model: model, source: visit.services.photoSource) { visit.photosDone() }
+          PhotoStep(
+            model: model, source: visit.services.photoSource,
+            onDone: { visit.photosDone() },
+            onRenameRooms: renameAction(captureId: model.capture.ref.captureId))
         }
       case .controls:
         if let model = visit.controlsModel {
@@ -69,6 +79,7 @@ struct VisitView: View {
             report: report, onTakePhoto: { visit.checklistTakePhoto($0) },
             onAddControls: { _ in visit.checklistAddControls() },
             onConfirmNoRoomsSkipped: { visit.checklistConfirmNoRoomsSkipped() },
+            onRenameRooms: renameAction(captureId: nil),
             onFinish: { visit.checklistFinished() })
         }
       case .packageReady:
@@ -77,6 +88,13 @@ struct VisitView: View {
         ProgressView()
       }
     }
+  }
+
+  /// Opens "Rename rooms" for one capture, or every capture when `captureId` is nil; nil (no
+  /// button) when there is no room to rename.
+  private func renameAction(captureId: LowercaseUUID?) -> (() -> Void)? {
+    guard visit.roomNamingDraft(captureId: captureId) != nil else { return nil }
+    return { renaming = visit.roomNamingDraft(captureId: captureId) }
   }
 }
 
@@ -138,14 +156,16 @@ private struct PhotoStep: View {
   let model: PhotoLabelingModel
   let source: PhotoSource
   let onDone: () -> Void
+  let onRenameRooms: (() -> Void)?
 
   var body: some View {
     switch source {
     case .camera(let camera):
-      PhotoCaptureFlowView(model: model, camera: camera, onDone: onDone)
+      PhotoCaptureFlowView(
+        model: model, camera: camera, onDone: onDone, onRenameRooms: onRenameRooms)
     case .fixed:
       #if DEBUG
-        UITestViewfinder(model: model, onDone: onDone)
+        UITestViewfinder(model: model, onDone: onDone, onRenameRooms: onRenameRooms)
       #else
         EmptyView()
       #endif
