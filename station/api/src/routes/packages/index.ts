@@ -1,19 +1,26 @@
-// Package read routes (contract/openapi/station.yaml):
+// Package routes (contract/openapi/station.yaml):
 //
 //   GET /v1/packages?dealId&visitId          listPackages   capture, bim, admin
 //   GET /v1/packages/{packageId}             getPackage     capture, bim, admin
 //   GET /v1/packages/{packageId}/verdict     getVerdict     capture, bim, admin
 //   GET /v1/packages/{packageId}/files/download?path=
 //                                            getFileDownloadLink   bim, admin
+//   GET /v1/packages/{packageId}/spatial-report
+//                                            getSpatialReportLink  bim, admin (report.ts)
+//   PUT /v1/packages/{packageId}/next-revision
+//                                            putNextRevisionNotice capture, admin
+//                                            (next-revision.ts)
 //
-// Reads only: nothing here writes the registry. The one exception to "nothing is audited" is
-// the download link: every link handed out is audited (download.ts). A packageId that is not a
-// contract UUID is answered 404 (these operations document no 400 for it).
+// The reads write nothing. Every link handed out is audited (download.ts, report.ts), and so
+// is every next-revision notice. A packageId that is not a contract UUID is answered 404
+// (these operations document no 400 for it).
 
 import { validateVerdict } from "@chapter/capture-contract";
 import type { FastifyInstance } from "fastify";
 import { ProblemError } from "../../core/problem.js";
 import { DOWNLOAD_ROLES, issueDownloadLink } from "./download.js";
+import { registerNextRevisionRoutes } from "./next-revision.js";
+import { issueSpatialReportLink } from "./report.js";
 import {
   fileDownloadQuerySchema,
   isContractUuid,
@@ -31,12 +38,14 @@ function packageNotFound(): ProblemError {
 }
 
 export default async function packageRoutes(app: FastifyInstance): Promise<void> {
+  const links = app.config.links;
+
   app.get<{ Querystring: ListPackagesQuery }>(
     "/packages",
     { config: { roles: READ_ROLES }, schema: { querystring: listPackagesQuerySchema } },
     async (request) => {
       const { dealId, visitId } = request.query;
-      return { packages: await listPackages(app.db, dealId, visitId) };
+      return { packages: await listPackages(app.db, links, dealId, visitId) };
     },
   );
 
@@ -48,7 +57,7 @@ export default async function packageRoutes(app: FastifyInstance): Promise<void>
       if (!isContractUuid(packageId)) {
         throw packageNotFound();
       }
-      const found = await getPackage(app.db, packageId);
+      const found = await getPackage(app.db, links, packageId);
       if (found === undefined) {
         throw packageNotFound();
       }
@@ -94,4 +103,12 @@ export default async function packageRoutes(app: FastifyInstance): Promise<void>
     { config: { roles: DOWNLOAD_ROLES }, schema: { querystring: fileDownloadQuerySchema } },
     async (request) => issueDownloadLink(request, request.params.packageId, request.query.path),
   );
+
+  app.get<{ Params: PackageParams }>(
+    "/packages/:packageId/spatial-report",
+    { config: { roles: DOWNLOAD_ROLES } },
+    async (request) => issueSpatialReportLink(request, request.params.packageId),
+  );
+
+  registerNextRevisionRoutes(app);
 }

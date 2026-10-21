@@ -31,6 +31,8 @@ const STATION_TABLES = [
   "hub_publications",
   "modeling_decisions",
   "audit_log",
+  "next_revision_notices",
+  "spatial_reports",
 ];
 
 const UP_MARKER = /^\s*--[\s-]*up\s+migration/im;

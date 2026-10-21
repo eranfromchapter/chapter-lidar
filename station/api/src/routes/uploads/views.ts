@@ -1,5 +1,7 @@
-// Registry rows of packages and package files, and their API shapes (Package, PackageFile,
-// FileCheckResult in contract/openapi/station.yaml). Optional fields are omitted, never null.
+// Registry rows of packages and package files as the upload routes read them, and the
+// FileCheckResult shape (contract/openapi/station.yaml). The Package bodies the upload routes
+// answer with are built by routes/packages/store.ts, like every other package body. Optional
+// fields are omitted, never null.
 
 import type { Queryable } from "../../core/db.js";
 import { toApiDateTime } from "../../core/time.js";
@@ -22,9 +24,6 @@ export interface PackageRow {
   sealed_at: Date | null;
   manifest: Record<string, unknown> | null;
   capture_record: Record<string, unknown> | null;
-  verdict_id: string | null;
-  verdict_outcome: string | null;
-  verdict_evaluated_at: Date | null;
 }
 
 export interface FileRow {
@@ -38,27 +37,27 @@ export interface FileRow {
   actual_sha256: string | null;
   actual_bytes: number | null;
   checked_at: Date | null;
+  verified_at: Date | null;
   blob_name: string | null;
+  /** The superseded package whose verified file this one reuses (carry-over). */
+  carried_over_from: string | null;
 }
 
 export const PACKAGE_COLUMNS = `
   p.package_id, p.visit_id, p.deal_id, p.revision, p.supersedes_package_id, p.status,
-  p.session_request, p.created_at, p.sealed_at, p.manifest, p.capture_record,
-  v.verdict_id, v.outcome AS verdict_outcome, v.evaluated_at AS verdict_evaluated_at`;
+  p.session_request, p.created_at, p.sealed_at, p.manifest, p.capture_record`;
 
 export const FILE_COLUMNS = `
   path, role, capture_id, area_key, sha256, bytes, status, actual_sha256, actual_bytes,
-  checked_at, blob_name`;
+  checked_at, verified_at, blob_name, carried_over_from`;
 
-/** The package row (with its verdict, if any) or undefined. */
+/** The package row or undefined. */
 export async function selectPackage(
   db: Queryable,
   packageId: string,
 ): Promise<PackageRow | undefined> {
   const result = await db.query<PackageRow>(
-    `SELECT ${PACKAGE_COLUMNS}
-       FROM packages p LEFT JOIN verdicts v ON v.package_id = p.package_id
-      WHERE p.package_id = $1`,
+    `SELECT ${PACKAGE_COLUMNS} FROM packages p WHERE p.package_id = $1`,
     [packageId],
   );
   return result.rows[0];
@@ -93,14 +92,6 @@ export function declarationOf(file: FileRow): UploadFileDeclaration {
   };
 }
 
-export function packageFileView(file: FileRow): Record<string, unknown> {
-  return {
-    ...declarationOf(file),
-    status: file.status,
-    ...(file.checked_at === null ? {} : { checkedAt: toApiDateTime(file.checked_at) }),
-  };
-}
-
 export function fileCheckResultView(file: FileRow): Record<string, unknown> {
   if (file.checked_at === null) {
     throw new Error("file check result requested for a file that was never checked");
@@ -113,37 +104,5 @@ export function fileCheckResultView(file: FileRow): Record<string, unknown> {
     expectedBytes: file.bytes,
     ...(file.actual_bytes === null ? {} : { actualBytes: file.actual_bytes }),
     checkedAt: toApiDateTime(file.checked_at),
-  };
-}
-
-export function packageView(row: PackageRow, files: readonly FileRow[]): Record<string, unknown> {
-  const verdict =
-    row.status === "verdict_ready" &&
-    row.verdict_id !== null &&
-    row.verdict_outcome !== null &&
-    row.verdict_evaluated_at !== null
-      ? {
-          verdict: {
-            verdictId: row.verdict_id,
-            outcome: row.verdict_outcome,
-            evaluatedAt: toApiDateTime(row.verdict_evaluated_at),
-          },
-        }
-      : {};
-  return {
-    packageId: row.package_id,
-    visitId: row.visit_id,
-    dealId: row.deal_id,
-    revision: row.revision,
-    ...(row.supersedes_package_id === null
-      ? {}
-      : { supersedesPackageId: row.supersedes_package_id }),
-    status: row.status,
-    createdAt: toApiDateTime(row.created_at),
-    ...(row.sealed_at === null ? {} : { sealedAt: toApiDateTime(row.sealed_at) }),
-    files: inDeclaredOrder(row, files).map(packageFileView),
-    ...(row.manifest === null ? {} : { manifest: row.manifest }),
-    ...(row.capture_record === null ? {} : { captureRecord: row.capture_record }),
-    ...verdict,
   };
 }

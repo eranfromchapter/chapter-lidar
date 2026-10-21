@@ -6,6 +6,7 @@ import {
   describeConfig,
   loadConfig,
   loadDatabaseConfig,
+  loadMaintenanceConfig,
 } from "../../src/core/config.js";
 import { AUDIENCE, SECOND_AUDIENCE, TENANT_ID, testEnv } from "./helpers.js";
 
@@ -337,5 +338,82 @@ describe("HUB live client settings", () => {
     assert.equal(config.hub.mode, "fake");
     assert.equal(config.hub.baseUrl, undefined);
     assert.equal(config.hub.serviceCredential, undefined);
+  });
+});
+
+describe("links and the reports container (OpenAPI 1.1.0)", () => {
+  it("leaves the links unset and the reports container at its default", () => {
+    const config = loadConfig(testEnv());
+    assert.deepEqual(config.links, {});
+    assert.equal(config.storage.reportsContainer, "reports");
+  });
+
+  it("reads REVIEW_BASE_URL, HUB_WEB_DEAL_URL_TEMPLATE and STORAGE_REPORTS_CONTAINER", () => {
+    const config = loadConfig(
+      testEnv({
+        REVIEW_BASE_URL: "https://review.hellochapter.com",
+        HUB_WEB_DEAL_URL_TEMPLATE: "https://hub.hellochapter.com/deals/{dealId}",
+        STORAGE_REPORTS_CONTAINER: "station-reports",
+      }),
+    );
+    assert.deepEqual(config.links, {
+      reviewBaseUrl: "https://review.hellochapter.com",
+      hubDealUrlTemplate: "https://hub.hellochapter.com/deals/{dealId}",
+    });
+    assert.equal(config.storage.reportsContainer, "station-reports");
+    const described = describeConfig(config);
+    assert.equal(described.reportsContainer, "station-reports");
+    assert.equal(described.reviewBaseUrl, "https://review.hellochapter.com");
+  });
+
+  it("refuses non-https links (except loopback), a template without {dealId} and a bad container", () => {
+    const issues = issuesOf(
+      testEnv({
+        REVIEW_BASE_URL: "http://review.example.com",
+        HUB_WEB_DEAL_URL_TEMPLATE: "https://hub.example.com/deals",
+        STORAGE_REPORTS_CONTAINER: "Reports_Bad",
+      }),
+    );
+    for (const name of [
+      "REVIEW_BASE_URL",
+      "HUB_WEB_DEAL_URL_TEMPLATE must contain {dealId}",
+      "STORAGE_REPORTS_CONTAINER",
+    ]) {
+      assert.ok(
+        issues.some((issue) => issue.startsWith(name)),
+        `${name} not reported: ${issues.join("; ")}`,
+      );
+    }
+    assert.ok(
+      issuesOf(testEnv({ HUB_WEB_DEAL_URL_TEMPLATE: "http://hub.example.com/{dealId}" })).some(
+        (issue) => issue.startsWith("HUB_WEB_DEAL_URL_TEMPLATE"),
+      ),
+    );
+    const local = loadConfig(
+      testEnv({
+        REVIEW_BASE_URL: "http://localhost:3000",
+        HUB_WEB_DEAL_URL_TEMPLATE: "http://localhost:4010/deals/{dealId}",
+      }),
+    );
+    assert.equal(local.links.reviewBaseUrl, "http://localhost:3000");
+  });
+});
+
+describe("maintenance scripts (loadMaintenanceConfig)", () => {
+  it("reads the database and storage settings only, and requires storage", () => {
+    const config = loadMaintenanceConfig({
+      DATABASE_URL: "postgres://station@localhost:5432/station",
+      AZURE_STORAGE_CONNECTION_STRING: "AccountName=x;AccountKey=abc123==",
+    });
+    assert.equal(config.database.connection.auth, "url");
+    assert.equal(config.storage.originalsContainer, "originals");
+    assert.ok(!JSON.stringify(config).includes("abc123"));
+    const issues = issuesOf(
+      { DATABASE_URL: "postgres://station@localhost:5432/station" },
+      loadMaintenanceConfig,
+    );
+    assert.deepEqual(issues, [
+      "AZURE_STORAGE_ACCOUNT_URL or AZURE_STORAGE_CONNECTION_STRING is required",
+    ]);
   });
 });

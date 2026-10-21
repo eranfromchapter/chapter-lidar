@@ -10,6 +10,7 @@ export const FIXTURE_DEAL_ADDRESS = "100 Example Street, Testville, NY 00000";
 
 /**
  * The fake HUB's deals. Two have a confirmed address; the third does not and is never returned.
+ * The second one names a project manager.
  */
 export const FAKE_HUB_DEALS: readonly RawHubDeal[] = Object.freeze([
   {
@@ -25,6 +26,8 @@ export const FAKE_HUB_DEALS: readonly RawHubDeal[] = Object.freeze([
     address: "200 Sample Avenue, Testville, NY 00000",
     addressConfirmed: true,
     updatedAt: "2026-09-15T09:30:00Z",
+    projectManagerName: "Pat Fixture",
+    projectManagerPhone: "+1 212 555 0100",
   },
   {
     dealId: "fixture-deal-0003",

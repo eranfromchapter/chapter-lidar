@@ -92,6 +92,8 @@ export class LiveHubClient implements HubClient {
       address: readPath(item, fields.address),
       addressConfirmed: readPath(item, fields.addressConfirmed),
       updatedAt: readPath(item, fields.updatedAt),
+      projectManagerName: readPath(item, this.#mapping.projectManager.name),
+      projectManagerPhone: readPath(item, this.#mapping.projectManager.phone),
     }));
     const { projects, skipped, duplicates } = normalizeDeals(raws);
     if (Object.keys(skipped).length > 0 || duplicates > 0) {

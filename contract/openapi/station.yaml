@@ -171,13 +171,14 @@ paths:
         targets expire. A different body for an existing `packageId` is a conflict (409).
 
         Carry-over (new packages of revision 2 or later): when the station holds the package
-        named by `supersedesPackageId`, it must be the same visit and deal, revision one lower,
-        and no longer uploading; otherwise 422 with code `supersedes_mismatch` (pointer
-        `/supersedesPackageId`). Each declared file whose path, role, capture, SHA-256 and size
-        equal a verified file of that package is verified at once from the stored blob
-        (`carriedOverFrom` is set and no upload target is granted). When the station does not
-        hold that package (revision n never arrived), every file gets a target as usual. Opening
-        the session removes the next-revision notice of the superseded package.
+        named by `supersedesPackageId`, it must be the same visit and deal and revision one
+        lower; otherwise 422 with code `supersedes_mismatch` (pointer `/supersedesPackageId`).
+        Once that package is sealed, each declared file whose path, role, capture, SHA-256 and
+        size equal a verified file of it is verified at once from the stored blob
+        (`carriedOverFrom` is set and no upload target is granted). When that package is still
+        uploading (the app re-sealed after a failed upload) or the station does not hold it
+        (revision n never arrived), every file gets a target as usual. Opening the session
+        removes the next-revision notice of the superseded package.
       x-roles: [capture, admin]
       requestBody:
         required: true
@@ -1218,11 +1219,12 @@ components:
     PackageSummaryFields:
       description: |
         The fields of a package summary, shared by PackageSummary, Package and ReviewPackage.
-        Open on its own; each of those closes it (unevaluatedProperties false). Properties
-        added in 1.1.0 are optional; `updatedAt`, `captures` and `totals` are sent in every
-        response of a 1.1.0 station.
+        Open on its own; each of those closes it (unevaluatedProperties false). Of the
+        properties added in 1.1.0, `updatedAt`, `captures` and `totals` are in every response
+        of a 1.1.0 station; the others are optional.
       type: object
-      required: [packageId, visitId, dealId, revision, status, createdAt]
+      required:
+        [packageId, visitId, dealId, revision, status, createdAt, updatedAt, captures, totals]
       properties:
         packageId:
           $ref: "#/components/schemas/Uuid"

@@ -42,6 +42,7 @@ export const CAPTURE_RECORD = example("capture-record/valid/two-captures.json");
 export const VERDICT = example<{ verdictId: string; outcome: string; evaluatedAt: string }>(
   "verdict/valid/limited.json",
 );
+export const FIELD_CONTROLS = example("field-controls/valid/two-captures.json");
 
 export const DEAL_ID = "HUB-1001";
 export const OTHER_DEAL_ID = "HUB-2002";
@@ -89,6 +90,8 @@ export async function startStation(
     services?: Partial<StationServices>;
     /** Test-only routes, registered before the app is ready. */
     routes?: (app: FastifyInstance) => void;
+    /** Extra environment for the station config (for example REVIEW_BASE_URL). */
+    env?: Record<string, string>;
   } = {},
 ): Promise<TestStation> {
   let release: () => void = () => undefined;
@@ -109,7 +112,7 @@ export async function startStation(
   const issuer = await startTestIssuer();
   const logs = logCollector();
   const app = await buildServer({
-    config: testConfig({ ENTRA_JWKS_URL: issuer.jwksUrl, DATABASE_URL: url }),
+    config: testConfig({ ENTRA_JWKS_URL: issuer.jwksUrl, DATABASE_URL: url, ...options.env }),
     db,
     services: options.services ?? {},
     logStream: logs.stream,
@@ -145,7 +148,7 @@ function sha256Of(text: string): string {
   return createHash("sha256").update(text).digest("hex");
 }
 
-async function insertFile(
+export async function insertFile(
   db: Database,
   packageId: string,
   file: ManifestFile,
@@ -187,7 +190,7 @@ async function insertFile(
   );
 }
 
-interface PackageSeed {
+export interface PackageSeed {
   packageId: string;
   visitId: string;
   dealId: string;
@@ -195,10 +198,21 @@ interface PackageSeed {
   supersedes?: string;
   status: string;
   createdAt: string;
-  sealed?: { manifest: Record<string, unknown>; captureRecord?: Record<string, unknown> };
+  sealed?: {
+    manifest: Record<string, unknown>;
+    captureRecord?: Record<string, unknown>;
+    /** Record the manifest size (sealed after migration 0011); else it is NULL (not backfilled). */
+    manifestBytes?: boolean;
+    fieldControls?: Record<string, unknown>;
+  };
 }
 
-async function insertPackage(db: Database, seed: PackageSeed, files: ManifestFile[]) {
+/** The sealed manifest's bytes as the seed registers them (sha256 and size). */
+export function manifestText(manifest: Record<string, unknown>): string {
+  return JSON.stringify(manifest);
+}
+
+export async function insertPackage(db: Database, seed: PackageSeed, files: ManifestFile[]) {
   const sessionRequest = {
     packageId: seed.packageId,
     visitId: seed.visitId,
@@ -211,8 +225,9 @@ async function insertPackage(db: Database, seed: PackageSeed, files: ManifestFil
     `INSERT INTO packages
        (package_id, visit_id, deal_id, revision, supersedes_package_id, status, session_request,
         created_by_id, created_by_name, created_at, manifest, manifest_sha256, sealed_at,
-        registered_at, capture_record)
-     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11::jsonb, $12, $13, $14, $15::jsonb)`,
+        registered_at, capture_record, manifest_bytes, field_controls)
+     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11::jsonb, $12, $13, $14, $15::jsonb,
+             $16, $17::jsonb)`,
     [
       seed.packageId,
       seed.visitId,
@@ -225,15 +240,19 @@ async function insertPackage(db: Database, seed: PackageSeed, files: ManifestFil
       "Dana Field",
       seed.createdAt,
       manifest === null ? null : JSON.stringify(manifest),
-      manifest === null ? null : sha256Of(JSON.stringify(manifest)),
+      manifest === null ? null : sha256Of(manifestText(manifest)),
       manifest === null ? null : String(manifest.sealedAt),
       manifest === null ? null : "2026-10-17T15:11:02.900Z",
       seed.sealed?.captureRecord === undefined ? null : JSON.stringify(seed.sealed.captureRecord),
+      manifest !== null && seed.sealed?.manifestBytes === true
+        ? Buffer.byteLength(manifestText(manifest))
+        : null,
+      seed.sealed?.fieldControls === undefined ? null : JSON.stringify(seed.sealed.fieldControls),
     ],
   );
 }
 
-function filesOf(manifest: { files: ManifestFile[] }): ManifestFile[] {
+export function filesOf(manifest: { files: ManifestFile[] }): ManifestFile[] {
   return manifest.files.map((file) => ({
     path: file.path,
     role: file.role,
@@ -329,7 +348,12 @@ export async function seedRegistry(db: Database): Promise<void> {
       revision: 1,
       status: "verdict_ready",
       createdAt: "2026-10-17T15:06:10.123Z",
-      sealed: { manifest: MANIFEST, captureRecord: CAPTURE_RECORD },
+      sealed: {
+        manifest: MANIFEST,
+        captureRecord: CAPTURE_RECORD,
+        manifestBytes: true,
+        fieldControls: FIELD_CONTROLS,
+      },
     },
     files,
   );

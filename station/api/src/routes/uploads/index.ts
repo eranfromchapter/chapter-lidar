@@ -15,11 +15,24 @@
 // (DB trigger); targets are create-only, so an existing blob cannot be overwritten or deleted
 // through one. A mismatched blob cannot be replaced either, so its next target is a new blob
 // (see storage/originals.ts). Every write is audited in the same transaction.
+//
+// Carry-over (revision n+1 of a visit): when the station holds the superseded package, it must
+// be the same visit and deal and revision n (else 422 supersedes_mismatch). Once revision n is
+// sealed, a declared file equal to one of its verified files (path, role, capture, area,
+// SHA-256, size) is registered verified at once on that file's blob (carried_over_from; no
+// upload target). While revision n is still uploading (the phone's re-seal after a failed
+// upload, phone-package §4.2) or when the station never received it, every file is uploaded as
+// usual. Opening the session removes revision n's next-revision notice. The session answer
+// carries the station's createdAt, which the phone shows as "Registered".
+//
+// Sealing also stores the review read model: the manifest's size and the parsed field-controls
+// file (when it matches the contract; the checks report a file that does not).
 
 import { createHash } from "node:crypto";
 import {
   formatErrors,
   validateCaptureRecord,
+  validateFieldControls,
   validateManifest,
   type PackageManifest,
 } from "@chapter/capture-contract";
@@ -40,7 +53,14 @@ import {
   type OriginalsStorage,
   type UploadGrant,
 } from "../../storage/originals.js";
-import { manifestMismatchErrors, sessionRequestErrors } from "./rules.js";
+import { getPackage } from "../packages/store.js";
+import {
+  carriesOver,
+  carryOverMatch,
+  manifestMismatchErrors,
+  sessionRequestErrors,
+  supersedesMismatchErrors,
+} from "./rules.js";
 import {
   completeFileRequestSchema,
   packageIdParamsSchema,
@@ -55,7 +75,6 @@ import {
   declarationOf,
   fileCheckResultView,
   inDeclaredOrder,
-  packageView,
   selectFiles,
   selectPackage,
   type FileRow,
@@ -67,6 +86,8 @@ export const UPLOAD_ROLES: readonly Role[] = ["capture", "admin"];
 
 /** Largest capture record the station parses at sealing. */
 export const MAX_CAPTURE_RECORD_BYTES = 4 * 1024 * 1024;
+/** Largest field-controls file the station parses at sealing (larger: not stored). */
+export const MAX_FIELD_CONTROLS_BYTES = 4 * 1024 * 1024;
 
 interface SessionFile {
   readonly path: string;
@@ -74,12 +95,23 @@ interface SessionFile {
   readonly blobName: string;
   /** True when the file gets an upload target. */
   readonly grant: boolean;
+  /** The superseded package whose verified file this one reuses. */
+  readonly carriedOverFrom?: string;
 }
 
 interface OpenedSession {
   readonly created: boolean;
   readonly status: PackageStatus;
+  readonly createdAt: Date;
   readonly files: SessionFile[];
+}
+
+interface SupersededPackage {
+  package_id: string;
+  visit_id: string;
+  deal_id: string;
+  revision: number;
+  status: PackageStatus;
 }
 
 function resolveStorage(app: FastifyInstance): OriginalsStorage {
@@ -157,6 +189,61 @@ function sealedConflict(): ProblemError {
   });
 }
 
+/** The superseded package as the station holds it, for carry-over. */
+interface CarryOverSource {
+  /** Its verified files by path; empty while it is still uploading (nothing is carried). */
+  readonly verified: Map<string, FileRow>;
+  /** True while it is still uploading: the phone re-sealed after a failed upload. */
+  readonly stillUploading: boolean;
+}
+
+/**
+ * The superseded package for carry-over: undefined when the request supersedes nothing or the
+ * station never received that package. Locks its row (FOR SHARE) against a concurrent
+ * next-revision notice or seal; 422 supersedes_mismatch when it is not the previous revision of
+ * the same visit and deal.
+ */
+async function carryOverSource(
+  tx: Queryable,
+  body: UploadSessionRequest,
+): Promise<CarryOverSource | undefined> {
+  if (body.supersedesPackageId === undefined) {
+    return undefined;
+  }
+  const found = await tx.query<SupersededPackage>(
+    `SELECT package_id, visit_id, deal_id, revision, status
+       FROM packages WHERE package_id = $1 FOR SHARE`,
+    [body.supersedesPackageId],
+  );
+  const superseded = found.rows[0];
+  if (superseded === undefined) {
+    return undefined;
+  }
+  const errors = supersedesMismatchErrors(body, {
+    visitId: superseded.visit_id,
+    dealId: superseded.deal_id,
+    revision: superseded.revision,
+  });
+  if (errors.length > 0) {
+    throw new ProblemError(422, "supersedes_mismatch", {
+      detail: "supersedesPackageId must be the previous revision of the same visit and deal.",
+      errors,
+    });
+  }
+  if (!carriesOver(superseded)) {
+    return { verified: new Map(), stillUploading: true };
+  }
+  const verified = await tx.query<FileRow>(
+    `SELECT ${FILE_COLUMNS} FROM package_files
+      WHERE package_id = $1 AND status = 'verified' AND blob_name IS NOT NULL`,
+    [superseded.package_id],
+  );
+  return {
+    verified: new Map(verified.rows.map((file) => [file.path, file])),
+    stillUploading: false,
+  };
+}
+
 async function openSession(
   tx: Queryable,
   request: FastifyRequest,
@@ -166,13 +253,13 @@ async function openSession(
   const packageId = body.packageId;
   const sessionJson = JSON.stringify(body);
 
-  const inserted = await tx.query(
+  const inserted = await tx.query<{ created_at: Date }>(
     `INSERT INTO packages
        (package_id, visit_id, deal_id, revision, supersedes_package_id, session_request,
         created_by_id, created_by_name)
      VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)
      ON CONFLICT (package_id) DO NOTHING
-     RETURNING package_id`,
+     RETURNING created_at`,
     [
       packageId,
       body.visitId,
@@ -185,15 +272,46 @@ async function openSession(
     ],
   );
 
-  if (inserted.rowCount === 1) {
-    const blobNames = body.files.map((file) => firstBlobName(packageId, file.path));
+  const created = inserted.rows[0];
+  if (created !== undefined) {
+    const source = await carryOverSource(tx, body);
+    // A carried-over file takes the verified file's blob and check result; any other file
+    // waits for its upload to attempt 1's blob.
+    const reused = body.files.map((declared) => {
+      const previous = source?.verified.get(declared.path);
+      return previous !== undefined && carryOverMatch(declared, previous) ? previous : undefined;
+    });
+    const files: SessionFile[] = body.files.map((declared, index) => {
+      const previous = reused[index];
+      return previous === undefined || previous.blob_name === null
+        ? {
+            path: declared.path,
+            status: "pending",
+            blobName: firstBlobName(packageId, declared.path),
+            grant: true,
+          }
+        : {
+            path: declared.path,
+            status: "verified",
+            blobName: previous.blob_name,
+            grant: false,
+            ...(body.supersedesPackageId === undefined
+              ? {}
+              : { carriedOverFrom: body.supersedesPackageId }),
+          };
+    });
     await tx.query(
       `INSERT INTO package_files
-         (package_id, path, role, capture_id, area_key, sha256, bytes, blob_name)
-       SELECT $1, f.path, f.role, f.capture_id, f.area_key, f.sha256, f.bytes, f.blob_name
+         (package_id, path, role, capture_id, area_key, sha256, bytes, blob_name, status,
+          actual_sha256, actual_bytes, checked_at, verified_at, carried_over_from)
+       SELECT $1, f.path, f.role, f.capture_id, f.area_key, f.sha256, f.bytes, f.blob_name,
+              f.status, f.actual_sha256, f.actual_bytes, f.checked_at, f.verified_at,
+              f.carried_over_from
          FROM unnest($2::text[], $3::text[], $4::uuid[], $5::text[], $6::text[], $7::bigint[],
-                     $8::text[])
-           AS f(path, role, capture_id, area_key, sha256, bytes, blob_name)`,
+                     $8::text[], $9::text[], $10::text[], $11::bigint[], $12::timestamptz[],
+                     $13::timestamptz[], $14::uuid[])
+           AS f(path, role, capture_id, area_key, sha256, bytes, blob_name, status,
+                actual_sha256, actual_bytes, checked_at, verified_at, carried_over_from)`,
       [
         packageId,
         body.files.map((file) => file.path),
@@ -202,9 +320,23 @@ async function openSession(
         body.files.map((file) => file.areaKey ?? null),
         body.files.map((file) => file.sha256),
         body.files.map((file) => file.bytes),
-        blobNames,
+        files.map((file) => file.blobName),
+        files.map((file) => file.status),
+        files.map((file, i) => (file.grant ? null : (reused[i]?.actual_sha256 ?? null))),
+        files.map((file, i) => (file.grant ? null : (reused[i]?.actual_bytes ?? null))),
+        files.map((file, i) => (file.grant ? null : (reused[i]?.checked_at ?? null))),
+        files.map((file, i) => (file.grant ? null : (reused[i]?.verified_at ?? null))),
+        files.map((file) => file.carriedOverFrom ?? null),
       ],
     );
+    const carriedOver = files.filter((file) => file.carriedOverFrom !== undefined).length;
+    let removedNotice = false;
+    if (source !== undefined) {
+      const deleted = await tx.query("DELETE FROM next_revision_notices WHERE package_id = $1", [
+        body.supersedesPackageId,
+      ]);
+      removedNotice = (deleted.rowCount ?? 0) > 0;
+    }
     await audit(
       request,
       "package.create",
@@ -216,26 +348,20 @@ async function openSession(
         ...(body.supersedesPackageId === undefined
           ? {}
           : { supersedesPackageId: body.supersedesPackageId }),
+        ...(source?.stillUploading === true ? { supersededStillUploading: true } : {}),
         files: body.files.length,
-        uploadTargets: body.files.length,
+        uploadTargets: body.files.length - carriedOver,
+        carriedOver,
+        ...(removedNotice ? { nextRevisionNoticeRemoved: true } : {}),
         container: request.server.services.originals?.container,
       },
       tx,
     );
-    return {
-      created: true,
-      status: "uploading",
-      files: body.files.map((file, index) => ({
-        path: file.path,
-        status: "pending",
-        blobName: blobNames[index] ?? firstBlobName(packageId, file.path),
-        grant: true,
-      })),
-    };
+    return { created: true, status: "uploading", createdAt: created.created_at, files };
   }
 
-  const existing = await tx.query<{ status: PackageStatus; same: boolean }>(
-    `SELECT status, session_request = $2::jsonb AS same
+  const existing = await tx.query<{ status: PackageStatus; same: boolean; created_at: Date }>(
+    `SELECT status, session_request = $2::jsonb AS same, created_at
        FROM packages WHERE package_id = $1 FOR UPDATE`,
     [packageId, sessionJson],
   );
@@ -274,7 +400,13 @@ async function openSession(
       status = "pending";
       retried.push(file.path);
     }
-    files.push({ path: file.path, status, blobName, grant: uploading && status !== "verified" });
+    files.push({
+      path: file.path,
+      status,
+      blobName,
+      grant: uploading && status !== "verified",
+      ...(file.carried_over_from === null ? {} : { carriedOverFrom: file.carried_over_from }),
+    });
   }
 
   await audit(
@@ -288,7 +420,7 @@ async function openSession(
     },
     tx,
   );
-  return { created: false, status: row.status, files };
+  return { created: false, status: row.status, createdAt: row.created_at, files };
 }
 
 interface LocatedFile {
@@ -305,7 +437,8 @@ async function locateFile(
   const result = await db.query<{ package_status: PackageStatus } & Partial<FileRow>>(
     `SELECT p.status AS package_status,
             f.path, f.role, f.capture_id, f.area_key, f.sha256, f.bytes, f.status,
-            f.actual_sha256, f.actual_bytes, f.checked_at, f.blob_name
+            f.actual_sha256, f.actual_bytes, f.checked_at, f.verified_at, f.blob_name,
+            f.carried_over_from
        FROM packages p
        LEFT JOIN package_files f ON f.package_id = p.package_id AND f.path = $2
       WHERE p.package_id = $1
@@ -336,18 +469,80 @@ function checkStatus(
   return digest.sha256 === file.sha256 ? "verified" : "sha256_mismatch";
 }
 
+/** Sends the package (OpenAPI Package, files in declared order) as the package routes build it. */
 async function sendPackage(
   app: FastifyInstance,
   reply: FastifyReply,
   packageId: string,
   status: 200 | 202,
 ): Promise<FastifyReply> {
-  const row = await selectPackage(app.db, packageId);
-  if (row === undefined) {
+  const detail = await getPackage(app.db, app.config.links, packageId, { fileOrder: "declared" });
+  if (detail === undefined) {
     throw notFound("package_not_found", "No package with this packageId.");
   }
-  const files = await selectFiles(app.db, packageId);
-  return reply.code(status).send(packageView(row, files));
+  return reply.code(status).send(detail);
+}
+
+/**
+ * Reads a verified file of the package from storage (at most maxBytes) and checks it still
+ * matches its fingerprint; a mismatch is an integrity error (500), never a client error.
+ */
+async function readVerified(
+  request: FastifyRequest,
+  storage: OriginalsStorage,
+  packageId: string,
+  file: FileRow,
+  maxBytes: number,
+): Promise<Buffer> {
+  const blob = await storageCall(request, `read ${file.role}`, () =>
+    storage.read(file.blob_name ?? firstBlobName(packageId, file.path), maxBytes),
+  );
+  if (blob === undefined || blob.sha256 !== file.sha256 || blob.bytes !== file.bytes) {
+    request.log.error(
+      { packageId, path: file.path },
+      `integrity: a verified ${file.role} no longer matches its fingerprint`,
+    );
+    throw new ProblemError(500, "integrity_error", {
+      detail: "A verified file no longer matches its fingerprint.",
+    });
+  }
+  return blob.data;
+}
+
+/**
+ * The package's field-controls file, parsed, when it exists and matches the contract; null
+ * otherwise (the checks report an unreadable file).
+ */
+async function sealedFieldControls(
+  request: FastifyRequest,
+  storage: OriginalsStorage,
+  packageId: string,
+  files: readonly FileRow[],
+): Promise<unknown> {
+  const file = files.find((candidate) => candidate.role === "field_controls");
+  if (file === undefined) {
+    return null;
+  }
+  if (file.bytes > MAX_FIELD_CONTROLS_BYTES) {
+    request.log.warn({ packageId, path: file.path }, "field controls too large to store");
+    return null;
+  }
+  const data = await readVerified(request, storage, packageId, file, MAX_FIELD_CONTROLS_BYTES);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(data.toString("utf8"));
+  } catch {
+    parsed = undefined;
+  }
+  const checked = validateFieldControls(parsed);
+  if (!checked.ok) {
+    request.log.warn(
+      { packageId, path: file.path },
+      "field controls do not match the contract; not stored",
+    );
+    return null;
+  }
+  return checked.value;
 }
 
 export default async function uploadRoutes(app: FastifyInstance): Promise<void> {
@@ -390,7 +585,13 @@ export default async function uploadRoutes(app: FastifyInstance): Promise<void> 
                   status: file.status,
                   upload: targetView(await storage.grantUpload(file.blobName)),
                 }
-              : { path: file.path, status: file.status },
+              : {
+                  path: file.path,
+                  status: file.status,
+                  ...(file.carriedOverFrom === undefined
+                    ? {}
+                    : { carriedOverFrom: file.carriedOverFrom }),
+                },
           ),
         ),
       );
@@ -404,6 +605,7 @@ export default async function uploadRoutes(app: FastifyInstance): Promise<void> 
         dealId: body.dealId,
         revision: body.revision,
         status: session.status,
+        createdAt: toApiDateTime(session.createdAt),
         files,
       });
     },
@@ -573,28 +775,16 @@ export default async function uploadRoutes(app: FastifyInstance): Promise<void> 
             detail: `The capture record is larger than ${MAX_CAPTURE_RECORD_BYTES} bytes.`,
           });
         }
-        const recordBlob = await storageCall(request, "read capture record", () =>
-          storage.read(
-            recordFile.blob_name ?? firstBlobName(packageId, recordFile.path),
-            MAX_CAPTURE_RECORD_BYTES,
-          ),
+        const recordData = await readVerified(
+          request,
+          storage,
+          packageId,
+          recordFile,
+          MAX_CAPTURE_RECORD_BYTES,
         );
-        if (
-          recordBlob === undefined ||
-          recordBlob.sha256 !== recordFile.sha256 ||
-          recordBlob.bytes !== recordFile.bytes
-        ) {
-          request.log.error(
-            { packageId, path: recordFile.path },
-            "integrity: a verified capture record no longer matches its fingerprint",
-          );
-          throw new ProblemError(500, "integrity_error", {
-            detail: "A verified file no longer matches its fingerprint.",
-          });
-        }
         let captureRecord: unknown;
         try {
-          captureRecord = JSON.parse(recordBlob.data.toString("utf8"));
+          captureRecord = JSON.parse(recordData.toString("utf8"));
         } catch {
           throw new ProblemError(422, "invalid_capture_record", {
             detail: "The capture record file is not valid JSON.",
@@ -608,6 +798,7 @@ export default async function uploadRoutes(app: FastifyInstance): Promise<void> 
             ).replace(/\n/g, "; ")}`,
           });
         }
+        const fieldControls = await sealedFieldControls(request, storage, packageId, files);
 
         const manifestBlob = manifestBlobName(packageId, manifest.visitId);
         try {
@@ -654,7 +845,8 @@ export default async function uploadRoutes(app: FastifyInstance): Promise<void> 
           await tx.query(
             `UPDATE packages
                 SET status = 'checks_queued', manifest = $2::jsonb, manifest_sha256 = $3,
-                    sealed_at = $4::timestamptz, registered_at = now(), capture_record = $5::jsonb
+                    sealed_at = $4::timestamptz, registered_at = now(), capture_record = $5::jsonb,
+                    field_controls = $6::jsonb, manifest_bytes = $7
               WHERE package_id = $1`,
             [
               packageId,
@@ -662,6 +854,8 @@ export default async function uploadRoutes(app: FastifyInstance): Promise<void> 
               manifestSha256,
               manifest.sealedAt,
               JSON.stringify(recordValidation.value),
+              fieldControls === null ? null : JSON.stringify(fieldControls),
+              raw.length,
             ],
           );
           const job = await tx.query<{ job_id: string }>(

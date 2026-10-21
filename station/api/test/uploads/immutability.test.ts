@@ -179,7 +179,11 @@ describe("station routes after sealing", () => {
       (access) =>
         access.url.startsWith("/v1/packages") && /\b(PUT|DELETE|PATCH)\b/.test(access.method),
     );
-    assert.deepEqual(writes, []);
+    // The only write route is the next-revision notice, which writes no package file.
+    assert.deepEqual(
+      writes.map((access) => `${access.method} ${access.url}`),
+      ["PUT /v1/packages/:packageId/next-revision"],
+    );
     const path = encodeURIComponent(pkg.session.files[0]?.path ?? "");
     for (const [method, url] of [
       ["DELETE", `/v1/packages/${pkg.packageId}`],

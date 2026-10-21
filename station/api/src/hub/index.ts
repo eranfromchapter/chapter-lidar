@@ -9,6 +9,7 @@ export type { LiveHubClientOptions } from "./live.js";
 export { HUB_API_MAPPING, readPath } from "./mapping.js";
 export type { HubApiMapping } from "./mapping.js";
 export { normalizeDeal, normalizeDeals, sortByMostRecent } from "./normalize.js";
+export { PersistingHubClient, storeProjects } from "./persist.js";
 export type { RawHubDeal, SkipReason } from "./normalize.js";
 export { createHubClient, resolveHubClient } from "./service.js";
 export type { CreateHubClientOptions } from "./service.js";

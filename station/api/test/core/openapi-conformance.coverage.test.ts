@@ -22,13 +22,10 @@ const CONFORMANCE_FILE = /^openapi-conformance\..+\.test\.ts$/;
  * below fails while a listed operation is already covered, so the list cannot go stale.
  */
 const NOT_YET_IMPLEMENTED = new Set([
-  "putNextRevisionNotice",
-  "getSpatialReportLink",
+  // Phase 3 (web-review §9.1 H): the package ZIP needs the worker's archive job (migration
+  // 0012_archive-job), which is not built yet.
   "requestPackageArchive",
   "getPackageArchive",
-  "listReviewProjects",
-  "listReviewPackages",
-  "listAllModelingDecisions",
 ]);
 
 function conformanceFiles(dir: string): string[] {

@@ -1,21 +1,20 @@
-// Test packages built from the generated box-room fixture (fixtures/generated/box-room).
+// Test packages built from the generated fixtures (fixtures/generated/<name>; box-room unless
+// another fixture is named, for example legacy-1.0.0 with the retired phone report).
 //
 // Every call gives a fresh package: new packageId and visitId (visit + revision is unique in the
 // registry), with the visitId rewritten in paths and file contents and every SHA-256 and size
-// recomputed, so the manifest stays consistent with the bytes.
+// recomputed, so the manifest stays consistent with the bytes. A file's bytes can be replaced
+// (fileOverrides, by fixture path) before the fingerprints are computed.
 
 import { createHash, randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { FileEntry, PackageManifest } from "@chapter/capture-contract";
 import type { UploadSessionRequest } from "../../../src/routes/uploads/schemas.js";
 
-export const FIXTURE_ROOT = fileURLToPath(
-  new URL("../../../../../fixtures/generated/box-room/package/", import.meta.url),
-);
-const FIXTURE_VISIT_ID = "c1b6d1fb-17af-4f4a-877c-2565ef9bdb86";
-const FIXTURE_MANIFEST = join(FIXTURE_ROOT, "Source Register", FIXTURE_VISIT_ID, "manifest.json");
+const GENERATED = fileURLToPath(new URL("../../../../../fixtures/generated/", import.meta.url));
+export const FIXTURE_ROOT = join(GENERATED, "box-room", "package");
 export const FIXTURE_DEAL_ID = "fixture-deal-0001";
 
 export interface TestPackage {
@@ -42,30 +41,52 @@ export interface MakePackageOptions {
   readonly revision?: number;
   readonly supersedesPackageId?: string;
   readonly visitId?: string;
+  readonly dealId?: string;
+  /** Fixture folder under fixtures/generated (default box-room). */
+  readonly fixture?: string;
+  /** Replacement bytes by fixture path (the path before the visitId is rewritten). */
+  readonly fileOverrides?: ReadonlyMap<string, Buffer>;
+  /** Manifest schemaVersion to write instead of the fixture's. */
+  readonly schemaVersion?: string;
+}
+
+/** Root, visitId and manifest path of a generated fixture package. */
+function fixturePackage(name: string): { root: string; visitId: string; manifest: string } {
+  const root = join(GENERATED, name, "package");
+  const visits = readdirSync(join(root, "Source Register"));
+  const visitId = visits[0];
+  if (visits.length !== 1 || visitId === undefined) {
+    throw new Error(`fixture ${name} must hold exactly one visit`);
+  }
+  return { root, visitId, manifest: join(root, "Source Register", visitId, "manifest.json") };
 }
 
 export function makePackage(options: MakePackageOptions = {}): TestPackage {
-  const original = JSON.parse(readFileSync(FIXTURE_MANIFEST, "utf8")) as PackageManifest;
+  const fixture = fixturePackage(options.fixture ?? "box-room");
+  const fixtureVisitId = fixture.visitId;
+  const original = JSON.parse(readFileSync(fixture.manifest, "utf8")) as PackageManifest;
   const packageId = randomUUID();
   const visitId = options.visitId ?? randomUUID();
   const revision = options.revision ?? 1;
 
   const files = new Map<string, Buffer>();
   const entries: FileEntry[] = original.files.map((entry) => {
-    const path = entry.path.split(FIXTURE_VISIT_ID).join(visitId);
-    const data = rewrite(readFileSync(join(FIXTURE_ROOT, entry.path)), FIXTURE_VISIT_ID, visitId);
+    const path = entry.path.split(fixtureVisitId).join(visitId);
+    const data =
+      options.fileOverrides?.get(entry.path) ??
+      rewrite(readFileSync(join(fixture.root, entry.path)), fixtureVisitId, visitId);
     files.set(path, data);
     return {
       ...entry,
       path,
       sha256: sha256(data),
       bytes: data.length,
-      derivedFrom: entry.derivedFrom.map((from) => from.split(FIXTURE_VISIT_ID).join(visitId)),
+      derivedFrom: entry.derivedFrom.map((from) => from.split(fixtureVisitId).join(visitId)),
     };
   });
 
-  const manifest: PackageManifest = {
-    schemaVersion: original.schemaVersion,
+  const manifest = {
+    schemaVersion: options.schemaVersion ?? original.schemaVersion,
     layoutVersion: original.layoutVersion,
     packageId,
     visitId,
@@ -75,11 +96,11 @@ export function makePackage(options: MakePackageOptions = {}): TestPackage {
       : { supersedesPackageId: options.supersedesPackageId }),
     sealedAt: original.sealedAt,
     files: entries as PackageManifest["files"],
-  };
+  } as PackageManifest;
   const session: UploadSessionRequest = {
     packageId,
     visitId,
-    dealId: FIXTURE_DEAL_ID,
+    dealId: options.dealId ?? FIXTURE_DEAL_ID,
     revision,
     ...(options.supersedesPackageId === undefined
       ? {}
@@ -96,6 +117,74 @@ export function makePackage(options: MakePackageOptions = {}): TestPackage {
   return {
     packageId,
     visitId,
+    manifest,
+    manifestBytes: Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, "utf8"),
+    session,
+    files,
+  };
+}
+
+/**
+ * The next revision of a package: same visit and files except the given changes (bytes by
+ * path of the base package; null removes a file) and added files (path -> bytes, copying the
+ * declaration of the base file with the same role, capture and area as `like`).
+ */
+export function nextRevision(
+  base: TestPackage,
+  changes: {
+    readonly replace?: ReadonlyMap<string, Buffer>;
+    readonly add?: readonly { path: string; like: string; data: Buffer }[];
+  } = {},
+): TestPackage {
+  const packageId = randomUUID();
+  const revision = base.manifest.revision + 1;
+  const files = new Map<string, Buffer>();
+  const entries: FileEntry[] = [];
+  for (const entry of base.manifest.files) {
+    const data = changes.replace?.get(entry.path) ?? base.files.get(entry.path);
+    if (data === undefined) {
+      throw new Error(`no bytes for ${entry.path}`);
+    }
+    files.set(entry.path, data);
+    entries.push({ ...entry, sha256: sha256(data), bytes: data.length });
+  }
+  for (const added of changes.add ?? []) {
+    const like = base.manifest.files.find((entry) => entry.path === added.like);
+    if (like === undefined) {
+      throw new Error(`no base file ${added.like}`);
+    }
+    files.set(added.path, added.data);
+    entries.push({
+      ...like,
+      path: added.path,
+      sha256: sha256(added.data),
+      bytes: added.data.length,
+    } as FileEntry);
+  }
+  const manifest = {
+    ...base.manifest,
+    packageId,
+    revision,
+    supersedesPackageId: base.packageId,
+    files: entries,
+  } as PackageManifest;
+  const session: UploadSessionRequest = {
+    ...base.session,
+    packageId,
+    revision,
+    supersedesPackageId: base.packageId,
+    files: entries.map((entry) => ({
+      path: entry.path,
+      role: entry.role,
+      ...(entry.captureId === undefined ? {} : { captureId: entry.captureId }),
+      ...(entry.areaKey === undefined ? {} : { areaKey: entry.areaKey }),
+      sha256: entry.sha256,
+      bytes: entry.bytes,
+    })),
+  };
+  return {
+    packageId,
+    visitId: base.visitId,
     manifest,
     manifestBytes: Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, "utf8"),
     session,

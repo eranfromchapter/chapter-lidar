@@ -69,3 +69,39 @@ export interface FileDownloadQuery {
 export interface PackageParams {
   packageId: string;
 }
+
+/** Contract DateTime (manifest $defs/dateTime): UTC, whole seconds, with Z. */
+export const dateTimeSchema = contractDef("dateTime");
+
+/** Largest revision the registry holds (Postgres integer). */
+const MAX_REVISION = 2_147_483_647;
+
+/** OpenAPI components.schemas.NextRevisionChange. */
+export const nextRevisionChangeSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["kind", "subject", "title", "detail"],
+  properties: {
+    kind: { enum: ["added", "changed", "removed"] },
+    subject: { enum: ["capture", "room_names", "field_control", "photos", "retired_file"] },
+    title: { type: "string", minLength: 1, maxLength: 200 },
+    detail: { type: "string", minLength: 1, maxLength: 300 },
+    answersNextAction: { type: "string", minLength: 1, maxLength: 500 },
+    method: { enum: ["tape", "laser"] },
+  },
+} as const;
+
+/**
+ * PUT /packages/{packageId}/next-revision body (OpenAPI NextRevisionNoticeInput). Deliberate
+ * bound the document leaves open: revision fits the registry's integer.
+ */
+export const nextRevisionNoticeInputSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["revision", "updatedAt", "changes"],
+  properties: {
+    revision: { type: "integer", minimum: 2, maximum: MAX_REVISION },
+    updatedAt: dateTimeSchema,
+    changes: { type: "array", maxItems: 50, items: nextRevisionChangeSchema },
+  },
+} as const;

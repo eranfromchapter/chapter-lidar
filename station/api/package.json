@@ -16,6 +16,7 @@
     "test:db": "tsx scripts/test-db.ts",
     "migrate": "tsx src/core/migrate-main.ts",
     "migrate:check": "tsx scripts/migrate-check.ts",
+    "backfill:review-read-model": "tsx ../../scripts/backfill-review-read-model.ts",
     "local:up": "bash scripts/local-up.sh",
     "local:down": "bash scripts/local-down.sh"
   },

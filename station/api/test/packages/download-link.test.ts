@@ -23,12 +23,18 @@ import {
 } from "../../src/routes/packages/download.js";
 import { testConfig } from "../core/helpers.js";
 import { ORIGINALS_CONTAINER as CONTAINER, startAzurite, type TestAzurite } from "./azurite.js";
+import { createHash } from "node:crypto";
+import { manifestPath } from "../../src/storage/originals.js";
 import {
   PACKAGE_ID,
   PLAN_DXF_PATH,
+  QUEUED_ID,
+  QUEUED_VISIT_ID,
   REVISION_2_ID,
   UNKNOWN_ID,
   MANIFEST,
+  VISIT_ID,
+  manifestText,
   seedRegistry,
   seedRetriedFile,
   startStation,
@@ -77,6 +83,7 @@ before(async () => {
   retried = await seedRetriedFile(station.db);
   await azurite.put(retried.rejectedBlobName, retried.rejectedBody);
   await azurite.put(retried.blobName, retried.body);
+  await azurite.put(`${PACKAGE_ID}/${manifestPath(VISIT_ID)}`, manifestText(MANIFEST));
 });
 
 after(async () => {
@@ -205,11 +212,43 @@ describe("download links for bim and admin", () => {
       action: "package_file.download_link",
       target_type: "package",
       target_id: PACKAGE_ID,
-      details: { path: PLAN_DXF_PATH, expiresAt },
+      details: { path: PLAN_DXF_PATH, role: "plan_dxf", expiresAt },
     });
     const all = await station.db.query("SELECT details::text AS d FROM audit_log");
     assert.ok(!all.rows.some((row) => String(row.d).includes(signature)));
     assert.ok(!station.logs.some((line) => line.includes(signature)), "signature in logs");
+  });
+});
+
+describe("download links of the sealed manifest", () => {
+  it("links the stored manifest once sealed, with its fingerprint, audited as role manifest", async () => {
+    const path = manifestPath(VISIT_ID);
+    const response = await requestLink(path, ["admin"]);
+    assert.equal(response.statusCode, 200, response.body);
+    const link = response.json() as { path: string; sha256: string; bytes: number; url: string };
+    const text = manifestText(MANIFEST);
+    assert.equal(link.path, path);
+    assert.equal(link.sha256, createHash("sha256").update(text).digest("hex"));
+    assert.equal(link.bytes, Buffer.byteLength(text));
+    assert.equal(await (await fetch(link.url)).text(), text);
+    const rows = await station.db.query<{ details: Record<string, unknown> }>(
+      `SELECT details FROM audit_log WHERE action = 'package_file.download_link'
+        ORDER BY audit_id DESC LIMIT 1`,
+    );
+    assert.equal(rows.rows[0]?.details.role, "manifest");
+    assert.equal(rows.rows[0]?.details.path, path);
+  });
+
+  it("answers 404 before the seal, before the size is recorded, and for another visit's path", async () => {
+    for (const [packageId, path] of [
+      [REVISION_2_ID, manifestPath(VISIT_ID)],
+      [QUEUED_ID, manifestPath(QUEUED_VISIT_ID)],
+      [PACKAGE_ID, manifestPath(QUEUED_VISIT_ID)],
+    ] as const) {
+      const response = await requestLink(path, ["bim"], LINK_ROUTE, packageId);
+      assert.equal(response.statusCode, 404, `${packageId} ${path}`);
+      assert.equal((response.json() as { code: string }).code, "not_found");
+    }
   });
 });
 

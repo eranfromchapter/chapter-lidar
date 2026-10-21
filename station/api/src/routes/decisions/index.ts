@@ -2,9 +2,12 @@
 //
 //   GET  /v1/packages/{packageId}/modeling-decisions   listModelingDecisions   bim, admin
 //   POST /v1/packages/{packageId}/modeling-decisions   createModelingDecision  bim, admin
+//   GET  /v1/modeling-decisions?dealId&limit           listAllModelingDecisions bim, admin
 //
 // Decisions are append-only (the table rejects UPDATE and DELETE). The station records the
-// signed-in user and the time; each decision is audited in the same transaction.
+// signed-in user and the time; each decision is audited in the same transaction. The list
+// across packages (the review screen's decision log) is newest first, with each package's deal
+// and revision.
 
 import type { FastifyInstance } from "fastify";
 import { audit } from "../../core/audit.js";
@@ -16,10 +19,14 @@ import { isContractUuid, type PackageParams } from "../packages/schemas.js";
 import { packageExists } from "../packages/store.js";
 import { decisionRuleErrors, type PackageFileRef } from "./rules.js";
 import {
+  LIST_ALL_DECISIONS_DEFAULT_LIMIT,
+  listAllDecisionsQuerySchema,
   modelingDecisionInputSchema,
   type DecisionSource,
+  type ListAllDecisionsQuery,
   type ModelingDecision,
   type ModelingDecisionInput,
+  type ModelingDecisionWithContext,
 } from "./schemas.js";
 
 const DECISION_ROLES = ["bim", "admin"] as const;
@@ -104,6 +111,30 @@ async function lockPackageFiles(
 }
 
 export default async function decisionRoutes(app: FastifyInstance): Promise<void> {
+  app.get<{ Querystring: ListAllDecisionsQuery }>(
+    "/modeling-decisions",
+    { config: { roles: DECISION_ROLES }, schema: { querystring: listAllDecisionsQuerySchema } },
+    async (request) => {
+      const { dealId, limit = LIST_ALL_DECISIONS_DEFAULT_LIMIT } = request.query;
+      const result = await app.db.query<DecisionRow & { deal_id: string; revision: number }>(
+        `SELECT d.decision_id, d.package_id, d.element, d.decision, d.capture_id, d.area_key,
+                d.sources, d.note, d.decided_by_id, d.decided_by_name, d.decided_at,
+                p.deal_id, p.revision
+           FROM modeling_decisions d
+           JOIN packages p ON p.package_id = d.package_id
+          WHERE $1::text IS NULL OR p.deal_id = $1::text
+          ORDER BY d.decided_at DESC, d.decision_id DESC
+          LIMIT $2`,
+        [dealId ?? null, limit + 1],
+      );
+      const decisions: ModelingDecisionWithContext[] = result.rows.slice(0, limit).map((row) => {
+        const { decisionId, packageId, ...rest } = toDecision(row);
+        return { decisionId, packageId, dealId: row.deal_id, revision: row.revision, ...rest };
+      });
+      return { decisions, truncated: result.rows.length > limit };
+    },
+  );
+
   app.get<{ Params: PackageParams }>(
     "/packages/:packageId/modeling-decisions",
     { config: { roles: DECISION_ROLES } },

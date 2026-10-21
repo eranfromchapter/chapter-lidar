@@ -294,6 +294,22 @@ describe("getProject responses", () => {
     });
   });
 
+  it("200 with the project manager when the HUB names one", async () => {
+    const token = await issuer.mint({ roles: ["capture"] });
+    const body = await conforms(
+      healthy,
+      "getProject",
+      { method: "GET", url: "/v1/projects/fixture-deal-0002", headers: bearer(token) },
+      200,
+    );
+    assert.deepEqual(body, {
+      dealId: "fixture-deal-0002",
+      projectName: "Fixture second project",
+      address: { formatted: "200 Sample Avenue, Testville, NY 00000" },
+      projectManager: { name: "Pat Fixture", phone: "+1 212 555 0100" },
+    });
+  });
+
   it("404 for an unknown deal, a deal without a confirmed address and an out-of-schema id", async () => {
     const token = await issuer.mint({ roles: ["admin"] });
     for (const dealId of ["no-such-deal", "fixture-deal-0003", "d".repeat(65)]) {

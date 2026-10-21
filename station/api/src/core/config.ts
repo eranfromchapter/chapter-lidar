@@ -81,10 +81,22 @@ export interface StationConfig {
     readonly accountUrl?: string;
     /** Container that holds the immutable originals. */
     readonly originalsContainer: string;
+    /** Container of the station's spatial reports (written by the worker). */
+    readonly reportsContainer: string;
     /** Blob endpoint as seen by clients, when it differs from the one the service uses. */
     readonly publicBlobEndpoint?: string;
   };
+  /** Web pages the API links to (PackageLinks). Optional: links are omitted when unset. */
+  readonly links: {
+    /** Web review screen base URL (same value as the worker's REVIEW_BASE_URL). */
+    readonly reviewBaseUrl?: string;
+    /** HUB page of a deal, with the placeholder {dealId}. */
+    readonly hubDealUrlTemplate?: string;
+  };
 }
+
+/** Placeholder of HUB_WEB_DEAL_URL_TEMPLATE. */
+export const DEAL_ID_PLACEHOLDER = "{dealId}";
 
 export class ConfigError extends Error {
   readonly issues: readonly string[];
@@ -290,6 +302,30 @@ function readStationEnv(read: Reader): StationEnv {
   return read.oneOf<StationEnv>("NODE_ENV", ["development", "test", "production"], "development");
 }
 
+function readStorage(read: Reader): StationConfig["storage"] {
+  const originalsContainer = read.raw("STORAGE_ORIGINALS_CONTAINER") ?? "originals";
+  if (!CONTAINER_NAME.test(originalsContainer)) {
+    read.issues.push("STORAGE_ORIGINALS_CONTAINER must be a valid Azure Blob container name");
+  }
+  const reportsContainer = read.raw("STORAGE_REPORTS_CONTAINER") ?? "reports";
+  if (!CONTAINER_NAME.test(reportsContainer)) {
+    read.issues.push("STORAGE_REPORTS_CONTAINER must be a valid Azure Blob container name");
+  }
+  const connectionString = read.raw("AZURE_STORAGE_CONNECTION_STRING");
+  const accountUrl = read.url("AZURE_STORAGE_ACCOUNT_URL", read.raw("AZURE_STORAGE_ACCOUNT_URL"));
+  const publicBlobEndpoint = read.httpUrl("STORAGE_PUBLIC_BLOB_ENDPOINT");
+  return hideSecret(
+    {
+      ...(connectionString === undefined ? {} : { connectionString }),
+      ...(accountUrl === undefined ? {} : { accountUrl }),
+      originalsContainer,
+      reportsContainer,
+      ...(publicBlobEndpoint === undefined ? {} : { publicBlobEndpoint }),
+    },
+    "connectionString",
+  );
+}
+
 /**
  * Reads only NODE_ENV and the database variables (for the migration entrypoint, which needs
  * no Entra API or HUB settings). Throws ConfigError listing every problem.
@@ -305,6 +341,28 @@ export function loadDatabaseConfig(env: Env = process.env): {
     throw new ConfigError(read.issues);
   }
   return { env: stationEnv, database };
+}
+
+/**
+ * Reads only NODE_ENV, the database and the storage variables (for one-off maintenance
+ * scripts such as the review read model backfill). Throws ConfigError listing every problem.
+ */
+export function loadMaintenanceConfig(env: Env = process.env): {
+  env: StationEnv;
+  database: DatabaseConfig;
+  storage: StationConfig["storage"];
+} {
+  const read = new Reader(env);
+  const stationEnv = readStationEnv(read);
+  const database = readDatabase(read, stationEnv);
+  const storage = readStorage(read);
+  if (storage.accountUrl === undefined && storage.connectionString === undefined) {
+    read.issues.push("AZURE_STORAGE_ACCOUNT_URL or AZURE_STORAGE_CONNECTION_STRING is required");
+  }
+  if (read.issues.length > 0) {
+    throw new ConfigError(read.issues);
+  }
+  return { env: stationEnv, database, storage };
 }
 
 /**
@@ -328,7 +386,11 @@ export function loadDatabaseConfig(env: Env = process.env): {
  * - HUB_BASE_URL (https in production), HUB_SERVICE_CREDENTIAL (secret); both required when
  *   HUB_MODE is live
  * - AZURE_STORAGE_CONNECTION_STRING (secret), AZURE_STORAGE_ACCOUNT_URL,
- *   STORAGE_ORIGINALS_CONTAINER [originals], STORAGE_PUBLIC_BLOB_ENDPOINT
+ *   STORAGE_ORIGINALS_CONTAINER [originals], STORAGE_REPORTS_CONTAINER [reports],
+ *   STORAGE_PUBLIC_BLOB_ENDPOINT
+ * - REVIEW_BASE_URL (https unless loopback): the web review screen, for links.review; links are
+ *   omitted while unset. HUB_WEB_DEAL_URL_TEMPLATE (https unless loopback, contains {dealId}):
+ *   the HUB page of a deal, for links.hub; omitted while unset.
  */
 export function loadConfig(env: Env = process.env): StationConfig {
   const read = new Reader(env);
@@ -381,13 +443,21 @@ export function loadConfig(env: Env = process.env): StationConfig {
     }
   }
 
-  const originalsContainer = read.raw("STORAGE_ORIGINALS_CONTAINER") ?? "originals";
-  if (!CONTAINER_NAME.test(originalsContainer)) {
-    read.issues.push("STORAGE_ORIGINALS_CONTAINER must be a valid Azure Blob container name");
+  const storage = readStorage(read);
+
+  const reviewBaseUrl = read.url("REVIEW_BASE_URL", read.raw("REVIEW_BASE_URL"));
+  const hubDealTemplate = read.raw("HUB_WEB_DEAL_URL_TEMPLATE");
+  let hubDealUrlTemplate: string | undefined;
+  if (hubDealTemplate !== undefined) {
+    if (!hubDealTemplate.includes(DEAL_ID_PLACEHOLDER)) {
+      read.issues.push(`HUB_WEB_DEAL_URL_TEMPLATE must contain ${DEAL_ID_PLACEHOLDER}`);
+    } else {
+      // Checked with a sample deal id in place of the placeholder.
+      const sample = hubDealTemplate.split(DEAL_ID_PLACEHOLDER).join("1001");
+      hubDealUrlTemplate =
+        read.url("HUB_WEB_DEAL_URL_TEMPLATE", sample) === undefined ? undefined : hubDealTemplate;
+    }
   }
-  const connectionString = read.raw("AZURE_STORAGE_CONNECTION_STRING");
-  const accountUrl = read.url("AZURE_STORAGE_ACCOUNT_URL", read.raw("AZURE_STORAGE_ACCOUNT_URL"));
-  const publicBlobEndpoint = read.httpUrl("STORAGE_PUBLIC_BLOB_ENDPOINT");
 
   const config: StationConfig = {
     env: stationEnv,
@@ -414,15 +484,11 @@ export function loadConfig(env: Env = process.env): StationConfig {
       },
       "serviceCredential",
     ),
-    storage: hideSecret(
-      {
-        ...(connectionString === undefined ? {} : { connectionString }),
-        ...(accountUrl === undefined ? {} : { accountUrl }),
-        originalsContainer,
-        ...(publicBlobEndpoint === undefined ? {} : { publicBlobEndpoint }),
-      },
-      "connectionString",
-    ),
+    storage,
+    links: {
+      ...(reviewBaseUrl === undefined ? {} : { reviewBaseUrl }),
+      ...(hubDealUrlTemplate === undefined ? {} : { hubDealUrlTemplate }),
+    },
   };
 
   if (read.issues.length > 0) {
@@ -461,6 +527,9 @@ export function describeConfig(config: StationConfig): Record<string, unknown> {
     hubBaseUrl: config.hub.baseUrl,
     hubCredential: config.hub.serviceCredential === undefined ? "unset" : "set",
     originalsContainer: config.storage.originalsContainer,
+    reportsContainer: config.storage.reportsContainer,
+    reviewBaseUrl: config.links.reviewBaseUrl ?? "unset",
+    hubDealUrlTemplate: config.links.hubDealUrlTemplate ?? "unset",
     storage: config.storage.accountUrl
       ? "account-url"
       : config.storage.connectionString

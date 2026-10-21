@@ -8,8 +8,11 @@ import { buildServer } from "../../src/core/app.js";
 import {
   MAX_FILE_PATH_LENGTH,
   MAX_FILE_PATH_SEGMENTS,
+  carriesOver,
+  carryOverMatch,
   manifestMismatchErrors,
   sessionRequestErrors,
+  supersedesMismatchErrors,
 } from "../../src/routes/uploads/rules.js";
 import type { UploadSessionRequest } from "../../src/routes/uploads/schemas.js";
 import { createAzureOriginalsStorage } from "../../src/storage/azure-blob.js";
@@ -152,6 +155,85 @@ describe("manifestMismatchErrors", () => {
   });
 });
 
+describe("supersedesMismatchErrors (carry-over)", () => {
+  const body = makePackage({ revision: 3, supersedesPackageId: PACKAGE_ID }).session;
+  const previous = { visitId: body.visitId, dealId: body.dealId, revision: 2 };
+
+  it("accepts the previous revision of the same visit and deal", () => {
+    assert.deepEqual(supersedesMismatchErrors(body, previous), []);
+  });
+
+  it("names every difference at /supersedesPackageId", () => {
+    const errors = supersedesMismatchErrors(body, {
+      visitId: "00000000-0000-4000-8000-000000000001",
+      dealId: "another-deal",
+      revision: 1,
+    });
+    assert.deepEqual(
+      errors.map((error) => [error.pointer, error.message]),
+      [
+        ["/supersedesPackageId", "names a package of another visit"],
+        ["/supersedesPackageId", "names a package of another deal"],
+        ["/supersedesPackageId", "names revision 1, not revision 2"],
+      ],
+    );
+  });
+});
+
+describe("carriesOver", () => {
+  it("carries the verified files of a sealed previous revision over", () => {
+    for (const status of ["checks_queued", "checking", "verdict_ready", "check_error"]) {
+      assert.equal(carriesOver({ status }), true, status);
+    }
+  });
+
+  it("carries nothing over from one still uploading (the re-seal after a failed upload)", () => {
+    assert.equal(carriesOver({ status: "uploading" }), false);
+  });
+});
+
+describe("carryOverMatch", () => {
+  const declared = makePackage().session.files.find((file) => file.role === "plan_dxf")!;
+  const verified = {
+    role: declared.role,
+    capture_id: declared.captureId ?? null,
+    area_key: declared.areaKey ?? null,
+    sha256: declared.sha256,
+    bytes: declared.bytes,
+  };
+
+  it("matches the same role, capture, area, SHA-256 and size", () => {
+    assert.equal(carryOverMatch(declared, verified), true);
+  });
+
+  it("does not match when any of them differs", () => {
+    for (const change of [
+      { role: "plan_pdf" },
+      { capture_id: "00000000-0000-4000-8000-000000000002" },
+      { area_key: "floor-2" },
+      { sha256: "0".repeat(64) },
+      { bytes: declared.bytes + 1 },
+    ]) {
+      assert.equal(
+        carryOverMatch(declared, { ...verified, ...change }),
+        false,
+        JSON.stringify(change),
+      );
+    }
+    const record = makePackage().session.files.find((file) => file.role === "capture_record")!;
+    assert.equal(
+      carryOverMatch(record, {
+        ...verified,
+        role: "capture_record",
+        capture_id: null,
+        area_key: null,
+      }),
+      false,
+      "a capture record with another file's fingerprint does not match",
+    );
+  });
+});
+
 describe("blob names", () => {
   const path = "Original Exports/floor-1/abc/points.las";
 
@@ -189,14 +271,22 @@ describe("blob names", () => {
 
 describe("storage configuration", () => {
   it("returns undefined when no storage is configured", () => {
-    assert.equal(createAzureOriginalsStorage({ originalsContainer: "originals" }), undefined);
+    assert.equal(
+      createAzureOriginalsStorage({ originalsContainer: "originals", reportsContainer: "reports" }),
+      undefined,
+    );
   });
 
   it("rejects a connection string without an account key, without quoting it", () => {
     const connectionString =
       "BlobEndpoint=https://example.blob.core.windows.net;SharedAccessSignature=sv=2025&sig=c2VjcmV0";
     assert.throws(
-      () => createAzureOriginalsStorage({ originalsContainer: "originals", connectionString }),
+      () =>
+        createAzureOriginalsStorage({
+          originalsContainer: "originals",
+          reportsContainer: "reports",
+          connectionString,
+        }),
       (error: unknown) =>
         error instanceof OriginalsStorageError &&
         !error.message.includes("c2VjcmV0") &&
