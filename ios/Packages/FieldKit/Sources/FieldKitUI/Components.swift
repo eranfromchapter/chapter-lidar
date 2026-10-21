@@ -65,8 +65,10 @@
   }
 
   /// A selectable chip: ink with light text when selected, nude otherwise. At least 44 pt tall.
-  /// `needsPhoto` puts a small dot before the title (blocked red, light on the selected chip)
-  /// and "needs photo" in the accessibility value: a room the checklist still asks a photo of.
+  /// `needsPhoto` puts a small dot in the chip's top right corner (blocked red, light on the
+  /// selected chip) and "needs photo" in the accessibility value: a room the checklist still
+  /// asks a photo of. The dot sits in the chip's padding, so the chip is as wide as without it
+  /// and the chips wrap as they do without dots.
   struct ChoiceChip: View {
     let title: String
     let isSelected: Bool
@@ -76,21 +78,22 @@
 
     var body: some View {
       Button(action: action) {
-        HStack(spacing: 6) {
-          if needsPhoto {
-            Circle()
-              .fill(isSelected ? FieldTheme.surface : FieldTheme.blocked)
-              .frame(width: 7, height: 7)
-              .accessibilityHidden(true)
+        Text(title)
+          .font(FieldTheme.chip)
+          .padding(.horizontal, horizontalPadding)
+          .frame(minHeight: FieldTheme.chipHeight)
+          .foregroundStyle(isSelected ? FieldTheme.surface : FieldTheme.ink)
+          .background(isSelected ? FieldTheme.ink : FieldTheme.nude)
+          .overlay(alignment: .topTrailing) {
+            if needsPhoto {
+              Circle()
+                .fill(isSelected ? FieldTheme.surface : FieldTheme.blocked)
+                .frame(width: 7, height: 7)
+                .padding(5)
+                .accessibilityHidden(true)
+            }
           }
-          Text(title)
-        }
-        .font(FieldTheme.chip)
-        .padding(.horizontal, horizontalPadding)
-        .frame(minHeight: FieldTheme.chipHeight)
-        .foregroundStyle(isSelected ? FieldTheme.surface : FieldTheme.ink)
-        .background(isSelected ? FieldTheme.ink : FieldTheme.nude)
-        .clipShape(RoundedRectangle(cornerRadius: FieldTheme.chipRadius))
+          .clipShape(RoundedRectangle(cornerRadius: FieldTheme.chipRadius))
       }
       .buttonStyle(.plain)
       .accessibilityAddTraits(isSelected ? .isSelected : [])

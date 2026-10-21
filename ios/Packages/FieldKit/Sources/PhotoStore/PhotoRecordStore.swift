@@ -159,32 +159,68 @@ public final class PhotoRecordStore: @unchecked Sendable {
   public func relabelRooms(
     captureId: LowercaseUUID, renames: [(from: String, to: String)]
   ) throws -> [PhotoRecord] {
-    var targets: [String: String] = [:]
-    for rename in renames {
-      let to = rename.to.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !to.isEmpty, to.count <= PhotoLabelDraft.maximumRoomLength,
-        to.unicodeScalars.count <= PhotoLabelDraft.maximumRoomLength
-      else { throw PhotoStoreError.invalidRoom }
-      let from = PhotoCoverage.key(rename.from)
-      // The first rename of a room wins; renaming a room to its own label changes nothing.
-      if targets[from] == nil, !from.isEmpty { targets[from] = to }
+    try relabelRooms([captureId: renames])
+  }
+
+  /// `relabelRooms(captureId:renames:)` for the renames of several captures (by capture id), in
+  /// one write of `photo-records.json`: either every capture's photos are relabeled or, when
+  /// the write fails, none is.
+  @discardableResult
+  public func relabelRooms(_ renamesByCapture: [LowercaseUUID: [(from: String, to: String)]])
+    throws -> [PhotoRecord]
+  {
+    var targets: [LowercaseUUID: [String: String]] = [:]
+    for (captureId, renames) in renamesByCapture {
+      var capture: [String: String] = [:]
+      for rename in renames {
+        let to = rename.to.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !to.isEmpty, to.count <= PhotoLabelDraft.maximumRoomLength,
+          to.unicodeScalars.count <= PhotoLabelDraft.maximumRoomLength
+        else { throw PhotoStoreError.invalidRoom }
+        let from = PhotoCoverage.key(rename.from)
+        // The first rename of a room wins; renaming a room to its own label changes nothing.
+        if capture[from] == nil, !from.isEmpty { capture[from] = to }
+      }
+      targets[captureId] = capture
     }
 
     lock.lock()
     defer { lock.unlock() }
     var next = saved
     var changed: [PhotoRecord] = []
-    for index in next.indices where next[index].captureId == captureId {
-      guard let to = targets[PhotoCoverage.key(next[index].room)], next[index].room != to
+    for index in next.indices {
+      guard let capture = targets[next[index].captureId],
+        let to = capture[PhotoCoverage.key(next[index].room)], next[index].room != to
       else { continue }
       next[index].labels.room = to
       changed.append(next[index])
     }
     guard !changed.isEmpty else { return [] }
-    let index = try CaptureContractJSON.makeEncoder(prettyPrinted: true).encode(next)
-    try files.write(index, toRelativePath: Self.indexPath, replacingExisting: true)
-    saved = next
+    try writeIndex(next)
     return changed
+  }
+
+  /// Puts back the labels the photos had in `previous` (records as `records` returned them
+  /// earlier, matched by path), for example to undo a relabel when a later step of a rename
+  /// failed. Exactly those labels come back, whatever a relabel did; a photo saved since keeps
+  /// its own, and no photo file is touched.
+  public func restoreLabels(_ previous: [PhotoRecord]) throws {
+    let labels = Dictionary(previous.map { ($0.path, $0.labels) }, uniquingKeysWith: { a, _ in a })
+    lock.lock()
+    defer { lock.unlock() }
+    var next = saved
+    for index in next.indices {
+      if let old = labels[next[index].path] { next[index].labels = old }
+    }
+    guard next != saved else { return }
+    try writeIndex(next)
+  }
+
+  /// Writes `records` as the index, then keeps them. The caller holds `lock`.
+  private func writeIndex(_ records: [PhotoRecord]) throws {
+    let index = try CaptureContractJSON.makeEncoder(prettyPrinted: true).encode(records)
+    try files.write(index, toRelativePath: Self.indexPath, replacingExisting: true)
+    saved = records
   }
 
   /// `relabelRooms(captureId:renames:)` for one room.

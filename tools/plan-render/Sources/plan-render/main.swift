@@ -10,9 +10,12 @@ import UniformTypeIdentifiers
 //
 //   plan-render <roomplan.json | capture-model.json> <out-dir>
 //               [--address <text>] [--units imperial|metric] [--title <text>]
+//               [--label <capture label>] [--room-names <names.json>]
 //
-// A roomplan.json (the raw RoomPlan capture) is mapped with `CaptureModelMapper`, as the phone's
-// scan viewer does; a capture-model.json is drawn as it is. The page is `FloorplanWriter.write`
+// A roomplan.json (the raw RoomPlan capture) is mapped as the phone's scan viewer maps it: with
+// the capture's label (`--label`, default "Scan") and the operator's room names (`--room-names`:
+// a JSON array of `RoomName`, the capture's entry of the visit's room-names.json), through
+// `RoomNaming.map`. A capture-model.json is drawn as it is. The page is `FloorplanWriter.write`
 // (public API, nothing redrawn here). Writes floorplan.pdf, floorplan.svg and floorplan.png
 // (page 1 of the PDF at 200 dpi on white) into <out-dir>, then prints a one-line JSON summary.
 // Failures go to stderr as one readable line, with exit code 2 (usage), 3 (input unreadable),
@@ -21,7 +24,8 @@ import UniformTypeIdentifiers
 enum PlanRender {
   static let usage = """
     Usage: plan-render <roomplan.json | capture-model.json> <out-dir> \
-    [--address <text>] [--units imperial|metric] [--title <text>]
+    [--address <text>] [--units imperial|metric] [--title <text>] \
+    [--label <capture label>] [--room-names <names.json>]
     """
   static let dpi: CGFloat = 200
 
@@ -35,6 +39,9 @@ enum PlanRender {
     var outDir: URL
     var options: FloorplanWriter.Options
     var units: DisplayUnitSystem
+    /// The capture's label, as the phone maps the scan with it.
+    var label = "Scan"
+    var roomNames: URL?
   }
 
   static func parse(_ args: [String]) throws -> Arguments {
@@ -42,6 +49,8 @@ enum PlanRender {
     var address: String?
     var title = "Floorplan"
     var units = DisplayUnitSystem.imperial
+    var label = "Scan"
+    var roomNames: URL?
     var i = 0
     func value(_ flag: String) throws -> String {
       i += 1
@@ -53,6 +62,11 @@ enum PlanRender {
       switch arg {
       case "--address": address = try value(arg)
       case "--title": title = try value(arg)
+      case "--label":
+        let text = try value(arg).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { throw Failure(code: 2, message: "--label needs a value.") }
+        label = text
+      case "--room-names": roomNames = URL(fileURLWithPath: try value(arg))
       case "--units":
         let text = try value(arg)
         guard let system = DisplayUnitSystem(rawValue: text) else {
@@ -72,11 +86,24 @@ enum PlanRender {
     return Arguments(
       input: URL(fileURLWithPath: positional[0]),
       outDir: URL(fileURLWithPath: positional[1], isDirectory: true), options: options,
-      units: units)
+      units: units, label: label, roomNames: roomNames)
   }
 
-  /// The capture model of the input, and which kind of file it was.
-  static func model(from url: URL) throws -> (model: CaptureModel, source: String) {
+  /// The operator's room names in `url`: a JSON array of `RoomName`.
+  static func roomNames(from url: URL) throws -> [RoomName] {
+    do {
+      return try JSONDecoder().decode([RoomName].self, from: Data(contentsOf: url))
+    } catch {
+      throw Failure(
+        code: 3, message: "\(url.lastPathComponent) is not a list of room names: \(describe(error))")
+    }
+  }
+
+  /// The capture model of the input, and which kind of file it was. A roomplan.json is mapped
+  /// with `label` and the room `names`, as the phone's scan viewer maps it.
+  static func model(from url: URL, label: String = "Scan", names: [RoomName] = []) throws -> (
+    model: CaptureModel, source: String
+  ) {
     let data: Data
     do {
       data = try Data(contentsOf: url)
@@ -106,9 +133,9 @@ enum PlanRender {
     let context = MappingContext(
       visitId: LowercaseUUID(rawValue: "00000000-0000-4000-8000-000000000001")!,
       captureId: LowercaseUUID(rawValue: "00000000-0000-4000-8000-000000000002")!,
-      areaKey: "scan", label: "Scan")
+      areaKey: "scan", label: label)
     do {
-      return (try CaptureModelMapper.map(document, context: context), "roomplan")
+      return (try RoomNaming.map(document, context: context, names: names).model, "roomplan")
     } catch {
       throw Failure(code: 4, message: "The RoomPlan capture could not be mapped: \(describe(error))")
     }
@@ -168,7 +195,8 @@ enum PlanRender {
 
   static func run(_ args: [String]) throws {
     let arguments = try parse(args)
-    let (model, source) = try model(from: arguments.input)
+    let names = try arguments.roomNames.map(roomNames(from:)) ?? []
+    let (model, source) = try model(from: arguments.input, label: arguments.label, names: names)
     let plan: FloorplanWriter.Floorplan
     do {
       plan = try FloorplanWriter.write(model: model, options: arguments.options)
@@ -191,6 +219,7 @@ enum PlanRender {
       "source": source,
       "units": arguments.units.rawValue,
       "rooms": model.rooms.count,
+      "roomLabels": model.rooms.map(\.label),
       "walls": model.walls.count,
       "page": plan.page.rawValue,
       "widthMM": plan.widthMM,

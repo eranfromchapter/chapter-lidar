@@ -147,13 +147,40 @@ final class RoomTypingTests: XCTestCase {
       // 2026-10-20, "it's not a closet it's a shower").
       ("Shower", .bathroom), ("shower", .bathroom), ("Walk-in shower", .bathroom), ("Tub", .bathroom),
       ("Bathtub", .bathroom), ("Half bath", .bathroom), ("Lavatory", .bathroom),
-      ("Pantry", .closet), ("Storage", .closet), ("Linen cupboard", .closet), ("Kitchen pantry", .kitchen),
+      ("Pantry", .closet), ("Storage", .closet), ("Linen cupboard", .closet),
       ("Entry", .hallway), ("Vestibule", .hallway), ("Hallway", .hallway),
       ("Room Mexico", nil), ("Showers wing", nil), ("Tubular", nil),
     ]
     for (label, type) in cases {
       XCTAssertEqual(RoomTyping.areaType(label), type, label)
     }
+  }
+
+  /// Names an operator combines from the quick names: the kind of room is the last word that
+  /// names one ("Bedroom closet" is a closet, not a bedroom), and a room of two parts takes its
+  /// first part's type.
+  func testACompoundNameTakesTheTypeOfItsLastTypeWord() {
+    let cases: [(String, RoomType?)] = [
+      ("Bedroom closet", .closet), ("Primary bedroom closet", .closet), ("Kitchen pantry", .closet),
+      ("Bathroom closet", .closet), ("Bedroom hall", .hallway), ("Hall bath", .bathroom),
+      ("Hall closet", .closet), ("Linen closet", .closet), ("Entry closet", .closet),
+      ("Bedroom storage", .closet), ("Storage room", .closet), ("Walk-in shower", .bathroom),
+      ("Kitchen nook", .kitchen), ("Guest bedroom 2", .bedroom), ("Shower room", .bathroom),
+      ("Bedroom closet 2", .closet), ("BEDROOM CLOSET", .closet),
+      // Two parts: the first part that names a type.
+      ("Living / dining", .livingRoom), ("Kitchen & dining", .kitchen), ("Kitchen/dining", .kitchen),
+      ("Bath and laundry", .bathroom), ("Office + guest bedroom", .office), ("Jack and Jill bath", .bathroom),
+      ("Mud room, laundry", .laundry), ("Room Mexico closet", .closet), ("Bedrooms and halls", nil),
+    ]
+    for (label, type) in cases {
+      XCTAssertEqual(RoomTyping.areaType(label), type, label)
+    }
+    // As a rename: the room is a closet chosen by the operator, not a bedroom.
+    let rooms: [RoomTyping.Result] = [.typed(.bedroom, .roomplanSection), .unknown, .typed(.closet, .inferred)]
+    XCTAssertEqual(
+      RoomTyping.renamedByOperator(
+        rooms, captureLabel: "Room Mexico", overrides: ["", "Kitchen pantry", "Bedroom closet"]),
+      [.typed(.bedroom, .roomplanSection), .typed(.closet, .operator), .typed(.closet, .operator)])
   }
 
   func testARenamedRoomTakesTheTypeItsNameSays() {

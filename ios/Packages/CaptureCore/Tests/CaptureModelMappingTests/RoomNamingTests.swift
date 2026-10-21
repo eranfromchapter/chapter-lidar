@@ -47,6 +47,18 @@ final class RoomNamingTests: XCTestCase {
     XCTAssertEqual(validator.validate(try encodedJSON(named.model)), [])
   }
 
+  /// Review of 2026-10-20: "Bedroom closet" made a bedroom (the first type word won), so the
+  /// plan counted a bedroom more. The kind of room is the last type word.
+  func testACompoundNameTypesTheRoomByItsLastTypeWord() throws {
+    let named = try map([RoomName(roomId: "room-3", derivedLabel: "Closet", name: "Bedroom closet")])
+    XCTAssertEqual(named.model.rooms.map(\.label), ["Bedroom", "Room 2", "Bedroom closet"])
+    XCTAssertEqual(named.model.rooms.map(\.type), [.bedroom, nil, .closet])
+    XCTAssertEqual(named.model.rooms.map(\.typeSource), [.roomplanSection, nil, .operator])
+    let hall = try map([RoomName(roomId: "room-2", derivedLabel: "Room 2", name: "Bedroom hall")])
+    XCTAssertEqual(hall.model.rooms.map(\.type), [.bedroom, .hallway, .closet])
+    XCTAssertEqual(hall.model.rooms.filter { $0.type == .bedroom }.count, 1, "one bedroom, as scanned")
+  }
+
   func testANameThatNamesNoTypeKeepsTheScansType() throws {
     let named = try map([
       RoomName(roomId: "room-1", derivedLabel: "Bedroom", name: "Eran's room"),
@@ -61,8 +73,10 @@ final class RoomNamingTests: XCTestCase {
   /// for: after an app update splits the scan differently, a stale name is dropped instead of
   /// landing on another room.
   func testANameAppliesOnlyToTheSameRoomOfTheSameSplit() throws {
-    let rooms = [(id: "room-1", derivedLabel: "Bedroom"), (id: "room-2", derivedLabel: "Room 2"),
-                 (id: "room-3", derivedLabel: "Closet")]
+    let rooms = [
+      ScannedRoom(id: "room-1", derivedLabel: "Bedroom"), ScannedRoom(id: "room-2", derivedLabel: "Room 2"),
+      ScannedRoom(id: "room-3", derivedLabel: "Closet"),
+    ]
     let shower = RoomName(roomId: "room-3", derivedLabel: "Closet", name: "Shower")
     XCTAssertEqual(RoomNaming.overrides(rooms: rooms, names: [shower]), ["", "", "Shower"])
     // The same id now has another derived label (a different split): ignored.
@@ -86,6 +100,76 @@ final class RoomNamingTests: XCTestCase {
     let stale = try map([RoomName(roomId: "room-2", derivedLabel: "Closet", name: "Shower")])
     XCTAssertEqual(stale.model.rooms.map(\.label), ["Bedroom", "Room 2", "Closet"])
     XCTAssertEqual(stale.model, try map([]).model)
+  }
+
+  /// Review of 2026-10-20: an untyped room is "Room N" by its position, the same thing its id
+  /// says, so id and label alone cannot tell another room of a different split. The footprint
+  /// (area and centre of the outline) does.
+  func testANameAppliesOnlyWhereTheRoomWas() throws {
+    let plain = try map([])
+    let scanned = plain.scannedRooms
+    XCTAssertEqual(scanned.map(\.id), ["room-1", "room-2", "room-3"])
+    XCTAssertEqual(scanned.map(\.derivedLabel), ["Bedroom", "Room 2", "Closet"])
+    let room2 = try XCTUnwrap(scanned[1].footprint)
+    let closet = try XCTUnwrap(scanned[2].footprint)
+    XCTAssertGreaterThan(room2.areaM2, closet.areaM2)
+    // The small room in the corner of the L (x 0 to 1.6, z 4.6 to 6).
+    XCTAssertEqual(closet.centerX, 0.8, accuracy: 0.4)
+    XCTAssertEqual(closet.centerZ, 5.3, accuracy: 0.4)
+
+    // Saved with the footprint the room had: applied.
+    let named = try map([
+      RoomName(roomId: "room-2", derivedLabel: "Room 2", name: "Kitchenette", footprint: room2),
+      RoomName(roomId: "room-3", derivedLabel: "Closet", name: "Shower", footprint: closet),
+    ])
+    XCTAssertEqual(named.model.rooms.map(\.label), ["Bedroom", "Kitchenette", "Shower"])
+
+    // The same id and label but another room (elsewhere, or of another size): ignored.
+    var elsewhere = room2
+    elsewhere.centerX += 2
+    var smaller = room2
+    smaller.areaM2 *= 0.5
+    for footprint in [elsewhere, smaller] {
+      let stale = try map([RoomName(roomId: "room-2", derivedLabel: "Room 2", name: "Kitchenette", footprint: footprint)])
+      XCTAssertEqual(stale.model.rooms.map(\.label), ["Bedroom", "Room 2", "Closet"], "\(footprint)")
+    }
+    // A slightly different outline of the same room still counts (rounding, a small fix to
+    // the outline after an update).
+    var nudged = closet
+    nudged.centerX += 0.1
+    nudged.areaM2 += 0.1
+    XCTAssertTrue(nudged.matches(closet))
+    XCTAssertEqual(
+      RoomNaming.overrides(rooms: scanned, names: [RoomName(roomId: "room-3", derivedLabel: "Closet", name: "Shower", footprint: nudged)]),
+      ["", "", "Shower"])
+    // A saved footprint and a room without one (no outline area): not the same room.
+    XCTAssertFalse(
+      RoomNaming.applies(
+        RoomName(roomId: "room-3", derivedLabel: "Closet", name: "Shower", footprint: closet),
+        to: ScannedRoom(id: "room-3", derivedLabel: "Closet", footprint: nil)))
+  }
+
+  func testFootprintOfAnOutline() throws {
+    // A 4 x 3 m rectangle from (1, 2): area 12, centre (3, 3.5), either winding.
+    let corners: [(Double, Double)] = [(1, 2), (5, 2), (5, 5), (1, 5)]
+    for polygon in [corners, corners.reversed()] {
+      let footprint = try XCTUnwrap(RoomFootprint(polygon: polygon.map { Vec3(x: $0.0, y: 0, z: $0.1) }))
+      XCTAssertEqual(footprint, RoomFootprint(areaM2: 12, centerX: 3, centerZ: 3.5))
+    }
+    // An L: the centre of the area, not of the corners.
+    let l: [(Double, Double)] = [(0, 0), (4, 0), (4, 1), (1, 1), (1, 4), (0, 4)]
+    let footprint = try XCTUnwrap(RoomFootprint(polygon: l.map { Vec3(x: $0.0, y: 0, z: $0.1) }))
+    XCTAssertEqual(footprint.areaM2, 7)
+    XCTAssertEqual(footprint.centerX, 1.36)  // (4 x 2 + 3 x 0.5) / 7, rounded to the centimetre
+    XCTAssertEqual(footprint.centerZ, 1.36)
+    XCTAssertNil(RoomFootprint(polygon: [Vec3(x: 0, y: 0, z: 0), Vec3(x: 1, y: 0, z: 0)]))
+    XCTAssertNil(RoomFootprint(polygon: [Vec3(x: 0, y: 0, z: 0), Vec3(x: 1, y: 0, z: 0), Vec3(x: 2, y: 0, z: 0)]))
+    // Saved and read back; a name saved without one decodes with none.
+    let name = RoomName(roomId: "room-3", derivedLabel: "Closet", name: "Shower", footprint: footprint)
+    XCTAssertEqual(try JSONDecoder().decode(RoomName.self, from: JSONEncoder().encode(name)), name)
+    let old = try JSONDecoder().decode(
+      RoomName.self, from: Data(#"{"roomId":"room-3","derivedLabel":"Closet","name":"Shower"}"#.utf8))
+    XCTAssertNil(old.footprint)
   }
 
   func testCleanedNamesStayWithinTheSchemaLimit() {

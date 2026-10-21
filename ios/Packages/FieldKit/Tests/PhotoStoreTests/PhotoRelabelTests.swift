@@ -66,6 +66,61 @@ final class PhotoRelabelTests: XCTestCase {
     XCTAssertEqual(store.records.map(\.room), ["Closet", "Bathroom"])
   }
 
+  /// The renames of two captures in one write: both or neither.
+  func testSeveralCapturesAreRelabeledInOneWrite() throws {
+    let files = CountingFileStore()
+    let store = try PhotoRecordStore(files: files)
+    try save(store, floor1, room: "Closet", seed: 1)
+    try save(store, floor2, room: "Hall", seed: 2)
+    try save(store, floor2, room: "Closet", seed: 3)
+    let writes = files.indexWrites
+    let changed = try store.relabelRooms([
+      floor1.captureId: [(from: "Closet", to: "Shower")],
+      floor2.captureId: [(from: "Hall", to: "Entry")],
+    ])
+    XCTAssertEqual(changed.map(\.room), ["Shower", "Entry"])
+    XCTAssertEqual(store.records.map(\.room), ["Shower", "Entry", "Closet"])
+    XCTAssertEqual(files.indexWrites, writes + 1, "one write of photo-records.json")
+
+    // The write fails: no capture is relabeled, in memory or on disk.
+    files.failIndexWrites = true
+    XCTAssertThrowsError(
+      try store.relabelRooms([
+        floor1.captureId: [(from: "Shower", to: "Steam room")],
+        floor2.captureId: [(from: "Entry", to: "Foyer")],
+      ]))
+    XCTAssertEqual(store.records.map(\.room), ["Shower", "Entry", "Closet"])
+    files.failIndexWrites = false
+    XCTAssertEqual(try PhotoRecordStore(files: files).records.map(\.room), ["Shower", "Entry", "Closet"])
+  }
+
+  /// Review of 2026-10-20: undoing a relabel by relabeling backwards also renamed a photo that
+  /// already had the new name ("Shower", typed in "Other room") and changed "closet" to
+  /// "Closet". `restoreLabels` puts back exactly the labels there were.
+  func testRestoreLabelsPutsBackExactlyThePreviousLabels() throws {
+    let files = InMemoryPhotoFileStore()
+    let store = try PhotoRecordStore(files: files)
+    try save(store, floor1, room: "Closet", seed: 1)
+    try save(store, floor1, room: "Shower", seed: 2)
+    try save(store, floor1, room: "closet", seed: 3)
+    let before = store.records
+    try store.relabelRoom(captureId: floor1.captureId, from: "Closet", to: "Shower")
+    XCTAssertEqual(store.records.map(\.room), ["Shower", "Shower", "Shower"])
+
+    // A photo saved after the relabel keeps its own label.
+    try save(store, floor1, room: "Shower", seed: 4)
+    try store.restoreLabels(before)
+    XCTAssertEqual(store.records.map(\.room), ["Closet", "Shower", "closet", "Shower"])
+    XCTAssertEqual(Array(store.records.prefix(3)), before)
+    XCTAssertEqual(try PhotoRecordStore(files: files).records, store.records, "written")
+    XCTAssertTrue(store.records.allSatisfy(store.isIntact))
+
+    // Nothing to put back: the index is not rewritten.
+    let index = try files.read(relativePath: PhotoRecordStore.indexPath)
+    try store.restoreLabels(store.records)
+    XCTAssertEqual(try files.read(relativePath: PhotoRecordStore.indexPath), index)
+  }
+
   func testNothingChangesForANameNotInUseOrAnInvalidName() throws {
     let files = InMemoryPhotoFileStore()
     let store = try PhotoRecordStore(files: files)
@@ -84,4 +139,25 @@ final class PhotoRelabelTests: XCTestCase {
     XCTAssertEqual(try store.relabelRoom(captureId: floor1.captureId, from: "Bedroom", to: "bedroom").count, 1)
     XCTAssertEqual(store.records.map(\.room), ["bedroom"])
   }
+}
+
+/// Files in memory that count the writes of the photo index and can refuse them.
+private final class CountingFileStore: PhotoFileStore, @unchecked Sendable {
+  private let files = InMemoryPhotoFileStore()
+  private(set) var indexWrites = 0
+  var failIndexWrites = false
+
+  struct Refused: Error {}
+
+  func write(_ data: Data, toRelativePath path: String, replacingExisting: Bool) throws {
+    if path == PhotoRecordStore.indexPath {
+      if failIndexWrites { throw Refused() }
+      indexWrites += 1
+    }
+    try files.write(data, toRelativePath: path, replacingExisting: replacingExisting)
+  }
+
+  func read(relativePath path: String) throws -> Data { try files.read(relativePath: path) }
+  func exists(relativePath path: String) -> Bool { files.exists(relativePath: path) }
+  func remove(relativePath path: String) throws { try files.remove(relativePath: path) }
 }

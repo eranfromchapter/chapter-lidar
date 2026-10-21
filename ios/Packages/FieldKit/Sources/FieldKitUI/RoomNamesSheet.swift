@@ -1,10 +1,15 @@
 #if canImport(SwiftUI) && canImport(UIKit)
   import FieldRules
   import SwiftUI
+  import UIKit
 
   /// "Rename rooms": every room of the capture (or of each capture, from the checklist) with a
   /// text field prefilled with its name and quick names under it (Shower, Closet, Bathroom…).
   /// RoomPlan has no shower: a small room the scan called "Closet" can be named what it is.
+  ///
+  /// A room the checklist still asks a photo of says "No photo yet". The sheet opens at the
+  /// room `RoomNamingDraft.focusRoomId` names (the Closet of "Closet has no photo"), and the room
+  /// being typed in is kept above the Save bar with its quick names in view.
   ///
   /// `onSave` gets the renamed rooms and returns an error message to show, or nil when the
   /// names were saved (the sheet then closes).
@@ -47,26 +52,51 @@
         }
         .padding(.horizontal, margin)
 
-        ScrollView {
-          VStack(alignment: .leading, spacing: FieldTheme.space24) {
-            ForEach(draft.captures) { capture in
-              VStack(alignment: .leading, spacing: FieldTheme.space16) {
-                if draft.captures.count > 1 {
-                  Text(capture.label).font(FieldTheme.rowTitle)
-                }
-                ForEach(capture.rooms) { room in
-                  editor(room)
-                  if room.id != capture.rooms.last?.id {
-                    Rectangle().fill(FieldTheme.nude).frame(height: 1)
+        ScrollViewReader { proxy in
+          ScrollView {
+            VStack(alignment: .leading, spacing: FieldTheme.space24) {
+              ForEach(draft.captures) { capture in
+                VStack(alignment: .leading, spacing: FieldTheme.space16) {
+                  if draft.captures.count > 1 {
+                    Text(capture.label).font(FieldTheme.rowTitle)
+                  }
+                  ForEach(capture.rooms) { room in
+                    editor(room)
+                      .id(room.id)
+                    if room.id != capture.rooms.last?.id {
+                      Rectangle().fill(FieldTheme.nude).frame(height: 1)
+                    }
                   }
                 }
               }
             }
+            .padding(.horizontal, margin)
+            .padding(.bottom, FieldTheme.space16)
           }
-          .padding(.horizontal, margin)
-          .padding(.bottom, FieldTheme.space16)
+          .scrollDismissesKeyboard(.interactively)
+          .onAppear {
+            // Opened from "Closet has no photo": start at the Closet.
+            guard let target = draft.focusRoomId else { return }
+            DispatchQueue.main.async { proxy.scrollTo(target, anchor: .top) }
+          }
+          .onChange(of: focused) { _, room in
+            // SwiftUI scrolls the field itself only to the keyboard's edge, under the Save bar
+            // and with its quick names hidden: scroll the room's whole block above the bar
+            // once the keyboard is up.
+            guard let room else { return }
+            Task { @MainActor in
+              try? await Task.sleep(for: .milliseconds(350))
+              guard focused == room else { return }
+              withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(room, anchor: .bottom) }
+            }
+          }
+          .onReceive(
+            NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)
+          ) { _ in
+            guard let room = focused else { return }
+            withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(room, anchor: .bottom) }
+          }
         }
-        .scrollDismissesKeyboard(.interactively)
 
         VStack(alignment: .leading, spacing: FieldTheme.space8) {
           if let error {
@@ -91,7 +121,24 @@
       let issue = draft.issue(room: room.id)
       let name = room.name.trimmingCharacters(in: .whitespacesAndNewlines)
       return VStack(alignment: .leading, spacing: FieldTheme.space8) {
-        FieldCaption(text: room.caption)
+        HStack(alignment: .firstTextBaseline, spacing: FieldTheme.space8) {
+          FieldCaption(text: room.caption)
+          Spacer(minLength: 0)
+          if room.needsPhoto {
+            // The chips' dot: the checklist still asks a photo of this room.
+            Label {
+              Text("No photo yet")
+            } icon: {
+              Circle().fill(FieldTheme.blocked).frame(width: 7, height: 7)
+            }
+            .font(FieldTheme.caption)
+            .foregroundStyle(FieldTheme.blocked)
+            .fixedSize()
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("No photo yet")
+            .accessibilityIdentifier("rooms.needsPhoto.\(room.roomId)")
+          }
+        }
         TextField(
           room.scannedLabel,
           text: Binding(get: { room.name }, set: { draft.setName($0, room: room.id) })
@@ -106,7 +153,11 @@
         .accessibilityLabel("Name of \(room.currentLabel)")
         .accessibilityIdentifier("rooms.name.\(room.roomId)")
         if let issue {
-          Text(issue.text).font(FieldTheme.caption).foregroundStyle(FieldTheme.blocked)
+          Text(issue.text)
+            .font(FieldTheme.caption)
+            .foregroundStyle(FieldTheme.blocked)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("rooms.issue.\(room.roomId)")
         }
         ScrollView(.horizontal, showsIndicators: false) {
           HStack(spacing: FieldTheme.space8) {

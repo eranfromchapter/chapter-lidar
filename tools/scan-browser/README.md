@@ -105,12 +105,15 @@ Floorplan; nothing is redrawn in the browser.
 
 ```sh
 plan-render <roomplan.json | capture-model.json> <out-dir> \
-  [--address <text>] [--units imperial|metric] [--title <text>]
+  [--address <text>] [--units imperial|metric] [--title <text>] \
+  [--label <capture label>] [--room-names <names.json>]
 ```
 
 It writes `floorplan.pdf`, `floorplan.svg` and `floorplan.png` (page 1 of the PDF at 200 dpi on
-white) and prints a one-line JSON summary. A `roomplan.json` is mapped with `CaptureModelMapper`
-first, as the phone's scan viewer does.
+white) and prints a one-line JSON summary (with the room labels). A `roomplan.json` is mapped
+first as the phone's scan viewer maps it: with the capture's label and the operator's room names
+(`RoomNaming.map`), so a room renamed on the phone ("Closet" to "Shower") has its new name here
+too.
 
 - **Source**: the raw `roomplan.json` from the originals (else from a sealed package), mapped
   with today's code, which is what the phone's scan viewer shows; else the `capture-model.json` of
@@ -118,7 +121,10 @@ first, as the phone's scan viewer does.
   "Draw from" switches between them: a capture model written by an older app build can split and
   label the rooms differently.
 - **Options**: the address and the display units come from the capture record (imperial when it
-  has none); the title is "Floorplan".
+  has none); the title is "Floorplan". The raw scan is mapped with the capture's label from the
+  capture record (else the area key as the phone titles it, "room-mexico" as "Room Mexico") and
+  with the capture's entries of the visit's `room-names.json` (the names the operator gave rooms
+  on the phone; the file is app-private and not part of a sealed package).
 - **Build**: on the first Floorplan request, and again whenever a Swift source of the tool or of
   those packages is newer than the binary, the server runs
   `swift build -c release --package-path tools/plan-render` (output in `tools/plan-render/.build`,

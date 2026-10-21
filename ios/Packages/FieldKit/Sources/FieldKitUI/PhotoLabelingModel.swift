@@ -62,16 +62,17 @@
 
     public var title: String { "Photo \(photoNumber) of \(capture.label)" }
 
-    /// The viewfinder's title: "Shower · Photo 16 of Room Mexico" when the camera was opened
-    /// for a room from the checklist, else `title`.
+    /// The title of the viewfinder and the labeling screen: "Shower · Photo 16 of Room Mexico"
+    /// when the camera was opened for a room from the checklist, else `title`.
     public var headerTitle: String {
       guard let targetRoom else { return title }
       return "\(targetRoom) \u{00B7} \(title)"
     }
 
-    /// Room chips: up to three rooms, then More.
-    public var primaryRooms: [String] { Array(capture.rooms.prefix(3)) }
-    public var otherRooms: [String] { Array(capture.rooms.dropFirst(3)) }
+    /// Room chips: up to three rooms, and the room the operator came for when it is further
+    /// down the list (`RoomChips`), then More.
+    public var primaryRooms: [String] { RoomChips.primary(capture.rooms, target: targetRoom) }
+    public var otherRooms: [String] { RoomChips.more(capture.rooms, target: targetRoom) }
 
     /// True when the checklist still asks a photo of `room`.
     public func needsPhoto(_ room: String) -> Bool { coverage.needsPhoto(room) }

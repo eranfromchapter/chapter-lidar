@@ -21,10 +21,16 @@
     public var body: some View {
       ScrollView {
         VStack(alignment: .leading, spacing: FieldTheme.space16) {
-          HStack {
-            Text(model.title).font(FieldTheme.headline)
+          HStack(alignment: .firstTextBaseline) {
+            // "Closet · Photo 7 of Room Mexico" when opened for the Closet from the checklist,
+            // as on the viewfinder.
+            Text(model.headerTitle)
+              .font(FieldTheme.headline)
+              .fixedSize(horizontal: false, vertical: true)
+              .accessibilityIdentifier("photo.labelTitle")
             Spacer()
             Text("Original kept").font(FieldTheme.caption).foregroundStyle(FieldTheme.muted)
+              .fixedSize()
           }
 
           photo

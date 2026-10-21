@@ -34,6 +34,8 @@
           header
             .padding(.horizontal, 20)
             .padding(.top, FieldTheme.space8)
+            .padding(.bottom, FieldTheme.space16)
+            .background(alignment: .top) { headerScrim }
 
           Spacer()
 
@@ -48,9 +50,15 @@
               .padding(.bottom, FieldTheme.space8)
           }
 
+          // On the coverage line's dark pill, and the shutter with a soft shadow: both stay
+          // visible over a bright scene.
           Text("Keep personal items and people out of the frame.")
             .font(FieldTheme.caption)
             .foregroundStyle(FieldTheme.surface)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(FieldTheme.ink.opacity(0.72))
+            .clipShape(RoundedRectangle(cornerRadius: FieldTheme.chipRadius))
             .padding(.bottom, FieldTheme.space8)
 
           Button {
@@ -60,6 +68,7 @@
               .fill(FieldTheme.surface)
               .frame(width: 72, height: 72)
               .overlay(Circle().stroke(FieldTheme.line, lineWidth: 4))
+              .shadow(color: FieldTheme.ink.opacity(0.35), radius: 6, y: 1)
           }
           .buttonStyle(.plain)
           .disabled(model.isCapturing || cameraError != nil)
@@ -80,11 +89,15 @@
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityIdentifier("photo.title")
           if let onRenameRooms {
+            // Light text on its own dark fill, like the coverage pill, so it reads over white
+            // shower tiles as well as in a dark room.
             Button("Rooms", action: onRenameRooms)
               .font(FieldTheme.chip)
               .padding(.horizontal, 14)
               .frame(minHeight: FieldTheme.chipHeight)
               .foregroundStyle(FieldTheme.surface)
+              .background(FieldTheme.ink.opacity(0.72))
+              .clipShape(RoundedRectangle(cornerRadius: FieldTheme.chipRadius))
               .overlay(
                 RoundedRectangle(cornerRadius: FieldTheme.chipRadius)
                   .stroke(FieldTheme.surface, lineWidth: 1))
@@ -102,6 +115,23 @@
         }
         coverageLine
       }
+    }
+
+    /// A dark band behind the header, from the top of the screen, fading out below it: the
+    /// light title ("Shower · Photo 16 of Room Mexico") reads over a bright scene, such as the
+    /// white tiles of the shower the operator is standing in.
+    private var headerScrim: some View {
+      LinearGradient(
+        stops: [
+          .init(color: FieldTheme.ink.opacity(0.78), location: 0),
+          .init(color: FieldTheme.ink.opacity(0.66), location: 0.7),
+          .init(color: FieldTheme.ink.opacity(0), location: 1),
+        ],
+        startPoint: .top, endPoint: .bottom
+      )
+      .ignoresSafeArea(edges: .top)
+      .allowsHitTesting(false)
+      .accessibilityHidden(true)
     }
 
     /// "Still needs a photo: Shower" or "Every room has a photo", on a dark pill so it reads

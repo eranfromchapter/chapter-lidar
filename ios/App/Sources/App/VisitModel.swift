@@ -131,24 +131,58 @@ final class VisitModel {
   // MARK: Room names
 
   /// The "Rename rooms" sheet: the rooms of `captureId` (from the photo step), or of every
-  /// capture (from the checklist). Nil when there is no room to rename.
+  /// capture (from the checklist), each marked when it still needs a photo. From the photo
+  /// step it opens at the room the camera was opened for, else at the first room without a
+  /// photo; from the checklist at the first room "A photo for every room" names ("Closet has no
+  /// photo"). Nil when there is no room to rename.
   func roomNamingDraft(captureId: LowercaseUUID?) -> RoomNamingDraft? {
     let captures = flow.captures.filter { captureId == nil || $0.captureId == captureId }
-    let draft = rooms.draft(for: captures)
+    var focus: (captureId: LowercaseUUID, room: String)?
+    if let captureId {
+      if let model = photoModel, model.capture.ref.captureId == captureId,
+        let room = model.targetRoom ?? model.coverage.roomsWithoutPhoto.first
+      {
+        focus = (captureId, room)
+      }
+    } else if let item = checklist?.item(.photoPerRoom) {
+      for gap in item.gaps {
+        guard case .roomWithoutPhoto(let captureLabel, let room) = gap,
+          let capture = flow.captures.first(where: { $0.label == captureLabel })
+        else { continue }
+        focus = (capture.captureId, room)
+        break
+      }
+    }
+    let draft = rooms.draft(for: captures, photos: photoStore.records, focus: focus)
     return draft.isEmpty ? nil : draft
   }
 
   /// Saves the sheet's names: the visit's `room-names.json`, the capture models (and so the
-  /// Floorplan, reports and checklist), and the photos already labeled with an old name. The
-  /// photo step's chips follow at once. Returns an error message for the sheet, nil when saved.
+  /// Floorplan, reports and checklist), the photos already labeled with an old name, and the
+  /// field controls measured in a renamed room (`field-controls.json`). The photo step's chips
+  /// follow at once. Returns an error message for the sheet, nil when saved.
   func renameRooms(_ renames: [RoomRename]) -> String? {
     guard let record = flow.record, !renames.isEmpty else { return nil }
     let before = rooms.rooms
+    let refs = flow.captures.map {
+      FieldControls.CaptureRef(captureId: $0.captureId, areaKey: $0.areaKey)
+    }
+    let root = workspace.controlsRoot
     do {
-      let models = try rooms.rename(
-        renames, captures: record.captures, visitId: record.visitId, photos: photoStore)
-      for (captureId, model) in models {
+      let result = try rooms.rename(
+        renames, captures: record.captures, visitId: record.visitId, photos: photoStore,
+        controls: controls,
+        writeControls: { next in
+          try FieldControlsFile.write(next, intoPackageRoot: root, knownCaptures: refs)
+        })
+      for (captureId, model) in result.models {
         scans[captureId] = ScanMeasurements(model: model)
+      }
+      if let next = result.controls {
+        controls = next
+        // The controls screen is rebuilt from the controls whenever it opens; one built
+        // already gets the new rooms and names now.
+        if controlsModel != nil { openControls() }
       }
       if let photoModel {
         let captureId = photoModel.capture.ref.captureId

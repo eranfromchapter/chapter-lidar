@@ -4,7 +4,8 @@ import XCTest
 /// capture record -> scan (replay) -> photos -> controls -> checklist -> package ready (and the
 /// scan's Floorplan) -> uploading -> station status "Checks queued". Uses the Debug-only stub
 /// station. On the way the room is renamed twice, from the viewfinder ("Rooms") and from the
-/// checklist ("Rename rooms"), and the photo follows the name.
+/// checklist ("Rename rooms"), and the photo (and the ceiling height measured in it) follows the
+/// name.
 final class ReplayFlowUITests: XCTestCase {
   private var app: XCUIApplication!
 
@@ -83,6 +84,10 @@ final class ReplayFlowUITests: XCTestCase {
     let nameField = app.textFields["rooms.name.room-1"]
     XCTAssertTrue(nameField.waitForExistence(timeout: 10))
     XCTAssertEqual(nameField.value as? String, "Room 1")
+    // The sheet says which room still needs a photo.
+    let noPhotoYet = app.descendants(matching: .any)["rooms.needsPhoto.room-1"]
+    XCTAssertTrue(noPhotoYet.exists)
+    XCTAssertEqual(noPhotoYet.label, "No photo yet")
     attachScreenshot("2 Rename rooms")
     tap(app.buttons["rooms.suggest.room-1.Shower"])
     XCTAssertEqual(nameField.value as? String, "Shower")
@@ -107,7 +112,8 @@ final class ReplayFlowUITests: XCTestCase {
     type("10 2", into: app.textFields["Value"])
     tap(button("Save measurement"))
     tap(button("Ceiling heights"))
-    type("Room 1", into: app.textFields["Room"])
+    // Measured in the room by its name now; a later rename moves the control with it.
+    type("Shower", into: app.textFields["Room"])
     type("8 1", into: app.textFields["Value"])
     tap(button("Save measurement"))
     tap(app.buttons["controls.continue"])
@@ -126,8 +132,10 @@ final class ReplayFlowUITests: XCTestCase {
     waitForLabel(coverage, "Still needs a photo: Shower")
     attachScreenshot("6 Viewfinder for Shower")
 
-    // The fixture photo: the Room chip is Shower, chosen and marked as still needing a photo.
+    // The fixture photo: the labeling screen keeps the room in its title, and the Room chip is
+    // Shower, chosen and marked as still needing a photo.
     tap(app.buttons["Take photo"], timeout: 20)
+    waitForLabel(app.staticTexts["photo.labelTitle"], "Shower \u{00B7} Photo 1 of Floor 1")
     let shower = button("Shower")
     XCTAssertTrue(shower.waitForExistence(timeout: 10))
     XCTAssertEqual(shower.value as? String, "needs photo")
@@ -150,6 +158,7 @@ final class ReplayFlowUITests: XCTestCase {
     tap(app.buttons["checklist.renameRooms"])
     XCTAssertTrue(nameField.waitForExistence(timeout: 10))
     XCTAssertEqual(nameField.value as? String, "Shower")
+    XCTAssertFalse(noPhotoYet.exists, "the room has its photo now")
     nameField.tap()
     nameField.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 12) + "Walk-in shower")
     XCTAssertEqual(nameField.value as? String, "Walk-in shower")

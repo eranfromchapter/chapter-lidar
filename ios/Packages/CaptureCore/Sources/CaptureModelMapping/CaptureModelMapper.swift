@@ -10,8 +10,9 @@ public struct MappingContext: Sendable {
   /// Room labels in room order, replacing the labels derived from the room types (see
   /// `RoomTyping.labels`): the operator's names (`RoomNaming`). A missing or blank entry keeps
   /// the derived label. A label that differs from the derived one and names a room type
-  /// (`RoomTyping.areaType`, for example "Shower") also sets the room's type, with source
-  /// `operator`; any other keeps the type from the scan (`RoomTyping.renamedByOperator`).
+  /// (`RoomTyping.areaType`, for example "Shower", or "Bedroom closet", a closet) also sets the
+  /// room's type, with source `operator`; any other keeps the type from the scan
+  /// (`RoomTyping.renamedByOperator`).
   public var roomLabels: [String]
   public var refs: [CaptureModel.SourceRef]
 

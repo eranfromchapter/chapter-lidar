@@ -38,6 +38,9 @@ public struct RoomNamingDraft: Hashable, Sendable, Identifiable {
     public var currentLabel: String
     /// What tells this room apart from the others, for example its floor area ("1.9 m²").
     public var detail: String?
+    /// The checklist still asks a photo of this room (`PhotoCoverage`): the sheet says so, so
+    /// the room a "Closet has no photo" row is about is easy to find.
+    public var needsPhoto: Bool
     /// The name in the text field.
     public var name: String
 
@@ -45,13 +48,14 @@ public struct RoomNamingDraft: Hashable, Sendable, Identifiable {
 
     public init(
       captureId: LowercaseUUID, roomId: String, scannedLabel: String, currentLabel: String,
-      detail: String? = nil
+      detail: String? = nil, needsPhoto: Bool = false
     ) {
       self.captureId = captureId
       self.roomId = roomId
       self.scannedLabel = scannedLabel
       self.currentLabel = currentLabel
       self.detail = detail
+      self.needsPhoto = needsPhoto
       self.name = currentLabel
     }
 
@@ -83,14 +87,16 @@ public struct RoomNamingDraft: Hashable, Sendable, Identifiable {
   public enum Issue: Hashable, Sendable {
     case empty
     case tooLong
-    /// Another room of the same capture has this name.
-    case duplicate(String)
+    /// Another room of the same capture has this name: the other room's name as it is written
+    /// there, and the label the scan gave that room, which tells the operator which room it is.
+    case duplicate(name: String, otherScannedLabel: String)
 
     public var text: String {
       switch self {
       case .empty: return "Enter a name"
       case .tooLong: return "Use at most \(RoomNamingDraft.maximumLength) characters"
-      case .duplicate(let name): return "Another room is already called \(name)"
+      case .duplicate(let name, let other):
+        return "The room scanned as \(other) is already called \(name)"
       }
     }
   }
@@ -107,10 +113,19 @@ public struct RoomNamingDraft: Hashable, Sendable, Identifiable {
 
   public let id: UUID
   public var captures: [Capture]
+  /// The room (`Room.id`) the sheet opens at: the room a failing checklist row names, or the
+  /// room the photo step was opened for. Nil to open at the top.
+  public var focusRoomId: String?
+  /// When each room's name was last set (`setName`), counting up: which of two rooms with the
+  /// same name the operator changed last.
+  private var editOrder: [String: Int] = [:]
+  private var edits = 0
 
-  public init(captures: [Capture], id: UUID = UUID()) {
+  public init(captures: [Capture], focusRoomId: String? = nil, id: UUID = UUID()) {
     self.id = id
     self.captures = captures.filter { !$0.rooms.isEmpty }
+    let rooms = self.captures.flatMap(\.rooms)
+    self.focusRoomId = rooms.contains { $0.id == focusRoomId } ? focusRoomId : nil
   }
 
   public var rooms: [Room] { captures.flatMap(\.rooms) }
@@ -122,6 +137,8 @@ public struct RoomNamingDraft: Hashable, Sendable, Identifiable {
     for c in captures.indices {
       for r in captures[c].rooms.indices where captures[c].rooms[r].id == id {
         captures[c].rooms[r].name = name
+        edits += 1
+        editOrder[id] = edits
       }
     }
   }
@@ -140,6 +157,10 @@ public struct RoomNamingDraft: Hashable, Sendable, Identifiable {
   }
 
   /// What is wrong with the name of the room with `id`; nil when it can be saved.
+  ///
+  /// A name another room of the capture already has is shown on one field only: the one of
+  /// those rooms the operator changed last (the field being typed in), not on a room the
+  /// operator did not touch. `hasIssues` counts every repeated name either way.
   public func issue(room id: String) -> Issue? {
     for capture in captures {
       guard let room = capture.rooms.first(where: { $0.id == id }) else { continue }
@@ -147,15 +168,33 @@ public struct RoomNamingDraft: Hashable, Sendable, Identifiable {
       if trimmed.isEmpty { return .empty }
       if trimmed.unicodeScalars.count > Self.maximumLength { return .tooLong }
       let key = Self.key(trimmed)
-      if capture.rooms.contains(where: { $0.id != id && Self.key($0.name) == key }) {
-        return .duplicate(trimmed)
-      }
-      return nil
+      let others = capture.rooms.filter { $0.id != id && Self.key($0.name) == key }
+      guard let other = others.first else { return nil }
+      let mine = editOrder[id] ?? 0
+      guard others.allSatisfy({ (editOrder[$0.id] ?? 0) < mine }) || isUntouchedGroup(others, id)
+      else { return nil }
+      return .duplicate(
+        name: other.name.trimmingCharacters(in: .whitespacesAndNewlines),
+        otherScannedLabel: other.scannedLabel)
     }
     return nil
   }
 
-  public var hasIssues: Bool { rooms.contains { issue(room: $0.id) != nil } }
+  /// No room of a repeated name was set by the operator (the sheet was opened with two rooms
+  /// of one name): every one of them shows it.
+  private func isUntouchedGroup(_ others: [Room], _ id: String) -> Bool {
+    editOrder[id] == nil && others.allSatisfy { editOrder[$0.id] == nil }
+  }
+
+  /// True when two rooms of one capture have the same name (`key(_:)`).
+  public var hasDuplicates: Bool {
+    captures.contains { capture in
+      let keys = capture.rooms.map { Self.key($0.name) }.filter { !$0.isEmpty }
+      return Set(keys).count < keys.count
+    }
+  }
+
+  public var hasIssues: Bool { hasDuplicates || rooms.contains { issue(room: $0.id) != nil } }
 
   /// The rooms whose name differs from their current label, in room order.
   public var changes: [RoomRename] {
