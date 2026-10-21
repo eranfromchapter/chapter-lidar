@@ -650,6 +650,68 @@ final class FloorplanWriterTests: XCTestCase {
       FontMetrics.width("Cafe\u{0301}", size: 10), FontMetrics.width("Caf\u{00E9}", size: 10))
   }
 
+  // MARK: Golden bytes
+
+  /// SHA-256 of the colour Floorplan without a north symbol (`north` nil, the default), recorded
+  /// before the north symbol of compass §6.3 replaced the compass rose. `tools/plan-render` and
+  /// the scan browser draw with `north` nil, so their pages must stay byte for byte the same.
+  private static let goldenWithoutNorth: [String: String] = [
+    "box-room/floor-1 pdf": "f3e94b9f45a74d4b4b6af360dd011dba172a710d60ec7d93b0a57a8f2bfc8c05",
+    "box-room/floor-1 svg": "1a9d53d6272b2590bb93b69b4442178034c3dfff6d4f0dd6ceec13147f003dfa",
+    "l-shaped-room/floor-1 pdf": "482922835ce7ab77fe556861f8ba068f0fa34fe6c229b68cf18b1f210ec559dd",
+    "l-shaped-room/floor-1 svg": "c16881c2d362cfed4c4d5420b44c9c0d5c5439db47292ffa76a32708d3c52031",
+    "two-floor-house/floor-1 pdf":
+      "d750555e226b6bb5e40c1ce32c4fa067e0425dc3c1814c91315992d53d134f84",
+    "two-floor-house/floor-1 svg":
+      "1b5e686dfe282979eca165a60579bf7b18ee53e2f4ee7a2afbed53d77f595960",
+    "two-floor-house/floor-2 pdf":
+      "39105e0adc285e4ef1b2397727df2198f8f57e9ebabacdcc8270cd3706ddf596",
+    "two-floor-house/floor-2 svg":
+      "b099d33a8949e56be8d7f80bba12128bce22f20cca038271cdedabbb9537fd1e",
+    "two-room-apartment/floor-1 pdf":
+      "1883d760a4f1500783ce875a91531c3e102499c28c91cd8255dbc903810aef05",
+    "two-room-apartment/floor-1 svg":
+      "528686c4044acec0d83aecda9fcb9d87b23b0f100812534e12d9472b29b48407",
+    "walkthrough automatic pdf": "fa31fbf7e437ba0821272e4d0849f30b9f82480928f258a4e033642404eebb73",
+    "walkthrough automatic svg": "aba9635d43c1b3b0cb48aae617f4c1e0817f2c0e79c5ad50f2c4bb0bff7ef07e",
+    "walkthrough letterLandscape pdf":
+      "365b977abdc1715abc275ef01ce51404bd8d61899f3b96696b87d5c53020a4e3",
+    "walkthrough letterLandscape svg":
+      "a14bd5243697337d35a23584c325ac8c79bbd6a6fd2dae83401125a725e5e710",
+    "walkthrough square pdf": "fa31fbf7e437ba0821272e4d0849f30b9f82480928f258a4e033642404eebb73",
+    "walkthrough square svg": "aba9635d43c1b3b0cb48aae617f4c1e0817f2c0e79c5ad50f2c4bb0bff7ef07e",
+    "walkthrough screen": "db216f1fb63ddfabb869c11c87bdb0bf323a96745a874c832d731ffe7bdbde30",
+    "walkthrough drawing svg": "623933d4243a0ee82bbf1d1069bce984870c04c9131e549761f38be29135200f",
+    "walkthrough drawing pdf": "732bd6f82f7742b176d83c0c2309cd5e5d04a0e07336ffc032efc9b8683c0df3",
+  ]
+
+  func testColourFloorplanUnchangedWithoutNorth() throws {
+    var outputs: [(name: String, data: Data)] = []
+    for capture in try Fixtures.all() {
+      let plan = try FloorplanWriter.write(
+        model: capture.model,
+        options: .init(address: capture.record.address.formatted))
+      outputs.append(("\(capture.outputFolder) pdf", plan.pdf))
+      outputs.append(("\(capture.outputFolder) svg", Data(plan.svg.utf8)))
+    }
+    let walkthrough = WalkthroughFixture.model
+    for page in FloorplanWriter.Page.allCases {
+      let plan = try write(walkthrough) { $0.page = page }
+      outputs.append(("walkthrough \(page.rawValue) pdf", plan.pdf))
+      outputs.append(("walkthrough \(page.rawValue) svg", Data(plan.svg.utf8)))
+    }
+    outputs.append(("walkthrough screen", try FloorplanWriter.screenPDF(model: walkthrough)))
+    let drawing = try FloorPlanDrawing(model: walkthrough)
+    outputs.append(("walkthrough drawing svg", Data(drawing.svg(title: "Apartment").utf8)))
+    outputs.append(("walkthrough drawing pdf", drawing.pdf(title: "Apartment")))
+    var actual: [String: String] = [:]
+    for output in outputs { actual[output.name] = SHA256.hexDigest(of: output.data) }
+    for name in actual.keys.sorted() {
+      XCTAssertEqual(actual[name], Self.goldenWithoutNorth[name], name)
+    }
+    XCTAssertEqual(Set(actual.keys), Set(Self.goldenWithoutNorth.keys))
+  }
+
   func testEveryFixtureCaptureWritesAFloorplan() throws {
     for capture in try Fixtures.all() {
       let plan = try write(capture.model)
