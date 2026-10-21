@@ -1,9 +1,10 @@
 // Revision n+1 of a visit (phone-package §10.3, OpenAPI 1.1.0 createUploadSession): unchanged
 // files are verified at once by carry-over from revision n, only new and changed files are
-// uploaded, supersedes_mismatch, the next-revision notice's removal, the station's createdAt in
-// the session answer, the retired phone report at sealing, and the review read model stored at
-// sealing (field controls, manifest size, links). Every answer of these flows is checked
-// against contract/openapi/station.yaml. Runs against a real Postgres and Azurite.
+// uploaded, supersedes_mismatch, the re-seal after a failed upload (revision n still
+// uploading: accepted, nothing carried over), the next-revision notice's removal, the station's
+// createdAt in the session answer, the retired phone report at sealing, and the review read
+// model stored at sealing (field controls, manifest size, links). Every answer of these flows is
+// checked against contract/openapi/station.yaml. Runs against a real Postgres and Azurite.
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -52,6 +53,7 @@ interface PackageFileBody {
 
 interface PackageBody {
   packageId: string;
+  supersedesPackageId?: string;
   status: string;
   createdAt: string;
   files: PackageFileBody[];
@@ -315,6 +317,80 @@ describe("supersedes_mismatch", () => {
       assert.equal(rows.rowCount, 0);
     });
   }
+});
+
+describe("the re-seal after a failed upload (revision 1 still uploading)", () => {
+  let rev1: TestPackage;
+  let rev1Files: Map<string, FileRegistryRow>;
+  let rev2: TestPackage;
+  let session: UploadSessionView;
+
+  before(async () => {
+    // Revision 1 reached the station and its files were verified, but the upload stopped
+    // before sealing (for example 409 package_conflict) and the phone re-sealed it as revision
+    // 2 from the same files.
+    rev1 = makePackage();
+    await uploadVerifiedPackage(station, rev1);
+    rev1Files = await registryFiles(rev1.packageId);
+    rev2 = nextRevision(rev1);
+  });
+
+  it("still answers 422 for a revision gap or another visit", async () => {
+    for (const pkg of [
+      makePackage({ visitId: rev1.visitId, revision: 3, supersedesPackageId: rev1.packageId }),
+      makePackage({ revision: 2, supersedesPackageId: rev1.packageId }),
+    ]) {
+      const response = checked("createUploadSession", await station.openSession(pkg));
+      assert.equal(response.statusCode, 422, response.body);
+      assert.equal(problemOf(response).code, "supersedes_mismatch");
+    }
+  });
+
+  it("opens revision 2 with an upload target for every file and carries nothing over", async () => {
+    const response = checked("createUploadSession", await station.openSession(rev2));
+    assert.equal(response.statusCode, 201, response.body);
+    session = response.json() as UploadSessionView;
+    assert.equal(session.files.length, rev2.session.files.length);
+    for (const file of session.files) {
+      assert.equal(file.status, "pending", file.path);
+      assert.ok(file.upload, file.path);
+      assert.ok(!("carriedOverFrom" in file), file.path);
+    }
+    for (const [path, row] of await registryFiles(rev2.packageId)) {
+      assert.equal(row.carried_over_from, null, path);
+      assert.equal(row.blob_name, `${rev2.packageId}/${path}`);
+    }
+    const audits = await station.db.query<{ details: Record<string, unknown> }>(
+      "SELECT details FROM audit_log WHERE action = 'package.create' AND target_id = $1",
+      [rev2.packageId],
+    );
+    assert.equal(audits.rows[0]?.details.supersedesPackageId, rev1.packageId);
+    assert.equal(audits.rows[0]?.details.supersededStillUploading, true);
+    assert.equal(audits.rows[0]?.details.carriedOver, 0);
+    assert.equal(audits.rows[0]?.details.uploadTargets, rev2.session.files.length);
+  });
+
+  it("seals revision 2 once every file is uploaded again", async () => {
+    const results = await uploadAll(station, rev2, session);
+    assert.equal(results.size, rev2.session.files.length);
+    const sealed = checked("sealPackage", await station.seal(rev2.packageId, rev2.manifestBytes));
+    assert.equal(sealed.statusCode, 202, sealed.body);
+    const body = sealed.json() as PackageBody;
+    assert.equal(body.supersedesPackageId, rev1.packageId);
+    assert.ok(body.files.every((file) => file.status === "verified"));
+    assert.ok(body.files.every((file) => file.carriedOverFrom === undefined));
+  });
+
+  it("leaves revision 1 uploading and unchanged", async () => {
+    assert.equal((await getPackage(rev1.packageId)).status, "uploading");
+    assert.deepEqual(await registryFiles(rev1.packageId), rev1Files);
+  });
+
+  it("registers one revision 2 only (409 revision_exists for a second one)", async () => {
+    const response = checked("createUploadSession", await station.openSession(nextRevision(rev1)));
+    assert.equal(response.statusCode, 409, response.body);
+    assert.equal(problemOf(response).code, "revision_exists");
+  });
 });
 
 describe("the next-revision notice", () => {

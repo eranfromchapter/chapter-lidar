@@ -15,8 +15,9 @@
 //   latest check run (or of the running checks job) and the number of rules of a completed run.
 // - publication: hub_publications (or pending while only the publish job is queued); hubFolder
 //   is always Capture/{visitId}/r{revision}.
-// - report: spatial_reports of the current verdict (ready), the current verdict's failed
-//   publication (failed), else pending; omitted before a verdict.
+// - report: spatial_reports of the current verdict (ready; floors cut to the ReportFloor
+//   fields), the current verdict's failed publication (failed), else pending; omitted before a
+//   verdict.
 // - links: REVIEW_BASE_URL and HUB_WEB_DEAL_URL_TEMPLATE (omitted while REVIEW_BASE_URL is unset).
 // HUB file states (PackageFile.hub, manifestFile.hub, report.hub) come from the entries the
 // publisher recorded in hub_publications.files: a recorded entry is a file in the HUB.
@@ -219,7 +220,8 @@ export interface SummaryRow {
   report_bytes: number | null;
   report_sha256: string | null;
   report_checks_page: number | null;
-  report_floors: ReportFloor[] | null;
+  /** spatial_reports.floors as the worker wrote it (a JSON array; see reportFloors). */
+  report_floors: unknown;
   report_hub: PublishedFileEntry | null;
 }
 
@@ -350,6 +352,47 @@ function recordCaptures(value: unknown): PackageCapture[] | undefined {
         ...(capture.mode === "room" || capture.mode === "floor" || capture.mode === "exterior"
           ? { mode: capture.mode }
           : {}),
+      },
+    ];
+  });
+}
+
+function isCount(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
+/**
+ * The ReportFloors of spatial_reports.floors: each floor with exactly the five contract fields
+ * (other keys are dropped); a floor without them in the expected shape is left out, so one bad
+ * row never breaks a package body.
+ */
+export function reportFloors(value: unknown): ReportFloor[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((item: unknown) => {
+    if (item === null || typeof item !== "object") {
+      return [];
+    }
+    const floor = item as Record<string, unknown>;
+    if (
+      typeof floor.captureId !== "string" ||
+      typeof floor.areaKey !== "string" ||
+      !isCount(floor.roomsScanned) ||
+      !isCount(floor.roomsUnlabeled) ||
+      typeof floor.floorAreaSqFt !== "number" ||
+      !Number.isFinite(floor.floorAreaSqFt) ||
+      floor.floorAreaSqFt < 0
+    ) {
+      return [];
+    }
+    return [
+      {
+        captureId: floor.captureId,
+        areaKey: floor.areaKey,
+        roomsScanned: floor.roomsScanned,
+        roomsUnlabeled: floor.roomsUnlabeled,
+        floorAreaSqFt: floor.floorAreaSqFt,
       },
     ];
   });
@@ -492,7 +535,7 @@ function reportOf(row: SummaryRow, verdict: VerdictSummary | undefined): ReportS
       bytes: row.report_bytes,
       sha256: row.report_sha256,
       checksPage: row.report_checks_page,
-      floors: row.report_floors,
+      floors: reportFloors(row.report_floors),
       ...(hub === undefined ? {} : { hub }),
     };
   }

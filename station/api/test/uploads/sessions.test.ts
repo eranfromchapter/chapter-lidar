@@ -135,27 +135,23 @@ describe("opening an upload session", () => {
     assert.equal(problemOf(response).code, "revision_exists");
   });
 
-  it("refuses revision 2 while the package it supersedes is still uploading (422)", async () => {
+  it("accepts revision 2 while the package it supersedes is still uploading (re-seal), carrying nothing over", async () => {
     const next = makePackage({
       visitId: pkg.visitId,
       revision: 2,
       supersedesPackageId: pkg.packageId,
     });
     const response = await station.openSession(next);
-    assert.equal(response.statusCode, 422, response.body);
-    assert.equal(problemOf(response).code, "supersedes_mismatch");
-    assert.deepEqual(
-      problemOf(response).errors?.map((error) => error.pointer),
-      ["/supersedesPackageId"],
+    assert.equal(response.statusCode, 201, response.body);
+    const session = response.json() as UploadSessionView;
+    assert.equal(session.revision, 2);
+    assert.ok(
+      session.files.every((file) => file.upload !== undefined && file.status === "pending"),
     );
   });
 
-  it("accepts revision 2 of the visit when the station never received the package it supersedes", async () => {
-    const next = makePackage({
-      visitId: pkg.visitId,
-      revision: 2,
-      supersedesPackageId: randomUUID(),
-    });
+  it("accepts revision 2 of a visit when the station never received the package it supersedes", async () => {
+    const next = makePackage({ revision: 2, supersedesPackageId: randomUUID() });
     const response = await station.openSession(next);
     assert.equal(response.statusCode, 201, response.body);
     const session = response.json() as UploadSessionView;

@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { after, before, describe, it } from "node:test";
-import { linksOf } from "../../src/routes/packages/store.js";
+import { linksOf, reportFloors } from "../../src/routes/packages/store.js";
 import { manifestPath } from "../../src/storage/originals.js";
 import { OpenApi } from "./openapi.js";
 import {
@@ -48,6 +48,8 @@ const TWO_FLOOR_UPLOAD_ID = "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c05";
 const NAMELESS_ID = "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c06";
 const ODD_DEAL_ID = "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c07";
 const ODD_DEAL = "HUB 7/7?x";
+const ODD_FLOORS_ID = "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c08";
+const ODD_FLOORS_VERDICT = "c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e08";
 
 const PLAN_DXF = MANIFEST.files.find((file) => file.role === "plan_dxf")!;
 const MESH = MANIFEST.files.find((file) => file.role === "mesh_glb")!;
@@ -237,6 +239,28 @@ before(async () => {
                                   pages, checks_page, floors, generated_at)
      VALUES ($1, $2, $3, 'old', $4, 1, 1, 1, '[]', now())`,
     [OLD_REPORT_ID, oldVerdict, `spatial-report-${oldVerdict}.pdf`, sha256("old")],
+  );
+
+  // A report whose floors the worker wrote off-contract: an extra key, a missing key, a
+  // negative count and a non-object.
+  await sealedWithVerdict(ODD_FLOORS_ID, ODD_FLOORS_VERDICT);
+  await station.db.query(
+    `INSERT INTO spatial_reports (package_id, verdict_id, file_name, blob_name, sha256, bytes,
+                                  pages, checks_page, floors, generated_at)
+     VALUES ($1, $2, $3, 'odd', $4, 1, 1, 1, $5::jsonb, $6)`,
+    [
+      ODD_FLOORS_ID,
+      ODD_FLOORS_VERDICT,
+      `spatial-report-${ODD_FLOORS_VERDICT}.pdf`,
+      sha256("odd"),
+      JSON.stringify([
+        { ...FLOOR_1, roomsScanned: 3, roomsUnlabeled: 1, floorAreaSqFt: 120.4, label: "Ground" },
+        { ...FLOOR_2, roomsScanned: 2, roomsUnlabeled: 0 },
+        { ...FLOOR_2, roomsScanned: -1, roomsUnlabeled: 0, floorAreaSqFt: 10 },
+        "floor-3",
+      ]),
+      VERDICT.evaluatedAt,
+    ],
   );
 
   // Uploading with files of two floors, declared floor 2 first.
@@ -435,6 +459,20 @@ describe("report", () => {
     assert.deepEqual(rows.get(FAILED_PUBLICATION_ID)?.report, { status: "failed" });
     assert.ok(!("report" in rows.get(CHECKING_ID)!));
     assert.ok(!("report" in rows.get(ERROR_ID)!));
+  });
+
+  it("keeps only the contract fields of each floor and leaves out floors it cannot read", async () => {
+    const expected = [{ ...FLOOR_1, roomsScanned: 3, roomsUnlabeled: 1, floorAreaSqFt: 120.4 }];
+    // detail() and summaries() check every body against the contract.
+    assert.deepEqual(
+      ((await detail(ODD_FLOORS_ID)).report as { floors: unknown }).floors,
+      expected,
+    );
+    assert.deepEqual(
+      ((await summaries(STATE_DEAL)).get(ODD_FLOORS_ID)?.report as { floors: unknown }).floors,
+      expected,
+    );
+    assert.deepEqual(reportFloors({ not: "an array" }), []);
   });
 });
 

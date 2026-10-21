@@ -8,8 +8,9 @@
 //    the new columns and tables are empty.
 // 3. The backfill dry run (library and CLI) reports what it would write and writes nothing;
 //    --apply fills manifest_bytes and contract-valid field controls, leaves updated_at alone,
-//    audits each package, reports missing or different blobs as failures, and a re-run finds
-//    nothing left to write.
+//    audits each package (in the same transaction: a failed audit row leaves the package
+//    unfilled), reports missing or different blobs as failures, and a re-run finds nothing left
+//    to write.
 // 4. The v2 guards: read model columns and carry-over are immutable once set.
 
 import assert from "node:assert/strict";
@@ -20,8 +21,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
+import type { QueryResult, QueryResultRow } from "pg";
 import { withThrowawayDatabase } from "../../scripts/lib/throwaway-postgres.js";
-import { createDatabase, urlConnection, type Database } from "../../src/core/db.js";
+import { createDatabase, urlConnection, type Database, type Queryable } from "../../src/core/db.js";
 import { MIGRATIONS_DIR, runMigrations } from "../../src/core/migrate.js";
 import { backfillReviewReadModel, BACKFILL_ACTOR } from "../../src/read-model/backfill.js";
 import { getPackage } from "../../src/routes/packages/store.js";
@@ -173,6 +175,22 @@ async function readModel(): Promise<
       { field_controls: row.field_controls, manifest_bytes: row.manifest_bytes },
     ]),
   );
+}
+
+/** db whose audit inserts fail inside transactions, like an audit_log outage mid-run. */
+function failingAudits(base: Database): Pick<Database, "query" | "transaction"> {
+  return {
+    query: base.query.bind(base),
+    transaction: <T>(fn: (tx: Queryable) => Promise<T>) =>
+      base.transaction((tx) =>
+        fn({
+          query: <R extends QueryResultRow>(text: string, values?: readonly unknown[]) =>
+            /INSERT INTO audit_log/.test(text)
+              ? Promise.reject<QueryResult<R>>(new Error("audit_log is unavailable"))
+              : tx.query<R>(text, values),
+        }),
+      ),
+  };
 }
 
 function runScript(args: string[], env: Record<string, string>) {
@@ -346,6 +364,17 @@ describe("the review read model backfill", () => {
     assert.equal(noStorage.status, 2, noStorage.stderr);
     assert.match(noStorage.stderr, /AZURE_STORAGE_ACCOUNT_URL or AZURE_STORAGE_CONNECTION_STRING/);
     assert.equal(runScript(["--help"], {}).status, 0);
+  });
+
+  it("--apply stops and leaves the package unfilled when its audit row cannot be written", async () => {
+    await assert.rejects(
+      backfillReviewReadModel({ db: failingAudits(db), storage, apply: true }),
+      /audit_log is unavailable/,
+    );
+    for (const row of (await readModel()).values()) {
+      assert.deepEqual(row, { field_controls: null, manifest_bytes: null });
+    }
+    assert.deepEqual(await snapshot(), beforeUpgrade);
   });
 
   it("--apply fills the read model, keeps updated_at, audits, and reports blobs that do not match", async () => {

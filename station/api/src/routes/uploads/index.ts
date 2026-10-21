@@ -17,12 +17,13 @@
 // (see storage/originals.ts). Every write is audited in the same transaction.
 //
 // Carry-over (revision n+1 of a visit): when the station holds the superseded package, it must
-// be the same visit and deal, revision n and sealed (else 422 supersedes_mismatch). A declared
-// file equal to one of its verified files (path, role, capture, area, SHA-256, size) is
-// registered verified at once on that file's blob (carried_over_from; no upload target). When
-// the station never received revision n, every file is uploaded as usual. Opening the session
-// removes revision n's next-revision notice. The session answer carries the station's
-// createdAt, which the phone shows as "Registered".
+// be the same visit and deal and revision n (else 422 supersedes_mismatch). Once revision n is
+// sealed, a declared file equal to one of its verified files (path, role, capture, area,
+// SHA-256, size) is registered verified at once on that file's blob (carried_over_from; no
+// upload target). While revision n is still uploading (the phone's re-seal after a failed
+// upload, phone-package §4.2) or when the station never received it, every file is uploaded as
+// usual. Opening the session removes revision n's next-revision notice. The session answer
+// carries the station's createdAt, which the phone shows as "Registered".
 //
 // Sealing also stores the review read model: the manifest's size and the parsed field-controls
 // file (when it matches the contract; the checks report a file that does not).
@@ -54,6 +55,7 @@ import {
 } from "../../storage/originals.js";
 import { getPackage } from "../packages/store.js";
 import {
+  carriesOver,
   carryOverMatch,
   manifestMismatchErrors,
   sessionRequestErrors,
@@ -187,16 +189,24 @@ function sealedConflict(): ProblemError {
   });
 }
 
+/** The superseded package as the station holds it, for carry-over. */
+interface CarryOverSource {
+  /** Its verified files by path; empty while it is still uploading (nothing is carried). */
+  readonly verified: Map<string, FileRow>;
+  /** True while it is still uploading: the phone re-sealed after a failed upload. */
+  readonly stillUploading: boolean;
+}
+
 /**
- * The verified files of the superseded package, by path, for carry-over: undefined when the
- * request supersedes nothing or the station never received that package. Locks its row
- * (FOR SHARE) against a concurrent next-revision notice; 422 supersedes_mismatch when it is not
- * the previous, sealed revision of the same visit and deal.
+ * The superseded package for carry-over: undefined when the request supersedes nothing or the
+ * station never received that package. Locks its row (FOR SHARE) against a concurrent
+ * next-revision notice or seal; 422 supersedes_mismatch when it is not the previous revision of
+ * the same visit and deal.
  */
 async function carryOverSource(
   tx: Queryable,
   body: UploadSessionRequest,
-): Promise<Map<string, FileRow> | undefined> {
+): Promise<CarryOverSource | undefined> {
   if (body.supersedesPackageId === undefined) {
     return undefined;
   }
@@ -213,21 +223,25 @@ async function carryOverSource(
     visitId: superseded.visit_id,
     dealId: superseded.deal_id,
     revision: superseded.revision,
-    sealed: superseded.status !== "uploading",
   });
   if (errors.length > 0) {
     throw new ProblemError(422, "supersedes_mismatch", {
-      detail:
-        "supersedesPackageId must be the sealed previous revision of the same visit and deal.",
+      detail: "supersedesPackageId must be the previous revision of the same visit and deal.",
       errors,
     });
+  }
+  if (!carriesOver(superseded)) {
+    return { verified: new Map(), stillUploading: true };
   }
   const verified = await tx.query<FileRow>(
     `SELECT ${FILE_COLUMNS} FROM package_files
       WHERE package_id = $1 AND status = 'verified' AND blob_name IS NOT NULL`,
     [superseded.package_id],
   );
-  return new Map(verified.rows.map((file) => [file.path, file]));
+  return {
+    verified: new Map(verified.rows.map((file) => [file.path, file])),
+    stillUploading: false,
+  };
 }
 
 async function openSession(
@@ -264,7 +278,7 @@ async function openSession(
     // A carried-over file takes the verified file's blob and check result; any other file
     // waits for its upload to attempt 1's blob.
     const reused = body.files.map((declared) => {
-      const previous = source?.get(declared.path);
+      const previous = source?.verified.get(declared.path);
       return previous !== undefined && carryOverMatch(declared, previous) ? previous : undefined;
     });
     const files: SessionFile[] = body.files.map((declared, index) => {
@@ -334,6 +348,7 @@ async function openSession(
         ...(body.supersedesPackageId === undefined
           ? {}
           : { supersedesPackageId: body.supersedesPackageId }),
+        ...(source?.stillUploading === true ? { supersededStillUploading: true } : {}),
         files: body.files.length,
         uploadTargets: body.files.length - carriedOver,
         carriedOver,

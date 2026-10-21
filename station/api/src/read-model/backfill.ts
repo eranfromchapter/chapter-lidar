@@ -11,11 +11,11 @@
 //   immutable, and a re-run finds nothing left except contract-invalid field controls, which
 //   it reports again without writing.
 // - Filling these columns does not move packages.updated_at (0011 trigger), and every package
-//   written is audited as a system action.
+//   written is audited as a system action in the same transaction.
 
 import { validateFieldControls } from "@chapter/capture-contract";
 import { writeAudit } from "../core/audit.js";
-import type { Queryable } from "../core/db.js";
+import type { Database, Queryable } from "../core/db.js";
 import { manifestBlobName, type OriginalsStorage } from "../storage/originals.js";
 
 /** Largest manifest the backfill reads (a sealed manifest is far smaller). */
@@ -49,7 +49,7 @@ export interface BackfillReport {
 }
 
 export interface BackfillOptions {
-  readonly db: Queryable;
+  readonly db: Pick<Database, "query" | "transaction">;
   readonly storage: Pick<OriginalsStorage, "read">;
   /** Write the columns; false (default) is a dry run. */
   readonly apply?: boolean;
@@ -168,25 +168,29 @@ async function backfillOne(
 
   const writes = manifestBytes !== undefined || value !== undefined;
   if (options.apply === true && writes) {
-    await options.db.query(
-      `UPDATE packages
-          SET manifest_bytes = COALESCE(manifest_bytes, $2::bigint),
-              field_controls = COALESCE(field_controls, $3::jsonb)
-        WHERE package_id = $1`,
-      [
-        candidate.package_id,
-        manifestBytes ?? null,
-        value === undefined ? null : JSON.stringify(value),
-      ],
-    );
-    await writeAudit(options.db, {
-      actor: { type: "system", name: BACKFILL_ACTOR },
-      action: "package.read_model_backfill",
-      target: { type: "package", id: candidate.package_id },
-      details: {
-        ...(manifestBytes === undefined ? {} : { manifestBytes }),
-        fieldControls,
-      },
+    // One transaction: a package is never filled without its audit row (a filled package is no
+    // longer a candidate, so a re-run could not add the row later).
+    await options.db.transaction(async (tx) => {
+      await tx.query(
+        `UPDATE packages
+            SET manifest_bytes = COALESCE(manifest_bytes, $2::bigint),
+                field_controls = COALESCE(field_controls, $3::jsonb)
+          WHERE package_id = $1`,
+        [
+          candidate.package_id,
+          manifestBytes ?? null,
+          value === undefined ? null : JSON.stringify(value),
+        ],
+      );
+      await writeAudit(tx, {
+        actor: { type: "system", name: BACKFILL_ACTOR },
+        action: "package.read_model_backfill",
+        target: { type: "package", id: candidate.package_id },
+        details: {
+          ...(manifestBytes === undefined ? {} : { manifestBytes }),
+          fieldControls,
+        },
+      });
     });
   }
   return {

@@ -8,6 +8,7 @@ import { buildServer } from "../../src/core/app.js";
 import {
   MAX_FILE_PATH_LENGTH,
   MAX_FILE_PATH_SEGMENTS,
+  carriesOver,
   carryOverMatch,
   manifestMismatchErrors,
   sessionRequestErrors,
@@ -156,9 +157,9 @@ describe("manifestMismatchErrors", () => {
 
 describe("supersedesMismatchErrors (carry-over)", () => {
   const body = makePackage({ revision: 3, supersedesPackageId: PACKAGE_ID }).session;
-  const previous = { visitId: body.visitId, dealId: body.dealId, revision: 2, sealed: true };
+  const previous = { visitId: body.visitId, dealId: body.dealId, revision: 2 };
 
-  it("accepts the sealed previous revision of the same visit and deal", () => {
+  it("accepts the previous revision of the same visit and deal", () => {
     assert.deepEqual(supersedesMismatchErrors(body, previous), []);
   });
 
@@ -167,7 +168,6 @@ describe("supersedesMismatchErrors (carry-over)", () => {
       visitId: "00000000-0000-4000-8000-000000000001",
       dealId: "another-deal",
       revision: 1,
-      sealed: false,
     });
     assert.deepEqual(
       errors.map((error) => [error.pointer, error.message]),
@@ -175,9 +175,20 @@ describe("supersedesMismatchErrors (carry-over)", () => {
         ["/supersedesPackageId", "names a package of another visit"],
         ["/supersedesPackageId", "names a package of another deal"],
         ["/supersedesPackageId", "names revision 1, not revision 2"],
-        ["/supersedesPackageId", "names a package that is still uploading"],
       ],
     );
+  });
+});
+
+describe("carriesOver", () => {
+  it("carries the verified files of a sealed previous revision over", () => {
+    for (const status of ["checks_queued", "checking", "verdict_ready", "check_error"]) {
+      assert.equal(carriesOver({ status }), true, status);
+    }
+  });
+
+  it("carries nothing over from one still uploading (the re-seal after a failed upload)", () => {
+    assert.equal(carriesOver({ status: "uploading" }), false);
   });
 });
 

@@ -3,6 +3,7 @@
 
 import type { FastifyInstance } from "fastify";
 import { buildServer } from "../../src/core/app.js";
+import type { Database } from "../../src/core/db.js";
 import { HubError, type HubClient, type HubProject } from "../../src/hub/types.js";
 import {
   fakeDatabase,
@@ -20,16 +21,17 @@ export interface ProjectsTestApp {
   close(): Promise<void>;
 }
 
-/** Builds the real app (every route area) with the given HubClient injected. */
+/** Builds the real app (every route area) with the given HubClient (and database) injected. */
 export async function projectsTestApp(
   hub: HubClient | undefined,
   env: Record<string, string | undefined> = {},
+  db: Database = fakeDatabase(),
 ): Promise<ProjectsTestApp> {
   const issuer = await startTestIssuer();
   const logs = logCollector();
   const app = await buildServer({
     config: testConfig({ ENTRA_JWKS_URL: issuer.jwksUrl, ...env }),
-    db: fakeDatabase(),
+    db,
     ...(hub === undefined ? {} : { services: { hub } }),
     logStream: logs.stream,
   });

@@ -85,13 +85,12 @@ export interface SupersededIdentity {
   readonly visitId: string;
   readonly dealId: string;
   readonly revision: number;
-  /** False while it is still uploading. */
-  readonly sealed: boolean;
 }
 
 /**
  * Why the package named by supersedesPackageId cannot be the previous revision of this
- * session (all at /supersedesPackageId): another visit or deal, not revision - 1, or not sealed.
+ * session (all at /supersedesPackageId): another visit or deal, or not revision - 1. A previous
+ * revision that is still uploading is accepted: see carriesOver.
  */
 export function supersedesMismatchErrors(
   body: UploadSessionRequest,
@@ -111,10 +110,16 @@ export function supersedesMismatchErrors(
       message: `names revision ${superseded.revision}, not revision ${body.revision - 1}`,
     });
   }
-  if (!superseded.sealed) {
-    errors.push({ pointer, message: "names a package that is still uploading" });
-  }
   return errors;
+}
+
+/**
+ * True when the verified files of the superseded package may be carried over: once it is
+ * sealed. A previous revision that is still uploading is superseded by the phone's re-seal after
+ * a failed upload (phone-package §4.2), a full rebuild that uploads every file again.
+ */
+export function carriesOver(superseded: { readonly status: string }): boolean {
+  return superseded.status !== "uploading";
 }
 
 /** A verified file of the superseded package, as the registry holds it. */
