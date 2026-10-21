@@ -211,10 +211,18 @@
       motionManager.stopDeviceMotionUpdates()
       motionRing.removeAll()
       motionSource = source
-      let ring = motionRing
-      motionManager.startDeviceMotionUpdates(using: frame, to: motionQueue) { motion, _ in
+      motionManager.startDeviceMotionUpdates(
+        using: frame, to: motionQueue, withHandler: Self.motionHandler(ring: motionRing, source: source))
+    }
+
+    /// The device-motion handler, made outside the main actor: Core Motion calls it on
+    /// `motionQueue`, and the ring is locked.
+    nonisolated static func motionHandler(ring: CompassMotionRing, source: HeadingSource)
+      -> CMDeviceMotionHandler
+    {
+      { motion, _ in
         guard let motion else { return }
-        ring.append(Self.sample(motion, source: source))
+        ring.append(sample(motion, source: source))
       }
     }
 
