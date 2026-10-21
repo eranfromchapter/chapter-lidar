@@ -47,6 +47,9 @@ let package = Package(
       name: "FieldRulesTests",
       dependencies: [
         "FieldRules",
+        // The checklist after a room rename relabels photos through the store, and the store's
+        // index is checked against contract/schema with this target's validator.
+        "PhotoStore",
         .product(name: "CaptureContract", package: "swift"),
       ]
     ),

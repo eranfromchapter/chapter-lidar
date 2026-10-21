@@ -145,6 +145,56 @@ public final class PhotoRecordStore: @unchecked Sendable {
     return try save(original: original, capture: capture, labels: labels)
   }
 
+  /// Relabels the photos of one capture after its rooms were renamed: a record whose room is
+  /// the `from` of a rename (compared as the checklist compares rooms, `PhotoCoverage.key`:
+  /// trimmed, ignoring case) gets that rename's `to`. All renames apply at once, to the labels
+  /// as they were, so two rooms can swap names. Only the records change, in memory and in
+  /// `photo-records.json`; no photo file is read, written or moved, so every original stays
+  /// byte for byte what the camera delivered (and its recorded SHA-256 and size still match).
+  ///
+  /// Throws `invalidRoom` (and changes nothing) when a new name is blank or longer than 100
+  /// characters or Unicode scalars (the manifest schema's room label). Returns the records
+  /// that changed, in save order.
+  @discardableResult
+  public func relabelRooms(
+    captureId: LowercaseUUID, renames: [(from: String, to: String)]
+  ) throws -> [PhotoRecord] {
+    var targets: [String: String] = [:]
+    for rename in renames {
+      let to = rename.to.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !to.isEmpty, to.count <= PhotoLabelDraft.maximumRoomLength,
+        to.unicodeScalars.count <= PhotoLabelDraft.maximumRoomLength
+      else { throw PhotoStoreError.invalidRoom }
+      let from = PhotoCoverage.key(rename.from)
+      // The first rename of a room wins; renaming a room to its own label changes nothing.
+      if targets[from] == nil, !from.isEmpty { targets[from] = to }
+    }
+
+    lock.lock()
+    defer { lock.unlock() }
+    var next = saved
+    var changed: [PhotoRecord] = []
+    for index in next.indices where next[index].captureId == captureId {
+      guard let to = targets[PhotoCoverage.key(next[index].room)], next[index].room != to
+      else { continue }
+      next[index].labels.room = to
+      changed.append(next[index])
+    }
+    guard !changed.isEmpty else { return [] }
+    let index = try CaptureContractJSON.makeEncoder(prettyPrinted: true).encode(next)
+    try files.write(index, toRelativePath: Self.indexPath, replacingExisting: true)
+    saved = next
+    return changed
+  }
+
+  /// `relabelRooms(captureId:renames:)` for one room.
+  @discardableResult
+  public func relabelRoom(captureId: LowercaseUUID, from: String, to: String) throws
+    -> [PhotoRecord]
+  {
+    try relabelRooms(captureId: captureId, renames: [(from: from, to: to)])
+  }
+
   /// The original bytes of a saved photo, exactly as stored.
   public func originalData(for record: PhotoRecord) throws -> Data {
     try files.read(relativePath: record.path)

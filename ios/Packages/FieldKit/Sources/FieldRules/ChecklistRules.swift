@@ -231,10 +231,6 @@ public enum ChecklistRules {
     text?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true
   }
 
-  private static func normalized(_ text: String) -> String {
-    text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-  }
-
   // MARK: 1 Every floor and area labeled
 
   private static func floorsLabeled(
@@ -282,26 +278,22 @@ public enum ChecklistRules {
 
   // MARK: 3 A photo for every room
 
+  /// Per capture, `PhotoCoverage` (the photo step shows the same rule): every room of its
+  /// capture model needs a photo labeled with its name; a capture without a room list needs a
+  /// photo of any kind.
   private static func photoPerRoom(
     _ captures: [CaptureRecord.Capture], _ input: ChecklistInput, _ wording: Wording
   ) -> ChecklistItem {
     var gaps: [ChecklistGap] = []
     var roomCount = 0
     for capture in captures {
-      let photos = input.photos.filter { $0.captureId == capture.captureId }
-      var seen = Set<String>()
-      let rooms = (input.capturedRooms[capture.captureId] ?? []).filter {
-        !isBlank($0) && seen.insert(normalized($0)).inserted
-      }
-      if rooms.isEmpty {
-        if photos.isEmpty { gaps.append(.captureWithoutPhoto(capture: capture.label)) }
-        continue
-      }
-      for room in rooms {
-        roomCount += 1
-        if !photos.contains(where: { normalized($0.room) == normalized(room) }) {
-          gaps.append(.roomWithoutPhoto(capture: capture.label, room: room))
-        }
+      let coverage = PhotoCoverage.status(
+        rooms: input.capturedRooms[capture.captureId] ?? [],
+        photos: input.photos.filter { $0.captureId == capture.captureId })
+      roomCount += coverage.rooms.count
+      if coverage.needsAnyPhoto { gaps.append(.captureWithoutPhoto(capture: capture.label)) }
+      for room in coverage.roomsWithoutPhoto {
+        gaps.append(.roomWithoutPhoto(capture: capture.label, room: room))
       }
     }
     let total = input.photos.count

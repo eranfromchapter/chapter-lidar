@@ -79,10 +79,18 @@ public struct VisitPackageBuilder: Sendable {
       .appendingPathComponent(capture.captureId.rawValue, isDirectory: true)
   }
 
-  /// The capture model of one capture, mapped from its RoomPlan original with the visit's ids.
+  /// The capture model of one capture, mapped from its RoomPlan original with the visit's ids
+  /// and the operator's room `names` (`RoomNaming`).
   public func captureModel(
-    of capture: CaptureRecord.Capture, visitId: LowercaseUUID
+    of capture: CaptureRecord.Capture, visitId: LowercaseUUID, names: [RoomName] = []
   ) throws -> CaptureModel {
+    try namedCaptureModel(of: capture, visitId: visitId, names: names).model
+  }
+
+  /// `captureModel(of:visitId:names:)` with the labels the scan gives its rooms without names.
+  public func namedCaptureModel(
+    of capture: CaptureRecord.Capture, visitId: LowercaseUUID, names: [RoomName]
+  ) throws -> NamedCaptureModel {
     let directory = originalsDirectory(of: capture)
     let roomPlanURL = directory.appendingPathComponent(RawOriginalsNaming.originals.roomPlanFileName)
     do {
@@ -90,7 +98,7 @@ public struct VisitPackageBuilder: Sendable {
       let base = try PackagePaths.folder(
         role: .rawRoomplanJSON, visitId: visitId,
         capture: CaptureRef(captureId: capture.captureId, areaKey: capture.areaKey))
-      return try CaptureModelMapper.map(
+      return try RoomNaming.map(
         document,
         context: MappingContext(
           visitId: visitId, captureId: capture.captureId, areaKey: capture.areaKey,
@@ -99,15 +107,19 @@ public struct VisitPackageBuilder: Sendable {
             CaptureModel.SourceRef(
               role: .rawRoomplanJSON, path: base + RawOriginalsNaming.originals.roomPlanFileName),
             CaptureModel.SourceRef(role: .rawDepth, path: base + RawOriginalsNaming.depthFileName),
-          ]))
+          ]),
+        names: names)
     } catch {
       throw VisitPackageError.captureModel(label: capture.label, reason: String(describing: error))
     }
   }
 
   /// Builds the draft. `photosRoot` is the root of the photo store (record paths are relative).
+  /// Every capture model, and the plans and reports drawn from it, carries the operator's
+  /// `roomNames`.
   public func plan(
     record: CaptureRecord, photos: [PhotoRecord], controls: FieldControls,
+    roomNames: VisitRoomNames = VisitRoomNames(),
     draftId: UUID = UUID(), packageId: LowercaseUUID = LowercaseUUID()
   ) throws -> VisitPackagePlan {
     guard !record.captures.isEmpty else { throw VisitPackageError.noCaptures }
@@ -144,7 +156,9 @@ public struct VisitPackageBuilder: Sendable {
 
     // Per capture.
     for capture in record.captures {
-      try addCapture(capture, record: record, draftFolder: draftFolder, to: &draft)
+      try addCapture(
+        capture, record: record, names: roomNames.names(for: capture.captureId),
+        draftFolder: draftFolder, to: &draft)
     }
 
     // Photos, with the fingerprint recorded when each was saved.
@@ -164,7 +178,7 @@ public struct VisitPackageBuilder: Sendable {
   }
 
   private func addCapture(
-    _ capture: CaptureRecord.Capture, record: CaptureRecord, draftFolder: URL,
+    _ capture: CaptureRecord.Capture, record: CaptureRecord, names: [RoomName], draftFolder: URL,
     to draft: inout PackageDraft
   ) throws {
     let ref = CaptureRef(captureId: capture.captureId, areaKey: capture.areaKey)
@@ -186,7 +200,7 @@ public struct VisitPackageBuilder: Sendable {
         capture: ref, mime: "application/octet-stream", generator: AppGenerators.captureCore,
         generatorVersion: appVersion))
 
-    let model = try captureModel(of: capture, visitId: record.visitId)
+    let model = try captureModel(of: capture, visitId: record.visitId, names: names)
     let modelURL = try write(
       try encode(model), to: exports.appendingPathComponent(PackageLayout.captureModelFileName))
     let modelPath = try draft.add(

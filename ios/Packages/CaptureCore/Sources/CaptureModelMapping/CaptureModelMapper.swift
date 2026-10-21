@@ -8,8 +8,10 @@ public struct MappingContext: Sendable {
   public var areaKey: String
   public var label: String
   /// Room labels in room order, replacing the labels derived from the room types (see
-  /// `RoomTyping.labels`). A missing or blank entry keeps the derived label; the room's type is
-  /// set either way.
+  /// `RoomTyping.labels`): the operator's names (`RoomNaming`). A missing or blank entry keeps
+  /// the derived label. A label that differs from the derived one and names a room type
+  /// (`RoomTyping.areaType`, for example "Shower") also sets the room's type, with source
+  /// `operator`; any other keeps the type from the scan (`RoomTyping.renamedByOperator`).
   public var roomLabels: [String]
   public var refs: [CaptureModel.SourceRef]
 
@@ -166,10 +168,13 @@ public enum CaptureModelMapper {
     }
 
     // Pass 3: room labels, numbered across the capture (`Bedroom 1`, `Bedroom 2`), and types.
-    // A single room the operator named ("Office") takes that name and type.
+    // A single room the operator named ("Office") takes that name and type, and so does a room
+    // the operator renamed ("Shower"); the numbering stays that of the scan.
     typings = RoomTyping.namedByOperator(typings, captureLabel: context.label)
     let labels = RoomTyping.labels(
       for: typings, captureLabel: context.label, overrides: context.roomLabels)
+    typings = RoomTyping.renamedByOperator(
+      typings, captureLabel: context.label, overrides: context.roomLabels)
     for index in model.rooms.indices {
       model.rooms[index].label = labels[index]
       model.rooms[index].type = typings[index].type

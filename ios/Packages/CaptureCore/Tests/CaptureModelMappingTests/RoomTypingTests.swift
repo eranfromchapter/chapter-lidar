@@ -143,10 +143,53 @@ final class RoomTypingTests: XCTestCase {
       ("Living / dining", .livingRoom), ("Dining room", .diningRoom), ("Front hall", .hallway),
       ("Laundry", .laundry), ("Coat closet", .closet), ("Floor 1", nil), ("Apartment", nil),
       ("", nil), ("Bedrooms wing", nil),
+      // RoomPlan has no shower: a shower or tub on its own is a bathroom (field report
+      // 2026-10-20, "it's not a closet it's a shower").
+      ("Shower", .bathroom), ("shower", .bathroom), ("Walk-in shower", .bathroom), ("Tub", .bathroom),
+      ("Bathtub", .bathroom), ("Half bath", .bathroom), ("Lavatory", .bathroom),
+      ("Pantry", .closet), ("Storage", .closet), ("Linen cupboard", .closet), ("Kitchen pantry", .kitchen),
+      ("Entry", .hallway), ("Vestibule", .hallway), ("Hallway", .hallway),
+      ("Room Mexico", nil), ("Showers wing", nil), ("Tubular", nil),
     ]
     for (label, type) in cases {
       XCTAssertEqual(RoomTyping.areaType(label), type, label)
     }
+  }
+
+  func testARenamedRoomTakesTheTypeItsNameSays() {
+    let rooms: [RoomTyping.Result] = [
+      .typed(.bedroom, .roomplanSection), .typed(.bathroom, .inferred), .typed(.closet, .inferred),
+    ]
+    let label = "Room Mexico"
+    XCTAssertEqual(RoomTyping.labels(for: rooms, captureLabel: label), ["Bedroom", "Bathroom", "Closet"])
+    XCTAssertEqual(
+      RoomTyping.renamedByOperator(rooms, captureLabel: label, overrides: ["", "", "Shower"]),
+      [.typed(.bedroom, .roomplanSection), .typed(.bathroom, .inferred), .typed(.bathroom, .operator)])
+    XCTAssertEqual(
+      RoomTyping.renamedByOperator(rooms, captureLabel: label, overrides: ["Guest suite", "", "Nook"]), rooms,
+      "a name that names no type keeps the scan's type")
+    XCTAssertEqual(
+      RoomTyping.renamedByOperator(rooms, captureLabel: label, overrides: ["bedroom ", "", "  "]), rooms,
+      "the derived label again, or a blank name, is not a rename")
+    XCTAssertEqual(RoomTyping.renamedByOperator(rooms, captureLabel: label, overrides: []), rooms)
+    XCTAssertEqual(
+      RoomTyping.renamedByOperator([.unknown, .mixed], captureLabel: label, overrides: ["Pantry", "Kitchen"]),
+      [.typed(.closet, .operator), .typed(.kitchen, .operator)])
+    // A single room the operator named by its area takes a later rename's type.
+    let office = RoomTyping.namedByOperator([.unknown], captureLabel: "Office")
+    XCTAssertEqual(
+      RoomTyping.renamedByOperator(office, captureLabel: "Office", overrides: ["Shower"]),
+      [.typed(.bathroom, .operator)])
+    XCTAssertEqual(
+      RoomTyping.renamedByOperator(office, captureLabel: "Office", overrides: ["office"]), office)
+
+    // The labels keep the scan's numbering: renaming Closet 1 leaves Closet 2.
+    let closets: [RoomTyping.Result] = [.typed(.closet, .inferred), .typed(.closet, .inferred)]
+    XCTAssertEqual(
+      RoomTyping.labels(for: closets, captureLabel: label, overrides: ["Shower"]), ["Shower", "Closet 2"])
+    XCTAssertEqual(
+      RoomTyping.renamedByOperator(closets, captureLabel: label, overrides: ["Shower"]),
+      [.typed(.bathroom, .operator), .typed(.closet, .inferred)])
   }
 
   func testTheOperatorNamesASingleRoom() {

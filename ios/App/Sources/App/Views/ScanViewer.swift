@@ -29,6 +29,11 @@ struct ScanItem: Identifiable, Hashable {
   var displayUnits: DisplayUnitSystem? = nil
   /// The capture time in the capture record.
   var capturedAt: Date? = nil
+  /// The capture's own label in the capture record, when known. The plan is mapped with it,
+  /// as the visit mapped it, so the rooms get the same labels and the names below apply.
+  var captureLabel: String? = nil
+  /// The operator's names for rooms of this scan (the visit's `room-names.json`).
+  var roomNames: [RoomName] = []
   var id: String { folder.path }
 
   /// When the scan was made: the capture record's time, else the file's.
@@ -43,6 +48,8 @@ enum ScanLibrary {
     var items: [ScanItem] = []
     for visit in children(of: visitsRoot) {
       let record = record(visit: visit)
+      // The operator's room names of this visit; none when it has no names file.
+      let names = (try? VisitRoomNames.load(from: VisitWorkspace(root: visit))) ?? VisitRoomNames()
       let exports = visit.appendingPathComponent("originals/Original Exports", isDirectory: true)
       for area in children(of: exports) {
         for capture in children(of: area) {
@@ -52,7 +59,8 @@ enum ScanLibrary {
           if let item = item(
             folder: capture, title: title(areaKey: area.lastPathComponent),
             address: record?.address.formatted, displayUnits: recorded?.units.display,
-            capturedAt: recorded?.capturedAt.date)
+            capturedAt: recorded?.capturedAt.date, captureLabel: recorded?.label,
+            roomNames: names.captures[capture.lastPathComponent] ?? [])
           {
             items.append(item)
           }
@@ -64,7 +72,7 @@ enum ScanLibrary {
 
   static func item(
     folder: URL, title: String, address: String? = nil, displayUnits: DisplayUnitSystem? = nil,
-    capturedAt: Date? = nil
+    capturedAt: Date? = nil, captureLabel: String? = nil, roomNames: [RoomName] = []
   ) -> ScanItem? {
     let file = folder.appendingPathComponent(roomPlanFile)
     guard
@@ -73,7 +81,7 @@ enum ScanLibrary {
     else { return nil }
     return ScanItem(
       folder: folder, title: title, date: date, address: address, displayUnits: displayUnits,
-      capturedAt: capturedAt)
+      capturedAt: capturedAt, captureLabel: captureLabel, roomNames: roomNames)
   }
 
   /// The newest capture record written for a visit (by "Package ready", under
@@ -128,15 +136,19 @@ final class ScanViewerModel {
   func load() async {
     defer { isLoading = false }
     let file = item.folder.appendingPathComponent(ScanLibrary.roomPlanFile)
-    let title = item.title
+    let label = item.captureLabel ?? item.title
+    let names = item.roomNames
     do {
       let result = try await Task.detached(priority: .userInitiated) {
         let data = try Data(contentsOf: file)
         let document = try RoomPlanDocument.decode(from: data)
-        let model = try CaptureModelMapper.map(
+        // With the operator's room names, as the package's capture model has them.
+        let model = try RoomNaming.map(
           document,
           context: MappingContext(
-            visitId: LowercaseUUID(), captureId: LowercaseUUID(), areaKey: "scan", label: title))
+            visitId: LowercaseUUID(), captureId: LowercaseUUID(), areaKey: "scan", label: label),
+          names: names
+        ).model
         return (model, ScanMeasurements(model: model), model.walls.count, model.rooms.count)
       }.value
       measurements = result.1

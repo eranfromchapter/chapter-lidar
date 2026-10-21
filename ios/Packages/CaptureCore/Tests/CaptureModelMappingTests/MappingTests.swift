@@ -117,7 +117,11 @@ final class MappingTests: XCTestCase {
       "two-floor-house 1": [nil],
     ]
     for (name, index) in allGeneratedCaptures {
-      let model = try mapFixture(name, capture: index).model
+      // The types from the scan alone: without the generator's room labels, which act as the
+      // operator's names (one of them, "Upper Hall", names a hallway; see below).
+      var mapped = try mapFixture(name, capture: index)
+      mapped.context.roomLabels = []
+      let model = try CaptureModelMapper.map(mapped.document, context: mapped.context)
       let key = "\(name) \(index)"
       XCTAssertEqual(model.rooms.map(\.type), try XCTUnwrap(expectedTypes[key]), key)
       XCTAssertEqual(
@@ -126,6 +130,15 @@ final class MappingTests: XCTestCase {
       XCTAssertTrue((model.windows + model.openings).allSatisfy { $0.isOpen == nil }, key)
       XCTAssertTrue(model.objects.allSatisfy { $0.attributes == nil && $0.parentId == nil }, key)
     }
+    // With the generator's labels as names: "Upper Hall" renames "Room 1" and names a hallway;
+    // the others name no type or repeat the derived label.
+    let named = try allGeneratedCaptures.map { try mapFixture($0.fixture, capture: $0.index).model }
+    XCTAssertEqual(named.map { $0.rooms.map(\.label) }, [
+      ["Test Room"], ["L Room"], ["Living Room", "Bedroom"], ["Living Room"], ["Upper Hall"],
+    ])
+    XCTAssertEqual(named[4].rooms.map(\.type), [.hallway])
+    XCTAssertEqual(named[4].rooms.map(\.typeSource), [.operator])
+    XCTAssertEqual(named[2].rooms.map(\.typeSource), [.roomplanSection, .roomplanSection])
   }
 
   func testLShapeAndStairVoidKeepTheirOutlines() throws {
@@ -243,13 +256,28 @@ final class MappingTests: XCTestCase {
     XCTAssertEqual(document.rooms[0].walls.count, 4)
   }
 
-  func testRoomLabelsOverrideTheDerivedLabelsAndKeepTheTypes() throws {
+  func testRoomLabelsOverrideTheDerivedLabelsAndTypeTheRoomsTheyName() throws {
     var mapped = try mapFixture("two-room-apartment")
-    mapped.context.roomLabels = ["Kitchen"]
-    let model = try CaptureModelMapper.map(mapped.document, context: mapped.context)
-    XCTAssertEqual(model.rooms.map(\.label), ["Kitchen", "Bedroom"])
+    // A name that names no room type keeps the type from the scan.
+    mapped.context.roomLabels = ["Guest suite"]
+    var model = try CaptureModelMapper.map(mapped.document, context: mapped.context)
+    XCTAssertEqual(model.rooms.map(\.label), ["Guest suite", "Bedroom"])
     XCTAssertEqual(model.rooms.map(\.type), [.livingRoom, .bedroom])
     XCTAssertEqual(model.rooms.map(\.typeSource), [.roomplanSection, .roomplanSection])
+
+    // A name that names one is the operator's type: the operator stood in the room.
+    mapped.context.roomLabels = ["Kitchen"]
+    model = try CaptureModelMapper.map(mapped.document, context: mapped.context)
+    XCTAssertEqual(model.rooms.map(\.label), ["Kitchen", "Bedroom"])
+    XCTAssertEqual(model.rooms.map(\.type), [.kitchen, .bedroom])
+    XCTAssertEqual(model.rooms.map(\.typeSource), [.operator, .roomplanSection])
+
+    // The derived label given again is no rename.
+    mapped.context.roomLabels = ["Living Room", "Bedroom"]
+    model = try CaptureModelMapper.map(mapped.document, context: mapped.context)
+    XCTAssertEqual(model.rooms.map(\.typeSource), [.roomplanSection, .roomplanSection])
+    let validator = try SchemaValidator(schemaURL: Fixtures.schemaURL("capture-model.schema.json"))
+    XCTAssertEqual(validator.validate(try encodedJSON(model)), [])
   }
 
   func testDoorsKeepIsOpenAndOnlyDoorsCarryIt() throws {
