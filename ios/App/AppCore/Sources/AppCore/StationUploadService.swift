@@ -104,10 +104,11 @@ public enum StationBridge {
     UploadSession(
       packageId: session.packageId, visitId: session.visitId, dealId: session.dealId,
       revision: session.revision, status: try convert(session.status),
+      createdAt: session.createdAt,
       files: try session.files.map { file in
         UploadSessionFile(
           path: file.path, status: try convert(file.status),
-          upload: file.upload.map(convert))
+          upload: file.upload.map(convert), carriedOverFrom: file.carriedOverFrom)
       })
   }
 

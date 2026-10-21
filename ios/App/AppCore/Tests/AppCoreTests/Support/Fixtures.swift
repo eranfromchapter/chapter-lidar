@@ -34,6 +34,21 @@ enum Fixtures {
     try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
     return url
   }
+
+  /// Removes a temporary folder that holds sealed (read-only) packages: makes everything
+  /// writable first (test scaffolding only; the app never deletes).
+  static func removeTemporaryDirectory(_ url: URL) {
+    let enumerator = FileManager.default.enumerator(at: url, includingPropertiesForKeys: nil)
+    while let item = enumerator?.nextObject() as? URL {
+      try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: item.path)
+    }
+    try? FileManager.default.removeItem(at: url)
+  }
+
+  static func manifestValidator() throws -> SchemaValidator {
+    try SchemaValidator(
+      schemaURL: repositoryRoot.appendingPathComponent("contract/schema/manifest.schema.json"))
+  }
 }
 
 /// A visit on the "phone" built from a fixture package: the fixture's raw originals copied where
@@ -85,6 +100,15 @@ struct FixtureVisit {
           labels: try XCTUnwrap(entry.photo)))
     }
     photos = saved
+  }
+
+  /// The manifest of a fixture package folder.
+  static func manifest(of root: URL) throws -> PackageManifest {
+    let register = root.appendingPathComponent("Source Register", isDirectory: true)
+    let visit = try XCTUnwrap(FileManager.default.contentsOfDirectory(atPath: register.path).first)
+    return try CaptureContractJSON.makeDecoder().decode(
+      PackageManifest.self,
+      from: Data(contentsOf: register.appendingPathComponent("\(visit)/manifest.json")))
   }
 
   /// SHA-256 of every original the phone holds for this visit (raw scan files and photos).
