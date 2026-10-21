@@ -4,11 +4,11 @@ import { StationError } from "@/lib/station";
 import { Notice } from "./Notice";
 
 /**
- * Turns a station error on a page into what the user sees: 404 is the not-found page, 403 and
- * an unreachable station are explained in place. Anything else is rethrown to the error page.
- * Never substitutes data.
+ * Turns a station error on a page into what the user sees (web-review §6.8): 404 is the
+ * not-found page, 401, 403 and an unreachable station are explained in place. Anything else is
+ * rethrown to the error page. Never substitutes data. `retryHref` is the page's own URL.
  */
-export function stationProblem(error: unknown) {
+export function stationProblem(error: unknown, retryHref = "/") {
   if (!(error instanceof StationError)) {
     throw error;
   }
@@ -24,13 +24,21 @@ export function stationProblem(error: unknown) {
   }
   if (error.status === 401) {
     return (
-      <Notice role="alert" title="Sign in again">
-        The station did not accept your sign-in. <a href={SIGN_IN_PATH}>Sign in again</a>.
+      <Notice
+        role="alert"
+        title="Sign in again"
+        action={{ label: "Sign in again", href: SIGN_IN_PATH }}
+      >
+        The station did not accept your sign-in.
       </Notice>
     );
   }
   return (
-    <Notice role="alert" title="The station could not answer">
+    <Notice
+      role="alert"
+      title="The station could not answer"
+      action={{ label: "Try again", href: retryHref }}
+    >
       The data could not be loaded from the station (status {error.status}). Try again in a moment.
     </Notice>
   );

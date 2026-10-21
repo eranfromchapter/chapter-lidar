@@ -1,6 +1,7 @@
-// Shared checks of the file route handlers (download, plan preview). Both are bim/admin only,
-// need a signed-in session and a well-formed package id and path. The station enforces the
-// same roles; this refuses early so capture users never trigger a link.
+// Shared checks of the download route handlers (files, plan preview, spatial report,
+// verdict.json). All are bim/admin only and need a signed-in session and a well-formed package
+// id (and, for files, a path). The station enforces the same roles; this refuses early so
+// capture users never trigger a link (web-review §6.6, §10).
 
 import "server-only";
 import { isPackageId, LIMITS } from "./decisions";
@@ -16,14 +17,16 @@ export function textResponse(status: number, message: string): Response {
   });
 }
 
+export type PackageAccess =
+  | { readonly ok: true; readonly session: ViewerSession }
+  | { readonly ok: false; readonly response: Response };
+
 export type FileAccess =
   | { readonly ok: true; readonly session: ViewerSession; readonly path: string }
   | { readonly ok: false; readonly response: Response };
 
-export async function authorizeFileRequest(
-  request: Request,
-  packageId: string,
-): Promise<FileAccess> {
+/** Session, bim/admin role and package id, before any station call. */
+export async function authorizePackageRequest(packageId: string): Promise<PackageAccess> {
   const session = await getViewerSession();
   if (session === null) {
     return { ok: false, response: textResponse(401, "Sign in to download files.") };
@@ -34,11 +37,28 @@ export async function authorizeFileRequest(
       response: textResponse(403, "Only BIM operators and admins can download package files."),
     };
   }
+  if (!isPackageId(packageId)) {
+    return { ok: false, response: textResponse(404, "No such package.") };
+  }
+  return { ok: true, session };
+}
+
+/** As authorizePackageRequest, plus the file path of ?path=. */
+export async function authorizeFileRequest(
+  request: Request,
+  packageId: string,
+): Promise<FileAccess> {
+  const access = await authorizePackageRequest(packageId);
+  if (!access.ok) {
+    return access.response.status === 404
+      ? { ok: false, response: textResponse(404, "No such package file.") }
+      : access;
+  }
   const path = new URL(request.url).searchParams.get("path") ?? "";
-  if (!isPackageId(packageId) || path.length === 0 || path.length > LIMITS.path) {
+  if (path.length === 0 || path.length > LIMITS.path) {
     return { ok: false, response: textResponse(404, "No such package file.") };
   }
-  return { ok: true, session, path };
+  return { ok: true, session: access.session, path };
 }
 
 /** Plain answer for a station error on a file route. Never includes the link or token. */
@@ -68,4 +88,16 @@ export function isFollowableLink(url: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** 303 to a short-lived link: never cached, never sent on as a referrer. */
+export function linkRedirect(url: string): Response {
+  return new Response(null, {
+    status: 303,
+    headers: {
+      location: url,
+      "cache-control": "no-store",
+      "referrer-policy": "no-referrer",
+    },
+  });
 }

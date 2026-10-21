@@ -1,16 +1,17 @@
-// "/sign-in" — the sign-in page, in the review screen's look instead of the Auth.js default
+// "/sign-in" — the sign-in page in the HUB look (web-review §6.7) instead of the Auth.js default
 // page. Auth.js sends sign-in and its errors here (auth.ts pages); the proxy serves it without a
 // session. Shows no data and does not echo the error code.
 
 import type { Metadata } from "next";
-import { Notice } from "@/components/Notice";
-import { AppHeader } from "@/components/PageFrame";
+import { Button } from "@/components/hub/Button";
+import { Card } from "@/components/hub/Card";
+import { SoloPage } from "@/components/SoloPage";
 import { safeReturnPath } from "@/lib/auth-redirect";
 import { startSignIn } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = { title: "Sign in · Capture review · Chapter" };
+export const metadata: Metadata = { title: "Sign in · Capture review" };
 
 interface SignInPageProps {
   readonly searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -25,30 +26,28 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
   const callbackUrl = safeReturnPath(first(query.callbackUrl));
   const failed = first(query.error) !== undefined;
   return (
-    <>
-      <AppHeader />
-      <main className="frame">
-        <div className="main">
-          <div className="page-title">
-            <h1>Sign in</h1>
-            <span className="page-title__meta">
-              Use your Chapter Microsoft account to see projects, capture packages, verdicts and
-              files.
-            </span>
-          </div>
+    <SoloPage>
+      <Card padding="lg">
+        <div className="hub-stack hub-stack--16">
+          <h1 className="page-title">Sign in</h1>
+          <p className="text-14" style={{ margin: 0 }}>
+            Use your Chapter Microsoft account to see projects, capture packages, verdicts and
+            files.
+          </p>
           {failed ? (
-            <Notice role="alert" title="Sign-in did not finish">
-              Try again. If it keeps happening, ask a Chapter admin.
-            </Notice>
+            <div role="alert" className="alert-box">
+              <strong>Sign-in did not finish</strong>
+              <span>Try again. If it keeps happening, ask a Chapter admin.</span>
+            </div>
           ) : null}
           <form action={startSignIn}>
             <input type="hidden" name="callbackUrl" value={callbackUrl} />
-            <button type="submit" className="button-primary">
+            <Button type="submit" variant="primary" size="md" fullWidth>
               Sign in with Microsoft
-            </button>
+            </Button>
           </form>
         </div>
-      </main>
-    </>
+      </Card>
+    </SoloPage>
   );
 }

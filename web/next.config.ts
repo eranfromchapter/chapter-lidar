@@ -1,5 +1,11 @@
 import type { NextConfig } from "next";
 
+/** Routes that redirect to a short-lived signed link: the link must not leak as a referrer. */
+const SIGNED_LINK_ROUTES = [
+  "/packages/:packageId/files/download",
+  "/packages/:packageId/report/download",
+];
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
@@ -15,6 +21,11 @@ const nextConfig: NextConfig = {
           { key: "X-Frame-Options", value: "DENY" },
         ],
       },
+      // Later entries win over earlier ones for the same header.
+      ...SIGNED_LINK_ROUTES.map((source) => ({
+        source,
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      })),
     ];
   },
 };
