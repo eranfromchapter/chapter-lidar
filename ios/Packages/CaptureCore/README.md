@@ -64,8 +64,15 @@ the v1 app shell; it goes once the app's navigation hosts the screens.
   tracking, turning, gravity checks, heading age and accuracy, calibration) and feeds
   `HeadingWindow`: windows of 8 pairs, the consistency test, the best window, the 30 s start
   period. At Finish floor `FrameCheck` measures φ and `CaptureFlowModel.finishFloor()` writes
-  `CaptureSessionResult.compass` into the capture with `setCompass`. No API takes a heading from
-  the screens.
+  `CaptureSessionResult.compass.recorded` into the capture with `setCompass`. No API takes a
+  heading from the screens.
+- **Always a reading or an issue**: every capture the app scans carries the four reading fields
+  or `headingIssue`, never neither. In a capture record 1.1.0 a capture with no compass field is
+  one scanned before the app read the compass (carried over from an older revision), which the
+  station's `orientation.compass` does not grade (Q-B). `HeadingWindow` gives `unavailable` when
+  no compass sample was ever paired with a frame (no compass service included) and `rejected`
+  when samples came but never made an accepted window; `recorded` turns a session's
+  `.none(issue: nil)` (a replay without a compass script) into `unavailable`.
 - **Tests**: `FakeCompass` scripts `verified` (212.4° ±8 true), `approximate` (±12 magnetic) and
   `none`, for the pre-check, `ReplaySession(compass:)` and the photo camera (85° → "E");
   `-ChapterUITestCompass` in the app selects it. Device tests D0 and D1 are in

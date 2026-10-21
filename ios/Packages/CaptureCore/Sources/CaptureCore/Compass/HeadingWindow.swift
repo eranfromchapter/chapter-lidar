@@ -121,7 +121,12 @@ public struct HeadingWindow: Sendable {
 
   /// What Finish floor records: the best window turned into the capture frame by `frameYaw`
   /// (compass §3.4), or no reading with the issue of §1.5 (unavailable > not calibrated >
-  /// rejected).
+  /// rejected). There is always an issue: a capture record 1.1.0 capture with neither a reading
+  /// nor an issue is one scanned before the app read the compass (the station does not grade it).
+  /// No compass sample was ever paired with a frame (no compass service, or Core Motion delivered
+  /// nothing): unavailable. Samples came but never made an accepted window (too few in a row,
+  /// tracking not normal, turning, a gravity or heading-age failure): rejected, the readings could
+  /// not be matched to the scan.
   public func result(frameYaw: Double = CompassMath.captureFrameYaw) -> CompassResult {
     if let best {
       return .reading(
@@ -129,12 +134,9 @@ public struct HeadingWindow: Sendable {
           CompassMath.captureHeading(worldHeading: best.worldHeading, frameYaw: frameYaw)),
         accuracy: best.accuracy, source: best.source, recordedAt: best.recordedAt)
     }
-    if isUnavailable { return .none(issue: .unavailable) }
-    if diagnostics.pairs > 0, !sawValidHeading || !sawCalibratedField {
-      return .none(issue: .notCalibrated)
-    }
-    if diagnostics.windowsRejected > 0 { return .none(issue: .rejected) }
-    return .none(issue: nil)
+    if isUnavailable || diagnostics.pairs == 0 { return .none(issue: .unavailable) }
+    if !sawValidHeading || !sawCalibratedField { return .none(issue: .notCalibrated) }
+    return .none(issue: .rejected)
   }
 
   // MARK: Private

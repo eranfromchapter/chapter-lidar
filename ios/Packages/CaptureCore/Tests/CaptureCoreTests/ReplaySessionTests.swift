@@ -116,6 +116,7 @@ final class ReplaySessionTests: XCTestCase {
     let events = await collect(session)
     XCTAssertFalse(events.contains { if case .compass = $0 { return true } else { return false } })
     XCTAssertEqual(result.compass, .none(issue: nil))
+    XCTAssertEqual(result.compass.recorded, .none(issue: .unavailable), "what Finish floor records")
   }
 
   func testTrackingLostScript() async throws {

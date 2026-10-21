@@ -7,6 +7,7 @@ export {
   COMPASS_EXPECTED,
   COMPASS_LIMITATION_FOR_LEGACY_RECORDS,
   ORIENTATION_NOT_VERIFIED,
+  scannedBeforeCompass,
 } from "./checks/compass.js";
 export { CheckContext, resolveRelative, type CaptureInfo } from "./context.js";
 export { clip, finding, outcomeOf, NO_ACTION } from "./finding.js";

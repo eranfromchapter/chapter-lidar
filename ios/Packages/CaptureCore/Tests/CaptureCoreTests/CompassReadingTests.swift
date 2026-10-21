@@ -138,6 +138,24 @@ final class PrecheckReadingTests: XCTestCase {
       CompassResult.none(issue: nil).state(capturedAt: captured, finishedAt: nil),
       .notVerified(.noReading, accuracy: nil))
   }
+
+  /// What Finish floor records: a reading or an issue, never neither (a capture record 1.1.0
+  /// capture with neither is one scanned before the app read the compass).
+  func testTheRecordedResultAlwaysHasAReadingOrAnIssue() {
+    let reading = CompassResult.reading(
+      heading: 212.4, accuracy: 8, source: .trueNorth, recordedAt: UTCTimestamp(start))
+    XCTAssertEqual(reading.recorded, reading)
+    for issue in HeadingIssue.allCases {
+      XCTAssertEqual(CompassResult.none(issue: issue).recorded, .none(issue: issue))
+    }
+    XCTAssertEqual(
+      CompassResult.none(issue: nil).recorded, .none(issue: .unavailable),
+      "a session that read no compass had none to read")
+    let recorded = CompassResult.none(issue: nil).recorded
+    XCTAssertEqual(
+      recorded.state(capturedAt: UTCTimestamp(start), finishedAt: nil),
+      .notVerified(.unavailable, accuracy: nil))
+  }
 }
 
 final class TrackingMonitorTests: XCTestCase {

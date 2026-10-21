@@ -35,7 +35,8 @@
   /// follows as `.compass` events. Pause and resume keep the ARSession, so the reading stays
   /// valid; a new session reads again. At `finish()` the frame check compares the surfaces of
   /// RoomPlan's last live update with the final result and the reading goes into
-  /// `CaptureSessionResult.compass`. Without a compass service the result is no reading.
+  /// `CaptureSessionResult.compass`. Without a compass service the result is no reading, with
+  /// the issue `unavailable` (no compass sample reached the scan).
   @MainActor
   public final class LiveCaptureSession: NSObject, CaptureSession, RoomCaptureSessionDelegate {
     public nonisolated let events: AsyncStream<CaptureSessionEvent>

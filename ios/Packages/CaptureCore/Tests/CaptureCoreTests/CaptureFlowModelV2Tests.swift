@@ -233,15 +233,35 @@ import XCTest
       XCTAssertEqual(CompassState(capture), .notVerified(.rejected, accuracy: nil))
     }
 
-    func testNoReadingRecordsNothing() async throws {
+    /// A scan without a compass (the replay reads none) records no reading and why: unavailable.
+    /// Never neither: a capture record 1.1.0 capture with no compass field is one scanned before
+    /// the app read the compass, which the station does not grade.
+    func testAScanWithoutACompassRecordsUnavailable() async throws {
       let model = try modelReadyToScan()
       let capture = try await finishedRecord(model).captures[0]
       XCTAssertNil(capture.heading)
       XCTAssertNil(capture.headingAccuracy)
       XCTAssertNil(capture.headingSource)
       XCTAssertNil(capture.headingRecordedAt)
-      XCTAssertNil(capture.headingIssue)
-      XCTAssertEqual(CompassState(capture), .notVerified(.noReading, accuracy: nil))
+      XCTAssertEqual(capture.headingIssue, .unavailable)
+      XCTAssertEqual(CompassState(capture), .notVerified(.unavailable, accuracy: nil))
+    }
+
+    func testEveryScanRecordsAReadingOrAnIssue() async throws {
+      let scripts: [String: ReplayCompass?] = [
+        "verified": FakeCompass(.verified).replayCompass,
+        "approximate": FakeCompass(.approximate).replayCompass,
+        "none": FakeCompass(.none).replayCompass,
+        "rejected": ReplayCompass(reading: nil, issue: .rejected),
+        "not calibrated": ReplayCompass(reading: nil, issue: .notCalibrated),
+        "no script": nil,
+      ]
+      for (name, script) in scripts {
+        let model = try modelReadyToScan(replayCompass: script)
+        let capture = try await finishedRecord(model).captures[0]
+        XCTAssertTrue(capture.heading != nil || capture.headingIssue != nil, name)
+        XCTAssertFalse(capture.heading != nil && capture.headingIssue != nil, name)
+      }
     }
 
     func testTheStep2ReadingIsNotRecorded() async throws {
@@ -285,7 +305,7 @@ import XCTest
         factory: {
           sessions += 1
           if sessions == 1 { return FailingSession(failure: .tooHot, compass: verified) }
-          // The new session reads no compass (`.none(issue: nil)` at Finish floor).
+          // The new session reads no compass (`.none(issue: nil)`; recorded as unavailable).
           return try ReplaySession(source: source)
         })
       await model.startScan()
@@ -306,8 +326,8 @@ import XCTest
       XCTAssertNil(capture.headingAccuracy)
       XCTAssertNil(capture.headingSource)
       XCTAssertNil(capture.headingRecordedAt)
-      XCTAssertNil(capture.headingIssue)
-      XCTAssertEqual(CompassState(capture), .notVerified(.noReading, accuracy: nil))
+      XCTAssertEqual(capture.headingIssue, .unavailable, "the new session's own result")
+      XCTAssertEqual(CompassState(capture), .notVerified(.unavailable, accuracy: nil))
     }
 
     // MARK: Pre-check

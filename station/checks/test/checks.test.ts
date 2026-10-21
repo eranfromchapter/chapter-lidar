@@ -40,7 +40,7 @@ const EXPECTED: Record<string, Array<[string, "blocker" | "limitation"]>> = {
   "glb rotated z-up by its node": [["orientation.up", "limitation"]],
   "compass reading rejected by the phone": [["orientation.compass", "limitation"]],
   "compass accuracy over 30 degrees": [["orientation.compass", "limitation"]],
-  "capture record 1.1.0 without a compass reading": [["orientation.compass", "limitation"]],
+  "capture record 1.1.0 with a capture scanned before the compass": [],
   "obj material library missing": [["companions.resolve", "limitation"]],
   "mtl texture missing": [["companions.resolve", "limitation"]],
   "gltf image missing": [["companions.resolve", "limitation"]],
@@ -54,11 +54,7 @@ const EXPECTED: Record<string, Array<[string, "blocker" | "limitation"]>> = {
     ["geometry.plausibility", "limitation"],
     ["geometry.plausibility", "limitation"],
   ],
-  // Plus the two-floor house's own limitation: Floor 2 has no compass reading.
-  "house with one shared landmark": [
-    ["orientation.compass", "limitation"],
-    ["floors.registration", "limitation"],
-  ],
+  "house with one shared landmark": [["floors.registration", "limitation"]],
   "field controls derived from the scan": [["evidence.independence", "limitation"]],
 };
 

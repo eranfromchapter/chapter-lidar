@@ -8,6 +8,17 @@ import Foundation
 public typealias CompassResult = CompassResultValue
 
 extension CompassResultValue {
+  /// What Finish floor writes into the capture. A capture this app scans always carries a reading
+  /// or `headingIssue`: in a capture record 1.1.0, a capture with neither is one scanned before
+  /// the app read the compass (carried over from an older revision), which the station does not
+  /// grade (`orientation.compass`, owner question Q-B). A session that read no compass and cannot
+  /// say why (`.none(issue: nil)`: a replay without a compass script, a scripted no-reading
+  /// compass) had no compass to read: `unavailable`.
+  public var recorded: CompassResultValue {
+    if case .none(issue: nil) = self { return .none(issue: .unavailable) }
+    return self
+  }
+
   /// The state the shared evaluator gives this result on a capture scanned from `capturedAt` to
   /// `finishedAt` (rules 1–8 of the contract, rule 5 included).
   public func state(capturedAt: UTCTimestamp, finishedAt: UTCTimestamp?) -> CompassState {

@@ -142,7 +142,7 @@ public struct CaptureSessionResult: Sendable, Equatable {
   public var startedAt: Date
   public var finishedAt: Date
   /// The floor's compass reading, taken in the scan's own frame (compass §3.3); none when the
-  /// session read none.
+  /// session read none (Finish floor records `CompassResult.recorded`: a reading or an issue).
   public var compass: CompassResult
   /// How the reading went (pairs, windows, frame check), for the debug log and device test D1.
   public var compassDiagnostics: CompassDiagnostics?
