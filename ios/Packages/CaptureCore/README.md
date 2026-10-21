@@ -1,8 +1,9 @@
 # CaptureCore
 
-The scan core of Chapter Capture (spec F2): Apple RoomPlan and ARKit LiDAR behind one session API,
-raw originals kept unchanged, the adapter into the contract `CaptureModel`, and the capture
-screens.
+The scan core of Chapter Capture (spec F2, design v2): Apple RoomPlan and ARKit LiDAR behind one
+session API, raw originals kept unchanged, the adapter into the contract `CaptureModel`, the
+compass reading of each floor, and the capture screens (build specs phone-capture §3, §5 and
+compass §3, §5 with the completeness critique).
 
 ```sh
 swift test --package-path ios/Packages/CaptureCore                          # Linux or macOS
@@ -16,9 +17,10 @@ CHAPTER_REAL_ROOMPLAN_DIR="/path/to/exports" swift test --package-path ios/Packa
 | Target                | Builds on             | Contents                                                                                                                                         |
 | --------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `CaptureModelMapping` | Linux, macOS, iOS     | Codable mirror of RoomPlan's JSON, transforms, room polygons, opening-to-wall assignment, `CaptureModelMapper`                                   |
-| `CaptureCore`         | Linux, macOS, iOS     | `CaptureSession` protocol, `ReplaySession`, `DeviceGate`, raw-originals writer and debug export, capture-record form logic, `CaptureFlowModel`   |
-| `CaptureRoomPlan`     | iOS only (RoomPlan)   | `LiveCaptureSession` (RoomPlan + ARKit), `RoomPlanAdapter`, `DeviceCapabilities.current()`, `LiveCameraPreview`, `CaptureSessionPreview`         |
-| `CaptureUI`           | iOS only (SwiftUI)    | The three capture screens of the frozen design (`CaptureFlowView`) and the design tokens                                                         |
+| `CaptureCore`         | Linux, macOS, iOS     | `CaptureSession` protocol, `ReplaySession`, `DeviceGate`, raw-originals writer and debug export, capture-record form logic, `CaptureFlowModel`, the compass reading (`Compass/`), `TrackingMonitor`, `CaptureText`, `DeviceNames`, the screen states `CapturesHomeState` and `CaptureOverviewState` |
+| `CaptureCompass`      | iOS only (CoreMotion) | `CompassService` (the app's one location and motion manager) and `CompassDeviceCheck` (device test D0)                                           |
+| `CaptureRoomPlan`     | iOS only (RoomPlan)   | `LiveCaptureSession` (RoomPlan + ARKit, tracking, compass pairing), `RoomPlanAdapter`, `DeviceCapabilities.current()`, `LiveCameraPreview`, `CaptureSessionPreview` |
+| `CaptureUI`           | iOS only (SwiftUI)    | The capture screens on ChapterUI: `CapturesHomeScreen`, `NewCaptureScreen`, `ScanSetupScreen`, `LiveScanScreen`, `CaptureOverviewScreen`; `ChapterTokens` (a façade over `ChapterTheme`) |
 | `CaptureTestSupport`  | everywhere, test only | Fixture paths and a JSON Schema subset validator; not a product                                                                                  |
 
 ### How the Apple-only targets are guarded
@@ -26,30 +28,86 @@ CHAPTER_REAL_ROOMPLAN_DIR="/path/to/exports" swift test --package-path ios/Packa
 There is no `.apple-only` marker at the package root. `scripts/swift-test.sh` skips a whole package
 that has one, and the mapping, schema and capture-record tests must run on Linux. Instead:
 
-- Every source file of `CaptureRoomPlan` and `CaptureUI` is wrapped in
-  `#if canImport(RoomPlan) && canImport(ARKit) && os(iOS)` (or `canImport(SwiftUI)`), so the target
-  compiles to an empty module on Linux and macOS.
-- Each of those two targets carries an `.apple-only` marker file in its own source folder (excluded
+- Every source file of `CaptureCompass`, `CaptureRoomPlan` and `CaptureUI` is wrapped in
+  `#if canImport(CoreMotion) …`, `#if canImport(RoomPlan) && canImport(ARKit) && os(iOS)` or
+  `canImport(SwiftUI)`, so the target compiles to an empty module on Linux and macOS. So are the
+  test targets `CaptureUITests` and `CaptureCompassTests`.
+- Each of those targets carries an `.apple-only` marker file in its own source folder (excluded
   from the build in `Package.swift`) as the documented signal that it needs Apple frameworks.
 - The macOS runner (`.github/workflows/ios.yml`) builds the whole package for iOS, scheme
   `CaptureCore-Package`, and runs every test on the simulator, including `CaptureRoomPlanTests`.
-- `CaptureRoomPlan` and `CaptureUI` use Swift language mode 5: RoomPlan and ARKit delegates are
-  Objective-C protocols with non-Sendable arguments.
+- `CaptureCompass`, `CaptureRoomPlan` and `CaptureUI` use Swift language mode 5: Core Location,
+  RoomPlan and ARKit delegates are Objective-C protocols with non-Sendable arguments.
+
+## The capture screens
+
+The screens take state and call actions; they hold no disk access, so every state is drawn from
+fixtures in the snapshot tests. The app's NavigationStack hosts them (phone-capture §3.0):
+
+| Screen | API | Driven by |
+| --- | --- | --- |
+| Captures home (2b-0) | `CapturesHomeScreen(state:actions:)` | `CapturesHomeState` (rows of critique R-28 via `Row.inProgress` / `Row.sealed`), built by the app's `CaptureLibrary` |
+| New capture (2b-1, 1b, 1c) | `NewCaptureScreen(model:onDiscard:)` | `CaptureFlowModel` step 1: `continueBlocker`/`continueTitle`, `offlineBanner`, `addressToggleChanged(isOn:)`, `addressAlert(_:dial:discard:)` with the words of `AddressDifferentAlert` |
+| What are you scanning? (2b-2) | `ScanSetupScreen(model:)` | step 2: `startScanBlocker`, `existingAreaKeys` (the "Floor N" suggestion and the duplicate check; the host sets it when adding a floor), `compassPrecheck`, `readCompassAgain()`, `openLocationSettings()`; no compass row when `hasCompass` is false |
+| Live scan (2b-3, 3b) | `LiveScanScreen(model:preview:)` | `livePhase` (scanning, paused, tracking lost, stopped), `liveCompass`, `recordingStatus`, `restartFloor()` |
+| Capture overview (2b-4) | `CaptureOverviewScreen(state:actions:)` | `CaptureOverviewState`, built by the app's `OverviewBuilder` |
+
+`CaptureFlowView` still hosts step 1, step 2 and the live scan in a NavigationStack of its own for
+the v1 app shell; it goes once the app's navigation hosts the screens.
+
+## The compass of each floor
+
+- **Pre-check** (step 2, never stored): `CompassProviding.precheck()` collects `CLHeading` for 2 s
+  (`PrecheckReading`); the row shows it with the words of `CompassPhoneText`.
+- **Scan-start reading** (stored): `LiveCaptureSession` pairs every 4 Hz frame with the Core
+  Motion sample within 25 ms (`CompassService.motionRing`), gates it (`CompassPair.dropReason`:
+  tracking, turning, gravity checks, heading age and accuracy, calibration) and feeds
+  `HeadingWindow`: windows of 8 pairs, the consistency test, the best window, the 30 s start
+  period. At Finish floor `FrameCheck` measures φ and `CaptureFlowModel.finishFloor()` writes
+  `CaptureSessionResult.compass` into the capture with `setCompass`. No API takes a heading from
+  the screens.
+- **Tests**: `FakeCompass` scripts `verified` (212.4° ±8 true), `approximate` (±12 magnetic) and
+  `none`, for the pre-check, `ReplaySession(compass:)` and the photo camera (85° → "E");
+  `-ChapterUITestCompass` in the app selects it. Device tests D0 and D1 are in
+  `docs/qa/compass-device-tests.md`.
+
+## Tracking lost
+
+`TrackingMonitor` turns ARKit's tracking state into `TrackingStatus`: lost after 1.0 s of
+`notAvailable` or relocalizing, or 3.0 s of any limited state; normal again after 0.5 s. While a
+frame is not tracked normally nothing is sampled (depth, pose, mesh), so "Recording paused" on the
+live scan is true; scans with tracking trouble have fewer depth samples, as intended.
+
+## Snapshot tests
+
+`Tests/CaptureUITests` draws every screen and state with `ChapterUISnapshotTesting` (402 × 874 pt
+at scale 3) and compares with `__Snapshots__/`, recorded on the iPhone 17 Pro simulator with iOS
+26.0 (the CI pin). In package tests the system chrome comes out as ChapterUI's README describes
+(no glass back pill, no switch knob) and system alerts are not drawn: the words, button order and
+actions of the address-different alert of 1c are unit tests (`AddressDifferentAlert`,
+`CaptureFlowModel.addressAlert`), and the drawn alert is checked by the app's UI tests. "Keyboard
+up" is drawn with a stand-in of the keyboard's height, as the bare test process has no keyboard.
+
+```sh
+cd ios/Packages/CaptureCore
+xcodebuild test -scheme CaptureCore-Package -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.0'
+TEST_RUNNER_RECORD_SNAPSHOTS=1 xcodebuild test -scheme CaptureCore-Package \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.0' -only-testing:CaptureUITests
+```
 
 ## Showing the camera feed
 
 `CaptureFlowModel.currentSession` is the session of the scan in progress (nil before Start scan and
 after Finish floor or Cancel; observed, so views follow it). The host passes
-`CaptureSessionPreview` from `CaptureRoomPlan` as the `preview` of `CaptureFlowView`: it shows
-`LiveCameraPreview` of the `LiveCaptureSession`'s `ARSession`, and nothing for a `ReplaySession` or
-no session, so the panel keeps the design's dark placeholder. It only displays the feed; the session
-runs it.
+`CaptureSessionPreview` from `CaptureRoomPlan` as the `preview` of `LiveScanScreen`: it shows
+RoomPlan's view of the `LiveCaptureSession`'s `ARSession`, and nothing for a `ReplaySession` or no
+session, so the camera well stays plain. It only displays the feed; the session runs it.
 
 ```swift
 import CaptureRoomPlan
 import CaptureUI
 
-CaptureFlowView(model: model, preview: { CaptureSessionPreview(model: model) })
+LiveScanScreen(model: model) { CaptureSessionPreview(model: model) }
 ```
 
 ## From RoomPlan to the CaptureModel

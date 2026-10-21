@@ -3,16 +3,16 @@
   import RoomPlan
   import SwiftUI
 
-  /// The live scan panel's content for `CaptureFlowView(model:preview:)`: Apple's RoomPlan view
+  /// The camera well's content for `LiveScanScreen(model:preview:)`: Apple's RoomPlan view
   /// (camera feed, live outline and coaching) of the model's current session when it is a
   /// `LiveCaptureSession`, otherwise nothing, so the panel
-  /// keeps the design's dark placeholder (`ReplaySession`, or no scan in progress).
+  /// keeps the design's plain well (`ReplaySession`, or no scan in progress).
   ///
   /// It reads `CaptureFlowModel.currentSession`, so it follows the scan: the view appears when Start
   /// scan made the session and goes when Finish floor or Cancel drops it. It only displays the
   /// session's `RoomCaptureView`; the session itself runs and stops it.
   ///
-  ///     CaptureFlowView(model: model, preview: { CaptureSessionPreview(model: model) })
+  ///     LiveScanScreen(model: model) { CaptureSessionPreview(model: model) }
   public struct CaptureSessionPreview: View {
     public let model: CaptureFlowModel
 

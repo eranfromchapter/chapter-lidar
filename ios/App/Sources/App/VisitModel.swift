@@ -327,6 +327,8 @@ final class VisitModel {
     draft.setAddressConfirmed(true, at: UTCTimestamp.now())
     draft.displayUnits = record.captures.first?.units.display ?? draft.displayUnits
     let next = makeCaptureModel(draft: draft)
+    // The next free "Floor N", and Start scan refuses a floor this visit already has.
+    next.existingAreaKeys = Set(record.captures.map(\.areaKey))
     next.step = .scanSetup
     captureModel = next
   }

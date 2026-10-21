@@ -1,162 +1,112 @@
 #if canImport(SwiftUI) && canImport(Observation) && os(iOS)
   import CaptureContract
   import CaptureCore
+  import ChapterUI
   import SwiftUI
 
-  private typealias Palette = ChapterTokens.Palette
-  private typealias Space = ChapterTokens.Space
-  private typealias Radius = ChapterTokens.Radius
-  private typealias Control = ChapterTokens.Control
-  private typealias Typo = ChapterTokens.Typography
-
-  /// Step 2 of 3: floor or area, mode, rooms you will not scan, coverage notes
-  /// (docs/waves/design/snapshot.html#screen-capture, panel 2).
-  struct ScanSetupScreen: View {
+  /// Step 2 of 3, What are you scanning? (phone-capture §3.3, artboard 2b-2, compass §5.1): the
+  /// floor or area name (prefilled "Floor N"), the mode, the rooms that will not be scanned, the
+  /// coverage notes and the compass pre-check. Start scan moves the model to the live scan
+  /// (`model.step == .scanning`), which the host presents full screen. The compass never blocks
+  /// Start scan. When adding a floor, the caption is the project title. Without a compass from
+  /// the host (`model.hasCompass`) there is no compass row.
+  public struct ScanSetupScreen: View {
     @Bindable var model: CaptureFlowModel
-    @State private var showAddRoom = false
+    @State private var showsAddRoom = false
     @State private var newRoomName = ""
     @State private var newRoomReason = ""
+    @State private var readAgain: Task<Void, Never>?
 
-    // The fields scroll and "Start scan" is pinned above the keyboard: with the keyboard up
-    // after typing the floor label, a plain VStack pushed the button off screen.
-    var body: some View {
+    public init(model: CaptureFlowModel) {
+      self.model = model
+    }
+
+    public var body: some View {
       ScrollView {
-        fields
-          .padding(.horizontal, 20)
-          .padding(.top, Space.s2)
-          .padding(.bottom, Space.s4)
+        VStack(alignment: .leading, spacing: ChapterTheme.Metric.sectionGapCompact) {
+          ChapterCard {
+            TextFieldRow(
+              label: "Name", text: $model.draft.floorLabel, prompt: "Floor 1",
+              accessibilityLabel: "Floor or area"
+            )
+            .submitLabel(.done)
+            .accessibilityIdentifier("capture.floorName")
+            ChapterSegmented(
+              "Mode", selection: $model.draft.mode,
+              options: CaptureMode.allCases.map {
+                .init($0, CaptureText.modeTitle($0), accessibilityIdentifier: "capture.mode.\($0.rawValue)")
+              }
+            )
+            // Three columns: beyond AX1 "Exterior" would break inside the word.
+            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+            .padding(.horizontal, ChapterTheme.Metric.rowPadding)
+            .padding(.vertical, ChapterTheme.Metric.navigationRowVerticalPadding)
+          }
+          skippedRooms
+          ChapterSection(header: "Coverage notes") {
+            TextAreaRow(
+              text: $model.draft.coverageNotes, prompt: "Optional",
+              accessibilityLabel: "Coverage notes"
+            )
+            .accessibilityIdentifier("capture.coverageNotes")
+          }
+          // Without a compass from the host nothing is read: no row, rather than a false "No
+          // compass on this phone".
+          if model.hasCompass {
+            ChapterSection(header: "Compass") {
+              CompassRow(state: model.compassPrecheck, now: { model.now() }) {
+                readAgain?.cancel()
+                readAgain = Task { await model.readCompassAgain() }
+              }
+            } footer: {
+              CompassFootnotes(isLocationOff: model.isLocationOff) { model.openLocationSettings() }
+            }
+          }
+        }
+        .captureContent(top: ChapterTheme.Metric.contentTopCompact)
       }
       .scrollDismissesKeyboard(.interactively)
-      .safeAreaInset(edge: .bottom, spacing: 0) {
-        VStack(alignment: .leading, spacing: Space.s2) {
-          if let message = model.errorMessage {
-            Text("■ \(message)").font(Typo.caption).foregroundStyle(Palette.blocked)
-          }
-          PrimaryButton(title: "Start scan", isEnabled: model.canStartScan) {
-            Task { await model.startScan() }
-          }
-          .accessibilityHint(
-            model.canStartScan ? "" : model.draft.validate().map(\.description).joined(separator: " "))
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, Space.s2)
-        .padding(.bottom, Space.s4)
-        .background(Palette.ground)
+      .navigationTitle("What are you scanning?")
+      .navigationBarTitleDisplayMode(.large)
+      .captureNavigationCaption(model.scanSetupCaption)
+      .chapterBackChevronOnly()
+      .chapterScreenBackground()
+      .chapterActionBar {
+        Button(model.startScanTitle) { Task { await model.startScan() } }
+          .buttonStyle(.chapter(.primary))
+          .disabled(!model.canStartScan)
+          .accessibilityIdentifier("capture.startScan")
       }
-      .alert("Add room", isPresented: $showAddRoom) {
+      .alert("Add a room you cannot scan", isPresented: $showsAddRoom) {
         TextField("Room name", text: $newRoomName)
-        TextField("Reason (optional)", text: $newRoomReason)
-        Button("Add") {
-          if !newRoomName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            model.addOmittedRoom(name: newRoomName, reason: newRoomReason)
-          }
-        }
+        TextField("Reason (for example locked)", text: $newRoomReason)
         Button("Cancel", role: .cancel) {}
+        Button("Add") { model.addOmittedRoom(name: newRoomName, reason: newRoomReason) }
       } message: {
         Text("A room you will not scan, for example a locked closet.")
       }
+      // The pre-check runs on appear and stops when the screen goes (cancelled with the task).
+      .task { await model.readCompassAgain() }
+      .onDisappear { readAgain?.cancel() }
     }
 
-    private var fields: some View {
-      VStack(alignment: .leading, spacing: 18) {
-        HStack {
-          Button {
-            model.back()
-          } label: {
-            Text("‹ Back").font(Typo.body).foregroundStyle(Palette.ink)
-              .frame(minHeight: Control.minTouch)
-          }
-          .buttonStyle(.plain)
-          Spacer()
-          Text("Step 2 of 3").font(Typo.caption).foregroundStyle(Palette.muted)
-        }
-        Text("What are you scanning?").font(Typo.display).foregroundStyle(Palette.ink)
-          .accessibilityAddTraits(.isHeader)
-
-        VStack(alignment: .leading, spacing: Space.s2) {
-          FieldLabel("Floor or area")
-          TextField("Floor 1", text: $model.draft.floorLabel)
-            .font(Typo.body)
-            .padding(.horizontal, Space.s4)
-            .frame(height: Control.fieldHeight)
-            .fieldBackground()
-            .submitLabel(.done)
-        }
-
-        VStack(alignment: .leading, spacing: Space.s2) {
-          FieldLabel("Mode")
-          HStack(spacing: 6) {
-            ForEach(CaptureMode.allCases, id: \.self) { mode in
-              let selected = model.draft.mode == mode
-              Button {
-                model.draft.mode = mode
-              } label: {
-                Text(CaptureFlowModel.modeTitle(mode))
-                  .font(Typo.sans(15, weight: selected ? .semibold : .regular))
-                  .foregroundStyle(Palette.ink)
-                  .frame(maxWidth: .infinity, minHeight: Control.segmentHeight)
-                  .background(
-                    selected ? Palette.surface : Color.clear,
-                    in: RoundedRectangle(cornerRadius: Radius.segment))
-              }
-              .buttonStyle(.plain)
-              .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
-            }
-          }
-          .padding(Space.s1)
-          .background(Palette.nude, in: RoundedRectangle(cornerRadius: Radius.card))
-        }
-
-        VStack(alignment: .leading, spacing: Space.s2) {
-          FieldLabel("Rooms you will not scan")
-          WrapLayout(spacing: Space.s2) {
-            ForEach(Array(model.draft.omittedRooms.enumerated()), id: \.offset) { index, room in
-              Button {
-                model.removeOmittedRoom(at: index)
-              } label: {
-                Text(chipText(room))
-                  .font(Typo.sans(15)).foregroundStyle(Palette.ink)
-                  .padding(.horizontal, 14).padding(.vertical, 10)
-                  .background(Palette.nude, in: RoundedRectangle(cornerRadius: Radius.chip))
-              }
-              .buttonStyle(.plain)
-              .accessibilityLabel("\(room.name), not scanned. Remove")
-            }
-            Button {
-              newRoomName = ""
-              newRoomReason = ""
-              showAddRoom = true
-            } label: {
-              Text("+ Add room")
-                .font(Typo.sans(15)).foregroundStyle(Palette.ink)
-                .padding(.horizontal, 14)
-                .frame(minHeight: Control.minTouch)
-                .overlay(
-                  RoundedRectangle(cornerRadius: Radius.chip)
-                    .strokeBorder(Palette.muted, style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
-            }
-            .buttonStyle(.plain)
+    private var skippedRooms: some View {
+      ChapterSection(header: "Rooms you will not scan") {
+        ForEach(Array(model.draft.omittedRooms.enumerated()), id: \.offset) { index, room in
+          RemovableRow(
+            title: room.name, subtitle: room.reason.map(CaptureText.capitalizedFirst),
+            removeAccessibilityIdentifier: "capture.removeSkippedRoom.\(index)"
+          ) {
+            model.removeOmittedRoom(at: index)
           }
         }
-
-        VStack(alignment: .leading, spacing: Space.s2) {
-          FieldLabel("Coverage notes")
-          TextEditor(text: $model.draft.coverageNotes)
-            .font(Typo.sans(15))
-            .scrollContentBackground(.hidden)
-            .padding(.horizontal, Space.s3).padding(.vertical, Space.s2)
-            .frame(height: 96)
-            .fieldBackground()
+        AddRow(title: "Add a room you cannot scan") {
+          newRoomName = ""
+          newRoomReason = ""
+          showsAddRoom = true
         }
+        .accessibilityIdentifier("capture.addSkippedRoom")
       }
-    }
-
-    /// "Primary closet · locked ✕".
-    private func chipText(_ room: CaptureRecord.RoomNote) -> String {
-      if let reason = room.reason, !reason.isEmpty {
-        return "\(room.name) · \(reason) ✕"
-      }
-      return "\(room.name) ✕"
     }
   }
 #endif

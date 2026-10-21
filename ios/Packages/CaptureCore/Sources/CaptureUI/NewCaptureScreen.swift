@@ -1,177 +1,187 @@
 #if canImport(SwiftUI) && canImport(Observation) && os(iOS)
   import CaptureCore
+  import ChapterUI
   import SwiftUI
 
-  private typealias Palette = ChapterTokens.Palette
-  private typealias Space = ChapterTokens.Space
-  private typealias Radius = ChapterTokens.Radius
-  private typealias Control = ChapterTokens.Control
-  private typealias Typo = ChapterTokens.Typography
-
-  /// Step 1 of 3: HUB project and address confirmation
-  /// (docs/waves/design/snapshot.html#screen-capture, panel 1).
-  struct NewCaptureScreen: View {
+  /// Step 1 of 3, New capture (phone-capture §3.2, artboards 2b-1, 1b, 1c): the HUB project, the
+  /// address confirmation and what is recorded automatically. Pushed on the app's
+  /// NavigationStack; Continue moves the model to step 2 (`model.step`), which the host pushes.
+  ///
+  /// `onDiscard` is "Call the PM" in the address-different alert: the draft is discarded and the
+  /// host goes back to the Captures home (nothing was saved). When the HUB gives the PM's phone,
+  /// the call is placed first.
+  public struct NewCaptureScreen: View {
     @Bindable var model: CaptureFlowModel
-    @State private var showProjectPicker = false
+    let onDiscard: @MainActor () -> Void
+    @State private var showsProjects = false
+    @State private var showsAddressAlert: Bool
+    @Environment(\.openURL) private var openURL
 
-    var body: some View {
-      VStack(alignment: .leading, spacing: 20) {
-        HStack {
-          Wordmark()
-          Spacer()
-          Text("Step 1 of 3").font(Typo.caption).foregroundStyle(Palette.muted)
+    /// `showsAddressAlert` opens the screen with the alert up (snapshots of artboard 1c).
+    public init(
+      model: CaptureFlowModel, showsAddressAlert: Bool = false,
+      onDiscard: @escaping @MainActor () -> Void = {}
+    ) {
+      self.model = model
+      self.onDiscard = onDiscard
+      self._showsAddressAlert = State(initialValue: showsAddressAlert)
+    }
+
+    public var body: some View {
+      ScrollView {
+        VStack(alignment: .leading, spacing: ChapterTheme.Metric.sectionGap) {
+          banners
+          projectSection
+          addressSection
+          ChapterSection(header: "Recorded automatically") {
+            ValueRow(label: "Operator", value: model.draft.operatorName)
+            ValueRow(label: "Device", value: model.deviceText)
+            ValueRow(label: "App", value: model.appText)
+          }
         }
-        Text("New capture").font(Typo.display).foregroundStyle(Palette.ink)
-          .accessibilityAddTraits(.isHeader)
+        .captureContent(top: ChapterTheme.Metric.contentTop)
+      }
+      .navigationTitle("New capture")
+      .navigationBarTitleDisplayMode(.large)
+      .chapterNavigationCaption("Step 1 of 3")
+      .chapterBackChevronOnly()
+      .chapterScreenBackground()
+      .chapterActionBar {
+        Button(model.continueTitle) { model.continueToSetup() }
+          .buttonStyle(.chapter(.primary))
+          .disabled(!model.canContinueToSetup)
+          .accessibilityIdentifier("capture.continue")
+      }
+      .sheet(isPresented: $showsProjects) {
+        HubProjectSheet(model: model)
+      }
+      // Words, order and actions come from `AddressDifferentAlert` and the model (unit tested).
+      .alert(AddressDifferentAlert.title, isPresented: $showsAddressAlert) {
+        ForEach(AddressDifferentAlert.actions, id: \.self) { action in
+          Button(action.title, role: action.isCancel ? .cancel : nil) {
+            model.addressAlert(action, dial: { openURL($0) }, discard: onDiscard)
+          }
+          .keyboardShortcut(action.isDefault ? .defaultAction : nil)
+        }
+      } message: {
+        Text(AddressDifferentAlert.message)
+      }
+      .task {
+        if model.listing == nil, !model.isLoadingProjects, !model.isOfflineWithoutList {
+          await model.loadProjects()
+        }
+      }
+    }
 
-        VStack(alignment: .leading, spacing: Space.s2) {
-          FieldLabel("HUB project")
-          Button {
-            showProjectPicker = true
-          } label: {
-            HStack {
-              Text(projectTitle).font(Typo.body).foregroundStyle(Palette.ink)
-              Spacer()
-              Text(model.draft.project == nil ? "Choose" : "Change").foregroundStyle(Palette.muted)
-            }
-            .font(Typo.body)
-            .padding(.horizontal, Space.s4)
-            .frame(maxWidth: .infinity, minHeight: Control.projectButtonHeight)
-            .fieldBackground()
+    // MARK: Parts
+
+    @ViewBuilder
+    private var banners: some View {
+      if let message = model.gate.message {
+        Banner(icon: .blocked, text: message)
+      }
+      if let offline = model.offlineBanner {
+        Banner(icon: .offline, text: offline)
+      }
+      if let error = model.projectsError {
+        Banner(icon: .blocked, text: error) {
+          // A row-action button, filled surface: the usual nude fill would vanish on the banner.
+          Button { Task { await model.loadProjects() } } label: {
+            Text("Try again")
+              .chapterTextStyle(.subhead)
+              .foregroundStyle(ChapterTheme.Color.ink)
+              .padding(.horizontal, ChapterTheme.Metric.rowActionPadding)
+              .frame(minHeight: ChapterTheme.Metric.rowActionHeight)
+              .background(
+                ChapterTheme.Color.surface,
+                in: RoundedRectangle(cornerRadius: ChapterTheme.Metric.rowActionRadius))
+              .fixedSize()
           }
           .buttonStyle(.plain)
-          .accessibilityLabel("HUB project")
-          .accessibilityValue(projectTitle)
-          Text(dealCaption).font(Typo.caption).foregroundStyle(Palette.muted)
+          .accessibilityIdentifier("capture.retryProjects")
         }
-
-        VStack(alignment: .leading, spacing: Space.s2) {
-          Text("Address in the HUB").font(Typo.caption).foregroundStyle(Palette.muted)
-          Text(model.draft.project?.address ?? "Choose a HUB project first")
-            .font(Typo.headline)
-            .foregroundStyle(model.draft.project == nil ? Palette.muted : Palette.ink)
-          Button {
-            model.setAddressConfirmed(!model.draft.isAddressConfirmed)
-          } label: {
-            HStack(spacing: Space.s3) {
-              Image(systemName: model.draft.isAddressConfirmed ? "checkmark.square.fill" : "square")
-                .font(.system(size: Control.checkbox))
-                .foregroundStyle(Palette.ink)
-              Text("I am at this address").font(Typo.body).foregroundStyle(Palette.ink)
-              Spacer(minLength: 0)
-            }
-            .frame(minHeight: Control.minTouch)
-            .contentShape(Rectangle())
-          }
-          .buttonStyle(.plain)
-          .disabled(model.draft.project == nil)
-          .accessibilityAddTraits(model.draft.isAddressConfirmed ? [.isButton, .isSelected] : .isButton)
-          Text(
-            "If the address on site is different, stop and call the PM. The station blocks packages with a mismatched address."
-          )
-          .font(Typo.caption).foregroundStyle(Palette.muted)
-        }
-        .padding(Space.s4)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .fieldBackground()
-
-        HStack(alignment: .top, spacing: Space.s3) {
-          VStack(alignment: .leading, spacing: Space.s1) {
-            Text("Operator").font(Typo.caption).foregroundStyle(Palette.muted)
-            Text(model.draft.operatorName).font(Typo.sans(15)).foregroundStyle(Palette.ink)
-          }
-          .frame(maxWidth: .infinity, alignment: .leading)
-          VStack(alignment: .leading, spacing: Space.s1) {
-            Text("Device").font(Typo.caption).foregroundStyle(Palette.muted)
-            Text(deviceText).font(Typo.sans(15)).foregroundStyle(Palette.ink)
-          }
-          .frame(maxWidth: .infinity, alignment: .leading)
-        }
-
-        if let message = model.gate.message {
-          Text("■ \(message)").font(Typo.caption).foregroundStyle(Palette.blocked)
-        }
-        if let message = model.projectsError {
-          Text("■ \(message)").font(Typo.caption).foregroundStyle(Palette.blocked)
-        }
-
-        Spacer(minLength: 0)
-        PrimaryButton(title: "Continue", isEnabled: model.canContinueToSetup) {
-          model.continueToSetup()
-        }
-      }
-      .padding(.horizontal, 20)
-      .padding(.top, Space.s2)
-      .padding(.bottom, Space.s4)
-      .sheet(isPresented: $showProjectPicker) {
-        ProjectPickerSheet(model: model)
       }
     }
 
-    private var projectTitle: String {
-      guard let project = model.draft.project else { return "Choose a HUB project" }
-      return project.projectName.isEmpty ? project.address : project.projectName
-    }
-
-    /// "Deal [DEAL ID] · from the HUB, updated 2 min ago".
-    private var dealCaption: String {
-      guard let project = model.draft.project else { return "Projects come from the HUB" }
-      var text = "Deal \(project.dealId) · from the HUB"
-      if let updated = project.updatedAt {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .short
-        text += ", updated \(formatter.localizedString(for: updated, relativeTo: Date()))"
+    private var projectSection: some View {
+      let project = model.draft.project
+      return ChapterSection(
+        header: "HUB project",
+        footer: model.isOffline
+          ? "A project not in this list cannot be started offline: the deal id must come from the HUB."
+          : nil
+      ) {
+        NavigationRow(
+          title: model.projectRowTitle,
+          subtitle: CaptureText.keepingAgesTogether(model.projectRowSubtitle),
+          detail: project == nil ? "Choose" : "Change", isPlaceholder: project == nil
+        ) {
+          showsProjects = true
+        }
+        .disabled(model.isOfflineWithoutList && project == nil)
+        // VoiceOver: "HUB project, 618 Valley Street, Deal 4821 · from the HUB, …, button".
+        .accessibilityLabel(Text("HUB project"))
+        .accessibilityValue(Text("\(model.projectRowTitle), \(model.projectRowSubtitle)"))
+        .accessibilityIdentifier("capture.project")
       }
-      return text
     }
 
-    /// "iPhone Pro · LiDAR ✓".
-    private var deviceText: String {
-      let device = model.draft.device
-      return "\(device.marketingName ?? device.model) · LiDAR \(model.hasLidar ? "✓" : "✗")"
+    private var addressSection: some View {
+      let project = model.draft.project
+      return ChapterSection(
+        header: "Address in the HUB",
+        footer:
+          "If the address on site is different, stop and call the PM. The station blocks "
+          + "packages with a different address."
+      ) {
+        ProminentTextRow(project?.address ?? "Choose a HUB project first", isPlaceholder: project == nil)
+        ToggleRow(
+          "I am at this address",
+          isOn: Binding(
+            get: { model.draft.isAddressConfirmed },
+            set: { isOn in
+              if model.addressToggleChanged(isOn: isOn) { showsAddressAlert = true }
+            })
+        )
+        .disabled(project == nil)
+        .accessibilityIdentifier("capture.addressConfirmed")
+      }
     }
   }
 
-  /// The list behind the HUB project button. The HUB data comes from the injected provider.
-  struct ProjectPickerSheet: View {
+  /// The HUB project sheet: one row per project (title and address); a tap chooses it.
+  struct HubProjectSheet: View {
     @Bindable var model: CaptureFlowModel
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-      NavigationStack {
-        Group {
-          if model.isLoadingProjects {
-            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-          } else if model.projects.isEmpty {
-            Text(model.projectsError ?? "No HUB projects.")
-              .font(Typo.body).foregroundStyle(Palette.muted).padding(Space.s5)
-              .frame(maxWidth: .infinity, maxHeight: .infinity)
-          } else {
-            List(model.projects) { project in
-              Button {
-                model.choose(project)
-                dismiss()
-              } label: {
-                VStack(alignment: .leading, spacing: Space.s1) {
-                  Text(project.projectName.isEmpty ? project.address : project.projectName)
-                    .font(Typo.body).foregroundStyle(Palette.ink)
-                  Text(project.address).font(Typo.caption).foregroundStyle(Palette.muted)
-                }
-                .frame(maxWidth: .infinity, minHeight: Control.primaryHeight - Space.s2, alignment: .leading)
+      VStack(spacing: 0) {
+        SheetBar(title: "HUB project", onCancel: { dismiss() })
+        ScrollView {
+          Group {
+            if model.isLoadingProjects {
+              ProgressView().frame(maxWidth: .infinity, minHeight: 120)
+            } else if model.projects.isEmpty {
+              ChapterSection {
+                ProminentTextRow(model.projectsError ?? "No HUB projects.", isPlaceholder: true)
               }
-              .listRowBackground(Palette.surface)
+            } else {
+              ChapterSection {
+                ForEach(model.projects) { project in
+                  NavigationRow(title: project.title, subtitle: project.address) {
+                    model.choose(project)
+                    dismiss()
+                  }
+                }
+              }
             }
-            .scrollContentBackground(.hidden)
           }
+          .captureContent(top: ChapterTheme.Metric.sectionHeaderGap)
         }
-        .background(Palette.ground)
-        .navigationTitle("HUB project")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-          ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-        }
-        .task { if model.projects.isEmpty { await model.loadProjects() } }
       }
+      .chapterScreenBackground()
+      .chapterSheet()
+      .task { if model.projects.isEmpty, !model.isLoadingProjects { await model.loadProjects() } }
     }
   }
 #endif

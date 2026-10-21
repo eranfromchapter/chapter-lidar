@@ -81,6 +81,11 @@ public enum CaptureSessionEvent: Sendable, Equatable {
   case stateChanged(CaptureSessionState)
   case progress(ScanProgress)
   case instruction(ScanInstruction)
+  /// The floor's compass (compass §5.2): when the best reading changes, when the start period
+  /// ends, and at each tick for the camera bearing.
+  case compass(CompassLiveState)
+  /// ARKit lost or regained tracking (phone-capture §3.4.1).
+  case tracking(TrackingStatus)
 }
 
 public struct CaptureSessionConfiguration: Sendable, Equatable {
@@ -136,11 +141,21 @@ public struct CaptureSessionResult: Sendable, Equatable {
   public var originals: RawOriginals
   public var startedAt: Date
   public var finishedAt: Date
+  /// The floor's compass reading, taken in the scan's own frame (compass §3.3); none when the
+  /// session read none.
+  public var compass: CompassResult
+  /// How the reading went (pairs, windows, frame check), for the debug log and device test D1.
+  public var compassDiagnostics: CompassDiagnostics?
 
-  public init(originals: RawOriginals, startedAt: Date, finishedAt: Date) {
+  public init(
+    originals: RawOriginals, startedAt: Date, finishedAt: Date,
+    compass: CompassResult = .none(issue: nil), compassDiagnostics: CompassDiagnostics? = nil
+  ) {
     self.originals = originals
     self.startedAt = startedAt
     self.finishedAt = finishedAt
+    self.compass = compass
+    self.compassDiagnostics = compassDiagnostics
   }
 
   /// The RoomPlan capture decoded from the original JSON.
@@ -159,7 +174,9 @@ public struct CaptureSessionResult: Sendable, Equatable {
 /// be tested without a device.
 ///
 /// Flow: `start`, then any number of `pause` and `resume` (each pause ends a RoomPlan segment
-/// of the same floor; a whole floor is joined from its segments), then `finish`.
+/// of the same floor; a whole floor is joined from its segments), then `finish`. Pause and
+/// resume keep the same world frame, so the compass reading stays valid; a new session (Try
+/// again, Restart this floor) reads the compass again.
 public protocol CaptureSession: AnyObject, Sendable {
   /// State changes, progress and guidance. Finishes when the session ends. One consumer.
   var events: AsyncStream<CaptureSessionEvent> { get }
