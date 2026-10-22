@@ -297,6 +297,7 @@ function drawRow(ctx: PageContext, row: ScheduleRow, top: number): number {
           wall: t.wallAreaM2,
           perimeter: t.perimeterM,
           volume: t.volumeM3,
+          volumeApproximate: t.volumeIsApproximate,
           items: floor.rooms.reduce((n, room) => n + room.items.length, 0),
         },
         top,
@@ -369,6 +370,8 @@ interface TotalValues {
   readonly wall: number;
   readonly perimeter: number;
   readonly volume: number;
+  /** A room's ceiling height is approximate (the cover's "cu ft approx." rule). */
+  readonly volumeApproximate: boolean;
   readonly items: number;
 }
 
@@ -385,7 +388,21 @@ function drawTotalRow(
   cell(canvas, 2, sqFt(values.wall), TYPE.tableBold, y, "right");
   cell(canvas, 3, `${fixed(values.area, 1)} m² · ${fixed(values.wall, 1)} m²`, MUTED, y);
   cell(canvas, 4, ftIn(values.perimeter), TYPE.tableMono, y, "right");
-  cell(canvas, 6, cuFt(values.volume), TYPE.tableBold, y, "right");
+  if (values.volumeApproximate) {
+    // " approx." as on the room rows, on the same line: it may run into the ceiling column,
+    // which is empty on total rows.
+    canvas.runs(
+      [
+        { text: cuFt(values.volume), style: TYPE.tableBold },
+        { text: " approx.", style: MUTED },
+      ],
+      COLUMN_X[5] as number,
+      y,
+      { width: (COLUMNS[5] as number) + GAP + (COLUMNS[6] as number), align: "right" },
+    );
+  } else {
+    cell(canvas, 6, cuFt(values.volume), TYPE.tableBold, y, "right");
+  }
   cell(canvas, 7, String(values.items), TYPE.tableBold, y, "right");
   canvas.rule(X, top + 5 + 11 + 5, WIDTH, rule);
   return top + TOTAL_HEIGHT;
@@ -401,6 +418,7 @@ function drawTotal(canvas: Canvas, model: Model, top: number): number {
       wall: t.wallAreaM2,
       perimeter: t.perimeterM,
       volume: t.volumeM3,
+      volumeApproximate: t.volumeIsApproximate,
       items: t.items,
     },
     top,

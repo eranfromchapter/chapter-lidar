@@ -367,3 +367,57 @@ describe("cover with four or more floors", () => {
     assert.ok(has(cover as string, `+2 floors on pages ${index.plan(1)} and ${index.plan(3)}`));
   });
 });
+
+describe("approx. on the schedule's totals", () => {
+  /** The schedule's line that starts with `label`. */
+  const lineOf = (texts: readonly string[], pages: readonly PageSpec[], label: string) =>
+    texts
+      .filter((_, i) => pages[i]?.kind === "schedule")
+      .flatMap((text) => text.split("\n"))
+      .find((line) => line.startsWith(label));
+
+  it("says approx. after the total volume when the cover does (424)", () => {
+    const { texts, pages } = get("limited");
+    assert.ok(has(texts[0] as string, "6,505.5 cu ft approx."));
+    assert.equal(
+      lineOf(texts, pages, "Total, scanned rooms"),
+      `Total, scanned rooms 796.2 2,852.0 74.0 m² · 265.0 m² 384' 4.2" 6,505.5 approx. 29`,
+    );
+  });
+
+  it("marks only the floor subtotals with an approximate room, and the total", async () => {
+    const input = syntheticInput([
+      { label: "Floor 1", rooms: [{ label: "Living room", w: 5, d: 4 }] },
+      {
+        label: "Floor 2",
+        rooms: [
+          { label: "Bedroom", w: 4, d: 3.5 },
+          { label: "Loft", w: 3, d: 2.5 },
+        ],
+      },
+    ]);
+    // The loft's walls were not captured: its ceiling height is approximate.
+    const floor2 = input.floors?.[1]?.model;
+    assert.ok(floor2?.status === "ok");
+    floor2.model.walls = floor2.model.walls.filter((wall) => !wall.roomIds?.includes("room-2"));
+    const report = await renderSpatialReport(input);
+    const texts = await pageTexts(report.bytes);
+    const { pages } = layoutOf(input);
+    assert.ok(has(texts[0] as string, "cu ft approx."));
+    assert.doesNotMatch(lineOf(texts, pages, "Floor 1, scanned rooms") ?? "", /approx\./);
+    assert.match(lineOf(texts, pages, "Floor 2, scanned rooms") ?? "", / approx\. 0$/);
+    assert.match(lineOf(texts, pages, "Total, scanned rooms") ?? "", / approx\. 0$/);
+  });
+
+  it("has no approx. when every ceiling height was measured", async () => {
+    const input = syntheticInput([
+      { label: "Floor 1", rooms: [{ label: "Living room", w: 5, d: 4 }] },
+    ]);
+    const report = await renderSpatialReport(input);
+    const texts = await pageTexts(report.bytes);
+    assert.ok(!(texts[0] as string).includes("approx."));
+    const total = lineOf(texts, layoutOf(input).pages, "Total, scanned rooms");
+    assert.ok(total !== undefined);
+    assert.doesNotMatch(total, /approx\./);
+  });
+});
