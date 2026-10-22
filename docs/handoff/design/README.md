@@ -10,7 +10,8 @@ When two documents disagree, the higher one wins:
 
 1. **Owner decisions** (Eran Polack, Oct 21, 2026; binding). Recorded in
    `docs/waves/design/DESIGN.md`, section "Design v2", "Owner decisions" (`DESIGN.md:73-108`),
-   and at the top of each spec. In short: the real Chapter logo and Inter everywhere; the web in
+   and at the top of each spec. In short: the real Chapter logo and Inter everywhere (with the
+   Times display titles and Courier or monospaced ids that `DESIGN.md:79-84` keeps); the web in
    the HUB look; the plan sheet made on the phone (Tabloid 11 x 17); the spatial report made on
    the station; the compass in three states (±10° / ±30°); the colour Floorplan unchanged.
 2. **`specs/00-critique.md`**: the completeness critique. Its resolutions (R-n) are binding.

@@ -171,9 +171,19 @@ The station calls the HUB REST API with a service credential. **Every HUB call b
   15 s, uploads 180 s. The API caches the deal list 10 minutes per replica
   (`station/api/src/hub/cache.ts:12`).
 - `GET /projects` answers 502 `hub_unavailable` when the HUB fails
-  (`station/api/src/routes/projects/index.ts:20-35`). Check rule 3 (`property.address`) reads the
-  deal's address from the HUB; without a confirmed HUB address it blocks
-  (`station/worker/src/checks-job.ts:64-73`).
+  (`station/api/src/routes/projects/index.ts:20-35`). It lists every HUB deal with a confirmed
+  address to every station role; there is no per-user filter (`index.ts:40-50`).
+- Check rule 3 (`property.address`) needs the deal's address from the HUB. When the HUB has no
+  such deal with a confirmed address (`getDeal` returns `null`,
+  `station/hub/src/live.ts:137-168`), or the HUB call fails, the checks job throws a
+  `RetryableJobError` (`station/worker/src/checks-job.ts:64-79`). The job is retried with
+  backoff (`WORKER_RETRY_BASE_SECONDS` 30, doubling, `station/worker/src/queue.ts:130-137`) and,
+  after `max_attempts` (default 5, `0004_jobs.sql`), fails: the package status becomes
+  `check_error` and the package **never gets a verdict**; nothing is published
+  (`checks-job.ts:211-260`, `queue.ts:100-128`). It does not produce a Blocked verdict.
+- So every HUB deal used for tests, in training and in production, must carry the HUB's
+  confirmed-address flag (only `true` counts, `station/hub/src/live.ts:153-156`). This is an input
+  from the HUB team (item 3 below).
 - Publication (`station/hub/src/plan.ts:1-31,114-133`): folders `Capture/<visitId>/r<revision>`
   (visit-wide) and `Capture/<areaKey>/<captureId>/r<revision>` (per capture). Uploaded: the spatial
   report `spatial-report-<verdictId>.pdf`, `manifest.json`, and per capture `plan_dxf`,
@@ -191,7 +201,8 @@ The station calls the HUB REST API with a service credential. **Every HUB call b
 1. HUB REST API base URL (`HUB_BASE_URL`, Bicep `CAPTURE_HUB_BASE_URL`).
 2. A HUB service credential (`HUB_SERVICE_CREDENTIAL`) and how it is sent.
 3. The deals list endpoint, envelope, paging and field names (sales `dealId`, address, the
-   address-confirmed flag, `updatedAt`, project manager name and phone).
+   address-confirmed flag, `updatedAt`, project manager name and phone), and test deals in HUB
+   training whose address-confirmed flag is `true`.
 4. The upload endpoint and how the target folder is named.
 5. The document search endpoint.
 6. The HUB web URL of a deal page (`HUB_WEB_DEAL_URL_TEMPLATE`) and of its Files folder (web
@@ -400,7 +411,19 @@ The workflow does not run the 0011 backfill (section 6).
 - `BRANCH_PROTECTION.md:43` lists the required `ci.yml` check as `gates`, but the job is named `ci`
   (`.github/workflows/ci.yml:24-25`). A ruleset requiring `gates` would block every merge.
 - The environments are to be limited to `main` (`BRANCH_PROTECTION.md:54`). With that rule set, a
-  station deploy needs v2 merged to `main`.
+  station deploy runs only from `main`. A manual `staging` run is otherwise allowed from any
+  branch; only `production` is refused off `main` by the workflow itself
+  (`.github/workflows/deploy-station.yml:83-86`).
+- Merging v2 into `main` has a side effect beyond the station: a Vercel project connected with
+  production branch `main` deploys `web/` to production
+  (`.github/BRANCH_PROTECTION.md:165-172`). The owner allows the production web only after
+  phase 3. So (**Recommendation**, see the [README](README.md#branches-deploys-and-the-web)):
+  phase 2 deploys the training station from `v2/main` (the `staging` environment allows
+  `v2/main` until the merge); v2 is merged into `main` in phase 3, before the production station
+  deploy; the production web project is connected only in phase 4.
+- If the `main` ruleset of `BRANCH_PROTECTION.md` section 2 is set, that merge also needs the
+  required `ios.yml` checks (`App` and the package jobs, `BRANCH_PROTECTION.md:44`) green. On
+  `add2d74` they fail ([05, section 3.1](05-status-open-items.md#31-github-actions)).
 
 ## 9. Deploy order
 
@@ -411,12 +434,36 @@ app build (T5, T7–T10). The station must accept capture-record and manifest 1.
 writes them" (design spec `00-tracks.md` section 2); "Station deployed before the app"
 (`docs/floorplan-report-plan.md:99`).
 
-| Phase | Station work                                                                                                                                                                                             |
-| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1     | None needed for the PM app submission (it has no capture). Prepare: fix the `infra/` gaps (section 7.4), set up Azure and GitHub (section 7.6).                                                          |
-| 2     | Deploy the **training** station (all of v2: API, checks, worker, hub, migrations through `0011`) connected to the HUB training API, with `REVIEW_BASE_URL` = training web origin. Then the training web. |
-| 3     | Deploy the **production** station (same v2) connected to the production HUB, with `REVIEW_BASE_URL` = the planned production web origin, **before** the PM app update is submitted to App Review.        |
-| 4     | Production web, then set the production HUB links.                                                                                                                                                       |
+| Phase | Station work                                                                                                                                                                                                                                                                                                                                                                         |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1     | None needed for the PM app submission (it has no capture). Prepare: fix the `infra/` gaps (section 7.4), set up Azure and GitHub (section 7.6).                                                                                                                                                                                                                                      |
+| 2     | If `staging` serves training: apply the **production Bicep first** (it alone creates the shared registry; see below), then the staging Bicep. Deploy the **training** station (all of v2: API, checks, worker, hub, migrations through `0011`) from `v2/main` (section 8.3), connected to the HUB training API, with `REVIEW_BASE_URL` = training web origin. Then the training web. |
+| 3     | Merge v2 into `main`. Deploy the **production** station (same v2) from `main`, connected to the production HUB, with `REVIEW_BASE_URL` = the planned production web origin, **before** the PM app update is submitted to App Review.                                                                                                                                                 |
+| 4     | Production web (its Vercel project is connected only now), then set the production HUB links.                                                                                                                                                                                                                                                                                        |
+
+**Phase 2 dependency on production infra.** Staging cannot be deployed alone: its params set
+`createRegistry = false` and `registryResourceGroupName = 'rg-chapter-capture-production'`
+(`infra/params/staging.bicepparam:20-22`), and the order is "production first (it creates the
+shared registry), then staging" (`infra/README.md:227-231`). Applying the production Bicep in
+phase 2 creates, and starts billing for, `rg-chapter-capture-production` with
+(`infra/params/production.bicepparam`):
+
+- Postgres `Standard_B2s`, 64 GB, 35-day backups;
+- storage `Standard_GZRS`, with the `originals` immutability policy of 2557 days (deployed
+  unlocked; locking it is a separate, permanent step, `infra/README.md:97-116`);
+- Key Vault `kv-chapter-capture-prod` with purge protection and 90-day soft delete
+  (`infra/README.md:29`; **Verify:** a deleted vault then keeps its name reserved for that time);
+- the container apps with at least 1 API and 1 worker replica, running the placeholder image
+  until a production station deploy (section 7.1); Log Analytics with 90-day retention;
+- the registry `acrchaptercapture` (Basic).
+
+It also needs the production deploy-time variables, including `CAPTURE_HUB_BASE_URL`, which is
+required (the compile fails without it, `infra/README.md:123-133`). If the production HUB URL is
+not known yet (**Input needed**), deploy with the best known value and deploy again in phase 3.
+Chapter decides whether these production resources may exist from phase 2 (**Input needed**).
+The alternative, a registry that staging creates for itself, is **Not built**: it changes the
+params and the fixed registry name `acrchaptercapture` (`infra/main.bicep:165`,
+`.github/workflows/deploy-station.yml:38`).
 
 ### 9.2 Within one station deploy
 
@@ -428,9 +475,11 @@ first (shared registry), then staging (`infra/README.md:227-231`).
 
 `infra/` knows `staging` and `production` only. Two ways:
 
-- **Use `staging` as the training station** (Recommendation: no new infra). Point its
+- **Use `staging` as the training station** (Recommendation: no new infra code). Point its
   `CAPTURE_HUB_BASE_URL` and `hub-service-credential` at HUB training. Note that staging's
-  `originals` retention is 1 day.
+  `originals` retention is 1 day. It needs the production Bicep applied first, in phase 2, with
+  the cost and governance effects listed in section 9.1, and a `staging` environment that allows
+  `v2/main` until v2 is merged (section 8.3).
 - **Add a `training` environment.** Needs a new params file, new names in the `names` block of
   `infra/main.bicep`, a new GitHub environment and changes to `deploy-station.yml`, which accepts
   only `staging` and `production`.
@@ -440,7 +489,8 @@ first (shared registry), then staging (`infra/README.md:227-231`).
 - [ ] Azure: admin steps 1-7 done; Bicep deployed (bootstrap, then normal).
 - [ ] `infra/params/*.bicepparam` `githubRepository` matches the real repo.
 - [ ] `REVIEW_BASE_URL` set on API and worker; `HUB_WEB_DEAL_URL_TEMPLATE` on the API.
-- [ ] HUB mapping confirmed for this HUB environment; `hub-service-credential` set in Key Vault.
+- [ ] HUB mapping confirmed for this HUB environment; `hub-service-credential` set in Key Vault;
+      the test deals carry the confirmed-address flag (section 5).
 - [ ] GitHub environment variables set; `deploy-station` run green (migration job `Succeeded`,
       `/health` 200).
 - [ ] 0011 backfill run if the database holds packages from before 0011.

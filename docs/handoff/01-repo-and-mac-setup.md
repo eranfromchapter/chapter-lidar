@@ -12,8 +12,8 @@ git switch v2/main
 git log --oneline -1
 ```
 
-- Expect `add2d74` or later at the top. If you see `2ca19b0`, the owner has not pushed the newer
-  commits yet (**Input needed**, see [README](README.md#repo-and-branch)).
+- Expect `add2d74` or later at the top (GitHub has had `add2d74` since Oct 22, 2026, 09:46 -0600;
+  see [README](README.md#repo-and-branch)).
 - `main` is the v1 build. Do not start from it.
 - The build agents also left local track branches (`v2/t0-contract` to `v2/t10-app-shell` and
   their `-fix` branches). They are merged into `v2/main` and are not on GitHub.
@@ -40,21 +40,21 @@ npm workspaces: `contract/ts`, `fixtures/generator`, `station/*`, `web` (`packag
 
 ## 3. Mac tools
 
-| Tool                  | Version                                                                                                | Needed for                                                                | Source                                                                                 |
-| --------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Xcode                 | see "Xcode version" below                                                                              | iOS packages, the app, simulator tests                                    | `.github/workflows/ios.yml:42-43`, `testflight.yml:64-65`                              |
-| iOS deployment target | 17.0                                                                                                   | every Swift package and the app                                           | `ios/project.yml:12-13,21`; each `Package.swift` declares `.iOS(.v17)`, `.macOS(.v14)` |
-| Swift tools version   | 6.0 (`// swift-tools-version: 6.0` in all 8 manifests)                                                 | the Swift packages                                                        | line 1 of each `Package.swift`                                                         |
-| XcodeGen              | 2.46.0, SHA-256 `4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806`                     | generating `ios/ChapterCapture.xcodeproj`                                 | `.github/workflows/ios.yml:50-51`                                                      |
-| Simulator             | iPhone 17 Pro. UI tests on `OS=latest`; snapshot tests on iOS **26.0** (references are recorded there) | simulator tests                                                           | `.github/workflows/ios.yml:44-49`, `ios/Packages/ChapterUI/README.md:17-18`            |
-| MSAL (Swift package)  | `exactVersion: 2.16.0`, `https://github.com/AzureAD/microsoft-authentication-library-for-objc`         | Entra sign-in in the app                                                  | `ios/project.yml:43-45`                                                                |
-| Node.js               | 22 (`.nvmrc`); engines `>=22.13.0`                                                                     | station, web, contract, fixtures, root scripts                            | `.nvmrc`, `package.json:7-10`                                                          |
-| npm                   | `>=10`                                                                                                 | same                                                                      | `package.json:9`                                                                       |
-| Docker                | not pinned; Docker with `docker compose` is required                                                   | local station, station API tests, export validators, infra compile checks | `station/api/scripts/local-up.sh:15-25`                                                |
-| Playwright Chromium   | `@playwright/test` 1.64.0                                                                              | web end-to-end tests                                                      | `web/package.json:28`                                                                  |
-| poppler (`pdftoppm`)  | CI uses Ubuntu `poppler-utils`; snapshots were recorded with poppler 26.04.0 on macOS                  | station spatial report visual tests (they skip locally without it)        | `.github/workflows/ci.yml:66-73`, `station/hub/test/report-visual/visual.test.ts:1-16` |
-| Python 3 + fontTools  | fontTools 4.62.1, Inter 3.019                                                                          | only to regenerate brand assets                                           | `tools/brand/generate_plan_brand.py:1-25`                                              |
-| Azure CLI             | `mcr.microsoft.com/azure-cli:2.67.0` (run in Docker)                                                   | infra checks and deploys                                                  | `infra/README.md:269-294`                                                              |
+| Tool                  | Version                                                                                                                       | Needed for                                                                | Source                                                                                   |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Xcode                 | see "Xcode version" below                                                                                                     | iOS packages, the app, simulator tests                                    | `.github/workflows/ios.yml:42-43`, `testflight.yml:64-65`                                |
+| iOS deployment target | 17.0                                                                                                                          | every capture Swift package and the app                                   | `ios/project.yml:12-13,21`; the 9 capture manifests declare `.iOS(.v17)`, `.macOS(.v14)` |
+| Swift tools version   | 6.0 (`// swift-tools-version: 6.0` in all 10 manifests: 9 capture packages and `tools/plan-render`)                           | the Swift packages                                                        | line 1 of each `Package.swift`; `tools/plan-render` declares `.macOS(.v14)` only         |
+| XcodeGen              | 2.46.0, SHA-256 `4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806`                                            | generating `ios/ChapterCapture.xcodeproj`                                 | `.github/workflows/ios.yml:50-51`                                                        |
+| Simulator             | iPhone 17 Pro. UI tests on `OS=latest`; snapshot tests on iOS **26.0** (references are recorded there)                        | simulator tests                                                           | `.github/workflows/ios.yml:44-49`, `ios/Packages/ChapterUI/README.md:17-18`              |
+| MSAL (Swift package)  | `exactVersion: 2.16.0`, `https://github.com/AzureAD/microsoft-authentication-library-for-objc`                                | Entra sign-in in the app                                                  | `ios/project.yml:43-45`                                                                  |
+| Node.js               | 22 (`.nvmrc`); engines `>=22.13.0`                                                                                            | station, web, contract, fixtures, root scripts                            | `.nvmrc`, `package.json:7-10`                                                            |
+| npm                   | `>=10`                                                                                                                        | same                                                                      | `package.json:9`                                                                         |
+| Docker                | not pinned; Docker with `docker compose` is required                                                                          | local station, station API tests, export validators, infra compile checks | `station/api/scripts/local-up.sh:15-25`                                                  |
+| Playwright Chromium   | `@playwright/test` 1.64.0                                                                                                     | web end-to-end tests                                                      | `web/package.json:28`                                                                    |
+| poppler (`pdftoppm`)  | CI uses Ubuntu `poppler-utils` (pdftoppm 24.02.0 in run `39807980144`); snapshots were recorded with poppler 26.04.0 on macOS | station spatial report visual tests (they skip locally without it)        | `.github/workflows/ci.yml:66-73`, `station/hub/test/report-visual/visual.test.ts:1-16`   |
+| Python 3 + fontTools  | fontTools 4.62.1, Inter 3.019                                                                                                 | only to regenerate brand assets                                           | `tools/brand/generate_plan_brand.py:1-25`                                                |
+| Azure CLI             | `mcr.microsoft.com/azure-cli:2.67.0` (run in Docker)                                                                          | infra checks and deploys                                                  | `infra/README.md:269-294`                                                                |
 
 Pinned Docker images used by the scripts: `postgres:16.15-bookworm`,
 `mcr.microsoft.com/azure-storage/azurite:3.35.0`, `node:22.23.3-bookworm-slim`
@@ -68,8 +68,8 @@ Pinned Docker images used by the scripts: `postgres:16.15-bookworm`,
   26 SDK build" (`.github/workflows/testflight.yml:64-65`).
 - The App target **does not compile on Xcode 26.3.**
   `ios/App/Sources/App/Views/ModelStyle.swift` lines 2265, 2331 and 2495 fail with "the compiler
-  is unable to type-check this expression in reasonable time" (CI run `39707269821`, commit
-  `2ca19b0`). The package jobs build; the App job fails.
+  is unable to type-check this expression in reasonable time" (CI runs `39707269821` on `2ca19b0`
+  and `39807980031` on `add2d74`). The package jobs build; the App job fails.
 - Every local v2 build used **Xcode 27.2 beta (27B5038j)** on the owner's Mac (macOS 27.0), and
   the App compiled there. The owner's Mac also has Xcode 27.1 (27A9275); the App was not built
   with it.
@@ -80,6 +80,68 @@ Pinned Docker images used by the scripts: `postgres:16.15-bookworm`,
   phone snapshots again (`TEST_RUNNER_RECORD_SNAPSHOTS=1`, `ios/Packages/ChapterUI/README.md:23-34`).
 - Use `xcode-select` or `DEVELOPER_DIR` to choose the Xcode, as CI does
   (`.github/workflows/ios.yml:43`).
+
+### 3.1 Install on a clean Mac
+
+The repo pins versions but has no install script for a Mac (no Brewfile, `.tool-versions` or
+`requirements.txt`). Steps marked **Verify** are Apple, Docker or vendor tooling, not repo facts.
+
+1. **Xcode.** Install the Xcode chosen above. The only Xcode that compiles the App today is
+   Xcode 27.2 beta (27B5038j), a beta from the Apple Developer downloads page, which needs an
+   Apple Developer account (**Verify**; **Input needed**: whose account). Select it:
+
+   ```sh
+   sudo xcode-select -s /Applications/<Xcode name>.app/Contents/Developer   # or: export DEVELOPER_DIR=...
+   xcodebuild -version
+   ```
+
+2. **iOS 26.0 simulator runtime.** The package tests and the app-hosted snapshot tests run on
+   `iPhone 17 Pro, OS=26.0`, because the phone snapshots were recorded there
+   (`.github/workflows/ios.yml:45-49`). A new Xcode 27.x install brings its own iOS runtime, not
+   iOS 26.0 (**Verify**). Download it in Xcode (Settings > Components) or with
+   `xcodebuild -downloadPlatform iOS -buildVersion 26.0` (**Verify** the exact form for your
+   Xcode). `scripts/ensure-simulator.sh` only waits for the device or creates it on the
+   **newest** installed runtime; it downloads no runtime (`scripts/ensure-simulator.sh:2-7,34-37`).
+   Check with `xcrun simctl list runtimes`. UI tests use `OS=latest` and need no extra runtime
+   (`ios.yml:44`).
+
+3. **XcodeGen 2.46.0**, the same checksum-checked download as CI (`.github/workflows/ios.yml:50-51,235-245`),
+   into a folder of your choice. Homebrew installs whatever version is current, not 2.46.0.
+
+   ```sh
+   XCODEGEN_VERSION=2.46.0
+   XCODEGEN_SHA256=4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806
+   archive="$HOME/Downloads/xcodegen-${XCODEGEN_VERSION}.zip"
+   curl --fail --location --silent --show-error --retry 3 -o "${archive}" \
+     "https://github.com/yonaskolb/XcodeGen/releases/download/${XCODEGEN_VERSION}/xcodegen.zip"
+   echo "${XCODEGEN_SHA256}  ${archive}" | shasum -a 256 --check --strict
+   mkdir -p "$HOME/tools/xcodegen-${XCODEGEN_VERSION}"
+   unzip -q "${archive}" -d "$HOME/tools/xcodegen-${XCODEGEN_VERSION}"
+   export PATH="$HOME/tools/xcodegen-${XCODEGEN_VERSION}/xcodegen/bin:$PATH"   # add to your shell profile
+   xcodegen --version
+   ```
+
+4. **Node 22** (22.13.0 or later 22.x; `.nvmrc` = `22`, `package.json:7-10`). CI reads `.nvmrc`
+   (`.github/workflows/ci.yml:34-38`). Any installer works; with nvm, `nvm install` in the repo
+   root reads `.nvmrc` (**Verify**). npm 10 or later comes with it. Then `npm ci` (section 4).
+5. **Docker with `docker compose`** (for example Docker Desktop for Mac; **Verify** its licence
+   terms for Chapter). `local-up.sh` needs `docker` on `PATH` and runs
+   `docker compose -f <file> up --detach --build --wait` (`station/api/scripts/local-up.sh:15-30`).
+   Needed for the local station, the station API tests, `scripts/verify-exports.sh` and the infra
+   checks.
+6. **Playwright Chromium:** `npx --workspace web playwright install --with-deps chromium`
+   (`.github/workflows/web-e2e.yml:51-52`), after `npm ci`.
+7. **poppler** for `pdftoppm` (station report snapshot tests; they skip locally without it).
+   On a Mac, for example `brew install poppler` (**Verify**).
+8. **jq**, used by `scripts/ensure-simulator.sh:34-37` (**Verify** whether your macOS has it;
+   otherwise `brew install jq`).
+9. **Python 3 with fontTools 4.62.1**, only to regenerate brand assets
+   (`tools/brand/generate_plan_brand.py:20-24`; another fontTools version may write other bytes).
+   For example, outside the repo: `python3 -m venv ~/.venvs/chapter-brand` and
+   `~/.venvs/chapter-brand/bin/pip install fonttools==4.62.1` (**Verify**); then run the
+   generator with that interpreter (section 9).
+10. **Azure CLI:** not installed; the repo runs it in Docker
+    (`mcr.microsoft.com/azure-cli:2.67.0`, `infra/README.md:269-294`).
 
 ## 4. Install and root checks
 
@@ -237,10 +299,16 @@ xcodebuild test -project ios/ChapterCapture.xcodeproj -scheme ChapterUISnapshots
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.0'
 ```
 
+- `OS=26.0` needs the iOS 26.0 simulator runtime installed (section 3.1, step 2). Without it
+  `xcodebuild` stops with "Unable to find a device matching the provided destination specifier",
+  as on the GitHub runner (run `39807980031`). On another iOS version the phone snapshots differ by
+  more than the tolerance (`.github/workflows/ios.yml:45-48`).
 - Record snapshots again with `TEST_RUNNER_RECORD_SNAPSHOTS=1` in front of `xcodebuild test`
   (`ios/Packages/ChapterUI/README.md:23-34`).
-- `scripts/ensure-simulator.sh "iPhone 17 Pro"` waits for the simulator, or creates it on the
-  newest iOS runtime (`scripts/ensure-simulator.sh:1-11`).
+- `scripts/ensure-simulator.sh "iPhone 17 Pro"` looks for the device by name on any runtime and
+  otherwise creates it on the newest installed iOS runtime (`scripts/ensure-simulator.sh:16-37`).
+  It neither downloads the iOS 26.0 runtime nor makes sure an iOS 26.0 device exists; check with
+  `xcrun simctl list devices`.
 - CI packages: `CaptureContract` (`contract/swift`), `ChapterUI`, `CaptureCore`, `PlanExport`,
   `MeshExport`, `FieldKit`, `PackageKit`, `StationClient` (`.github/workflows/ios.yml:62-82`).
 
@@ -344,6 +412,10 @@ node station/hub/scripts/generate-brand-assets.mjs --check     # station report 
 python3 -I tools/brand/generate_plan_brand.py --logo tools/brand/chapter-logo.svg \
   --inter "<path to>/Inter-VariableFont_slnt,wght.ttf" --check
 ```
+
+CI's `ci` job runs `verify-exports.sh` on the PlanExport (`dxf pdf preview`) and MeshExport
+(`gltf las`) test output after the Swift tests (`.github/workflows/ci.yml:92-109`); on `add2d74`
+every kind passed (run `39807980144`).
 
 Sources: `scripts/verify-exports.sh:1-13`, `scripts/verify/plan-sheet-snapshot.sh:1-23` (the
 reference render runs in Docker; without Docker it uses the local `pdftoppm` and stand-in fonts),

@@ -25,15 +25,22 @@ verdict and every finding, download files and record where each modeling decisio
 
 Routes (`web/app`):
 
-| URL                                                                       | Who                                   |
-| ------------------------------------------------------------------------- | ------------------------------------- |
-| `/` Projects (tabs `all`, `blocked`, `limited`, `ready`, `progress`; `q`) | all station roles                     |
-| `/packages` Packages (`q`)                                                | all station roles                     |
-| `/projects/[dealId]` Project (`tab=packages` or `log`)                    | all station roles                     |
-| `/packages/[packageId]` Package (`?file=<path>`, `?floor=<areaKey>`)      | all roles; `capture` sees status only |
-| `/decisions` Modeling decision log                                        | `bim`, `admin`                        |
-| `/sign-in`                                                                | no session                            |
-| `/api/auth/*`                                                             | Auth.js                               |
+| URL                                                                                                 | Who                                   |
+| --------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| `/` Projects with at least one package (tabs `all`, `blocked`, `limited`, `ready`, `progress`; `q`) | all station roles                     |
+| `/packages` Packages (`q`)                                                                          | all station roles                     |
+| `/projects/[dealId]` Project (`tab=packages` or `log`)                                              | all station roles                     |
+| `/packages/[packageId]` Package (`?file=<path>`, `?floor=<areaKey>`)                                | all roles; `capture` sees status only |
+| `/decisions` Modeling decision log                                                                  | `bim`, `admin`                        |
+| `/sign-in`                                                                                          | no session                            |
+| `/api/auth/*`                                                                                       | Auth.js                               |
+
+The Projects page lists only projects that already have a package: it calls the station's
+`listReviewProjects` (`web/app/(review)/page.tsx:64`, `web/lib/station.ts:69-70`;
+`GET /v1/review/projects`, "Projects with at least one package",
+`contract/openapi/station.yaml:643-653`). The web never calls `GET /v1/projects` (the HUB deal
+list); that is the phone's call on New capture. The project page reads one deal with
+`getProject` (`web/app/(review)/projects/[dealId]/page.tsx:110`).
 
 File routes (`bim`, `admin` only; `web/lib/file-access.ts:28-63`): `/packages/{id}/files/download`
 (303 to a 10-minute station link), `/packages/{id}/files/preview` (streams a plan PNG, the signed
@@ -122,7 +129,8 @@ Not possible as built (`X-Frame-Options: DENY`, section 2). Needs a security dec
 - **Vercel (documented path).** Vercel Git integration on the Chapter Vercel team, project root
   directory `web`, production branch `main`, every other branch a preview deployment; variables in
   the Vercel project settings, never in the repo (`.github/BRANCH_PROTECTION.md:165-172`). There
-  is no `vercel.json` and no GitHub workflow for the web.
+  is no `vercel.json` and no GitHub workflow for the web. Read section 4.1 before connecting any
+  Vercel project to the repo.
 - **Self-hosted** (`next start`, Node 22, in a container or on a VM). The e2e harness sets
   `AUTH_TRUST_HOST: "true"` when it runs `next start` outside Vercel
   (`web/playwright.config.ts:55-68`). **Verify:** a self-hosted Auth.js app behind a proxy needs
@@ -133,6 +141,33 @@ Not possible as built (`X-Frame-Options: DENY`, section 2). Needs a security dec
 - **Input needed:** the host name per environment, who owns the DNS, and whether Vercel or another
   host is used. The Vercel project must point at `eranfromchapter/chapter-lidar` (or its future
   `HelloChapter` location).
+
+### 4.1 A stable training host on Vercel
+
+The documented Vercel setup has one project: production branch `main`, every other branch a
+preview deployment (`.github/BRANCH_PROTECTION.md:170-171`). That does not fit the owner's
+timeline as it stands:
+
+- A preview deployment's URL changes per deployment, but the Entra redirect URI
+  (`https://<web host>/api/auth/callback/microsoft-entra-id`, section 6) needs a fixed host.
+- Once that project is connected, every push to `main` deploys `web/` to production. `main` holds
+  the v1 web today, and v2 is merged into `main` in phase 3, before the production web is allowed
+  (README, "Branches, deploys and the web").
+
+**Recommendation** (Vercel behaviour below is **Verify**):
+
+- **Training (phase 2):** a separate Vercel project for training (name **Input needed**), root
+  directory `web`, its production branch set to the branch training deploys from (`v2/main`, and
+  `main` after the phase 3 merge), with the training domain attached and the training values of
+  section 8 as its Production-scoped variables. Its "production" deployment is the training web
+  on a fixed host name.
+- **Production (phase 4 only):** create and connect the production Vercel project (production
+  branch `main`, `BRANCH_PROTECTION.md:171`) and attach the production domain only when the
+  phase 4 gate opens.
+- Alternative for training: one Vercel project with a domain assigned to a dedicated Git branch
+  (for example `training`) and Preview variables scoped to that branch. It works only if the
+  production domain is not attached and the project's production deployments are not used
+  before phase 4.
 
 ## 5. Environment variables
 
@@ -216,7 +251,7 @@ Test-only variables (`web/playwright.config.ts:14-20,55-68`): `E2E_WEB_PORT` (de
 
 The web needs a running station. In Azure the station always runs `NODE_ENV=production` and
 `HUB_MODE=live`, staging included, and requires `HUB_BASE_URL` and `HUB_SERVICE_CREDENTIAL`
-(`infra/modules/containerapps.bicep:171-198`, `station/api/src/core/config.ts:431-442`). So
+(`infra/modules/containerapps.bicep:171-203`, `station/api/src/core/config.ts:431-442`). So
 "connect to HUB training" means a station connected to the HUB training API, plus the web pointed
 at that station.
 
@@ -224,13 +259,18 @@ Steps:
 
 1. Decide which station serves training (**Input needed**): the existing `staging` environment of
    `infra/`, or a new environment. `infra/` knows only `staging` and `production`
-   (`infra/params/`). The word "training" appears nowhere in the repo.
+   (`infra/params/`). The word "training" appears nowhere in the repo. Using `staging` needs the
+   production Bicep applied first (shared registry;
+   [04, section 9.1](04-station-and-deploy.md#91-across-the-owners-phases)).
 2. Get the HUB training API details confirmed by the HUB team and update the mapping if needed
-   ([04, section 5](04-station-and-deploy.md#5-hub-connection)).
-3. Deploy the station for training ([04](04-station-and-deploy.md)), with the settings in the
-   station table below.
+   ([04, section 5](04-station-and-deploy.md#5-hub-connection)). The HUB training deals used for
+   tests must have a confirmed address (the HUB's confirmed-address flag, only `true` counts):
+   the phone lists only those, and a package sealed into any other deal never gets a verdict.
+3. Deploy the station for training from `v2/main` ([04](04-station-and-deploy.md), sections 8.3
+   and 9), with the settings in the station table below.
 4. Create the training Entra registration for the web and assign station roles to training users.
-5. Deploy the web on the training host with the web settings below.
+5. Deploy the web on the fixed training host with the web settings below, in its own Vercel
+   project (section 4.1).
 6. Add the training "Capture review" link in the HUB training navigation (optional for the gate).
 7. Run the training checks in section 10.
 
@@ -255,7 +295,7 @@ Steps:
 | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | `REVIEW_BASE_URL` (API **and** worker)                                 | training web origin. The worker refuses to start without it.                     | `station/worker/src/config.ts:296-302`, `station/api/src/core/config.ts:391-393` |
 | `HUB_WEB_DEAL_URL_TEMPLATE` (API)                                      | HUB training deal page URL with `{dealId}` (https)                               | `station/api/src/core/config.ts:392-393,449-459`                                 |
-| `HUB_MODE`                                                             | `live` (set by infra)                                                            | `infra/modules/containerapps.bicep:171-175`                                      |
+| `HUB_MODE`                                                             | `live` (set by infra)                                                            | `infra/modules/containerapps.bicep:196-199`                                      |
 | `HUB_BASE_URL` (Bicep `hubBaseUrl`, deploy env `CAPTURE_HUB_BASE_URL`) | HUB training REST API base URL (https)                                           | `infra/README.md:82,128`                                                         |
 | `HUB_SERVICE_CREDENTIAL` (Key Vault secret `hub-service-credential`)   | HUB training service credential, set by an admin in Key Vault, never in the repo | `infra/README.md:87,175-184`                                                     |
 | `ENTRA_TENANT_ID`, `ENTRA_AUDIENCE` (`CAPTURE_ENTRA_AUDIENCE`)         | Chapter Main tenant; station app registration client id and/or App ID URI        | `infra/README.md:71-74,127`                                                      |
@@ -276,9 +316,12 @@ one real visit has gone through end to end in production.
   of the production HUB.
 - The production station's worker needs `REVIEW_BASE_URL` already in phase 3. Choose the
   production web host name then; links in reports made before this phase open only once it is live.
-- Vercel deploys production from `main` (`.github/BRANCH_PROTECTION.md:171`), so v2 must be merged
-  to `main`. Note that a push to `main` also triggers `deploy-station.yml` to staging
-  ([04, section 8](04-station-and-deploy.md#8-cicd)).
+- v2 is already in `main` by now: it is merged in phase 3, because `deploy-station.yml` deploys
+  the production station only from `main` (`.github/workflows/deploy-station.yml:83-86`). A push
+  to `main` also deploys the station to staging (`deploy-station.yml:19-21`).
+- Only now create and connect the production Vercel project (root `web`, production branch
+  `main`, `.github/BRANCH_PROTECTION.md:165-172`) and attach the production domain (section 4.1).
+  Its first production deployment is the go-live.
 - Add the production "Capture review" link to the HUB navigation and the deal page.
 
 ## 10. Acceptance checklist
@@ -289,15 +332,19 @@ one real visit has gone through end to end in production.
       Microsoft" completes and returns to the page asked for.
 - [ ] A user with no station role sees "No station role"; a `capture` user sees status only; a
       `bim` user sees downloads and the decision log.
-- [ ] Projects list shows HUB training deals with confirmed addresses (station `GET /v1/projects`
-      against the HUB training API).
+- [ ] Before any package exists, the Projects page is empty: it lists only projects with at least
+      one package (section 1). The HUB training deals with a confirmed address show on the
+      phone's New capture (station `GET /v1/projects` against the HUB training API).
 - [ ] A test package uploaded to the training station (from a Debug build of the standalone app or
-      the PM app branch, configured for the training station) reaches a verdict; the package page
-      shows the verdict, findings and files.
+      the PM app branch, configured for the training station, sealed into a HUB training deal with
+      a confirmed address) reaches a verdict; its project now appears on the Projects page; the
+      package page shows the verdict, findings and files.
 - [ ] Spatial report download works (303 to a short-lived link); plan PNG preview loads; a file
       download works and the link expires.
-- [ ] The spatial report and plan files appear in the HUB training deal's Files tab under
-      `Capture/<visitId>/r<revision>`.
+- [ ] In the HUB training deal's Files tab: the spatial report and `manifest.json` under
+      `Capture/<visitId>/r<revision>`, and each capture's plan files (DXF, rooms CSV, plan sheet
+      PDF, plan PNG) under `Capture/<areaKey>/<captureId>/r<revision>`
+      (`station/hub/src/plan.ts:3-6,114-122`).
 - [ ] "Open the HUB", "Open in the HUB" and the Files link open the HUB training pages (if the
       variables are set).
 - [ ] Removing one required variable shows the 503 "not configured" page (then restore it).

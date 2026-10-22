@@ -33,19 +33,19 @@ says so.
 6. Entra values: client id, tenant id, station API scope, `capture` role assignments (section 10).
 7. Training and production station URLs (https).
 
-**Blockers in the capture code to fix first:**
+**Blocker in the capture code to fix first:**
 
 - `ios/App/Sources/App/Views/ModelStyle.swift` lines 2265, 2331, 2495 do not compile on Xcode 26.3
-  (CI run `39707269821`). It compiled on Xcode 27.2 beta (27B5038j). It must compile on the release
-  Xcode the PM app ships with ([01, section 3](01-repo-and-mac-setup.md#xcode-version-read-this-first)).
-- `v2/main` must be pushed to GitHub ([README](README.md#repo-and-branch)).
+  (CI runs `39707269821` and `39807980031`, the latter on `add2d74`). It compiled on Xcode 27.2
+  beta (27B5038j). It must compile on the release Xcode the PM app ships with
+  ([01, section 3](01-repo-and-mac-setup.md#xcode-version-read-this-first)).
 
 ## 3. What the capture code needs from the host
 
 | Need                                     | Value                                                        | Source                                                                          |
 | ---------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------- |
 | Minimum iOS                              | 17.0. Every package declares `.iOS(.v17)`, `.macOS(.v14)`    | `ios/project.yml:12-13,21`, e.g. `ios/Packages/CaptureCore/Package.swift:29-32` |
-| Swift tools                              | `// swift-tools-version: 6.0` (all 8 manifests)              | line 1 of each `Package.swift`                                                  |
+| Swift tools                              | `// swift-tools-version: 6.0` (all 9 capture manifests)      | line 1 of each `Package.swift`                                                  |
 | App target Swift settings in the repo    | `SWIFT_VERSION: "5.0"`, `SWIFT_STRICT_CONCURRENCY: complete` | `ios/project.yml:19-20`                                                         |
 | Targets kept in Swift 5 language mode    | `CaptureCompass`, `CaptureRoomPlan`, `CaptureUI`             | `ios/Packages/CaptureCore/Package.swift:62,72,81`                               |
 | MSAL                                     | `exactVersion: 2.16.0`                                       | `ios/project.yml:43-45`                                                         |
@@ -81,9 +81,14 @@ through `CaptureRoomPlan` (`ios/Packages/CaptureCore/Package.swift:64-69`).
 
 - The packages point at each other by relative path, for example
   `.package(path: "../../../contract/swift")` (`ios/App/AppCore/Package.swift:28-34`).
+- **This repo cannot be a remote Swift Package Manager dependency.** SwiftPM resolves a Git
+  dependency from a `Package.swift` at the repo root, and this repo has none: the 10 manifests
+  are at `contract/swift`, `ios/App/AppCore`, `ios/Packages/*` (7) and `tools/plan-render`
+  (`git ls-files '*Package.swift'`).
 - **Recommendation:** bring `contract/swift`, `ios/Packages/` and `ios/App/AppCore/` into the PM
-  app repo together, with the same relative layout, or add this repo as a Git dependency. Copying
-  one package alone breaks the paths.
+  app repo together, with the same relative layout: a copy, or this repo as a git submodule or
+  subtree. Then add them to the PM app's Xcode project as **local** packages (by path), as
+  `ios/project.yml:24-42` does. Copying one package alone breaks the paths.
 - Apple-only targets compile to empty modules on Linux: CaptureCompass, CaptureRoomPlan, CaptureUI
   (`ios/Packages/CaptureCore/Package.swift:10-16`), ChapterUI (`ios/Packages/ChapterUI/Package.swift:17-21`),
   FieldKitUI (`ios/Packages/FieldKit/Package.swift:8-10`).
@@ -123,7 +128,14 @@ In the App target (`ios/App/Sources/App/`), port into the PM app:
 | `Views/FloorplanView.swift`                               | 318   | The colour Floorplan on the phone (stays as approved)                                                               | Port unchanged.                                                                               |
 | `Views/ScanViewer.swift`                                  | 353   | One floor's 3D model and plan (RoomPlan, SceneKit)                                                                  | Port.                                                                                         |
 | `Views/ModelStyle.swift`                                  | 2,797 | Restyles the RoomPlan USDZ in SceneKit                                                                              | Port. **Fails to compile on Xcode 26.3** (section 2).                                         |
-| `Debug/UITest*.swift`, `Debug/FieldTestEnvironment.swift` | ~610  | UI-test replay and field-test modes, `#if DEBUG`                                                                    | Optional; Debug only (`ios/project.yml:72-74`).                                               |
+| `Debug/UITest*.swift`, `Debug/FieldTestEnvironment.swift` | 609   | UI-test replay and field-test modes, `#if DEBUG`                                                                    | Debug only (`ios/project.yml:72-74`). **Required in Debug** as ported (see below the table).  |
+
+The Debug files are not optional as the code stands. Other ported files use them inside
+`#if DEBUG`: `AppModel.make()` (`FieldTestEnvironment`, `UITestLaunchOptions`, `UITestV1Visits`,
+`UITestEnvironment`; `AppModel.swift:94-118`), `RootView` (`UITestFontAudit`, `UITestProbeView`;
+`RootView.swift:22-31`) and `AppNavigation` (`UITestHooks`, `UITestViewfinder`;
+`AppNavigation.swift:41-43,320-324`). Port the five Debug files, or remove those `#if DEBUG` blocks
+too; otherwise the PM app's Debug build does not compile. Release excludes them either way.
 
 Screen flow: Captures home → New capture → What are you scanning? → Live scan → Photos → Capture
 overview → Field controls / Before you leave → Package ready → Package status → Verdict received.
@@ -166,10 +178,15 @@ Harmless in a standalone app; in the PM app they touch every screen.
    `Application Support/FieldTestVisits` (`ios/App/Sources/App/AppModel.swift:87,98,123,146`) and
    `Caches/upload-scratch` (`AppDelegate.swift:20-23`). **Recommendation:** put them under a
    `ChapterCapture/` folder so they cannot collide with the PM app's folders.
-8. **The capture record carries the host's version.** It reads `Bundle.main` through
-   `CaptureRecord.AppInfo.from(bundle:)`, else `0.0.0` / `0` (`VisitModel.swift:118-120`). The schema
-   wants `^[0-9]+\.[0-9]+\.[0-9]+$` (`contract/schema/capture-record.schema.json:110-121`). The PM
-   app's `CFBundleShortVersionString` must be three dotted numbers.
+8. **The capture record carries the host's version.** It reads `CFBundleShortVersionString` and
+   `CFBundleVersion` from `Bundle.main` through `CaptureRecord.AppInfo.from(bundle:)`
+   (`ios/Packages/CaptureCore/Sources/CaptureCore/CaptureRecordDraft.swift:259-277`). One to three
+   dotted numbers are accepted and padded (`1.2` becomes `1.2.0`). Anything else, for example a
+   suffix such as `2.3.0-beta`, or a missing build number, falls back **silently** to version
+   `0.0.0`, build `0` in every capture record (`VisitModel.swift:118-120`). The schema wants
+   `^[0-9]+\.[0-9]+\.[0-9]+$` and a build of 1 to 32 characters
+   (`contract/schema/capture-record.schema.json:110-121`). Check the PM app's values against these
+   rules.
 9. **Hard-coded identifiers** that do not follow the host's bundle id:
    - `com.hellochapter.capture.package-upload`: background `URLSession` (`AppDelegate.swift:16`)
    - `com.hellochapter.capture.verdict-refresh`: BGTask (`StationStatusCache.swift:204`, `Info.plist:51`)
@@ -247,6 +264,17 @@ Keys the repo does **not** have:
 These hooks must run when the capture UI is not open, for example after iOS relaunches the app in
 the background for upload events. Put them in the PM app's AppDelegate, not in the capture screens.
 
+**Build the capture's `AppModel` at app launch too, not when the user first opens capture.** The
+standalone app creates it at launch (`@State private var model = AppModel.make()`,
+`ChapterCaptureApp.swift:9`). `AppModel.make()` is the only place that gives `VerdictRefresh` its
+visits folder and station (`configureBackgroundRefresh()`, `AppModel.swift:152,169-173`), and,
+for a signed-in user, resumes the uploads of sealed packages (`showHome()`,
+`AppModel.swift:153-156,237-241`). Registering the BGTask alone is not enough: while
+`VerdictRefresh` is not configured, `run()` returns `false` and the task does not schedule itself
+again (`AppDelegate.swift:163-167,182-184`), so background verdict refreshes silently stop. If the
+PM app keeps the capture UI lazy, it must still run, at launch, the same station and services setup
+and `VerdictRefresh.shared.configure(visitsRoot:source:)`.
+
 **Entitlements** (`ios/App/Resources/App.entitlements:5-8`): `keychain-access-groups` =
 `$(AppIdentifierPrefix)com.microsoft.adalcache`, MSAL's default token cache group
 (`ios/App/Sources/App/Auth/EntraSignIn.swift:17-19`). Nothing else: no `aps-environment`, App
@@ -306,8 +334,26 @@ products (`CaptureCore`, `CaptureRoomPlan`, `PlanExport`, `PackageKit`, `Station
   (`AppModel.swift:123-130`, `RootView.swift:67-93`).
 - `ConfigurationLoader.load(_:)` takes a closure (`AppConfiguration.swift:83-84`). The PM app can
   supply the values from its own configuration without the `Chapter*` Info.plist keys.
-- **Recommendation:** one value set per build configuration: Debug and TestFlight builds point at
-  the training station, the App Store build at the production station.
+- **How the repo builds it:** only two configurations, Debug and Release (`ios/project.yml:51-53`);
+  Archive uses Release (`ios/project.yml:200-201`). The four values are compiled into Info.plist
+  at build time (`ios/App/Config/Base.xcconfig:1-9`, `ios/App/Resources/Info.plist:68-75`), from
+  `Local.xcconfig` or `xcodebuild` build settings. A TestFlight build and the App Store build are
+  both Release archives, and the binary sent to App Review is one of the builds uploaded to App
+  Store Connect, so it is also on TestFlight (**Verify**). There is no "TestFlight points at
+  training, App Store points at production" switch inside one binary.
+- **Recommendation**, if the PM app keeps build-time values:
+  - Debug builds: the training station.
+  - A **training build** for TestFlight internal testers: a third configuration (for example
+    `Training`, a copy of Release with the training values; **Not built**), or a separate Release
+    archive with the training values passed as build settings. It gets its own build number.
+  - The **App Store build**: a separate Release archive with the production values and a higher
+    build number.
+  - Trade-off: the build submitted to App Review was not the build tested on training. Before
+    submitting it, install that exact build from TestFlight and run one visit against the
+    production station with a test deal (section 13).
+- Alternative: the PM app supplies the values at run time through `ConfigurationLoader.load(_:)`
+  (above), for example from its own environment setting. That keeps one binary, but an
+  environment switch in an App Store build is a product decision (**Input needed**).
 - The scope name is not fixed in the repo. Examples differ: `api://<station app id>/Capture.Upload`
   in iOS (`AppConfiguration.swift:11`) and `api://<station-app-id>/access_as_user` in web
   (`web/lib/config.ts:38`). **Input needed:** the real scope of the station app registration.
@@ -395,7 +441,17 @@ phone needs:
 
 1. **Sign-in is required.** Every capture screen is behind Entra sign-in with the `capture` role.
    **Verify:** App Review needs working demo credentials. **Input needed:** a reviewer account
-   with the `capture` role on the production station, and a production HUB project it can see.
+   with the `capture` role on the production station.
+   - The station does **not** filter HUB deals per user: `GET /v1/projects` returns every HUB deal
+     with a confirmed address to any `capture`, `bim` or `admin` token
+     (`station/api/src/routes/projects/index.ts:40-50`). The reviewer sees every production deal's
+     name, address and PM phone, and can seal a package into any of them.
+   - A sealed package is checked and published: its spatial report and plan files go into that
+     deal's HUB Files tab (section 11, [04, section 5](04-station-and-deploy.md#5-hub-connection)).
+   - **Recommendation:** create a dedicated test deal in the production HUB (with a confirmed
+     address) and name it in the review notes as the one to use. Whether the reviewer may see the
+     other production deals is a Chapter decision (**Input needed**); a per-user deal filter is
+     **Not built**.
 2. **Reviewers may not have a LiDAR device.** Without LiDAR or RoomPlan, Continue says "This phone
    cannot scan". **Recommendation:** say in the review notes that capture needs an iPhone Pro or
    iPad Pro with LiDAR, and attach a screen recording of a real scan.
@@ -403,12 +459,16 @@ phone needs:
    code matches: 3 km accuracy, nothing stored (`CompassService.swift:58`, `ios/App/README.md:24-26`).
 4. **Background mode `fetch`.** Used only by the verdict refresh. Explain it in the review notes,
    or drop it (section 8).
-5. **No privacy manifest in the repo** (no `PrivacyInfo.xcprivacy`). The code reads file
-   timestamps: `contentModificationDateKey` (`ios/App/AppCore/Sources/AppCore/VisitStore.swift:262,282`,
-   `CaptureLibrary.swift:155`, `ios/App/Sources/App/Views/ScanViewer.swift:58`) and
-   `creationDateKey` (`VisitStore.swift:295`). **Verify:** file timestamps are a "required
-   reason" API; the PM app's privacy manifest must declare it. Check whether MSAL 2.16.0 ships its
-   own manifest.
+5. **No privacy manifest in the repo** (no `PrivacyInfo.xcprivacy`). The capture code uses two
+   kinds of API that Apple lists as "required reason" APIs (**Verify** both against Apple's
+   current list; the PM app's privacy manifest must declare each with a reason):
+   - **File timestamps:** `contentModificationDateKey`
+     (`ios/App/AppCore/Sources/AppCore/VisitStore.swift:262,282`, `CaptureLibrary.swift:155`,
+     `ios/App/Sources/App/Views/ScanViewer.swift:58`) and `creationDateKey` (`VisitStore.swift:295`).
+   - **System boot time:** `ProcessInfo.processInfo.systemUptime`, used to turn a motion sample's
+     timestamp into a date
+     (`ios/Packages/CaptureCore/Sources/CaptureCompass/CompassService.swift:127`).
+   - Check whether MSAL 2.16.0 ships its own manifest.
 6. **App Privacy labels.** The capture record holds `operatorName` and `operatorUserId` (the Entra
    object id) (`VisitModel.swift:221-225`, `EntraSignIn.swift:113-116`), device model, OS, site
    photos, scans and the HUB project address. No location. Declare these in App Store Connect
@@ -485,15 +545,19 @@ The repo has no React Native or Flutter code. The capture is native Swift becaus
 - [ ] Info.plist keys added as in section 7, with usage strings that name the PM app; no `arkit`
       required capability.
 - [ ] AppDelegate forwards background `URLSession` events, registers the BGTask (if kept) and
-      routes `"verdict"` notifications (section 8).
+      routes `"verdict"` notifications; the capture `AppModel` (or at least its station setup and
+      `VerdictRefresh.configure`) runs at app launch (section 8).
 - [ ] Entra redirect URI `msauth.<PM bundle id>://auth` registered; sign-in returns a station token
       with the `capture` role; 401 retry works (section 10).
-- [ ] Debug/TestFlight build against the training station: HUB training projects listed; a full
-      visit scanned on a LiDAR phone, sealed, uploaded (also after the app is closed during
-      upload), verdict received, notification shown.
+- [ ] Debug build and the training build (section 10) against the training station: HUB training
+      projects listed; a full visit scanned on a LiDAR phone, sealed, uploaded (also after the app
+      is closed during upload), verdict received, notification shown.
+- [ ] The exact App Store build, installed from TestFlight, runs one visit against the production
+      station on a test deal before it is submitted (section 10).
 - [ ] A phone without LiDAR shows the capture entry as unavailable, and the rest of the PM app
       works.
-- [ ] Capture record `app.version` is the PM app version (three dotted numbers).
+- [ ] Capture record `app.version` and `app.build` are the PM app's values, not the silent
+      `0.0.0` / `0` fallback (section 6, item 8).
 - [ ] Privacy manifest, App Privacy answers, export compliance and review notes ready (section 13).
 - [ ] Production station live with v2 (manifest and capture record 1.1.0 accepted) before release.
 - [ ] After approval: one real visit in production reaches a verdict, and the spatial report and
