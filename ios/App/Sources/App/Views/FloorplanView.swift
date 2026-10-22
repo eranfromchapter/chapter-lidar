@@ -1,5 +1,6 @@
 import CaptureContract
 import CaptureUI
+import ChapterUI
 import CoreGraphics
 import Foundation
 import ImageIO
@@ -26,23 +27,28 @@ enum FloorplanFiles {
     var errorDescription: String?
   }
 
-  /// The one-page Floorplan PDF, dated `capturedAt` (when the scan was made).
+  /// The one-page Floorplan PDF, dated `capturedAt` (when the scan was made). `north`: the
+  /// capture's compass (compass §6.3): the north symbol, or "Orientation: not verified" with its
+  /// reason, at the top right; nil draws nothing (a scan without a capture record).
   static func pdf(
-    model: CaptureModel, address: String?, units: DisplayUnitSystem, capturedAt: Date
+    model: CaptureModel, address: String?, units: DisplayUnitSystem, capturedAt: Date,
+    north: CompassState? = nil
   ) throws -> Data {
     let options = FloorplanWriter.Options(
-      address: address, units: UnitFormatter(system: units),
+      address: address, units: UnitFormatter(system: units), north: north,
       creationDate: FloorplanWriter.pdfDate(capturedAt))
     return try FloorplanWriter.pdf(model: model, options: options)
   }
 
   /// The plan alone, laid out for a phone's width so its names and dimensions read at a glance
-  /// (no title or footer: the screen has its own).
-  static func screenPDF(model: CaptureModel, units: DisplayUnitSystem, capturedAt: Date) throws
-    -> Data
-  {
+  /// (no title or footer: the screen has its own). The north arrow is drawn for a verified or
+  /// approximate reading only.
+  static func screenPDF(
+    model: CaptureModel, units: DisplayUnitSystem, capturedAt: Date, north: CompassState? = nil
+  ) throws -> Data {
     let options = FloorplanWriter.Options(
-      units: UnitFormatter(system: units), creationDate: FloorplanWriter.pdfDate(capturedAt))
+      units: UnitFormatter(system: units), north: north,
+      creationDate: FloorplanWriter.pdfDate(capturedAt))
     return try FloorplanWriter.screenPDF(model: model, options: options)
   }
 
@@ -100,6 +106,8 @@ final class FloorplanModel {
   let address: String?
   /// When the scan was made; the PDFs carry it as their creation date.
   let capturedAt: Date
+  /// The capture's compass, for the north symbol (nil: none drawn).
+  let north: CompassState?
   /// Where the share files go: one folder per scan and unit system, under the temporary folder.
   @ObservationIgnored private let exportName: String
   private(set) var units: DisplayUnitSystem
@@ -114,12 +122,13 @@ final class FloorplanModel {
 
   init(
     model: CaptureModel, address: String?, units: DisplayUnitSystem, capturedAt: Date,
-    exportName: String
+    north: CompassState? = nil, exportName: String
   ) {
     self.model = model
     self.address = address
     self.units = units
     self.capturedAt = capturedAt
+    self.north = north
     self.exportName = exportName
   }
 
@@ -134,6 +143,7 @@ final class FloorplanModel {
     let model = self.model
     let address = self.address
     let capturedAt = self.capturedAt
+    let north = self.north
     let folder = FileManager.default.temporaryDirectory
       .appendingPathComponent("floorplan-\(exportName)", isDirectory: true)
       .appendingPathComponent(units.rawValue, isDirectory: true)
@@ -142,13 +152,14 @@ final class FloorplanModel {
     errorMessage = nil
     do {
       let screen = try await Task.detached(priority: .userInitiated) {
-        try FloorplanFiles.screenPDF(model: model, units: units, capturedAt: capturedAt)
+        try FloorplanFiles.screenPDF(
+          model: model, units: units, capturedAt: capturedAt, north: north)
       }.value
       guard current == generation else { return }
       self.screen = screen
       let pdf = try await Task.detached(priority: .userInitiated) {
         try FloorplanFiles.pdf(
-          model: model, address: address, units: units, capturedAt: capturedAt)
+          model: model, address: address, units: units, capturedAt: capturedAt, north: north)
       }.value
       guard current == generation else { return }
       self.pdf = pdf
@@ -166,10 +177,16 @@ final class FloorplanModel {
 }
 
 /// The Floorplan card: the plan alone, filling the card (pinch to zoom, double-tap to zoom
-/// in), a Units menu that rewrites it in feet-inches or metres, and Download, which shares the
+/// in), a Units choice that rewrites it in feet-inches or metres, and Download, which shares the
 /// full page as floorplan.pdf and a 300 dpi floorplan.png.
+///
+/// The units are chosen in a confirmation dialog, not a `Menu`: presenting a SwiftUI `Menu`
+/// from this screen made UIKit add a `_UIReparentingView` to the hosting controller's view
+/// (the runtime warning "Adding '_UIReparentingView' as a subview of UIHostingController.view
+/// is not supported").
 struct FloorplanView: View {
   let floorplan: FloorplanModel
+  @State private var choosesUnits = false
 
   var body: some View {
     VStack(spacing: Space.s2) {
@@ -202,25 +219,23 @@ struct FloorplanView: View {
   }
 
   private var unitsMenu: some View {
-    Menu {
-      Picker(
-        "Units",
-        selection: Binding(
-          get: { floorplan.units },
-          set: { units in Task { await floorplan.write(units: units) } })
-      ) {
-        Text("Imperial (ft-in)").tag(DisplayUnitSystem.imperial)
-        Text("Metric (m)").tag(DisplayUnitSystem.metric)
-      }
+    Button {
+      choosesUnits = true
     } label: {
       chip {
         Image(systemName: "ruler")
         Text(floorplan.units == .imperial ? "ft-in" : "m")
-        Image(systemName: "chevron.down").font(.system(size: 11, weight: .semibold))
+        Image(systemName: "chevron.down").font(ChapterTheme.Font.caption)
       }
     }
+    .buttonStyle(.plain)
     .accessibilityLabel("Units, \(floorplan.units == .imperial ? "feet and inches" : "metres")")
     .accessibilityIdentifier("floorplan.units")
+    .confirmationDialog("Units", isPresented: $choosesUnits, titleVisibility: .visible) {
+      Button("Imperial (ft-in)") { Task { await floorplan.write(units: .imperial) } }
+      Button("Metric (m)") { Task { await floorplan.write(units: .metric) } }
+      Button("Cancel", role: .cancel) {}
+    }
   }
 
   @ViewBuilder private var download: some View {

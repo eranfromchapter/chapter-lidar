@@ -1,0 +1,17 @@
+{
+  "captures" : {
+    "ba028a66-d76e-4616-b0d6-e3e04e5c9535" : [
+      {
+        "derivedLabel" : "Living Room",
+        "footprint" : {
+          "areaM2" : 30,
+          "centerX" : 3,
+          "centerZ" : 2.5
+        },
+        "name" : "Shower",
+        "roomId" : "room-1"
+      }
+    ]
+  },
+  "version" : 1
+}

@@ -1,0 +1,586 @@
+{
+  "dealId" : "fixture-deal-0001",
+  "files" : [
+    {
+      "bytes" : 1148,
+      "lastCheck" : {
+        "actualBytes" : 1148,
+        "actualSha256" : "c664017f4331087cb20cdd864221b033b5291f6db2c33eb32c2cfd69599f9e04",
+        "checkedAt" : "2026-10-21T22:48:47Z",
+        "expectedBytes" : 1148,
+        "expectedSha256" : "c664017f4331087cb20cdd864221b033b5291f6db2c33eb32c2cfd69599f9e04",
+        "path" : "Source Register/c1b6d1fb-17af-4f4a-877c-2565ef9bdb86/capture-record.json",
+        "status" : "verified"
+      },
+      "path" : "Source Register/c1b6d1fb-17af-4f4a-877c-2565ef9bdb86/capture-record.json",
+      "phase" : "verified",
+      "rejectedUploads" : 0,
+      "sha256" : "c664017f4331087cb20cdd864221b033b5291f6db2c33eb32c2cfd69599f9e04",
+      "stagedBlockIds" : [
+
+      ]
+    },
+    {
+      "bytes" : 2768,
+      "lastCheck" : {
+        "actualBytes" : 2768,
+        "actualSha256" : "d6d52becf7ce728b378c11a901be3e42d11bdcbf79e6189c00f72b4a1e62bd51",
+        "checkedAt" : "2026-10-21T22:48:47Z",
+        "expectedBytes" : 2768,
+        "expectedSha256" : "d6d52becf7ce728b378c11a901be3e42d11bdcbf79e6189c00f72b4a1e62bd51",
+        "path" : "Field Measurements/c1b6d1fb-17af-4f4a-877c-2565ef9bdb86/field-controls.json",
+        "status" : "verified"
+      },
+      "path" : "Field Measurements/c1b6d1fb-17af-4f4a-877c-2565ef9bdb86/field-controls.json",
+      "phase" : "verified",
+      "rejectedUploads" : 0,
+      "sha256" : "d6d52becf7ce728b378c11a901be3e42d11bdcbf79e6189c00f72b4a1e62bd51",
+      "stagedBlockIds" : [
+
+      ]
+    },
+    {
+      "bytes" : 3442,
+      "lastCheck" : {
+        "actualBytes" : 3442,
+        "actualSha256" : "438a3c24833b0e48e9b908367656a0be2a0ed20b33a3d3c82c49693dfa5ca2f6",
+        "checkedAt" : "2026-10-21T22:48:47Z",
+        "expectedBytes" : 3442,
+        "expectedSha256" : "438a3c24833b0e48e9b908367656a0be2a0ed20b33a3d3c82c49693dfa5ca2f6",
+        "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/roomplan.json",
+        "status" : "verified"
+      },
+      "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/roomplan.json",
+      "phase" : "verified",
+      "rejectedUploads" : 0,
+      "sha256" : "438a3c24833b0e48e9b908367656a0be2a0ed20b33a3d3c82c49693dfa5ca2f6",
+      "stagedBlockIds" : [
+
+      ]
+    },
+    {
+      "bytes" : 14224,
+      "lastCheck" : {
+        "actualBytes" : 14224,
+        "actualSha256" : "4e30958048d51aabc36fa61d59d50515f59eee29426b61e438d15ee9bafb9fba",
+        "checkedAt" : "2026-10-21T22:48:47Z",
+        "expectedBytes" : 14224,
+        "expectedSha256" : "4e30958048d51aabc36fa61d59d50515f59eee29426b61e438d15ee9bafb9fba",
+        "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/depth-samples.bin",
+        "status" : "verified"
+      },
+      "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/depth-samples.bin",
+      "phase" : "verified",
+      "rejectedUploads" : 0,
+      "sha256" : "4e30958048d51aabc36fa61d59d50515f59eee29426b61e438d15ee9bafb9fba",
+      "stagedBlockIds" : [
+
+      ]
+    },
+    {
+      "bytes" : 2902,
+      "lastCheck" : {
+        "actualBytes" : 2902,
+        "actualSha256" : "3ef27e8881e40350c16dd8651d89ea142f3103343b69e55d61b2ecfd85e83b93",
+        "checkedAt" : "2026-10-21T22:48:47Z",
+        "expectedBytes" : 2902,
+        "expectedSha256" : "3ef27e8881e40350c16dd8651d89ea142f3103343b69e55d61b2ecfd85e83b93",
+        "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/capture-model.json",
+        "status" : "verified"
+      },
+      "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/capture-model.json",
+      "phase" : "verified",
+      "rejectedUploads" : 0,
+      "sha256" : "3ef27e8881e40350c16dd8651d89ea142f3103343b69e55d61b2ecfd85e83b93",
+      "stagedBlockIds" : [
+
+      ]
+    },
+    {
+      "bytes" : 4636,
+      "lastCheck" : {
+        "actualBytes" : 4636,
+        "actualSha256" : "a44fed151c4d47aa8123cdb38e3ee4823a2a3b43978b9d947e9faf7b2c65f989",
+        "checkedAt" : "2026-10-21T22:48:47Z",
+        "expectedBytes" : 4636,
+        "expectedSha256" : "a44fed151c4d47aa8123cdb38e3ee4823a2a3b43978b9d947e9faf7b2c65f989",
+        "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/plan.dxf",
+        "status" : "verified"
+      },
+      "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/plan.dxf",
+      "phase" : "verified",
+      "rejectedUploads" : 0,
+      "sha256" : "a44fed151c4d47aa8123cdb38e3ee4823a2a3b43978b9d947e9faf7b2c65f989",
+      "stagedBlockIds" : [
+
+      ]
+    },
+    {
+      "bytes" : 296,
+      "lastCheck" : {
+        "actualBytes" : 296,
+        "actualSha256" : "01d6aa25d22909f3b110823d0daa3a79c999035876eea704cff03dbebd29897e",
+        "checkedAt" : "2026-10-21T22:48:47Z",
+        "expectedBytes" : 296,
+        "expectedSha256" : "01d6aa25d22909f3b110823d0daa3a79c999035876eea704cff03dbebd29897e",
+        "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/rooms.csv",
+        "status" : "verified"
+      },
+      "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/rooms.csv",
+      "phase" : "verified",
+      "rejectedUploads" : 0,
+      "sha256" : "01d6aa25d22909f3b110823d0daa3a79c999035876eea704cff03dbebd29897e",
+      "stagedBlockIds" : [
+
+      ]
+    },
+    {
+      "bytes" : 154277,
+      "lastCheck" : {
+        "actualBytes" : 154277,
+        "actualSha256" : "5c234706e1c827ebdf629c7238e6b7d58ec98bc399777d1defc08ba597a81e6e",
+        "checkedAt" : "2026-10-21T22:48:47Z",
+        "expectedBytes" : 154277,
+        "expectedSha256" : "5c234706e1c827ebdf629c7238e6b7d58ec98bc399777d1defc08ba597a81e6e",
+        "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/plan.pdf",
+        "status" : "verified"
+      },
+      "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/plan.pdf",
+      "phase" : "verified",
+      "rejectedUploads" : 0,
+      "sha256" : "5c234706e1c827ebdf629c7238e6b7d58ec98bc399777d1defc08ba597a81e6e",
+      "stagedBlockIds" : [
+
+      ]
+    },
+    {
+      "bytes" : 164577,
+      "lastCheck" : {
+        "actualBytes" : 164577,
+        "actualSha256" : "896aef213948eb3a4741bdeeae04429bfd20f6b0fe3ec6a60fea45132cffa123",
+        "checkedAt" : "2026-10-21T22:48:47Z",
+        "expectedBytes" : 164577,
+        "expectedSha256" : "896aef213948eb3a4741bdeeae04429bfd20f6b0fe3ec6a60fea45132cffa123",
+        "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/spatial-report.pdf",
+        "status" : "verified"
+      },
+      "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/spatial-report.pdf",
+      "phase" : "verified",
+      "rejectedUploads" : 0,
+      "sha256" : "896aef213948eb3a4741bdeeae04429bfd20f6b0fe3ec6a60fea45132cffa123",
+      "stagedBlockIds" : [
+
+      ]
+    },
+    {
+      "bytes" : 58763,
+      "lastCheck" : {
+        "actualBytes" : 58763,
+        "actualSha256" : "588e9754ed0dade4ee9a131a0aec8756a27d800a8162f3fe36f2387d6cfac1be",
+        "checkedAt" : "2026-10-21T22:48:47Z",
+        "expectedBytes" : 58763,
+        "expectedSha256" : "588e9754ed0dade4ee9a131a0aec8756a27d800a8162f3fe36f2387d6cfac1be",
+        "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/plan.png",
+        "status" : "verified"
+      },
+      "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/plan.png",
+      "phase" : "verified",
+      "rejectedUploads" : 0,
+      "sha256" : "588e9754ed0dade4ee9a131a0aec8756a27d800a8162f3fe36f2387d6cfac1be",
+      "stagedBlockIds" : [
+
+      ]
+    },
+    {
+      "bytes" : 9116,
+      "lastCheck" : {
+        "actualBytes" : 9116,
+        "actualSha256" : "e45472d31c7376d4161dd3f90a201f70ee30cee9a1df5442143f21f6906bcabe",
+        "checkedAt" : "2026-10-21T22:48:47Z",
+        "expectedBytes" : 9116,
+        "expectedSha256" : "e45472d31c7376d4161dd3f90a201f70ee30cee9a1df5442143f21f6906bcabe",
+        "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/plan.svg",
+        "status" : "verified"
+      },
+      "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/plan.svg",
+      "phase" : "verified",
+      "rejectedUploads" : 0,
+      "sha256" : "e45472d31c7376d4161dd3f90a201f70ee30cee9a1df5442143f21f6906bcabe",
+      "stagedBlockIds" : [
+
+      ]
+    },
+    {
+      "bytes" : 32315,
+      "lastCheck" : {
+        "actualBytes" : 32315,
+        "actualSha256" : "69ee678481ddab0b1679b2aaed4d68bce2e7e864307866ffaa7d26a74d8c77d7",
+        "checkedAt" : "2026-10-21T22:48:47Z",
+        "expectedBytes" : 32315,
+        "expectedSha256" : "69ee678481ddab0b1679b2aaed4d68bce2e7e864307866ffaa7d26a74d8c77d7",
+        "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/points.las",
+        "status" : "verified"
+      },
+      "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/points.las",
+      "phase" : "verified",
+      "rejectedUploads" : 0,
+      "sha256" : "69ee678481ddab0b1679b2aaed4d68bce2e7e864307866ffaa7d26a74d8c77d7",
+      "stagedBlockIds" : [
+
+      ]
+    },
+    {
+      "bytes" : 219,
+      "lastCheck" : {
+        "actualBytes" : 219,
+        "actualSha256" : "002c11d07bdd7d304e8f6e1bd30facb253200718cf90db773605cbbc5b6dda03",
+        "checkedAt" : "2026-10-21T22:48:47Z",
+        "expectedBytes" : 219,
+        "expectedSha256" : "002c11d07bdd7d304e8f6e1bd30facb253200718cf90db773605cbbc5b6dda03",
+        "path" : "Site Photos/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/photo-0001.jpg",
+        "status" : "verified"
+      },
+      "path" : "Site Photos/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/photo-0001.jpg",
+      "phase" : "verified",
+      "rejectedUploads" : 0,
+      "sha256" : "002c11d07bdd7d304e8f6e1bd30facb253200718cf90db773605cbbc5b6dda03",
+      "stagedBlockIds" : [
+
+      ]
+    }
+  ],
+  "formatVersion" : 1,
+  "manifestSha256" : "d34d011168742d15787de227db0f570977848eb1a630501681cdfccf63806698",
+  "packageId" : "696df5db-37c4-4381-9f08-a7b677992e55",
+  "sealResult" : {
+    "createdAt" : "2026-10-21T22:48:47Z",
+    "dealId" : "fixture-deal-0001",
+    "files" : [
+      {
+        "bytes" : 1148,
+        "checkedAt" : "2026-10-21T22:48:47Z",
+        "path" : "Source Register/c1b6d1fb-17af-4f4a-877c-2565ef9bdb86/capture-record.json",
+        "role" : "capture_record",
+        "sha256" : "c664017f4331087cb20cdd864221b033b5291f6db2c33eb32c2cfd69599f9e04",
+        "status" : "verified"
+      },
+      {
+        "bytes" : 2768,
+        "checkedAt" : "2026-10-21T22:48:47Z",
+        "path" : "Field Measurements/c1b6d1fb-17af-4f4a-877c-2565ef9bdb86/field-controls.json",
+        "role" : "field_controls",
+        "sha256" : "d6d52becf7ce728b378c11a901be3e42d11bdcbf79e6189c00f72b4a1e62bd51",
+        "status" : "verified"
+      },
+      {
+        "areaKey" : "floor-1",
+        "bytes" : 3442,
+        "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+        "checkedAt" : "2026-10-21T22:48:47Z",
+        "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/roomplan.json",
+        "role" : "raw_roomplan_json",
+        "sha256" : "438a3c24833b0e48e9b908367656a0be2a0ed20b33a3d3c82c49693dfa5ca2f6",
+        "status" : "verified"
+      },
+      {
+        "areaKey" : "floor-1",
+        "bytes" : 14224,
+        "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+        "checkedAt" : "2026-10-21T22:48:47Z",
+        "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/depth-samples.bin",
+        "role" : "raw_depth",
+        "sha256" : "4e30958048d51aabc36fa61d59d50515f59eee29426b61e438d15ee9bafb9fba",
+        "status" : "verified"
+      },
+      {
+        "areaKey" : "floor-1",
+        "bytes" : 2902,
+        "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+        "checkedAt" : "2026-10-21T22:48:47Z",
+        "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/capture-model.json",
+        "role" : "capture_model",
+        "sha256" : "3ef27e8881e40350c16dd8651d89ea142f3103343b69e55d61b2ecfd85e83b93",
+        "status" : "verified"
+      },
+      {
+        "areaKey" : "floor-1",
+        "bytes" : 4636,
+        "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+        "checkedAt" : "2026-10-21T22:48:47Z",
+        "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/plan.dxf",
+        "role" : "plan_dxf",
+        "sha256" : "a44fed151c4d47aa8123cdb38e3ee4823a2a3b43978b9d947e9faf7b2c65f989",
+        "status" : "verified"
+      },
+      {
+        "areaKey" : "floor-1",
+        "bytes" : 296,
+        "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+        "checkedAt" : "2026-10-21T22:48:47Z",
+        "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/rooms.csv",
+        "role" : "rooms_csv",
+        "sha256" : "01d6aa25d22909f3b110823d0daa3a79c999035876eea704cff03dbebd29897e",
+        "status" : "verified"
+      },
+      {
+        "areaKey" : "floor-1",
+        "bytes" : 154277,
+        "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+        "checkedAt" : "2026-10-21T22:48:47Z",
+        "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/plan.pdf",
+        "role" : "plan_pdf",
+        "sha256" : "5c234706e1c827ebdf629c7238e6b7d58ec98bc399777d1defc08ba597a81e6e",
+        "status" : "verified"
+      },
+      {
+        "areaKey" : "floor-1",
+        "bytes" : 164577,
+        "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+        "checkedAt" : "2026-10-21T22:48:47Z",
+        "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/spatial-report.pdf",
+        "role" : "spatial_report_pdf",
+        "sha256" : "896aef213948eb3a4741bdeeae04429bfd20f6b0fe3ec6a60fea45132cffa123",
+        "status" : "verified"
+      },
+      {
+        "areaKey" : "floor-1",
+        "bytes" : 58763,
+        "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+        "checkedAt" : "2026-10-21T22:48:47Z",
+        "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/plan.png",
+        "role" : "plan_png",
+        "sha256" : "588e9754ed0dade4ee9a131a0aec8756a27d800a8162f3fe36f2387d6cfac1be",
+        "status" : "verified"
+      },
+      {
+        "areaKey" : "floor-1",
+        "bytes" : 9116,
+        "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+        "checkedAt" : "2026-10-21T22:48:47Z",
+        "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/plan.svg",
+        "role" : "plan_svg",
+        "sha256" : "e45472d31c7376d4161dd3f90a201f70ee30cee9a1df5442143f21f6906bcabe",
+        "status" : "verified"
+      },
+      {
+        "areaKey" : "floor-1",
+        "bytes" : 32315,
+        "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+        "checkedAt" : "2026-10-21T22:48:47Z",
+        "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/points.las",
+        "role" : "point_cloud_las",
+        "sha256" : "69ee678481ddab0b1679b2aaed4d68bce2e7e864307866ffaa7d26a74d8c77d7",
+        "status" : "verified"
+      },
+      {
+        "areaKey" : "floor-1",
+        "bytes" : 219,
+        "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+        "checkedAt" : "2026-10-21T22:48:47Z",
+        "path" : "Site Photos/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/photo-0001.jpg",
+        "role" : "photo",
+        "sha256" : "002c11d07bdd7d304e8f6e1bd30facb253200718cf90db773605cbbc5b6dda03",
+        "status" : "verified"
+      }
+    ],
+    "manifest" : {
+      "files" : [
+        {
+          "bytes" : 1148,
+          "derivedFrom" : [
+
+          ],
+          "generator" : "chapter-capture-ios/CaptureCore",
+          "generatorVersion" : "1.0.0",
+          "mime" : "application/json",
+          "path" : "Source Register/c1b6d1fb-17af-4f4a-877c-2565ef9bdb86/capture-record.json",
+          "role" : "capture_record",
+          "sha256" : "c664017f4331087cb20cdd864221b033b5291f6db2c33eb32c2cfd69599f9e04"
+        },
+        {
+          "bytes" : 2768,
+          "derivedFrom" : [
+
+          ],
+          "generator" : "chapter-capture-ios/FieldKit",
+          "generatorVersion" : "1.0.0",
+          "mime" : "application/json",
+          "path" : "Field Measurements/c1b6d1fb-17af-4f4a-877c-2565ef9bdb86/field-controls.json",
+          "role" : "field_controls",
+          "sha256" : "d6d52becf7ce728b378c11a901be3e42d11bdcbf79e6189c00f72b4a1e62bd51"
+        },
+        {
+          "areaKey" : "floor-1",
+          "bytes" : 3442,
+          "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+          "derivedFrom" : [
+
+          ],
+          "generator" : "chapter-capture-ios/CaptureCore",
+          "generatorVersion" : "1.0.0",
+          "mime" : "application/json",
+          "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/roomplan.json",
+          "role" : "raw_roomplan_json",
+          "sha256" : "438a3c24833b0e48e9b908367656a0be2a0ed20b33a3d3c82c49693dfa5ca2f6"
+        },
+        {
+          "areaKey" : "floor-1",
+          "bytes" : 14224,
+          "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+          "derivedFrom" : [
+
+          ],
+          "generator" : "chapter-capture-ios/CaptureCore",
+          "generatorVersion" : "1.0.0",
+          "mime" : "application/octet-stream",
+          "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/depth-samples.bin",
+          "role" : "raw_depth",
+          "sha256" : "4e30958048d51aabc36fa61d59d50515f59eee29426b61e438d15ee9bafb9fba"
+        },
+        {
+          "areaKey" : "floor-1",
+          "bytes" : 2902,
+          "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+          "derivedFrom" : [
+            "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/roomplan.json"
+          ],
+          "generator" : "chapter-capture-ios/CaptureCore",
+          "generatorVersion" : "1.0.0",
+          "mime" : "application/json",
+          "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/capture-model.json",
+          "role" : "capture_model",
+          "sha256" : "3ef27e8881e40350c16dd8651d89ea142f3103343b69e55d61b2ecfd85e83b93"
+        },
+        {
+          "areaKey" : "floor-1",
+          "bytes" : 4636,
+          "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+          "derivedFrom" : [
+            "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/capture-model.json"
+          ],
+          "generator" : "chapter-capture-ios/PlanExport",
+          "generatorVersion" : "1.0.0",
+          "mime" : "image/vnd.dxf",
+          "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/plan.dxf",
+          "role" : "plan_dxf",
+          "sha256" : "a44fed151c4d47aa8123cdb38e3ee4823a2a3b43978b9d947e9faf7b2c65f989"
+        },
+        {
+          "areaKey" : "floor-1",
+          "bytes" : 296,
+          "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+          "derivedFrom" : [
+            "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/capture-model.json"
+          ],
+          "generator" : "chapter-capture-ios/PlanExport",
+          "generatorVersion" : "1.0.0",
+          "mime" : "text/csv",
+          "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/rooms.csv",
+          "role" : "rooms_csv",
+          "sha256" : "01d6aa25d22909f3b110823d0daa3a79c999035876eea704cff03dbebd29897e"
+        },
+        {
+          "areaKey" : "floor-1",
+          "bytes" : 154277,
+          "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+          "derivedFrom" : [
+            "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/capture-model.json"
+          ],
+          "generator" : "chapter-capture-ios/PlanExport",
+          "generatorVersion" : "1.0.0",
+          "mime" : "application/pdf",
+          "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/plan.pdf",
+          "role" : "plan_pdf",
+          "sha256" : "5c234706e1c827ebdf629c7238e6b7d58ec98bc399777d1defc08ba597a81e6e"
+        },
+        {
+          "areaKey" : "floor-1",
+          "bytes" : 164577,
+          "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+          "derivedFrom" : [
+            "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/capture-model.json"
+          ],
+          "generator" : "chapter-capture-ios/PlanExport",
+          "generatorVersion" : "1.0.0",
+          "mime" : "application/pdf",
+          "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/spatial-report.pdf",
+          "role" : "spatial_report_pdf",
+          "sha256" : "896aef213948eb3a4741bdeeae04429bfd20f6b0fe3ec6a60fea45132cffa123"
+        },
+        {
+          "areaKey" : "floor-1",
+          "bytes" : 58763,
+          "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+          "derivedFrom" : [
+            "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/capture-model.json"
+          ],
+          "generator" : "chapter-capture-ios/PlanExport",
+          "generatorVersion" : "1.0.0",
+          "mime" : "image/png",
+          "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/plan.png",
+          "role" : "plan_png",
+          "sha256" : "588e9754ed0dade4ee9a131a0aec8756a27d800a8162f3fe36f2387d6cfac1be"
+        },
+        {
+          "areaKey" : "floor-1",
+          "bytes" : 9116,
+          "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+          "derivedFrom" : [
+            "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/capture-model.json"
+          ],
+          "generator" : "chapter-capture-ios/PlanExport",
+          "generatorVersion" : "1.0.0",
+          "mime" : "image/svg+xml",
+          "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/plan.svg",
+          "role" : "plan_svg",
+          "sha256" : "e45472d31c7376d4161dd3f90a201f70ee30cee9a1df5442143f21f6906bcabe"
+        },
+        {
+          "areaKey" : "floor-1",
+          "bytes" : 32315,
+          "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+          "derivedFrom" : [
+            "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/depth-samples.bin"
+          ],
+          "generator" : "chapter-capture-ios/MeshExport",
+          "generatorVersion" : "0.1.0",
+          "mime" : "application/vnd.las",
+          "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/points.las",
+          "role" : "point_cloud_las",
+          "sha256" : "69ee678481ddab0b1679b2aaed4d68bce2e7e864307866ffaa7d26a74d8c77d7"
+        },
+        {
+          "areaKey" : "floor-1",
+          "bytes" : 219,
+          "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+          "derivedFrom" : [
+
+          ],
+          "generator" : "chapter-capture-ios/FieldKit",
+          "generatorVersion" : "1.0.0",
+          "mime" : "image/jpeg",
+          "path" : "Site Photos/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/photo-0001.jpg",
+          "photo" : {
+            "direction" : "N",
+            "room" : "Test Room",
+            "subject" : "general",
+            "takenAt" : "2026-10-17T14:07:11Z"
+          },
+          "role" : "photo",
+          "sha256" : "002c11d07bdd7d304e8f6e1bd30facb253200718cf90db773605cbbc5b6dda03"
+        }
+      ],
+      "layoutVersion" : "1.0.0",
+      "packageId" : "696df5db-37c4-4381-9f08-a7b677992e55",
+      "revision" : 1,
+      "schemaVersion" : "1.0.0",
+      "sealedAt" : "2026-10-21T22:48:47Z",
+      "visitId" : "c1b6d1fb-17af-4f4a-877c-2565ef9bdb86"
+    },
+    "packageId" : "696df5db-37c4-4381-9f08-a7b677992e55",
+    "revision" : 1,
+    "sealedAt" : "2026-10-21T22:48:47Z",
+    "status" : "checks_queued",
+    "visitId" : "c1b6d1fb-17af-4f4a-877c-2565ef9bdb86"
+  }
+}

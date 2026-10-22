@@ -1,0 +1,69 @@
+{
+  "address" : {
+    "confirmedAt" : "2026-10-17T13:58:20Z",
+    "confirmedOnSite" : true,
+    "formatted" : "100 Example Street, Testville, NY 00000"
+  },
+  "app" : {
+    "build" : "fixture",
+    "version" : "1.0.0"
+  },
+  "captures" : [
+    {
+      "areaKey" : "floor-1",
+      "captureId" : "ba028a66-d76e-4616-b0d6-e3e04e5c9535",
+      "capturedAt" : "2026-10-17T14:02:11Z",
+      "coverageNotes" : "",
+      "finishedAt" : "2026-10-17T14:20:40Z",
+      "inaccessibleRooms" : [
+
+      ],
+      "label" : "Floor 1",
+      "mode" : "floor",
+      "omittedRooms" : [
+
+      ],
+      "units" : {
+        "display" : "metric",
+        "length" : "m"
+      }
+    },
+    {
+      "areaKey" : "floor-2",
+      "captureId" : "e236b82f-337b-45f5-ab4b-6a8f3eb64ffc",
+      "capturedAt" : "2026-10-17T14:32:11Z",
+      "coverageNotes" : "The stair void is open: no wall or rail was captured along its edge.",
+      "finishedAt" : "2026-10-17T14:50:40Z",
+      "inaccessibleRooms" : [
+
+      ],
+      "label" : "Floor 2",
+      "mode" : "floor",
+      "omittedRooms" : [
+
+      ],
+      "units" : {
+        "display" : "metric",
+        "length" : "m"
+      }
+    }
+  ],
+  "device" : {
+    "hasLidar" : true,
+    "marketingName" : "iPhone 16 Pro",
+    "model" : "iPhone17,1",
+    "osName" : "iOS",
+    "osVersion" : "26.0.1"
+  },
+  "hub" : {
+    "dealId" : "fixture-deal-0001",
+    "projectName" : "Fixture two-floor-house"
+  },
+  "operator" : {
+    "name" : "Test Operator",
+    "userId" : "00000000-0000-4000-8000-000000000001"
+  },
+  "schemaVersion" : "1.0.0",
+  "visitId" : "d205358c-0394-44af-b86c-69bc3fdd9d21",
+  "visitedAt" : "2026-10-17T13:55:00Z"
+}

@@ -1,0 +1,32 @@
+[
+  {
+    "areaKey" : "floor-1",
+    "bytes" : 220,
+    "captureId" : "ba028a66-d76e-4616-b0d6-e3e04e5c9535",
+    "format" : "jpeg",
+    "labels" : {
+      "direction" : "N",
+      "room" : "Living Room",
+      "subject" : "general",
+      "takenAt" : "2026-10-17T14:07:11Z"
+    },
+    "path" : "Site Photos/floor-1/ba028a66-d76e-4616-b0d6-e3e04e5c9535/photo-0001.jpg",
+    "sequence" : 1,
+    "sha256" : "38d8e70e00280c231c6c8d811d58583af943a8344caa8eded36c1553450c2ec5"
+  },
+  {
+    "areaKey" : "floor-2",
+    "bytes" : 218,
+    "captureId" : "e236b82f-337b-45f5-ab4b-6a8f3eb64ffc",
+    "format" : "jpeg",
+    "labels" : {
+      "direction" : "N",
+      "room" : "Upper Hall",
+      "subject" : "general",
+      "takenAt" : "2026-10-17T14:37:11Z"
+    },
+    "path" : "Site Photos/floor-2/e236b82f-337b-45f5-ab4b-6a8f3eb64ffc/photo-0001.jpg",
+    "sequence" : 1,
+    "sha256" : "117d7aab53505622ccb0d9f4ba3be3d5e6e1adbdb77f074e8b8cf54ea83e6e96"
+  }
+]
