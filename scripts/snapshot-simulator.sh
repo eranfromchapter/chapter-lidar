@@ -12,9 +12,9 @@
 #      still be loading its runtimes);
 #   2. takes the available iOS runtime of the reference version, else the newest available point
 #      release of it;
-#   3. if there is none, downloads the reference version
-#      (`xcodebuild -downloadPlatform iOS -buildVersion <version>`: about 8 GB, several minutes)
-#      and takes that;
+#   3. if there is none, downloads the reference version, or the first point release of it that
+#      Xcode offers (`xcodebuild -downloadPlatform iOS -buildVersion <version>
+#      -architectureVariant arm64 -exportPath`, then `simctl runtime add`: 8 GB), and takes that;
 #   4. takes an available device of that name on that runtime, or creates one;
 #   5. builds the runtime's dyld shared cache if it has none yet, boots the device and waits until
 #      it has finished booting, at most SIMULATOR_BOOT_SECONDS; a boot that hangs is shut down
@@ -77,14 +77,57 @@ until [[ -n "$(reference_runtime)" ]] || has_device; do
   sleep 10
 done
 
+# Downloads the runtime disk image of the reference version, else of the first of its point
+# releases on offer, for this Mac's architecture (-architectureVariant arm64 on Apple silicon),
+# and adds it to CoreSimulator with `simctl runtime add`. On the macos-15 runner Xcode 26.3
+# downloads iOS 26.0 (23A343, 7.5 GB) this way in about 3 min and adds it in about 1 min; asked
+# to download and install it in one go, without the variant, it answers "iOS 26.0 is not
+# available for download".
+download_runtime() {
+  local candidate output started dir image variant
+  variant="universal"
+  [[ "$(uname -m)" == arm64 ]] && variant="arm64"
+  for candidate in "${version}" "${version}.1" "${version}.2" "${version}.3"; do
+    dir="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/snapshot-runtime.XXXXXX")"
+    log "Downloading iOS ${candidate} (${variant}): xcodebuild -downloadPlatform iOS" \
+      "-buildVersion ${candidate} -architectureVariant ${variant} -exportPath ..."
+    started=${SECONDS}
+    if output="$(xcodebuild -downloadPlatform iOS -buildVersion "${candidate}" \
+      -architectureVariant "${variant}" -exportPath "${dir}" 2>&1)"; then
+      image="$(find "${dir}" -name '*.dmg' -type f -print -quit)"
+      if [[ -n "${image}" ]]; then
+        log "Downloaded $(basename "${image}") ($(du -h "${image}" | cut -f1)) in $((SECONDS - started)) s; adding it."
+        started=${SECONDS}
+        xcrun simctl runtime add "${image}" -m >&2 || log "simctl runtime add failed."
+        rm -rf "${dir}"
+        for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
+          [[ -n "$(reference_runtime)" ]] && break
+          sleep 5
+        done
+        if [[ -n "$(reference_runtime)" ]]; then
+          log "Added iOS ${candidate} in $((SECONDS - started)) s."
+          return 0
+        fi
+        log "iOS ${candidate} is still not an available runtime."
+        continue
+      else
+        log "xcodebuild wrote no disk image."
+      fi
+    fi
+    log "iOS ${candidate}: $(tr '\r' '\n' <<<"${output}" | grep -v '^[[:space:]]*$' | tail -n 2 | tr '\n' ' ')"
+    rm -rf "${dir}"
+  done
+  return 1
+}
+
 runtime="$(reference_runtime)"
 if [[ -z "${runtime}" ]]; then
   log "No iOS ${version} simulator runtime here (the references are recorded on it). Installed:"
   xcrun simctl list runtimes >&2
-  log "Downloading iOS ${version} (xcodebuild -downloadPlatform iOS -buildVersion ${version})..."
-  started=${SECONDS}
-  xcodebuild -downloadPlatform iOS -buildVersion "${version}" >&2
-  log "Downloaded and installed iOS ${version} in $((SECONDS - started)) s."
+  if ! download_runtime; then
+    log "::error::Could not download iOS ${version} or a point release of it."
+    exit 1
+  fi
   deadline=$((SECONDS + 120))
   until [[ -n "$(reference_runtime)" ]]; do
     if ((SECONDS >= deadline)); then
@@ -112,8 +155,9 @@ if [[ -z "${udid}" ]]; then
   udid="$(xcrun simctl create "${name}" "${device_type}" "${runtime_id}")"
 fi
 
-# The runtime's dyld shared cache: a no-op when it exists (as on the runner image), else built
-# now rather than while the tests run.
+# The runtime's dyld shared cache: a no-op when it exists (as on the runner image); a runtime
+# downloaded above has none yet, and building it (213 s on the runner) is better done now than
+# while the tests run.
 started=${SECONDS}
 xcrun simctl runtime dyld_shared_cache update "${runtime_id}" >&2
 log "dyld shared cache of iOS ${runtime_version} ready ($((SECONDS - started)) s)."
