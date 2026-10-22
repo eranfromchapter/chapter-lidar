@@ -334,17 +334,47 @@ final class ReportParityGoldenTests: XCTestCase {
       XCTFail("\(name) is missing: run with UPDATE_PARITY_GOLDENS=1", file: file, line: line)
       return
     }
-    let golden = try JSONSerialization.jsonObject(with: Data(contentsOf: url))
-    let actual = try JSONSerialization.jsonObject(with: data)
+    let golden = try JSONDecoder().decode(JSONValue.self, from: Data(contentsOf: url))
+    let actual = try JSONDecoder().decode(JSONValue.self, from: data)
     var differences: [String] = []
     Self.compare(golden, actual, path: name, into: &differences)
     XCTAssertTrue(
       differences.isEmpty, differences.prefix(20).joined(separator: "\n"), file: file, line: line)
   }
 
-  static func compare(_ a: Any, _ b: Any, path: String, into differences: inout [String]) {
+  /// A JSON value, decoded the same way on every platform (no Foundation bridging of numbers
+  /// and flags).
+  enum JSONValue: Decodable {
+    case null
+    case bool(Bool)
+    case number(Double)
+    case string(String)
+    case array([JSONValue])
+    case object([String: JSONValue])
+
+    init(from decoder: Decoder) throws {
+      let container = try decoder.singleValueContainer()
+      if container.decodeNil() {
+        self = .null
+      } else if let value = try? container.decode(Bool.self) {
+        self = .bool(value)
+      } else if let value = try? container.decode(Double.self) {
+        self = .number(value)
+      } else if let value = try? container.decode(String.self) {
+        self = .string(value)
+      } else if let value = try? container.decode([JSONValue].self) {
+        self = .array(value)
+      } else {
+        self = .object(try container.decode([String: JSONValue].self))
+      }
+    }
+  }
+
+  static func compare(
+    _ a: JSONValue, _ b: JSONValue, path: String, into differences: inout [String]
+  ) {
     switch (a, b) {
-    case (let a as [String: Any], let b as [String: Any]):
+    case (.object(let a), .object(let b)):
       for key in Set(a.keys).union(b.keys).sorted() {
         guard let x = a[key], let y = b[key] else {
           differences.append("\(path).\(key): only in one")
@@ -352,7 +382,7 @@ final class ReportParityGoldenTests: XCTestCase {
         }
         compare(x, y, path: "\(path).\(key)", into: &differences)
       }
-    case (let a as [Any], let b as [Any]):
+    case (.array(let a), .array(let b)):
       guard a.count == b.count else {
         differences.append("\(path): \(a.count) items, now \(b.count)")
         return
@@ -360,15 +390,15 @@ final class ReportParityGoldenTests: XCTestCase {
       for (index, pair) in zip(a, b).enumerated() {
         compare(pair.0, pair.1, path: "\(path)[\(index)]", into: &differences)
       }
-    case (let a as String, let b as String):
-      if a != b { differences.append("\(path): \(a) -> \(b)") }
-    case (let a as NSNumber, let b as NSNumber):
-      let x = a.doubleValue
-      let y = b.doubleValue
+    case (.string(let x), .string(let y)):
+      if x != y { differences.append("\(path): \(x) -> \(y)") }
+    case (.number(let x), .number(let y)):
       if abs(x - y) > max(1e-12, 1e-9 * max(abs(x), abs(y))) {
         differences.append("\(path): \(x) -> \(y)")
       }
-    case (is NSNull, is NSNull):
+    case (.bool(let x), .bool(let y)):
+      if x != y { differences.append("\(path): \(x) -> \(y)") }
+    case (.null, .null):
       break
     default:
       differences.append("\(path): \(a) -> \(b)")
