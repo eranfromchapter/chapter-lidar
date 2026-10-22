@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["../*"],
+      "@chapter/station-checks": ["../../station/checks/src/index.ts"],
+      "@chapter/station-checks/node": ["../../station/checks/src/node.ts"]
+    }
+  }
+}

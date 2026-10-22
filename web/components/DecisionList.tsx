@@ -1,52 +1,67 @@
-import type { CaptureRecord } from "@chapter/capture-contract";
-import { formatDateTime, pathDisplayName } from "@/lib/format";
-import type { ModelingDecision, PackageFile } from "@/lib/station-types";
+// Logged modeling decisions (web-review §6.4.7): "<b>element</b> — decision · from {sources} ·
+// {note}" with the author and the station's time. Used on the package page (oldest first), the
+// project's log tab (with a revision badge) and the global log (with a link to the package).
+
+import { formatDateTime, formatDateTime24 } from "@/lib/format";
+import { sourceText, type DecisionContext } from "@/lib/decisions";
+import type { ModelingDecision } from "@/lib/station-types";
+import { Badge } from "./hub/Badge";
+
+export interface DecisionEntry {
+  readonly decision: ModelingDecision;
+  /** What is known about the decision's package, to word its sources. */
+  readonly context?: DecisionContext;
+  /** "Revision {n}" badge before the element (project log). */
+  readonly revision?: number;
+  /** A link line above the entry (global log): "{project title} · Revision {n}". */
+  readonly link?: { readonly text: string; readonly href: string };
+}
 
 export interface DecisionListProps {
-  readonly decisions: readonly ModelingDecision[];
-  readonly files: readonly PackageFile[];
-  readonly captureRecord: CaptureRecord | undefined;
+  readonly entries: readonly DecisionEntry[];
+  readonly label?: string;
 }
 
-function sourceText(
-  decision: ModelingDecision,
-  files: readonly PackageFile[],
-  record: CaptureRecord | undefined,
-): string {
-  return decision.sources
-    .map((source) => {
-      const name = pathDisplayName(source.path, files, record);
-      const detail = source.controlId ?? source.elementId;
-      return detail === undefined ? name : `${name} (${detail})`;
-    })
-    .join(" + ");
-}
-
-/** Logged decisions, oldest first, each with its author and time as recorded by the station. */
-export function DecisionList({ decisions, files, captureRecord }: DecisionListProps) {
+export function DecisionList({ entries, label = "Logged decisions" }: DecisionListProps) {
+  if (entries.length === 0) {
+    return (
+      <p className="text-13 text-muted" style={{ margin: 0 }}>
+        No decisions logged yet.
+      </p>
+    );
+  }
   return (
-    <ul className="decision-list" aria-label="Logged decisions">
-      {decisions.length === 0 ? (
-        <li className="decision-list__empty">No decisions logged yet.</li>
-      ) : (
-        decisions.map((decision) => (
-          <li key={decision.decisionId} className="decision-list__item">
-            <div className="decision-list__body">
-              <span>
-                <b>{decision.element}</b> — {decision.decision}
-              </span>
-              <span className="caption">Source: {sourceText(decision, files, captureRecord)}</span>
-              {decision.note === undefined ? null : (
-                <span className="caption">Uncertainty and next check: {decision.note}</span>
+    <ul className="decision-list" aria-label={label}>
+      {entries.map(({ decision, context, revision, link }) => (
+        <li key={decision.decisionId} className="decision-entry">
+          <div className="decision-entry__body">
+            {link === undefined ? null : (
+              <a className="decision-entry__context" href={link.href}>
+                {link.text}
+              </a>
+            )}
+            <span>
+              {revision === undefined ? null : (
+                <span className="decision-entry__badge">
+                  <Badge tone="neutral">Revision {revision}</Badge>
+                </span>
               )}
-            </div>
-            <span className="decision-list__meta">
-              {decision.decidedBy.name} ·{" "}
-              <time dateTime={decision.decidedAt}>{formatDateTime(decision.decidedAt)}</time>
+              <b>{decision.element}</b> — {decision.decision}
+              <span className="decision-entry__muted">
+                {" · from "}
+                {sourceText(decision, context)}
+                {decision.note === undefined ? "" : ` · ${decision.note}`}
+              </span>
             </span>
-          </li>
-        ))
-      )}
+          </div>
+          <span className="decision-entry__meta">
+            {decision.decidedBy.name} ·{" "}
+            <time dateTime={decision.decidedAt} title={formatDateTime(decision.decidedAt)}>
+              {formatDateTime24(decision.decidedAt)}
+            </time>
+          </span>
+        </li>
+      ))}
     </ul>
   );
 }

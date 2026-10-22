@@ -1,0 +1,69 @@
+# End-to-end tests of the review screen (web-review §12.4): `next build && next start` with test
+# settings against the local station of web/e2e/mock-station.ts, in Chromium. Every page is
+# captured at 1440 and 390 px wide; the screenshots are kept as an artifact for review.
+#
+# No secrets are used: the settings are test values (web/test/support/tokens.ts) and the station
+# is local. Third-party actions are pinned to full commit SHAs.
+name: web-e2e
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "web/**"
+      - "contract/**"
+      - "fixtures/**"
+      - "station/checks/**"
+      - "package-lock.json"
+      - ".github/workflows/web-e2e.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  e2e:
+    name: web-e2e
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js from .nvmrc
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium for Playwright
+        run: npx --workspace web playwright install --with-deps chromium
+
+      - name: End-to-end tests
+        env:
+          E2E_SCREENSHOTS: ${{ runner.temp }}/web-e2e-screenshots
+          E2E_OUTPUT: ${{ runner.temp }}/web-e2e-results
+        run: npm run e2e --workspace web
+
+      - name: Keep the screenshots
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: web-e2e-screenshots
+          path: |
+            ${{ runner.temp }}/web-e2e-screenshots
+            ${{ runner.temp }}/web-e2e-results
+          if-no-files-found: ignore
+          retention-days: 14

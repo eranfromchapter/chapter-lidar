@@ -1,5 +1,5 @@
-// Server-only client for the station API (contract/openapi/station.yaml). Every call sends the
-// signed-in user's station access token as a bearer token; the browser never talks to the
+// Server-only client for the station API (contract/openapi/station.yaml 1.1.0). Every call sends
+// the signed-in user's station access token as a bearer token; the browser never talks to the
 // station and never sees the token. Errors carry the HTTP status and the problem code only.
 
 import "server-only";
@@ -8,9 +8,14 @@ import type {
   HubProject,
   ModelingDecision,
   ModelingDecisionInput,
+  ModelingDecisionWithContext,
   PackageSummary,
   Problem,
+  ReviewPackage,
+  ReviewProject,
+  SpatialReportLink,
   StationPackage,
+  StationPage,
   Verdict,
 } from "./station-types";
 
@@ -33,20 +38,43 @@ export class StationError extends Error {
   }
 }
 
+/** Query of the review lists (listReviewProjects, listReviewPackages). */
+export interface ReviewListQuery {
+  /** 1 to 200 characters; empty means no search. */
+  readonly q?: string;
+  /** 1 to 200; the station's default is 100. */
+  readonly limit?: number;
+}
+
 export interface StationClient {
-  listProjects(query?: { q?: string; limit?: number }): Promise<HubProject[]>;
+  /** getProject: the HUB project of a deal. */
   getProject(dealId: string): Promise<HubProject>;
+  /** listPackages: the packages of one deal, newest first. */
   listPackages(dealId: string): Promise<PackageSummary[]>;
+  /** getPackage: one package with its files. */
   getPackage(packageId: string): Promise<StationPackage>;
-  /** The verdict, or null while the checks have not finished (404 verdict_not_ready). */
+  /** getVerdict: the verdict, or null while the checks have not finished (verdict_not_ready). */
   getVerdict(packageId: string): Promise<Verdict | null>;
-  /** A 10-minute read-only link. Never render it into a page; redirect to it on request. */
+  /** getFileDownloadLink: a 10-minute read-only link. Never render it into a page. */
   getFileDownloadLink(packageId: string, path: string): Promise<DownloadLink>;
+  /** getSpatialReportLink: a 10-minute link to the station's spatial report. Never render it. */
+  getSpatialReportLink(packageId: string): Promise<SpatialReportLink>;
+  /** listModelingDecisions: the decisions of one package, oldest first. */
   listModelingDecisions(packageId: string): Promise<ModelingDecision[]>;
+  /** createModelingDecision: the station records the author and the time. */
   createModelingDecision(
     packageId: string,
     input: ModelingDecisionInput,
   ): Promise<ModelingDecision>;
+  /** listReviewProjects: projects that have packages, most recent package change first. */
+  listReviewProjects(query?: ReviewListQuery): Promise<StationPage<ReviewProject>>;
+  /** listReviewPackages: every package, newest first. */
+  listReviewPackages(query?: ReviewListQuery): Promise<StationPage<ReviewPackage>>;
+  /** listAllModelingDecisions: decisions across packages, newest first. */
+  listAllModelingDecisions(query?: {
+    readonly dealId?: string;
+    readonly limit?: number;
+  }): Promise<StationPage<ModelingDecisionWithContext>>;
 }
 
 export interface StationClientOptions {
@@ -64,6 +92,14 @@ async function problemOf(response: Response): Promise<Problem> {
   } catch {
     return {};
   }
+}
+
+function listQuery(query: ReviewListQuery): Record<string, string | undefined> {
+  const q = query.q?.trim();
+  return {
+    q: q === undefined || q.length === 0 ? undefined : q,
+    limit: query.limit === undefined ? undefined : String(query.limit),
+  };
 }
 
 export function createStationClient(options: StationClientOptions): StationClient {
@@ -115,15 +151,6 @@ export function createStationClient(options: StationClientOptions): StationClien
   const seg = encodeURIComponent;
 
   return {
-    async listProjects(query = {}) {
-      const body = await call<{ projects: HubProject[] }>("GET", "/projects", {
-        query: {
-          q: query.q,
-          limit: query.limit === undefined ? undefined : String(query.limit),
-        },
-      });
-      return body.projects;
-    },
     getProject(dealId) {
       return call<HubProject>("GET", `/projects/${seg(dealId)}`);
     },
@@ -155,6 +182,9 @@ export function createStationClient(options: StationClientOptions): StationClien
         query: { path },
       });
     },
+    getSpatialReportLink(packageId) {
+      return call<SpatialReportLink>("GET", `/packages/${seg(packageId)}/spatial-report`);
+    },
     async listModelingDecisions(packageId) {
       const body = await call<{ decisions: ModelingDecision[] }>(
         "GET",
@@ -166,6 +196,35 @@ export function createStationClient(options: StationClientOptions): StationClien
       return call<ModelingDecision>("POST", `/packages/${seg(packageId)}/modeling-decisions`, {
         body: input,
       });
+    },
+    async listReviewProjects(query = {}) {
+      const body = await call<{ projects: ReviewProject[]; truncated: boolean }>(
+        "GET",
+        "/review/projects",
+        { query: listQuery(query) },
+      );
+      return { items: body.projects, truncated: body.truncated };
+    },
+    async listReviewPackages(query = {}) {
+      const body = await call<{ packages: ReviewPackage[]; truncated: boolean }>(
+        "GET",
+        "/review/packages",
+        { query: listQuery(query) },
+      );
+      return { items: body.packages, truncated: body.truncated };
+    },
+    async listAllModelingDecisions(query = {}) {
+      const body = await call<{ decisions: ModelingDecisionWithContext[]; truncated: boolean }>(
+        "GET",
+        "/modeling-decisions",
+        {
+          query: {
+            dealId: query.dealId,
+            limit: query.limit === undefined ? undefined : String(query.limit),
+          },
+        },
+      );
+      return { items: body.decisions, truncated: body.truncated };
     },
   };
 }

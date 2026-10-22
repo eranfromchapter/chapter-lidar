@@ -150,16 +150,21 @@ export function readStationConfig(env: Env = process.env): StationConfig {
 }
 
 /**
- * Plain page shown when the configuration is incomplete. Names no variable and no value. Shows
- * the Chapter logo and Inter from public/brand, which the proxy serves in every state.
+ * Plain page shown when the configuration is incomplete (web-review §6.7): the HUB look with
+ * inline styles only (no app CSS loads here), the HUB wordmark and Inter from public/brand,
+ * which the proxy serves in every state. Names no variable and no value.
  */
 export function configErrorResponse(): Response {
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Capture review is not configured</title>
-<style>@font-face{font-family:Inter;font-weight:400;font-display:swap;src:url("/brand/inter-400.woff2") format("woff2")}</style></head>
-<body style="margin:0;padding:48px;background:#F5EFE6;color:#1F2429;font-family:Inter,'Helvetica Neue',Helvetica,Arial,sans-serif">
-<img src="/brand/chapter-logo.svg" width="94" height="34" alt="Chapter Renovation" style="display:block;margin:0 0 32px">
-<h1 style="margin:0 0 12px;font-family:Times,'Times New Roman',serif;font-size:34px;font-weight:400">Capture review is not configured</h1>
-<p style="margin:0;font-size:17px">Sign-in or the station connection is not set up for this deployment, so no data is shown. Ask a Chapter admin to complete the review screen settings.</p>
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Capture review is not configured</title>
+<style>@font-face{font-family:Inter;font-style:normal;font-weight:400;font-display:swap;src:url("/brand/inter-400.woff2") format("woff2")}@font-face{font-family:Inter;font-style:normal;font-weight:600;font-display:swap;src:url("/brand/inter-600.woff2") format("woff2")}</style></head>
+<body style="margin:0;background:#f1f1f1;color:rgba(0,0,0,.6);font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-synthesis:none;-webkit-font-smoothing:antialiased">
+<main style="max-width:440px;margin:15vh auto 0;padding:0 16px;display:flex;flex-direction:column;gap:20px">
+<div style="display:flex;flex-direction:column;gap:8px"><img src="/brand/chapter-wordmark.svg" alt="Chapter" width="122" height="28" style="display:block;height:28px;width:auto"><span style="font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:rgba(0,0,0,.4);font-weight:600">Capture review</span></div>
+<div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;box-shadow:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.04);padding:32px">
+<h1 style="margin:0 0 12px;font-size:26px;line-height:1.15;font-weight:600;letter-spacing:-0.02em;color:#000">Capture review is not configured</h1>
+<p style="margin:0;font-size:14px;line-height:1.5">Sign-in or the station connection is not set up for this deployment, so no data is shown. Ask a Chapter admin to complete the review screen settings.</p>
+</div>
+</main>
 </body></html>`;
   return new Response(html, {
     status: 503,

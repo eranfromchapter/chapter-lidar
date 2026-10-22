@@ -32,17 +32,22 @@ export async function sessionCookie(options: {
   roles: StationRole[];
   expiresInSeconds?: number;
   refreshToken?: string;
+  /** Display name of the signed-in user (default "Casey Capture"). */
+  name?: string;
+  /** Session secret (default TEST_ENV.AUTH_SECRET). */
+  secret?: string;
 }): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   const expiresAt = now + (options.expiresInSeconds ?? 3600);
+  const name = options.name ?? "Casey Capture";
   const accessToken = fakeAccessToken({
     oid: "22222222-2222-4222-8222-222222222222",
-    name: "Casey Capture",
+    name,
     roles: options.roles,
     exp: expiresAt,
   });
   return encode({
-    secret: TEST_ENV.AUTH_SECRET,
+    secret: options.secret ?? TEST_ENV.AUTH_SECRET,
     salt: SESSION_COOKIE,
     token: {
       sub: "22222222-2222-4222-8222-222222222222",
@@ -51,7 +56,7 @@ export async function sessionCookie(options: {
         expiresAt,
         ...(options.refreshToken === undefined ? {} : { refreshToken: options.refreshToken }),
         userId: "22222222-2222-4222-8222-222222222222",
-        name: "Casey Capture",
+        name,
         roles: options.roles,
       },
     },

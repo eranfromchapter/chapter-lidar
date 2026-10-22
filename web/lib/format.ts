@@ -1,176 +1,64 @@
-// Display rules from the frozen design (docs/waves/design/DESIGN.md, screen-review).
+// Display rules of the review screen (web-review spec §5.4, §6.4.6): sizes, lengths, areas,
+// dates in Eastern Time, ids, file names and role labels. Verdict and check words are not here:
+// they come from @chapter/capture-contract's review-text so the spatial report prints the same.
 
-import type {
-  CaptureMode,
-  CaptureRecord,
-  Outcome,
-  Role,
-  Severity,
-} from "@chapter/capture-contract";
-import type { PackageFile, PackageStatus } from "./station-types";
+import type { CaptureMode, CaptureRecord, Role } from "@chapter/capture-contract";
+import type { PackageFile } from "./station-types";
 
-/** Verdicts always carry a word and a shape, never colour alone. */
-export const OUTCOME = {
-  ready: {
-    shape: "●",
-    word: "Ready",
-    plain: "ready for the stated preliminary task",
-  },
-  limited: {
-    shape: "▲",
-    word: "Limited",
-    plain: "usable with named limitations",
-  },
-  blocked: {
-    shape: "■",
-    word: "Blocked",
-    plain: "missing information prevents the task",
-  },
-} as const satisfies Record<Outcome, { shape: string; word: string; plain: string }>;
+/** Every Chapter market is on Eastern Time; dates and times are shown there. */
+export const TIME_ZONE = "America/New_York";
 
-/** "▲ Limited" */
-export function outcomeLabel(outcome: Outcome): string {
-  return `${OUTCOME[outcome].shape} ${OUTCOME[outcome].word}`;
-}
+const UNITS = ["B", "KB", "MB", "GB", "TB"] as const;
 
-/** "▲ Limited: usable with named limitations" */
-export function outcomeHeadline(outcome: Outcome): string {
-  return `${outcomeLabel(outcome)}: ${OUTCOME[outcome].plain}`;
-}
-
-/** Severity groups in the order they are listed. */
-export const SEVERITY_ORDER: readonly Severity[] = ["blocker", "limitation", "info"];
-
-export const SEVERITY_GROUP: Record<Severity, string> = {
-  blocker: "Blockers",
-  limitation: "Limitations",
-  info: "Information and passed checks",
-};
-
-/**
- * Severity cell of a finding. Info findings of a passed check read "● Passed" as in the design;
- * other info findings read "● Info".
- */
-export function severityLabel(severity: Severity, checkPassed: boolean): string {
-  switch (severity) {
-    case "blocker":
-      return "■ Blocker";
-    case "limitation":
-      return "▲ Limited";
-    case "info":
-      return checkPassed ? "● Passed" : "● Info";
-  }
-}
-
-/** CSS tone of a severity cell. */
-export function severityTone(severity: Severity): "blocked" | "limited" | "ready" {
-  switch (severity) {
-    case "blocker":
-      return "blocked";
-    case "limitation":
-      return "limited";
-    case "info":
-      return "ready";
-  }
-}
-
-export const PACKAGE_STATUS: Record<PackageStatus, string> = {
-  uploading: "Uploading",
-  checks_queued: "Checks queued",
-  checking: "Checks running",
-  verdict_ready: "Verdict ready",
-  check_error: "Check error",
-};
-
-export const ROLE_LABEL: Record<Role, string> = {
-  capture_record: "Capture record",
-  raw_roomplan_json: "RoomPlan JSON (raw)",
-  raw_depth: "Depth samples (raw)",
-  capture_model: "Capture model",
-  plan_dxf: "Plan DXF",
-  rooms_csv: "Rooms CSV",
-  plan_pdf: "Plan PDF",
-  spatial_report_pdf: "Spatial report PDF",
-  plan_png: "Plan PNG",
-  plan_svg: "Plan SVG",
-  mesh_glb: "Mesh GLB",
-  mesh_obj: "Mesh OBJ",
-  mesh_mtl: "Mesh MTL",
-  texture: "Texture",
-  point_cloud_las: "Point cloud LAS",
-  photo: "Photo",
-  field_controls: "Field controls",
-};
-
-export const MODE_LABEL: Record<CaptureMode, string> = {
-  room: "one room",
-  floor: "whole floor",
-  exterior: "exterior",
-};
-
-/**
- * HUB upload cap shown on screen-review: an upload-role file is linked, not uploaded, when its
- * size is over this many bytes (45 MiB = 47,185,920). MUST match MAX_HUB_UPLOAD_BYTES in
- * station/hub/src/plan.ts, the authoritative publisher (a test guards against drift).
- */
-export const HUB_LINK_THRESHOLD_BYTES = 45 * 1024 * 1024;
-
-/**
- * Package file roles the station uploads to the HUB (when not over the size cap). MUST match
- * HUB_UPLOAD_ROLES in station/hub/src/plan.ts (a test guards against drift). Every other
- * package file is only listed in the verdict report with a link to this screen.
- */
-export const HUB_UPLOAD_ROLES: readonly Role[] = Object.freeze([
-  "plan_dxf",
-  "rooms_csv",
-  "plan_pdf",
-  "spatial_report_pdf",
-  "plan_png",
-]);
-
-/**
- * "In the HUB" cell: the station's publication rule for this file, not live HUB state (the
- * station API exposes no per-file publish state). Upload roles up to the cap are "Uploaded",
- * larger ones "Linked (over 45 MB)" (the design's wording); every other role is "Linked",
- * reachable only through this screen.
- */
-export function hubState(role: Role, bytes: number): string {
-  if (!HUB_UPLOAD_ROLES.includes(role)) {
-    return "Linked";
-  }
-  return bytes > HUB_LINK_THRESHOLD_BYTES ? "Linked (over 45 MB)" : "Uploaded";
-}
-
-/** Decimal sizes as in the design: 1.2 MB, 96 MB, 180 MB. */
+/** Decimal sizes: "999 B", "14 KB", "1.2 MB", "96 MB", "768 MB" (one decimal below 10). */
 export function formatBytes(bytes: number): string {
-  if (bytes < 1000) {
-    return `${bytes} B`;
+  if (!Number.isFinite(bytes) || bytes < 1000) {
+    return `${Math.max(0, Math.round(bytes))} B`;
   }
-  const units = ["kB", "MB", "GB", "TB"];
+  let unit = 0;
   let value = bytes;
-  let unit = "B";
-  for (const next of units) {
-    if (value < 1000) {
-      break;
-    }
+  while (value >= 1000 && unit < UNITS.length - 1) {
     value /= 1000;
-    unit = next;
+    unit += 1;
   }
-  const rounded = value < 10 ? Math.round(value * 10) / 10 : Math.round(value);
-  return `${rounded} ${unit}`;
+  let rounded = value < 10 ? Math.round(value * 10) / 10 : Math.round(value);
+  if (rounded >= 1000 && unit < UNITS.length - 1) {
+    rounded = 1;
+    unit += 1;
+  }
+  return `${rounded} ${UNITS[unit]}`;
 }
 
-/** "9f2c…a41e" */
-export function shortSha(sha256: string): string {
-  return sha256.length <= 8 ? sha256 : `${sha256.slice(0, 4)}…${sha256.slice(-4)}`;
+const GROUPED = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+const ONE_DECIMAL = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
+
+/** "7,520 mm" */
+export function formatMm(valueMm: number): string {
+  return `${GROUPED.format(Math.round(valueMm))} mm`;
 }
 
-/** Every Chapter market is on Eastern Time; times are shown there with the zone named. */
-const TIME_ZONE = "America/New_York";
+/** "807.5 sq ft" */
+export function formatSqFt(squareFeet: number): string {
+  return `${ONE_DECIMAL.format(squareFeet)} sq ft`;
+}
+
+function parse(iso: string): Date | undefined {
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
 
 const DATE_FORMAT = new Intl.DateTimeFormat("en-US", {
   timeZone: TIME_ZONE,
   year: "numeric",
+  month: "short",
+  day: "numeric",
+});
+
+const DAY_FORMAT = new Intl.DateTimeFormat("en-US", {
+  timeZone: TIME_ZONE,
   month: "short",
   day: "numeric",
 });
@@ -185,10 +73,21 @@ const DATE_TIME_FORMAT = new Intl.DateTimeFormat("en-US", {
   timeZoneName: "short",
 });
 
-function parse(iso: string): Date | undefined {
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? undefined : date;
-}
+const TIME_24_FORMAT = new Intl.DateTimeFormat("en-US", {
+  timeZone: TIME_ZONE,
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+const DAY_KEY_FORMAT = new Intl.DateTimeFormat("en-CA", {
+  timeZone: TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+const YEAR_FORMAT = new Intl.DateTimeFormat("en-US", { timeZone: TIME_ZONE, year: "numeric" });
 
 /** "Oct 17, 2026" */
 export function formatDate(iso: string): string {
@@ -196,24 +95,177 @@ export function formatDate(iso: string): string {
   return date === undefined ? iso : DATE_FORMAT.format(date);
 }
 
-/** "Oct 17, 2026, 11:20 AM EDT" */
+/** "Oct 17, 2026, 11:20 AM EDT": the full time, for title attributes. */
 export function formatDateTime(iso: string): string {
   const date = parse(iso);
   return date === undefined ? iso : DATE_TIME_FORMAT.format(date);
 }
 
-/** Label of the capture a file belongs to, from the capture record. */
+/** "14:02" (24 h, Eastern Time). */
+function time24(date: Date): string {
+  return TIME_24_FORMAT.format(date);
+}
+
+/** The New York calendar day of a time, "2026-05-16". */
+function dayKey(date: Date): string {
+  return DAY_KEY_FORMAT.format(date);
+}
+
+/** "May 16, 2026 14:02" (24 h, Eastern Time, no zone). */
+export function formatDateTime24(iso: string): string {
+  const date = parse(iso);
+  return date === undefined ? iso : `${DATE_FORMAT.format(date)} ${time24(date)}`;
+}
+
+/** "May 16 · 13:58", or only "14:01" when on the same New York day as `previous`. */
+export function formatDayTime(iso: string, previous?: string): string {
+  const date = parse(iso);
+  if (date === undefined) {
+    return iso;
+  }
+  const before = previous === undefined ? undefined : parse(previous);
+  if (before !== undefined && dayKey(before) === dayKey(date)) {
+    return time24(date);
+  }
+  return `${DAY_FORMAT.format(date)} · ${time24(date)}`;
+}
+
+/** "Today" when the New York calendar day of `iso` is today's, else "Jan 25, 2025". */
+export function dayLabel(iso: string, now: Date = new Date()): string {
+  const date = parse(iso);
+  if (date === undefined) {
+    return iso;
+  }
+  return dayKey(date) === dayKey(now) ? "Today" : DATE_FORMAT.format(date);
+}
+
+/**
+ * "just now" (under a minute), "{m} min ago", "{h} h ago" (under a day), else the date, without
+ * the year when it is this year.
+ */
+export function updatedAgo(iso: string, now: Date = new Date()): string {
+  const date = parse(iso);
+  if (date === undefined) {
+    return iso;
+  }
+  const seconds = Math.max(0, (now.getTime() - date.getTime()) / 1000);
+  if (seconds < 60) {
+    return "just now";
+  }
+  if (seconds < 3600) {
+    return `${Math.floor(seconds / 60)} min ago`;
+  }
+  if (seconds < 86_400) {
+    return `${Math.floor(seconds / 3600)} h ago`;
+  }
+  return YEAR_FORMAT.format(date) === YEAR_FORMAT.format(now)
+    ? DAY_FORMAT.format(date)
+    : DATE_FORMAT.format(date);
+}
+
+/** "9f2c…a41e" */
+export function shortSha(sha256: string): string {
+  return sha256.length <= 8 ? sha256 : `${sha256.slice(0, 4)}…${sha256.slice(-4)}`;
+}
+
+/** "3f6c2a9e…" */
+export function shortId(uuid: string): string {
+  return uuid.length <= 8 ? uuid : `${uuid.slice(0, 8)}…`;
+}
+
+export function plural(count: number, singular: string, pluralForm = `${singular}s`): string {
+  return `${count} ${count === 1 ? singular : pluralForm}`;
+}
+
+export const MODE_LABEL: Record<CaptureMode, string> = {
+  room: "one room",
+  floor: "whole floor",
+  exterior: "exterior",
+};
+
+/** "whole floor × 1", "whole floor × 2", "whole floor × 1, exterior × 1" */
+export function modeSummary(modes: readonly CaptureMode[]): string {
+  const counts = new Map<CaptureMode, number>();
+  for (const mode of modes) {
+    counts.set(mode, (counts.get(mode) ?? 0) + 1);
+  }
+  return [...counts.entries()].map(([mode, count]) => `${MODE_LABEL[mode]} × ${count}`).join(", ");
+}
+
+/** "floor" when every capture is a whole floor (or nothing is known yet), else "area". */
+export function areaNoun(modes: readonly (CaptureMode | undefined)[]): "floor" | "area" {
+  return modes.every((mode) => mode === undefined || mode === "floor") ? "floor" : "area";
+}
+
+/** "2 floors", "1 floor", or "3 areas" when not every capture is a whole floor. */
+export function areaCount(modes: readonly (CaptureMode | undefined)[]): string {
+  return plural(modes.length, areaNoun(modes));
+}
+
+/** "primary-closet" -> "Primary closet", "floor-1" -> "Floor 1". */
+export function humanizeAreaKey(areaKey: string): string {
+  const words = areaKey.split(/[-_]+/).filter((word) => word.length > 0);
+  const text = words.join(" ");
+  return text.length === 0 ? areaKey : text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** Label of a capture: the capture record's, else the humanised areaKey. */
 export function captureLabel(
   record: CaptureRecord | undefined,
   captureId: string | undefined,
   areaKey: string | undefined,
 ): string | undefined {
   if (captureId === undefined) {
-    return undefined;
+    return areaKey === undefined ? undefined : humanizeAreaKey(areaKey);
   }
   const capture = record?.captures.find((item) => item.captureId === captureId);
-  return capture?.label ?? areaKey;
+  if (capture !== undefined) {
+    return capture.label;
+  }
+  return areaKey === undefined ? undefined : humanizeAreaKey(areaKey);
 }
+
+/** Row label of each package file role (web-review §6.4.6). */
+export const ROLE_LABEL: Record<Role, string> = {
+  plan_dxf: "Plan DXF",
+  rooms_csv: "Rooms CSV",
+  plan_pdf: "Plan sheet PDF",
+  plan_png: "Plan PNG",
+  plan_svg: "Plan SVG",
+  mesh_glb: "Mesh GLB",
+  mesh_obj: "Mesh OBJ",
+  mesh_mtl: "Mesh MTL",
+  texture: "Texture",
+  point_cloud_las: "Point cloud LAS",
+  raw_roomplan_json: "Raw RoomPlan",
+  raw_depth: "Depth",
+  capture_model: "Capture model",
+  photo: "Site photo",
+  field_controls: "Field controls",
+  capture_record: "Capture record",
+  spatial_report_pdf: "Spatial report · phone (retired)",
+};
+
+/** Files card role filter group of each role. */
+export const ROLE_FILTER_GROUP: Record<Role, string> = {
+  plan_dxf: "Plan DXF",
+  rooms_csv: "Rooms CSV",
+  plan_pdf: "Plan sheet PDF",
+  plan_png: "Plan PNG",
+  plan_svg: "Plan SVG",
+  mesh_glb: "Mesh GLB",
+  mesh_obj: "OBJ + MTL",
+  mesh_mtl: "OBJ + MTL",
+  texture: "OBJ + MTL",
+  point_cloud_las: "Point cloud LAS",
+  raw_roomplan_json: "Raw RoomPlan",
+  raw_depth: "Depth",
+  capture_model: "Capture model",
+  photo: "Site photo",
+  field_controls: "Field controls",
+  capture_record: "Capture record",
+  spatial_report_pdf: "Spatial report",
+};
 
 /**
  * File name shown to people: "Floor 1 / plan.dxf" for a capture's file (mesh companions keep
@@ -233,39 +285,30 @@ export function fileDisplayName(
       name = segments.slice(index + 1).join("/");
     }
   }
-  const label = captureLabel(record, captureId, areaKey);
+  const label = captureId === undefined ? undefined : captureLabel(record, captureId, areaKey);
   return label === undefined ? name : `${label} / ${name}`;
 }
 
-/** Display name of a package path, using the package file entry when there is one. */
+const UUID_SEGMENT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/**
+ * Display name of a package path, using the package file entry when there is one. Without it
+ * (a list across packages), a capture file is recognised by the layout's
+ * "{folder}/{areaKey}/{captureId}/{name}" segments and labelled from its areaKey.
+ */
 export function pathDisplayName(
   path: string,
   files: readonly PackageFile[],
   record: CaptureRecord | undefined,
 ): string {
   const file = files.find((item) => item.path === path);
-  return fileDisplayName(path, record, file?.captureId, file?.areaKey);
-}
-
-/** "whole floor × 2" or "whole floor, exterior" */
-export function modeSummary(record: CaptureRecord): string {
-  const counts = new Map<CaptureMode, number>();
-  for (const capture of record.captures) {
-    counts.set(capture.mode, (counts.get(capture.mode) ?? 0) + 1);
+  if (file !== undefined) {
+    return fileDisplayName(path, record, file.captureId, file.areaKey);
   }
-  return [...counts.entries()]
-    .map(([mode, count]) => (count > 1 ? `${MODE_LABEL[mode]} × ${count}` : MODE_LABEL[mode]))
-    .join(", ");
-}
-
-/** "2 floors", "1 floor", or "3 areas" when not every capture is a whole floor. */
-export function areaCount(record: CaptureRecord): string {
-  const count = record.captures.length;
-  const allFloors = record.captures.every((capture) => capture.mode === "floor");
-  const noun = allFloors ? "floor" : "area";
-  return `${count} ${noun}${count === 1 ? "" : "s"}`;
-}
-
-export function plural(count: number, singular: string, pluralForm = `${singular}s`): string {
-  return `${count} ${count === 1 ? singular : pluralForm}`;
+  const segments = path.split("/");
+  const index = segments.findIndex((segment, at) => at >= 2 && UUID_SEGMENT.test(segment));
+  if (index >= 2 && index < segments.length - 1) {
+    return fileDisplayName(path, record, segments[index], segments[index - 1]);
+  }
+  return fileDisplayName(path, record);
 }

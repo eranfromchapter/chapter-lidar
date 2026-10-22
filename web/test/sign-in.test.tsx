@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-// The sign-in page: the review screen's header with the Chapter logo instead of the Auth.js
-// default page, a sign-in button that starts the Entra sign-in, and a return path that never
-// leaves this site.
+// The sign-in page in the HUB look (web-review §6.7, WR-AC10) instead of the Auth.js default
+// page: the HUB wordmark, a card with the sign-in button that starts the Entra sign-in, and a
+// return path that never leaves this site.
 
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -24,22 +24,30 @@ afterEach(() => {
 });
 
 describe("sign-in page", () => {
-  it("shows the Chapter logo, the title and the sign-in button", async () => {
+  it("shows the wordmark, the eyebrow, the card and the sign-in button", async () => {
     const { container } = await renderPage({ callbackUrl: "/packages/abc?x=1" });
-    const header = screen.getByRole("banner");
-    const logo = within(header).getByRole("img", { name: "Chapter Renovation" });
-    expect(logo.getAttribute("src")).toBe("/brand/chapter-logo.svg");
-    expect(header.textContent).toContain("Capture review");
+    const wordmark = screen.getByRole("img", { name: "Chapter" });
+    expect(wordmark.getAttribute("src")).toBe("/brand/chapter-wordmark.svg");
+    expect(screen.getByText("Capture review")).toBeTruthy();
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Sign in");
-    expect(screen.getByRole("button", { name: "Sign in with Microsoft" })).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Use your Chapter Microsoft account to see projects, capture packages, verdicts and files.",
+      ),
+    ).toBeTruthy();
+    const button = screen.getByRole("button", { name: "Sign in with Microsoft" });
+    expect(button.getAttribute("type")).toBe("submit");
     expect(screen.queryByRole("alert")).toBeNull();
+    expect(container.textContent).not.toMatch(/RENOVATION/i);
     const callback = container.querySelector<HTMLInputElement>('input[name="callbackUrl"]');
     expect(callback?.value).toBe("/packages/abc?x=1");
   });
 
   it("says sign-in did not finish after an Auth.js error, without echoing the code", async () => {
     const { container } = await renderPage({ error: "<b>OAuthCallbackError</b>" });
-    expect(within(screen.getByRole("alert")).getByText("Sign-in did not finish")).toBeTruthy();
+    const alert = screen.getByRole("alert");
+    expect(within(alert).getByText("Sign-in did not finish")).toBeTruthy();
+    expect(alert.textContent).toContain("Try again. If it keeps happening, ask a Chapter admin.");
     expect(container.textContent).not.toContain("OAuthCallbackError");
   });
 
