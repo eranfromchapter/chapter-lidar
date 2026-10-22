@@ -378,7 +378,7 @@ Do not start the migration job while it still runs the placeholder image.
 | Workflow             | Trigger                                                                                        | Runner                                | Needs (names only)                                                                                                                                                                                                               |
 | -------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ci.yml` (job `ci`)  | push, every branch                                                                             | ubuntu-24.04                          | no secrets: format, lint (eslint + secretlint), typecheck, Swift 6, poppler-utils, `npm test`, export verification                                                                                                               |
-| `ios.yml`            | push, every branch                                                                             | macos-15, Xcode 26.3, XcodeGen 2.46.0 | no secrets: one job per package and `App`                                                                                                                                                                                        |
+| `ios.yml`            | push, every branch                                                                             | macos-15, Xcode 26.3, XcodeGen 2.46.0 | no secrets: one job per package and `App`; package tests on the simulator `scripts/snapshot-simulator.sh` picks                                                                                                                  |
 | `web-e2e.yml`        | push touching `web/**`, `contract/**`, `fixtures/**`, `station/checks/**`, `package-lock.json` | ubuntu-24.04                          | no secrets; Playwright against `web/e2e/mock-station.ts`                                                                                                                                                                         |
 | `testflight.yml`     | manual                                                                                         | macos-15, Xcode 26.3                  | environment `testflight`: variable `APPLE_TEAM_ID`; secrets `APP_STORE_CONNECT_API_KEY_ID`, `APP_STORE_CONNECT_API_ISSUER_ID`, `APP_STORE_CONNECT_API_KEY_P8`. Builds the **standalone** app, bundle `com.hellochapter.capture`. |
 | `deploy-station.yml` | push to `main` → staging; manual with `staging` or `production` (production only from `main`)  | ubuntu-24.04                          | environment `staging` / `production` variables `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (OIDC, no secrets)                                                                                                  |
@@ -422,8 +422,9 @@ The workflow does not run the 0011 backfill (section 6).
   `v2/main` until the merge); v2 is merged into `main` in phase 3, before the production station
   deploy; the production web project is connected only in phase 4.
 - If the `main` ruleset of `BRANCH_PROTECTION.md` section 2 is set, that merge also needs the
-  required `ios.yml` checks (`App` and the package jobs, `BRANCH_PROTECTION.md:44`) green. On
-  `add2d74` they fail ([05, section 3.1](05-status-open-items.md#31-github-actions)).
+  required `ios.yml` checks (`App` and the package jobs, `BRANCH_PROTECTION.md:44`) green. They
+  failed on `add2d74` and pass since the CI fix: all 9 jobs green on `v2/ci-fix` `5104ca6` (run
+  `39851260036`, [05, section 3.1](05-status-open-items.md#31-github-actions)).
 
 ## 9. Deploy order
 

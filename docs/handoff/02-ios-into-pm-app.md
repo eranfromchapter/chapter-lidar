@@ -33,11 +33,12 @@ says so.
 6. Entra values: client id, tenant id, station API scope, `capture` role assignments (section 10).
 7. Training and production station URLs (https).
 
-**Blocker in the capture code to fix first:**
+**Xcode for the capture code:**
 
-- `ios/App/Sources/App/Views/ModelStyle.swift` lines 2265, 2331, 2495 do not compile on Xcode 26.3
-  (CI runs `39707269821` and `39807980031`, the latter on `add2d74`). It compiled on Xcode 27.2
-  beta (27B5038j). It must compile on the release Xcode the PM app ships with
+- The App target and every capture package build and pass their tests on Xcode 26.3, the CI pin
+  (`ios` run `39851260036` on `5104ca6`), and the App compiles on Xcode 27.2 beta (27B5038j). The
+  former Xcode 26.3 blocker in `ios/App/Sources/App/Views/ModelStyle.swift` is fixed (`f9fb781`).
+  Build it with the release Xcode the PM app ships with before porting
   ([01, section 3](01-repo-and-mac-setup.md#xcode-version-read-this-first)).
 
 ## 3. What the capture code needs from the host
@@ -127,7 +128,7 @@ In the App target (`ios/App/Sources/App/`), port into the PM app:
 | `Views/PackageScreens.swift`                              | 995   | Package ready, Package status, Verdict received, Revision n                                                         | Port.                                                                                         |
 | `Views/FloorplanView.swift`                               | 318   | The colour Floorplan on the phone (stays as approved)                                                               | Port unchanged.                                                                               |
 | `Views/ScanViewer.swift`                                  | 353   | One floor's 3D model and plan (RoomPlan, SceneKit)                                                                  | Port.                                                                                         |
-| `Views/ModelStyle.swift`                                  | 2,797 | Restyles the RoomPlan USDZ in SceneKit                                                                              | Port. **Fails to compile on Xcode 26.3** (section 2).                                         |
+| `Views/ModelStyle.swift`                                  | 2,813 | Restyles the RoomPlan USDZ in SceneKit                                                                              | Port. Type-checks on Xcode 26.3 since `f9fb781` (section 2).                                  |
 | `Debug/UITest*.swift`, `Debug/FieldTestEnvironment.swift` | 609   | UI-test replay and field-test modes, `#if DEBUG`                                                                    | Debug only (`ios/project.yml:72-74`). **Required in Debug** as ported (see below the table).  |
 
 The Debug files are not optional as the code stands. Other ported files use them inside
@@ -477,8 +478,8 @@ phone needs:
    normally exempt; the account holder must answer.
 8. **iPad.** If the PM app ships on iPad, the capture screens run there too. The gate allows an
    iPad Pro with LiDAR.
-9. **Build.** The update must be built with a release Xcode that compiles `ModelStyle.swift`
-   (section 2).
+9. **Build.** The update must be built with a release Xcode (**Verify**). The capture code builds
+   on Xcode 26.3 in CI; check it on the Xcode chosen for the App Store build (section 2).
 10. **Station first.** The production station must accept manifest and capture record 1.1.0 before
     the update is released, and must be up for App Review.
 
@@ -538,7 +539,8 @@ The repo has no React Native or Flutter code. The capture is native Swift becaus
 
 **Phase 3 update (capture on):**
 
-- [ ] `ModelStyle.swift` compiles on the release Xcode used for the App Store build; CI pins moved.
+- [ ] The capture code builds and its tests pass on the release Xcode used for the App Store build;
+      the Xcode pins in `ios.yml` and `testflight.yml` match it.
 - [ ] PM app deployment target is iOS 17.0 or later.
 - [ ] All packages of section 4 linked; App files of section 5 ported; the app builds in Release.
 - [ ] Navigation bar, tint and colour scheme of the rest of the PM app are unchanged (section 6).

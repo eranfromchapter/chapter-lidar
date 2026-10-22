@@ -1,29 +1,38 @@
 # 05 · Status and open items
 
-State on Oct 22, 2026, at `v2/main` commit `add2d74`. Sources: `git`, `gh run list`, the CI logs,
-the build logs of the local runs on the owner's Mac, `docs/waves/design/DESIGN.md`,
-`docs/waves/specs/F*.md`, `plan.md`.
+State on Oct 22, 2026, at `v2/main` at or after the merge of `v2/ci-fix` (`34b06c3`; its history
+includes `5104ca6`). Sources: `git`, `gh run list`, the CI logs, the build logs of the local runs
+on the owner's Mac, `docs/waves/design/DESIGN.md`, `docs/waves/specs/F*.md`, `plan.md`.
 
-**One line:** v2 is built, integrated and pushed (`v2/main` at `add2d74`). On GitHub, `ci` (Node,
-Swift on Linux, export validators in Docker, report snapshots on Linux) and `web-e2e` are green;
-`ios` is red because the App compiles only with the Xcode 27.2 beta and the runner has no iOS 26.0
-simulator for the package tests. The integrated worker e2e last timed out, the compass device
-tests never ran, nothing is deployed, and the HUB, Apple, Entra, Azure and PM app inputs are still
-to come.
+**One line:** v2 is built and integrated on `v2/main`, with the iOS CI fix (`v2/ci-fix`, up to
+`5104ca6`) and this kit. On GitHub, `ci` (Node, Swift on Linux, export validators in Docker,
+report snapshots on Linux), `ios` (App build and UI tests on Xcode 26.3, every package's simulator
+tests) and `web-e2e` are green. The integrated worker e2e last timed out, the compass device tests
+never ran, nothing is deployed, and the HUB, Apple, Entra, Azure and PM app inputs are still to
+come.
 
 ## 1. Branches
 
-| Branch                  | Head      | On GitHub                              | What it is                                                           |
-| ----------------------- | --------- | -------------------------------------- | -------------------------------------------------------------------- |
-| `main`                  | `3e22c19` | yes                                    | v1 build                                                             |
-| `fix/ios-ci-first-push` | `80182ea` | yes, **PR #1** to `main`, open         | iOS CI fixes, field-test mode; already inside `v2/main` (superseded) |
-| `feat/floorplan-report` | `05f16e8` | yes                                    | floorplan-report phases, Chapter brand, rename rooms; base of v2     |
-| `v2/main`               | `add2d74` | yes (pushed Oct 22, 2026, 09:46 -0600) | Design v2 integration branch: the code to hand off                   |
-| `v2/handoff`            | this kit  | no                                     | `v2/main` plus `docs/handoff/`                                       |
+| Branch                  | Head                       | On GitHub                                                       | What it is                                                                     |
+| ----------------------- | -------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `main`                  | `3e22c19`                  | yes                                                             | v1 build                                                                       |
+| `fix/ios-ci-first-push` | `80182ea`                  | yes, **PR #1** to `main`, open                                  | iOS CI fixes, field-test mode; already inside `v2/main` (superseded)           |
+| `feat/floorplan-report` | `05f16e8`                  | yes                                                             | floorplan-report phases, Chapter brand, rename rooms; base of v2               |
+| `v2/main`               | the merge of `v2/handoff`  | yes (`add2d74` since Oct 22, 2026, 09:46 -0600; then the merge) | Design v2 integration branch: the code to hand off, with the CI fix and this kit |
+| `v2/ci-fix`             | `5104ca6`                  | yes                                                             | iOS CI fix on `add2d74`, 7 commits `f9fb781`..`5104ca6`                         |
+| `v2/handoff`            | this kit, after `34b06c3`  | through `v2/main`                                               | `add2d74` plus `docs/handoff/` and the merge of `v2/ci-fix` (`34b06c3`)         |
 
 The push of `add2d74` brought the 16 commits after `2ca19b0` to GitHub: the T5 plan sheet merge
 (`cb71f62`), the T4 spatial report merge (`dd635d1`), parity fixes (`cc5a056`, `03cdeef`), docs
 (`f11c972`, `f53c1bc`, `5527e29`) and report fixes (`9c7d45d`, `add2d74`).
+
+`v2/ci-fix` makes the `ios` workflow pass on Xcode 26.3 and changes nothing a user sees:
+`ModelStyle.swift` door lines in typed steps (`f9fb781`) and PlanExport `MetricsTests` in typed
+steps (`dd48159`), both with bit-identical values; `scripts/snapshot-simulator.sh` for the snapshot
+runtime (`40edbc0`), its boot retry (`c8a6026`) and its download fallback (`5104ca6`); two App UI
+tests that tolerate a slow runner (`96924f2`, `ac0e3a9`; `-ChapterUITestScanStep` now accepts up
+to 60 s, `ios/App/AppCore/Sources/AppCore/LaunchMode.swift:133`). No snapshot reference was
+recorded again.
 
 ## 2. What is built (v2)
 
@@ -63,19 +72,24 @@ Source of truth: `docs/waves/design/DESIGN.md` section "Design v2 (Oct 21, 2026)
 
 | Workflow       | Branch, commit                    | Date (UTC)   | Result                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | -------------- | --------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ios            | `v2/ci-fix` `5104ca6`             | Oct 22 20:43 | **success** (run `39851260036`), all 9 jobs on Xcode 26.3. App: build and 16 UI tests (`OS=latest`). Package tests on an iPhone 17 Pro with iOS 26.0.1 (23A8464) from `scripts/snapshot-simulator.sh`, 0 failures: CaptureContract 71, ChapterUI 58 (1 skipped) + 18 app-hosted snapshots, CaptureCore 159 + 151 (2 skipped) + 42, PlanExport 207, MeshExport 36, FieldKit 48 + 122 + 18, PackageKit 67 (1 skipped), StationClient 45. In 5 of the 8 package jobs the first simulator boot hung at "Waiting on BackBoard" and the second finished. |
+| ci             | `v2/ci-fix` `5104ca6`             | Oct 22 20:43 | **success** (run `39851260271`): format, lint, typecheck, Node tests, Linux `swift test`, "Verify export files". |
 | ci             | `v2/main` `add2d74`               | Oct 22 15:46 | **success** (run `39807980144`): format, lint, typecheck; Node tests, 0 failed (contract 151, fixtures 119, station-api 514, station-checks 298, dev-idp 51, station-hub 219 including the 19 spatial report snapshot pages with pdftoppm 24.02.0, station-worker 23, web 290); Linux `swift test`, all 9 packages passed (AppCore 184 tests, 0 failures); "Verify export files" in Docker: dxf 5, pdf 26, preview 70, gltf 13, las 11 files, all passed. |
-| ios            | `v2/main` `add2d74`               | Oct 22 15:46 | **failure** (run `39807980031`): App job, `ModelStyle.swift:2265, 2331, 2495` type-check timeouts on Xcode 26.3. Every package job builds, then its tests stop: no iPhone 17 Pro simulator with iOS 26.0 on the runner (it has 26.0.1, 26.1, 26.2).                                                                                                                                                                                                       |
+| ios            | `v2/main` `add2d74`               | Oct 22 15:46 | failure (run `39807980031`), both causes fixed by `v2/ci-fix` (section 5): the App job's `ModelStyle.swift` type-check timeouts on Xcode 26.3, and the package tests' fixed `OS=26.0` destination, which matched no simulator of the runner image (it had 26.0.1, 26.1, 26.2). |
 | web-e2e        | `v2/main` `add2d74`               | Oct 22 15:46 | success (run `39807979797`): 25 e2e tests passed                                                                                                                                                                                                                                                                                                                                                                                                          |
 | ci             | `v2/main` `2ca19b0`               | Oct 22 01:42 | failure: Linux `swift test` of `ios/App/AppCore`, 184 tests, 1 failure: `PackagePipelineTests.testSealUploadAndStationConfirmationKeepOriginalsByteIdentical` (`XCTUnwrap` of `StationStatusCache`, `PackagePipelineTests.swift:190`). It did not happen again on `add2d74`. "Verify export files" skipped.                                                                                                                                               |
 | ios            | `v2/main` `2ca19b0`               | Oct 22 01:42 | failure: the same two causes as on `add2d74`                                                                                                                                                                                                                                                                                                                                                                                                              |
 | web-e2e        | `v2/main` `2ca19b0`               | Oct 22 01:42 | success                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | ci             | `feat/floorplan-report` `05f16e8` | Oct 21 03:51 | success, including "Verify export files"                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| ios            | `fix/ios-ci-first-push` `80182ea` | Oct 18 19:40 | success: **the last green ios run**                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ios            | `fix/ios-ci-first-push` `80182ea` | Oct 18 19:40 | success: the last green `ios` run before `v2/ci-fix`                                                                                                                                                                                                                                                                                                                                                                                                      |
 | deploy-station | `main` `3e22c19`                  | Oct 18 13:56 | failure: GitHub environment `staging` has no `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`                                                                                                                                                                                                                                                                                                                                                |
 | testflight     | —                                 | —            | never run                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
-Times are UTC. The `ios` run on `feat/floorplan-report` `05f16e8` (Oct 21) also failed; the last
-green `ios` run is the one on `80182ea`.
+Times are UTC. The `ios` run on `feat/floorplan-report` `05f16e8` (Oct 21) also failed. Runs on
+the earlier `v2/ci-fix` commits are cited in their commit messages. `web-e2e` runs only on pushes
+that touch `web/**`, `contract/**`, `fixtures/**`, `station/checks/**` or `package-lock.json`
+(`.github/workflows/web-e2e.yml:9-18`); `v2/ci-fix` touches none, so its last run is the one on
+`add2d74`.
 
 ### 3.2 Local runs on the owner's Mac (Oct 21-22)
 
@@ -92,12 +106,12 @@ green `ios` run is the one on `80182ea`.
 ## 4. Not run or not verified
 
 - Docker-based export validators **locally** (Docker is not installed on the owner's Mac). On
-  GitHub CI they ran on `add2d74` and passed (section 3.1).
+  GitHub CI they ran on `add2d74` and on `5104ca6` and passed (section 3.1).
 - Plan sheet golden reference render in Docker (`scripts/verify/plan-sheet-snapshot.sh`); CI does
   not run this script.
 - App UI tests and the package simulator suites after T4/T5: not run locally after T5 changed
-  PlanExport (section 3.2), and on GitHub they fail before testing (App does not compile on
-  Xcode 26.3; no iOS 26.0 simulator for the packages).
+  PlanExport (section 3.2). On GitHub they all passed on `5104ca6` with Xcode 26.3 (run
+  `39851260036`, section 3.1); no local run used Xcode 26.3.
 - Worker e2e on the integrated tree (failed, section 3.2).
 - PackageKit `E2EUploadTests` against a local station.
 - Real-scan tests (`CHAPTER_REAL_ROOMPLAN_DIR` unset).
@@ -112,8 +126,8 @@ green `ios` run is the one on `80182ea`.
 
 | #   | Issue                                                                                                                                                                                                                                           | Where                                                                                                  |
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| 1   | **App does not compile on Xcode 26.3** (CI pin). Compiles on Xcode 27.2 beta. App Store builds need a release Xcode (**Verify**).                                                                                                               | `ios/App/Sources/App/Views/ModelStyle.swift:2265,2331,2495`                                            |
-| 2   | **iOS CI simulator pin.** `SNAPSHOT_SIMULATOR_DESTINATION` wants iOS 26.0; the runner has 26.0.1, 26.1, 26.2, so every package job fails (still so on `add2d74`). Moving it means recording phone snapshots again.                              | `.github/workflows/ios.yml:45-49`                                                                      |
+| 1   | **Fixed:** the App did not compile on Xcode 26.3 (type-check timeouts). `ModelStyle.swift` and PlanExport `MetricsTests.swift` now use typed steps with identical values; CI is the only proof on 26.3 (run `39851260036`). | `ios/App/Sources/App/Views/ModelStyle.swift`, branch `v2/ci-fix` |
+| 2   | **Fixed:** the snapshot tests wanted iOS 26.0, which the runner lacked. `scripts/snapshot-simulator.sh` picks the reference runtime (26.0, else newest 26.0.x), downloads 26.0 if missing and retries hung first boots. A boot that hangs on all three attempts would still fail the job. | `scripts/snapshot-simulator.sh`, `.github/workflows/ios.yml` |
 | 3   | **AppCore test failed once on Linux** (`StationStatusCache` nil) on `2ca19b0`; it passed on `add2d74` (184 tests, 0 failures) and on macOS. Root cause not recorded.                                                                            | `ios/App/AppCore/Tests/AppCoreTests/PackagePipelineTests.swift:190`                                    |
 | 4   | **Worker e2e timeout** on the integrated tree.                                                                                                                                                                                                  | `station/worker/test/e2e/pipeline.e2e.ts`                                                              |
 | 5   | **`REVIEW_BASE_URL` not set by `infra/`**; the worker exits without it. `HUB_WEB_DEAL_URL_TEMPLATE` not set either.                                                                                                                             | `infra/modules/containerapps.bicep:137-221`, `station/worker/src/config.ts:296-302`, `plan.md:497-498` |
@@ -175,8 +189,7 @@ All seven are still open questions to the owner. The build ships the default
    may see every other production deal (the station does not filter deals per user; 02, section
    13).
 5. App Privacy questionnaire and export-compliance answers (account holder).
-6. A release Xcode chosen for the App Store build; someone to fix `ModelStyle.swift` on it and
-   move the CI pins.
+6. A release Xcode chosen for the App Store build.
 7. A LiDAR iPhone (or iPad Pro) for development, the compass device tests D0/D1 and a recorded scan.
 8. For the standalone app's `testflight.yml` only (if still used): environment `testflight`
    variable `APPLE_TEAM_ID`, secrets `APP_STORE_CONNECT_API_KEY_ID`,

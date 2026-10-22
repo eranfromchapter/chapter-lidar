@@ -10,10 +10,12 @@ git clone https://github.com/eranfromchapter/chapter-lidar.git
 cd chapter-lidar
 git switch v2/main
 git log --oneline -1
+git merge-base --is-ancestor 5104ca6 HEAD && echo "CI fix included"
 ```
 
-- Expect `add2d74` or later at the top (GitHub has had `add2d74` since Oct 22, 2026, 09:46 -0600;
-  see [README](README.md#repo-and-branch)).
+- Expect the merge of `v2/handoff` (this kit) or later at the top. Its history includes `add2d74`
+  (on GitHub since Oct 22, 2026, 09:46 -0600) and the iOS CI fix `v2/ci-fix` up to `5104ca6`,
+  merged as `34b06c3`; see [README](README.md#repo-and-branch).
 - `main` is the v1 build. Do not start from it.
 - The build agents also left local track branches (`v2/t0-contract` to `v2/t10-app-shell` and
   their `-fix` branches). They are merged into `v2/main` and are not on GitHub.
@@ -32,7 +34,7 @@ git log --oneline -1
 | `infra/`                                                                            | Azure Bicep (`main.bicep`, `modules/`, `params/staging.bicepparam`, `params/production.bicepparam`)                                                                                              |
 | `fixtures/`                                                                         | Test fixtures and their generator (npm workspace `@chapter/fixtures`)                                                                                                                            |
 | `tools/`                                                                            | `brand/` (logo and font generator), `plan-render/` (macOS Floorplan renderer), `scan-browser/` (field-test file browser)                                                                         |
-| `scripts/`                                                                          | `swift-test.sh`, `bootstrap-swift.sh`, `ensure-simulator.sh`, `verify-exports.sh`, `verify/`, `backfill-review-read-model.ts`, `workspaces.mjs`, `wait-workflow.sh`                              |
+| `scripts/`                                                                          | `swift-test.sh`, `bootstrap-swift.sh`, `ensure-simulator.sh`, `snapshot-simulator.sh`, `verify-exports.sh`, `verify/`, `backfill-review-read-model.ts`, `workspaces.mjs`, `wait-workflow.sh`     |
 | `.github/workflows/`                                                                | `ci.yml`, `ios.yml`, `web-e2e.yml`, `testflight.yml`, `deploy-station.yml`                                                                                                                       |
 | `docs/`                                                                             | Design (`waves/design/DESIGN.md`), feature specs (`waves/specs/F1.md`-`F13.md`), architecture, QA notes, this kit                                                                                |
 
@@ -42,11 +44,11 @@ npm workspaces: `contract/ts`, `fixtures/generator`, `station/*`, `web` (`packag
 
 | Tool                  | Version                                                                                                                       | Needed for                                                                | Source                                                                                   |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Xcode                 | see "Xcode version" below                                                                                                     | iOS packages, the app, simulator tests                                    | `.github/workflows/ios.yml:42-43`, `testflight.yml:64-65`                                |
+| Xcode                 | see "Xcode version" below                                                                                                     | iOS packages, the app, simulator tests                                    | `.github/workflows/ios.yml:44-45`, `testflight.yml:64-65`                                |
 | iOS deployment target | 17.0                                                                                                                          | every capture Swift package and the app                                   | `ios/project.yml:12-13,21`; the 9 capture manifests declare `.iOS(.v17)`, `.macOS(.v14)` |
 | Swift tools version   | 6.0 (`// swift-tools-version: 6.0` in all 10 manifests: 9 capture packages and `tools/plan-render`)                           | the Swift packages                                                        | line 1 of each `Package.swift`; `tools/plan-render` declares `.macOS(.v14)` only         |
-| XcodeGen              | 2.46.0, SHA-256 `4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806`                                            | generating `ios/ChapterCapture.xcodeproj`                                 | `.github/workflows/ios.yml:50-51`                                                        |
-| Simulator             | iPhone 17 Pro. UI tests on `OS=latest`; snapshot tests on iOS **26.0** (references are recorded there)                        | simulator tests                                                           | `.github/workflows/ios.yml:44-49`, `ios/Packages/ChapterUI/README.md:17-18`              |
+| XcodeGen              | 2.46.0, SHA-256 `4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806`                                            | generating `ios/ChapterCapture.xcodeproj`                                 | `.github/workflows/ios.yml:55-56`                                                        |
+| Simulator             | iPhone 17 Pro. UI tests on `OS=latest`; package and snapshot tests on iOS **26.0** (references are recorded there) or a 26.0.x point release | simulator tests                                                           | `.github/workflows/ios.yml:46-54`, `ios/Packages/ChapterUI/README.md:17-19`              |
 | MSAL (Swift package)  | `exactVersion: 2.16.0`, `https://github.com/AzureAD/microsoft-authentication-library-for-objc`                                | Entra sign-in in the app                                                  | `ios/project.yml:43-45`                                                                  |
 | Node.js               | 22 (`.nvmrc`); engines `>=22.13.0`                                                                                            | station, web, contract, fixtures, root scripts                            | `.nvmrc`, `package.json:7-10`                                                            |
 | npm                   | `>=10`                                                                                                                        | same                                                                      | `package.json:9`                                                                         |
@@ -63,49 +65,62 @@ Pinned Docker images used by the scripts: `postgres:16.15-bookworm`,
 
 ### Xcode version (read this first)
 
-- CI pins Xcode **26.3** on the `macos-15` runner (`.github/workflows/ios.yml:42-43`). The
+- CI pins Xcode **26.3** on the `macos-15` runner (`.github/workflows/ios.yml:44-45`). The
   TestFlight workflow pins the same version; its comment says "App Store Connect requires an Xcode
   26 SDK build" (`.github/workflows/testflight.yml:64-65`).
-- The App target **does not compile on Xcode 26.3.**
-  `ios/App/Sources/App/Views/ModelStyle.swift` lines 2265, 2331 and 2495 fail with "the compiler
-  is unable to type-check this expression in reasonable time" (CI runs `39707269821` on `2ca19b0`
-  and `39807980031` on `add2d74`). The package jobs build; the App job fails.
-- Every local v2 build used **Xcode 27.2 beta (27B5038j)** on the owner's Mac (macOS 27.0), and
-  the App compiled there. The owner's Mac also has Xcode 27.1 (27A9275); the App was not built
-  with it.
+- The App target and every package build on Xcode 26.3 and pass their tests there (`ios` run
+  `39851260036` on `5104ca6`). Before `v2/ci-fix` the App and PlanExport's `MetricsTests` did not
+  type-check "in reasonable time" on 26.3; the door lines of `ModelStyle.swift` and the two test
+  expressions are now computed in typed steps with bit-identical values (`f9fb781`, `dd48159`;
+  `ios/App/Sources/App/Views/ModelStyle.swift:2249-2258`).
+- Every local v2 build used **Xcode 27.2 beta (27B5038j)** on the owner's Mac (macOS 27.0); the
+  App compiles there too. The owner's Mac also has Xcode 27.1 (27A9275); the App was not built
+  with it. No local build used Xcode 26.3: CI is the only proof for it.
 - **Verify:** App Store builds are normally made with a release (non-beta) Xcode.
-- **First task for the iOS developer:** pick the release Xcode the PM app will ship with, make
-  `ModelStyle.swift` compile on it (split the three expressions), and move the CI pins in
-  `ios.yml` and `testflight.yml` to it. Moving the snapshot simulator pin means recording the
-  phone snapshots again (`TEST_RUNNER_RECORD_SNAPSHOTS=1`, `ios/Packages/ChapterUI/README.md:23-34`).
+- **First task for the iOS developer:** pick the release Xcode the PM app will ship with, build
+  the App and run the tests on it, and move the Xcode pins in `ios.yml` and `testflight.yml` to it
+  if it is not 26.3. The phone snapshots stay on iOS 26.0
+  (`ios/Packages/ChapterUI/Sources/ChapterUISnapshotTesting/ChapterSnapshot.swift:32`); moving
+  that version means recording them again (`TEST_RUNNER_RECORD_SNAPSHOTS=1`,
+  `ios/Packages/ChapterUI/README.md:24-37`).
 - Use `xcode-select` or `DEVELOPER_DIR` to choose the Xcode, as CI does
-  (`.github/workflows/ios.yml:43`).
+  (`.github/workflows/ios.yml:45`).
 
 ### 3.1 Install on a clean Mac
 
 The repo pins versions but has no install script for a Mac (no Brewfile, `.tool-versions` or
 `requirements.txt`). Steps marked **Verify** are Apple, Docker or vendor tooling, not repo facts.
 
-1. **Xcode.** Install the Xcode chosen above. The only Xcode that compiles the App today is
-   Xcode 27.2 beta (27B5038j), a beta from the Apple Developer downloads page, which needs an
-   Apple Developer account (**Verify**; **Input needed**: whose account). Select it:
+1. **Xcode.** Install the Xcode chosen above. The App builds with Xcode 26.3 (the CI pin) and with
+   Xcode 27.2 beta (27B5038j). Betas and older releases come from the Apple Developer downloads
+   page, which needs an Apple Developer account (**Verify**; **Input needed**: whose account).
+   Select it:
 
    ```sh
    sudo xcode-select -s /Applications/<Xcode name>.app/Contents/Developer   # or: export DEVELOPER_DIR=...
    xcodebuild -version
    ```
 
-2. **iOS 26.0 simulator runtime.** The package tests and the app-hosted snapshot tests run on
-   `iPhone 17 Pro, OS=26.0`, because the phone snapshots were recorded there
-   (`.github/workflows/ios.yml:45-49`). A new Xcode 27.x install brings its own iOS runtime, not
-   iOS 26.0 (**Verify**). Download it in Xcode (Settings > Components) or with
-   `xcodebuild -downloadPlatform iOS -buildVersion 26.0` (**Verify** the exact form for your
-   Xcode). `scripts/ensure-simulator.sh` only waits for the device or creates it on the
-   **newest** installed runtime; it downloads no runtime (`scripts/ensure-simulator.sh:2-7,34-37`).
-   Check with `xcrun simctl list runtimes`. UI tests use `OS=latest` and need no extra runtime
-   (`ios.yml:44`).
+2. **iOS 26.0 simulator runtime.** The package tests and the app-hosted snapshot tests run on an
+   iPhone 17 Pro with iOS 26.0, where the phone snapshots were recorded, or a 26.0.x point release
+   of it (`.github/workflows/ios.yml:48-54`). `scripts/snapshot-simulator.sh` installs it when
+   missing (section 7.2): it takes iOS 26.0, else the newest installed 26.0.x, and otherwise
+   downloads iOS 26.0 (7.5 GB on the runner) and adds it (`scripts/snapshot-simulator.sh:1-32`).
+   A new Xcode 27.x install brings its own iOS runtime, not 26.0 (**Verify**). Manual install,
+   if the script's download fails: Xcode > Settings > Components, or the two commands the script
+   runs (`scripts/snapshot-simulator.sh:86-101`; checked with Xcode 26.3 on the runner, **Verify**
+   with Xcode 27.x; `universal` instead of `arm64` on an Intel Mac):
 
-3. **XcodeGen 2.46.0**, the same checksum-checked download as CI (`.github/workflows/ios.yml:50-51,235-245`),
+   ```sh
+   mkdir -p ~/Downloads/ios-26.0
+   xcodebuild -downloadPlatform iOS -buildVersion 26.0 -architectureVariant arm64 -exportPath ~/Downloads/ios-26.0
+   xcrun simctl runtime add ~/Downloads/ios-26.0/<downloaded>.dmg
+   xcrun simctl list runtimes      # iOS 26.0 (or 26.0.x) must be listed
+   ```
+
+   UI tests use `OS=latest` and need no extra runtime (`ios.yml:47`).
+
+3. **XcodeGen 2.46.0**, the same checksum-checked download as CI (`.github/workflows/ios.yml:55-56,245-255`),
    into a folder of your choice. Homebrew installs whatever version is current, not 2.46.0.
 
    ```sh
@@ -133,8 +148,8 @@ The repo pins versions but has no install script for a Mac (no Brewfile, `.tool-
    (`.github/workflows/web-e2e.yml:51-52`), after `npm ci`.
 7. **poppler** for `pdftoppm` (station report snapshot tests; they skip locally without it).
    On a Mac, for example `brew install poppler` (**Verify**).
-8. **jq**, used by `scripts/ensure-simulator.sh:34-37` (**Verify** whether your macOS has it;
-   otherwise `brew install jq`).
+8. **jq**, used by `scripts/ensure-simulator.sh:34-37` and `scripts/snapshot-simulator.sh:57-66`
+   (**Verify** whether your macOS has it; otherwise `brew install jq`).
 9. **Python 3 with fontTools 4.62.1**, only to regenerate brand assets
    (`tools/brand/generate_plan_brand.py:20-24`; another fontTools version may write other bytes).
    For example, outside the repo: `python3 -m venv ~/.venvs/chapter-brand` and
@@ -282,13 +297,24 @@ bash scripts/swift-test.sh                              # every package; skips a
 
 (`ios/App/README.md:69-74`, `scripts/swift-test.sh:1-14`)
 
-On the simulator, as CI does (`.github/workflows/ios.yml:117-166`): in each package folder, use
-scheme `<Name>-Package` when Xcode generates it, otherwise `<Name>`:
+On the simulator, as CI does (`.github/workflows/ios.yml:122-175`). First, from the repo root,
+get the snapshot simulator. `scripts/snapshot-simulator.sh` prints its destination,
+`platform=iOS Simulator,id=<UDID>`, on stdout and logs to stderr
+(`scripts/snapshot-simulator.sh:1-32`):
+
+```sh
+DESTINATION="$(scripts/snapshot-simulator.sh)"     # default device "iPhone 17 Pro"; ios.yml passes it by name
+echo "$DESTINATION"
+```
+
+Then, in each package folder, use scheme `<Name>-Package` when Xcode generates it, otherwise
+`<Name>`:
 
 ```sh
 cd ios/Packages/ChapterUI
 xcodebuild build -scheme ChapterUI-Package -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO
-xcodebuild test -scheme ChapterUI-Package -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.0'
+xcodebuild test -scheme ChapterUI-Package -destination "$DESTINATION"
+cd -
 ```
 
 App-hosted snapshot tests (from the repo root):
@@ -296,21 +322,34 @@ App-hosted snapshot tests (from the repo root):
 ```sh
 xcodegen generate --spec ios/project.yml
 xcodebuild test -project ios/ChapterCapture.xcodeproj -scheme ChapterUISnapshots \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.0'
+  -destination "$DESTINATION"
 ```
 
-- `OS=26.0` needs the iOS 26.0 simulator runtime installed (section 3.1, step 2). Without it
-  `xcodebuild` stops with "Unable to find a device matching the provided destination specifier",
-  as on the GitHub runner (run `39807980031`). On another iOS version the phone snapshots differ by
-  more than the tolerance (`.github/workflows/ios.yml:45-48`).
+- The script reads the reference version from
+  `ios/Packages/ChapterUI/Sources/ChapterUISnapshotTesting/ChapterSnapshot.swift:32` (26.0),
+  takes the iOS 26.0 runtime, else the newest installed 26.0.x, else downloads iOS 26.0 (section
+  3.1, step 2). It never falls back to another iOS version: on another version the phone snapshots
+  differ by more than the tolerance (`.github/workflows/ios.yml:48-54`). It creates the iPhone 17
+  Pro on that runtime when missing and boots it, at most 3 attempts (the third on an erased
+  device), because a first boot of iOS 26.0.1 often hangs at "Waiting on BackBoard"
+  (`scripts/snapshot-simulator.sh:165-218`). Exit code 1: no runtime found or installed, or no
+  finished boot.
+- Settings (`scripts/snapshot-simulator.sh:27-32`): `SNAPSHOT_IOS_VERSION` (another reference
+  version), `SIMULATOR_WAIT_SECONDS` (default 240), `SIMULATOR_BOOT_SECONDS` (default 180 per
+  boot attempt).
+- Fallback without the script: install iOS 26.0 by hand (section 3.1, step 2) and use
+  `-destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.0'`
+  (`ios/Packages/ChapterUI/README.md:24-37`). Without that runtime `xcodebuild` stops with "Unable
+  to find a device matching the provided destination specifier".
 - Record snapshots again with `TEST_RUNNER_RECORD_SNAPSHOTS=1` in front of `xcodebuild test`
-  (`ios/Packages/ChapterUI/README.md:23-34`).
-- `scripts/ensure-simulator.sh "iPhone 17 Pro"` looks for the device by name on any runtime and
-  otherwise creates it on the newest installed iOS runtime (`scripts/ensure-simulator.sh:16-37`).
-  It neither downloads the iOS 26.0 runtime nor makes sure an iOS 26.0 device exists; check with
-  `xcrun simctl list devices`.
+  (`ios/Packages/ChapterUI/README.md:24-37`).
+- `scripts/ensure-simulator.sh "iPhone 17 Pro"`, which the App job runs before the UI tests on
+  `OS=latest` (`.github/workflows/ios.yml:284-286`), looks for the device by name on any runtime
+  and otherwise creates it on the newest installed iOS runtime (`scripts/ensure-simulator.sh:16-37`).
+  It does not pick or install iOS 26.0; use `snapshot-simulator.sh` for the package and snapshot
+  tests.
 - CI packages: `CaptureContract` (`contract/swift`), `ChapterUI`, `CaptureCore`, `PlanExport`,
-  `MeshExport`, `FieldKit`, `PackageKit`, `StationClient` (`.github/workflows/ios.yml:62-82`).
+  `MeshExport`, `FieldKit`, `PackageKit`, `StationClient` (`.github/workflows/ios.yml:67-87`).
 
 ### 7.3 Field-test build for a real iPhone
 
@@ -414,14 +453,14 @@ python3 -I tools/brand/generate_plan_brand.py --logo tools/brand/chapter-logo.sv
 ```
 
 CI's `ci` job runs `verify-exports.sh` on the PlanExport (`dxf pdf preview`) and MeshExport
-(`gltf las`) test output after the Swift tests (`.github/workflows/ci.yml:92-109`); on `add2d74`
-every kind passed (run `39807980144`).
+(`gltf las`) test output after the Swift tests (`.github/workflows/ci.yml:92-109`); it passed on
+`add2d74` (run `39807980144`, every kind) and on `5104ca6` (run `39851260271`).
 
 Sources: `scripts/verify-exports.sh:1-13`, `scripts/verify/plan-sheet-snapshot.sh:1-23` (the
 reference render runs in Docker; without Docker it uses the local `pdftoppm` and stand-in fonts),
-`station/hub/scripts/generate-brand-assets.mjs:1-27`, `ios/Packages/ChapterUI/README.md:55-60`.
+`station/hub/scripts/generate-brand-assets.mjs:1-27`, `ios/Packages/ChapterUI/README.md:58-63`.
 Do not edit the generated fonts, logo data or `ChapterBrandAssets.swift` by hand
-(`ios/Packages/ChapterUI/README.md:48-60`).
+(`ios/Packages/ChapterUI/README.md:51-63`).
 
 ## 10. Infra checks (Docker)
 

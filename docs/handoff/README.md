@@ -1,9 +1,10 @@
 # Chapter Capture: developer handoff kit
 
 Start here. This kit is for experienced developers who have not seen the project. It was written
-on Oct 22, 2026 from branch `v2/main` at commit `add2d74`. Every command, path, version and
-setting name in it comes from the repo or from its CI and build logs; `path:line` points at the
-source. Anything else carries one of the markers listed at the end of this page.
+on Oct 22, 2026 for branch `v2/main` at or after the merge of `v2/ci-fix` (`34b06c3`), whose
+history includes the CI fix up to `5104ca6`. Every command, path, version and setting name in it
+comes from the repo or from its CI and build logs; `path:line` points at the source. Anything else
+carries one of the markers listed at the end of this page.
 
 ## What Chapter Capture is
 
@@ -134,26 +135,29 @@ The iOS part needs a Mac with Xcode. The other parts also build on the same Mac.
 | Tool       | Version                                                                                                                        | Source                                                                |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
 | macOS      | a version that runs the chosen Xcode; the owner's Mac runs macOS 27.0                                                          | build logs                                                            |
-| Xcode      | CI pins 26.3, but the App target does **not** compile on 26.3. It compiled with Xcode 27.2 beta (27B5038j). See 01, section 3. | `.github/workflows/ios.yml:42-43`, `05-status-open-items.md`          |
-| XcodeGen   | 2.46.0, the checksum-checked release download (not Homebrew, which installs whatever is current)                               | `.github/workflows/ios.yml:50-51,235-245`                             |
+| Xcode      | CI pins 26.3; the App and every package build and pass their tests on it (run `39851260036`). The App also compiled with Xcode 27.2 beta (27B5038j), used for every local build. See 01, section 3. | `.github/workflows/ios.yml:44-45`, `05-status-open-items.md`          |
+| XcodeGen   | 2.46.0, the checksum-checked release download (not Homebrew, which installs whatever is current)                               | `.github/workflows/ios.yml:55-56,245-255`                             |
 | Node / npm | Node 22 (`.nvmrc`), engines `>=22.13.0`; npm `>=10`                                                                            | `.nvmrc`, `package.json:7-10`                                         |
 | Docker     | required for the local station, the station API tests and the export validators                                                | `station/api/scripts/local-up.sh:15-18`                               |
 | iPhone     | an iPhone Pro or iPad Pro with LiDAR, iOS 17 or later, for real scans                                                          | `ios/Packages/CaptureCore/Sources/CaptureCore/DeviceGate.swift:32-41` |
 
-The package and snapshot tests also need the iOS 26.0 simulator runtime, installed separately
-from a new Xcode 27.x. Full list: [01, section 3](01-repo-and-mac-setup.md#3-mac-tools); install
-steps for a clean Mac: [01, section 3.1](01-repo-and-mac-setup.md#31-install-on-a-clean-mac).
+The package and snapshot tests run on an iPhone 17 Pro simulator with iOS 26.0 or a 26.0.x point
+release; `scripts/snapshot-simulator.sh` finds it, or downloads iOS 26.0 when neither is
+installed. Full list: [01, section 3](01-repo-and-mac-setup.md#3-mac-tools); install steps for a
+clean Mac: [01, section 3.1](01-repo-and-mac-setup.md#31-install-on-a-clean-mac).
 
 ## Repo and branch
 
 - Repo: `https://github.com/eranfromchapter/chapter-lidar` (`git remote -v`).
 - Branch: **`v2/main`** holds the complete v2 work. `main` holds only the v1 build (OpenAPI 1.0.0,
   migrations `0001`-`0008`).
-- `v2/main` is on GitHub at `add2d74` (pushed Oct 22, 2026, 09:46 -0600). GitHub CI on
-  `add2d74`: `ci` and `web-e2e` green; `ios` red, on the App job (`ModelStyle.swift` does not
-  compile on the pinned Xcode 26.3) and on every package job (no iOS 26.0 simulator on the
-  runner). Details: [05, section 3.1](05-status-open-items.md#31-github-actions).
-- This kit is on branch `v2/handoff`, on top of `v2/main` at `add2d74`. It is not pushed.
+- The kit and the code it describes: `v2/main` (the merge of `v2/handoff`; its history includes
+  `add2d74`, pushed Oct 22, 2026, 09:46 -0600, and the iOS CI fix `v2/ci-fix`, `f9fb781` to
+  `5104ca6`, merged as `34b06c3`). How to check: [01, section 1](01-repo-and-mac-setup.md#1-get-the-code).
+- GitHub CI on `v2/ci-fix` head `5104ca6`: `ios` green (run `39851260036`, all 9 jobs: App build
+  and UI tests, every package's simulator tests) and `ci` green (run `39851260271`). `web-e2e`
+  last ran on `add2d74` and passed (run `39807979797`); the CI fix changes no file it watches.
+  Details: [05, section 3.1](05-status-open-items.md#31-github-actions).
 - PR #1 (`fix/ios-ci-first-push` to `main`) is open and superseded: its head `80182ea` is already
   inside `v2/main`.
 
