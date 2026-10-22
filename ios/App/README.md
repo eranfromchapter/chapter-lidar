@@ -120,10 +120,10 @@ xcodebuild build -project ios/ChapterCapture.xcodeproj -scheme App -configuratio
   -destination generic/platform=iOS -derivedDataPath build/dd-v2 \
   -allowProvisioningUpdates -allowProvisioningDeviceRegistration
 /usr/libexec/PlistBuddy -c 'Print :ChapterFieldTest' \
-  build/dd-v2/Build/Products/Debug-iphoneos/App.app/Info.plist   # YES
+  build/dd-v2/Build/Products/Debug-iphoneos/ChapterCapture.app/Info.plist   # YES
 ```
 
-Then install `build/dd-v2/Build/Products/Debug-iphoneos/App.app` with Xcode or `xcrun devicectl
+Then install `build/dd-v2/Build/Products/Debug-iphoneos/ChapterCapture.app` with Xcode or `xcrun devicectl
 device install app`. Release ignores the flag and excludes the `FieldTest*` sources.
 
 ## Debug-only UI-test mode
