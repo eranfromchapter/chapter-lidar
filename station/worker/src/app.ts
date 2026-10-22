@@ -5,7 +5,7 @@ import { createFakeHubApi } from "@chapter/station-hub/fake";
 import type { WorkerConfig } from "./config.js";
 import { createDatabase } from "./db.js";
 import type { Logger } from "./logger.js";
-import { createOriginalsReader } from "./storage.js";
+import { createOriginalsReader, createReportsWriter } from "./storage.js";
 import { Worker } from "./worker.js";
 
 /** The HUB client of the configuration: live, or the in-process fake (never in production). */
@@ -41,9 +41,11 @@ export function startWorker(config: WorkerConfig, logger: Logger, hub?: HubApi):
     {
       db,
       originals: createOriginalsReader(config.storage),
+      reports: createReportsWriter(config.storage),
       hub: hub ?? createHubApi(config),
       logger,
       reviewBaseUrl: config.reviewBaseUrl,
+      reportTimeZone: config.reportTimeZone,
       retryBaseSeconds: config.worker.retryBaseSeconds,
       retryMaxSeconds: config.worker.retryMaxSeconds,
       publishRetryBaseMs: config.worker.publishRetryBaseMs,

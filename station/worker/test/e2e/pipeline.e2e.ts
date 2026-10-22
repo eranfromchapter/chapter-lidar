@@ -1,5 +1,5 @@
-// F9 AC6: against the local stack a sealed fixture package reaches a stored verdict and a HUB
-// publication within 120 s, and re-running the job is idempotent.
+// F9 AC6: against the local stack a sealed fixture package reaches a stored verdict, a stored
+// spatial report and a HUB publication within 120 s, and re-running the job is idempotent.
 //
 //   station/api/scripts/local-up.sh && npm run test:e2e --workspace station/worker
 //
@@ -19,18 +19,13 @@ import {
   FIXTURE_DEAL_ID,
   connectStack,
   seedSealedPackage,
+  sha256,
   waitFor,
   type Stack,
 } from "./support.js";
 
 const REVIEW_BASE_URL = "http://localhost:3000";
-const UPLOAD_ROLES = new Set([
-  "plan_dxf",
-  "rooms_csv",
-  "plan_pdf",
-  "spatial_report_pdf",
-  "plan_png",
-]);
+const UPLOAD_ROLES = new Set(["plan_dxf", "rooms_csv", "plan_pdf", "plan_png"]);
 
 let stack: Stack;
 let server: FakeHubServer;
@@ -77,6 +72,25 @@ async function publication(packageId: string) {
   return result.rows;
 }
 
+async function spatialReport(packageId: string) {
+  const result = await stack.db.query<{
+    verdict_id: string;
+    file_name: string;
+    blob_name: string;
+    sha256: string;
+    bytes: number;
+    pages: number;
+    checks_page: number;
+    floors: Array<{ areaKey: string; captureId: string; roomsScanned: number }>;
+    generated_at: Date;
+  }>(
+    `SELECT verdict_id, file_name, blob_name, sha256, bytes, pages, checks_page, floors, generated_at
+       FROM spatial_reports WHERE package_id = $1`,
+    [packageId],
+  );
+  return result.rows;
+}
+
 async function verdicts(packageId: string) {
   const result = await stack.db.query<{
     verdict_id: string;
@@ -107,6 +121,8 @@ describe("station worker end to end (local stack)", { timeout: 300_000 }, () => 
       DATABASE_URL,
       AZURE_STORAGE_CONNECTION_STRING: AZURITE_CONNECTION_STRING,
       STORAGE_ORIGINALS_CONTAINER: "originals",
+      STORAGE_REPORTS_CONTAINER: "reports",
+      REPORT_TIME_ZONE: "America/New_York",
       HUB_MODE: "live",
       HUB_BASE_URL: server.url,
       HUB_SERVICE_CREDENTIAL: server.hub.credential,
@@ -195,7 +211,7 @@ describe("station worker end to end (local stack)", { timeout: 300_000 }, () => 
     const visitFolder = `Capture/${visitId}/r1`;
     const planEntries = manifest.files.filter((entry) => UPLOAD_ROLES.has(entry.role));
     const expected = [
-      `${visitFolder}/verdict-report-${verdict.verdictId}.pdf`,
+      `${visitFolder}/spatial-report-${verdict.verdictId}.pdf`,
       `${visitFolder}/manifest.json`,
       ...planEntries.map(
         (entry) => `Capture/${entry.areaKey}/${entry.captureId}/r1/${entry.path.split("/").pop()}`,
@@ -219,7 +235,7 @@ describe("station worker end to end (local stack)", { timeout: 300_000 }, () => 
     }
     const manifestDoc = ours().find((doc) => doc.name === "manifest.json");
     assert.ok(manifestDoc);
-    const report = ours().find((doc) => doc.name.startsWith("verdict-report-"));
+    const report = ours().find((doc) => doc.name.startsWith("spatial-report-"));
     assert.equal(
       Buffer.from(report?.data ?? [])
         .subarray(0, 5)
@@ -239,8 +255,26 @@ describe("station worker end to end (local stack)", { timeout: 300_000 }, () => 
     );
     assert.deepEqual(
       audits.rows.map((row) => row.action),
-      ["verdict.store", "hub.publish"],
+      ["verdict.store", "report.store", "hub.publish"],
     );
+
+    // The spatial report stored for the web review is the HUB document, byte for byte.
+    const storedReports = await spatialReport(packageId);
+    assert.equal(storedReports.length, 1);
+    const row = storedReports[0]!;
+    assert.equal(row.verdict_id, verdict.verdictId);
+    assert.equal(row.file_name, `spatial-report-${verdict.verdictId}.pdf`);
+    assert.equal(row.blob_name, `${packageId}/spatial-report-${verdict.verdictId}.pdf`);
+    assert.equal(row.sha256, report?.sha256);
+    assert.equal(row.bytes, report?.bytes);
+    assert.ok(row.pages >= 5 && row.checks_page >= 2 && row.checks_page <= row.pages);
+    assert.equal(row.generated_at.toISOString().replace(/\.\d{3}Z$/, "Z"), verdict.evaluatedAt);
+    assert.ok(Array.isArray(row.floors) && row.floors.length === 1);
+    assert.equal(row.floors[0]?.areaKey, manifest.files.find((f) => f.areaKey)?.areaKey);
+    const blob = await stack.reports.getBlobClient(row.blob_name).downloadToBuffer();
+    assert.equal(sha256(blob), report?.sha256);
+    const reportEntry = pub.files.find((f) => f.name === row.file_name);
+    assert.equal(reportEntry?.role, "spatial_report");
 
     // Re-run the checks job: it replaces its own run and upserts the one verdict row.
     const rerunAt = new Date();
@@ -300,12 +334,23 @@ describe("station worker end to end (local stack)", { timeout: 300_000 }, () => 
     // No duplicate HUB uploads: every folder/name once; plan files and manifest uploaded once.
     const names = ours().map((doc) => `${doc.folder}/${doc.name}`);
     assert.equal(new Set(names).size, names.length, `duplicates: ${names.join(", ")}`);
-    const nonReport = ours().filter((doc) => !doc.name.startsWith("verdict-report-"));
+    const nonReport = ours().filter((doc) => !doc.name.startsWith("spatial-report-"));
     assert.equal(nonReport.length, expected.length - 1);
     const verdictIds = new Set([verdict.verdictId, after[0]!.verdict_id]);
-    const reports = ours().filter((doc) => doc.name.startsWith("verdict-report-"));
+    const reports = ours().filter((doc) => doc.name.startsWith("spatial-report-"));
     assert.equal(reports.length, verdictIds.size, "one report per verdict");
     assert.equal(await packageStatus(packageId), "verdict_ready");
+
+    // One spatial_reports row per package, for the current verdict; every report blob kept.
+    const storedAfter = await spatialReport(packageId);
+    assert.equal(storedAfter.length, 1);
+    assert.equal(storedAfter[0]?.verdict_id, after[0]!.verdict_id);
+    for (const id of verdictIds) {
+      assert.ok(
+        await stack.reports.getBlobClient(`${packageId}/spatial-report-${id}.pdf`).exists(),
+        `report blob of ${id}`,
+      );
+    }
   });
 
   it("ends in check_error, not a verdict, when a stored file no longer matches its SHA-256", async () => {
@@ -343,6 +388,7 @@ describe("station worker end to end (local stack)", { timeout: 300_000 }, () => 
     assert.equal(audit.rows[0]?.details.reason, "sha256_mismatch");
     assert.match(String(audit.rows[0]?.details.path), /plan\.dxf$/);
     assert.equal((await publication(packageId)).length, 0);
+    assert.equal((await spatialReport(packageId)).length, 0);
     assert.ok(!server.hub.documents.some((doc) => doc.folder.includes(visitId)));
   });
 
@@ -369,6 +415,40 @@ describe("station worker end to end (local stack)", { timeout: 300_000 }, () => 
     } finally {
       server.hub.clearFailures();
     }
+  });
+
+  it("links the phone's retired report of a legacy package and stores the station's report", async () => {
+    const seeded = await seedSealedPackage(stack, { fixture: "legacy-1.0.0" });
+    const { packageId, visitId, manifest } = seeded;
+    await waitFor(
+      async () => {
+        const rows = await publication(packageId);
+        return rows[0]?.status === "published" && (await settled(packageId)) ? true : undefined;
+      },
+      120_000,
+      "the legacy package's publication",
+    );
+    const legacy = manifest.files.filter((entry) => entry.role === "spatial_report_pdf");
+    assert.ok(legacy.length > 0, "the legacy fixture carries the phone's report");
+    const pub = (await publication(packageId))[0]!;
+    for (const entry of legacy) {
+      const recorded = pub.files.find((f) => f.name === entry.path);
+      assert.equal(recorded?.kind, "linked");
+      assert.ok(
+        !server.hub.documents.some(
+          (doc) => doc.folder.includes(entry.captureId ?? "-") && doc.name === "spatial-report.pdf",
+        ),
+      );
+    }
+    const verdict = (await verdicts(packageId))[0]!;
+    assert.ok(
+      server.hub.documents.some(
+        (doc) =>
+          doc.folder === `Capture/${visitId}/r1` &&
+          doc.name === `spatial-report-${verdict.verdict_id}.pdf`,
+      ),
+    );
+    assert.equal((await spatialReport(packageId))[0]?.verdict_id, verdict.verdict_id);
   });
 
   it("recovers a job whose worker died (stale lock) and counts the attempt", async () => {

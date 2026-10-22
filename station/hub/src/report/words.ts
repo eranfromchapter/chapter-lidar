@@ -44,6 +44,9 @@ export const WORDS = {
   contentsNotePhotos: "Each room has a plan page followed by its site photos.",
   contentsNoteSomePhotos:
     "Each room has a plan page, followed by its site photos when there are any.",
+  /** Not drawn in the artboards: the photo pages were left out for the size limit (5.6.6). */
+  contentsNoteNoPhotos:
+    "Each room has a plan page. Site photos are in the package (left out of this report: size limit).",
   otherFloorNote:
     "One plan page per floor. The contents list is on the first plan page only. Floors are drawn in their own scan frame: the station does not align captures to each other.",
   legend: "Legend",

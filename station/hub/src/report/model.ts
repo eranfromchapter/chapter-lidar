@@ -6,8 +6,10 @@ import {
   checkCounts,
   checkRows,
   compassState,
+  northSymbol,
   notScannedRooms,
   notScannedRoomText,
+  NOT_VERIFIED_BOX,
   type Capture,
   type CaptureMode,
   type CaptureModel,
@@ -15,6 +17,7 @@ import {
   type CheckRow,
   type CompassState,
   type FieldControls,
+  type NorthSymbol,
   type NotScannedRoom,
   type RoomType,
   type Verdict,
@@ -31,6 +34,7 @@ import {
   type RoomMetrics,
 } from "./metrics/room-metrics.js";
 import { decimals, feetInches, squareFeet } from "./metrics/units.js";
+import { WORDS } from "./words.js";
 
 export type FillClass = "habitable" | "wet" | "other" | "outdoor";
 export type ItemGroup = "furniture" | "fixtures" | "appliances" | "other" | "openings";
@@ -487,6 +491,25 @@ export function taskWords(verdict: Verdict): string {
 
 export function blockerCount(model: Model): number {
   return model.counts.blockers;
+}
+
+/** The north block of a floor without a readable scan model. */
+export const NO_SCAN_MODEL_SYMBOL: NorthSymbol = {
+  kind: "box",
+  box: NOT_VERIFIED_BOX,
+  caption: WORDS.noScanModel,
+};
+
+/**
+ * The north symbol of a floor's drawing: the drawing turns the plan clockwise by the floor's
+ * squaring rotation a, so the contract's drawing rotation is -a (compass 2.5). A floor without a
+ * readable model has no drawing: the box with "No scan model".
+ */
+export function floorNorthSymbol(floor: ModelFloor): NorthSymbol {
+  if (floor.metrics === undefined) {
+    return NO_SCAN_MODEL_SYMBOL;
+  }
+  return northSymbol(floor.compass, -floor.rotationDegrees);
 }
 
 /** The label point of a room in plan coordinates (for labels and markers). */

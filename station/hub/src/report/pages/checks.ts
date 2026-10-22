@@ -142,6 +142,8 @@ function sliceHeight(layout: RowLayout, slice: CheckSlice): number {
 }
 
 const ROW_CHROME = 3 + 3 + 0.75;
+/** A finding block taller than this may split between its lines (else it moves on whole). */
+const BLOCK_SPLIT_HEIGHT = 300;
 
 /** The part of a row from (block, line, action) that fits `available` content height. */
 function fitRow(
@@ -149,6 +151,7 @@ function fitRow(
   start: { block: number; line: number; action: number },
   available: number,
   continued: boolean,
+  canDefer: boolean,
 ): { slice: CheckSlice; next?: { block: number; line: number; action: number } } | undefined {
   const parts: Array<CheckSlice["blocks"][number]> = [];
   let used = 0;
@@ -172,7 +175,17 @@ function fitRow(
       used += gap + height;
       continue;
     }
-    // Split inside this block, between lines.
+    // A row splits between finding blocks; inside a block only when the block alone is taller
+    // than a whole page can hold, or when nothing else is on the page yet.
+    if (parts.length > 0) {
+      return {
+        slice: { row: 0, continued, blocks: parts, ends: false },
+        next: { block: b, line: fromLine, action: fromAction },
+      };
+    }
+    if (canDefer && height <= BLOCK_SPLIT_HEIGHT) {
+      return undefined;
+    }
     const room = available - used - gap;
     let leftCount = 0;
     let leftUsed = 0;
@@ -211,13 +224,7 @@ function fitRow(
       }
       return { slice: { row: 0, continued, blocks: parts, ends: false }, next };
     }
-    if (parts.length === 0) {
-      return undefined;
-    }
-    return {
-      slice: { row: 0, continued, blocks: parts, ends: false },
-      next: { block: b, line: fromLine, action: fromAction },
-    };
+    return undefined;
   }
   return { slice: { row: 0, continued, blocks: parts, ends: true } };
 }
@@ -475,13 +482,8 @@ export function paginateChecks(canvas: Canvas, model: Model): PageSpec[] {
     while (rowIndex < layouts.length) {
       const layout = layouts[rowIndex] as RowLayout;
       const available = BOTTOM - y - ROW_CHROME;
-      const fit = fitRow(layout, rowStart, available, rowContinued);
-      const whole =
-        rowStart.block === 0 && rowStart.line === 0 && rowStart.action === 0 && !rowContinued;
-      if (
-        fit === undefined ||
-        (fit.next !== undefined && whole && slices.length > 0 && fit.slice.blocks.length === 0)
-      ) {
+      const fit = fitRow(layout, rowStart, available, rowContinued, slices.length > 0);
+      if (fit === undefined) {
         break;
       }
       const slice: CheckSlice = { ...fit.slice, row: rowIndex };
@@ -764,13 +766,13 @@ function drawSlice(canvas: Canvas, layout: RowLayout, slice: CheckSlice, top: nu
     by += Math.max(left, right);
   });
   const height = sliceHeight(layout, slice);
-  canvas.rule(X, top + 3 + height + 3, TABLE_WIDTH, COLOR.line);
+  if (slice.ends) {
+    canvas.rule(X, top + 3 + height + 3, TABLE_WIDTH, COLOR.line);
+  }
   return top + ROW_CHROME + height;
 }
 
-/** Number of finding lines the table holds (tests). */
-export function checksLayoutForTests(canvas: Canvas, model: Model): number {
-  return model.checkRows
-    .map((row) => rowLayout(canvas, row))
-    .reduce((n, l) => n + l.blocks.length, 0);
+/** Number of finding blocks of each table row (tests: every block is placed). */
+export function checkBlockCounts(canvas: Canvas, model: Model): number[] {
+  return model.checkRows.map((row) => rowLayout(canvas, row).blocks.length);
 }

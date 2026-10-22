@@ -21,6 +21,7 @@ export const PG_PORT = Number(process.env.STATION_PG_PORT ?? "55432");
 export const AZURITE_PORT = Number(process.env.STATION_AZURITE_PORT ?? "10000");
 export const DATABASE_URL = `postgres://station@127.0.0.1:${PG_PORT}/station`;
 export const ORIGINALS_CONTAINER = "originals";
+export const REPORTS_CONTAINER = "reports";
 export const FIXTURE_DEAL_ID = "fixture-deal-0001";
 
 /** Azurite's published development account key (not a secret). */
@@ -36,10 +37,22 @@ export const AZURITE_CONNECTION_STRING = [
   "",
 ].join(";");
 
-const FIXTURE_ROOT = fileURLToPath(
-  new URL("../../../../fixtures/generated/box-room/package/", import.meta.url),
-);
-const FIXTURE_VISIT_ID = "c1b6d1fb-17af-4f4a-877c-2565ef9bdb86";
+/** Generated fixtures the e2e seeds from: package root and the visit id in its paths. */
+const FIXTURES = {
+  "box-room": {
+    root: fileURLToPath(
+      new URL("../../../../fixtures/generated/box-room/package/", import.meta.url),
+    ),
+    visitId: "c1b6d1fb-17af-4f4a-877c-2565ef9bdb86",
+  },
+  // Sealed by an app before v2: manifest 1.0.0 with the phone's spatial-report.pdf.
+  "legacy-1.0.0": {
+    root: fileURLToPath(
+      new URL("../../../../fixtures/generated/legacy-1.0.0/package/", import.meta.url),
+    ),
+    visitId: "11acffc6-9ff2-43ae-aefd-ed16d21a3b9c",
+  },
+} as const;
 
 export function sha256(data: Buffer): string {
   return createHash("sha256").update(data).digest("hex");
@@ -66,11 +79,15 @@ export interface SeedOptions {
   readonly maxAttempts?: number;
   /** Insert the checks job as running under a dead worker's lock, 2 hours old. */
   readonly staleLock?: boolean;
+  /** The generated fixture to seed (default box-room). */
+  readonly fixture?: keyof typeof FIXTURES;
 }
 
 export interface Stack {
   readonly db: Database;
   readonly container: ContainerClient;
+  /** The spatial reports the worker stores. */
+  readonly reports: ContainerClient;
   close(): Promise<void>;
 }
 
@@ -79,9 +96,9 @@ export async function connectStack(): Promise<Stack> {
   try {
     const tables = await db.query<{ n: number }>(
       `SELECT count(*)::int AS n FROM information_schema.tables
-        WHERE table_name IN ('packages', 'package_files', 'jobs', 'check_runs', 'check_results', 'verdicts', 'hub_publications')`,
+        WHERE table_name IN ('packages', 'package_files', 'jobs', 'check_runs', 'check_results', 'verdicts', 'hub_publications', 'spatial_reports')`,
     );
-    if (tables.rows[0]?.n !== 7) {
+    if (tables.rows[0]?.n !== 8) {
       throw new Error(
         "the station tables are missing: start the stack with station/api/scripts/local-up.sh",
       );
@@ -95,19 +112,22 @@ export async function connectStack(): Promise<Stack> {
       { cause: error },
     );
   }
-  const container =
-    BlobServiceClient.fromConnectionString(AZURITE_CONNECTION_STRING).getContainerClient(
-      ORIGINALS_CONTAINER,
-    );
+  const service = BlobServiceClient.fromConnectionString(AZURITE_CONNECTION_STRING);
+  const container = service.getContainerClient(ORIGINALS_CONTAINER);
   await container.createIfNotExists();
-  return { db, container, close: () => db.close() };
+  const reports = service.getContainerClient(REPORTS_CONTAINER);
+  await reports.createIfNotExists();
+  return { db, container, reports, close: () => db.close() };
 }
 
-/** Seeds one sealed box-room package with a queued checks job, as the station API would. */
+/** Seeds one sealed fixture package with a queued checks job, as the station API would. */
 export async function seedSealedPackage(
   stack: Stack,
   options: SeedOptions = {},
 ): Promise<SeededPackage> {
+  const fixture = FIXTURES[options.fixture ?? "box-room"];
+  const FIXTURE_ROOT = fixture.root;
+  const FIXTURE_VISIT_ID = fixture.visitId;
   const manifestFile = join(FIXTURE_ROOT, "Source Register", FIXTURE_VISIT_ID, "manifest.json");
   const original = JSON.parse(readFileSync(manifestFile, "utf8")) as PackageManifest;
   const packageId = randomUUID();

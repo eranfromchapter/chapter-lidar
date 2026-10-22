@@ -126,10 +126,16 @@ export function drawPhotosPage(
     const n = page.firstNumber + i;
     const subject = SUBJECT[photo.subject] ?? photo.subject;
     const head = room === undefined ? `${n} · ${photo.room} · ${subject}` : `${n} · ${subject}`;
+    const looking = ` · looking ${photo.direction}`;
+    const lookingStyle = { ...TYPE.dense, color: COLOR.muted };
+    const headWidth = IMAGE_W + 6 - canvas.width(looking, lookingStyle);
     canvas.runs(
       [
-        { text: head, style: TYPE.dense },
-        { text: ` · looking ${photo.direction}`, style: { ...TYPE.dense, color: COLOR.muted } },
+        {
+          text: canvas.truncate(canvas.prepare(head, TYPE.dense), TYPE.dense, headWidth),
+          style: TYPE.dense,
+        },
+        { text: looking, style: lookingStyle },
       ],
       x,
       y + IMAGE_H + 4,

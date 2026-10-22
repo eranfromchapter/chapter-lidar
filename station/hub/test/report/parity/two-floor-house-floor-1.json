@@ -1,0 +1,82 @@
+{
+  "source": "PlanExport PlanMetrics (Swift), recorded with the T4 parity harness",
+  "model": "fixtures/generated/two-floor-house/package/Original Exports/floor-1/ba028a66-d76e-4616-b0d6-e3e04e5c9535/capture-model.json",
+  "rooms": [
+    {
+      "bbox": {
+        "acrossM": 5,
+        "alongM": 6,
+        "angle": 0,
+        "longM": 6,
+        "shortM": 5
+      },
+      "ceiling": {
+        "approximate": false,
+        "basis": "roomWalls",
+        "heightM": 2.7,
+        "reasons": []
+      },
+      "floorAreaM2": 30,
+      "frameAngle": 0,
+      "id": "room-1",
+      "inscribed": {
+        "acrossM": 5,
+        "alongM": 6,
+        "angle": 0,
+        "longM": 6,
+        "shortM": 5
+      },
+      "label": "Living Room",
+      "objects": [
+        {
+          "category": "stairs",
+          "id": "object-1",
+          "sizeM": [1, 2.7, 3]
+        }
+      ],
+      "openings": [
+        {
+          "areaM2": 1.8900000000000001,
+          "heightM": 2.1,
+          "id": "door-1",
+          "type": "door",
+          "widthM": 0.9
+        },
+        {
+          "areaM2": 1.44,
+          "heightM": 1.2,
+          "id": "window-1",
+          "type": "window",
+          "widthM": 1.2
+        }
+      ],
+      "perimeterM": 22,
+      "strings": {
+        "bboxLong": "19' 8.2\"",
+        "bboxShort": "16' 4.9\"",
+        "ceiling": "8' 10.3\"",
+        "floorArea": "322.9 ft²",
+        "inscribedLong": "19' 8.2\"",
+        "inscribedShort": "16' 4.9\"",
+        "perimeter": "72' 2.1\""
+      },
+      "type": null,
+      "volumeM3": 81,
+      "wallAreaExclM2": 56.07000000000001,
+      "wallAreaInclM2": 59.400000000000006,
+      "walledLengthM": 22
+    }
+  ],
+  "totals": {
+    "bathrooms": 0,
+    "bedrooms": 0,
+    "livableAreaM2": 30,
+    "perimeter": "72' 2.1\"",
+    "perimeterM": 22,
+    "roomCount": 1,
+    "volumeIsApproximate": false,
+    "volumeM3": 81,
+    "wallAreaM2": 56.07000000000001,
+    "windowAreaM2": 1.44
+  }
+}

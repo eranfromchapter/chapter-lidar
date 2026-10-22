@@ -41,6 +41,10 @@ RUN npm run build --workspace @chapter/station-checks
 COPY station/hub/tsconfig.json station/hub/tsconfig.build.json station/hub/
 COPY station/hub/src station/hub/src
 RUN npm run build --workspace @chapter/station-hub
+# The spatial report reduces photos with sharp: its prebuilt linux binaries come from the
+# optional @img/* packages in package-lock.json (no install script). Fail the build early when
+# they are missing.
+RUN node -e "require('sharp'); require('heic-decode')"
 COPY station/worker/tsconfig.json station/worker/tsconfig.build.json station/worker/
 COPY station/worker/src station/worker/src
 RUN npm run build --workspace @chapter/station-worker
@@ -60,7 +64,8 @@ RUN --mount=type=secret,id=build_ca,required=false \
     npm ci --omit=dev --ignore-scripts --include-workspace-root=false \
       --workspace @chapter/capture-contract --workspace @chapter/station-checks \
       --workspace @chapter/station-hub --workspace @chapter/station-worker \
-  && npm cache clean --force
+  && npm cache clean --force \
+  && node -e "require('sharp')"
 
 # ---- runtime ------------------------------------------------------------------------------
 FROM ${NODE_IMAGE} AS runtime

@@ -3,13 +3,18 @@
 // api identity:     Storage Blob Data Contributor + Storage Blob Delegator (storage account),
 //                   Key Vault Secrets User (vault).
 // worker identity:  Storage Blob Data Reader (storage account) to read originals for checks,
-//                   Key Vault Secrets User (vault) for the HUB credential.
+//                   Storage Blob Data Contributor on the `reports` container only (it writes
+//                   the spatial report PDFs there), Key Vault Secrets User (vault) for the HUB
+//                   credential.
 // admin group:      Key Vault Secrets Officer (vault) to set secret values.
 // deploy identity:  Contributor on the two container apps and the migration job (update image,
 //                   start the job), Reader on the resource group.
 
 @description('Storage account name.')
 param storageAccountName string
+
+@description('Name of the container of the spatial report PDFs.')
+param reportsContainerName string
 
 @description('Key Vault name.')
 param keyVaultName string
@@ -115,6 +120,29 @@ resource workerBlobReader 'Microsoft.Authorization/roleAssignments@2022-04-01' =
     roleDefinitionId: subscriptionResourceId(
       'Microsoft.Authorization/roleDefinitions',
       roles.storageBlobDataReader
+    )
+    principalId: workerPrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' existing = {
+  parent: storage
+  name: 'default'
+}
+
+resource reportsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' existing = {
+  parent: blobService
+  name: reportsContainerName
+}
+
+resource workerReportsContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(reportsContainer.id, workerAppName, roles.storageBlobDataContributor)
+  scope: reportsContainer
+  properties: {
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      roles.storageBlobDataContributor
     )
     principalId: workerPrincipalId
     principalType: 'ServicePrincipal'

@@ -137,6 +137,36 @@ describe("worker config", () => {
     assert.ok(!problems.join("\n").includes("bad credential"));
   });
 
+  it("defaults the reports container and the report time zone, and validates them", () => {
+    const config = loadConfig(LOCAL);
+    assert.equal(config.storage.reportsContainer, "reports");
+    assert.equal(config.reportTimeZone, "America/New_York");
+    assert.equal(describeConfig(config).reportsContainer, "reports");
+    const custom = loadConfig({
+      ...LOCAL,
+      STORAGE_REPORTS_CONTAINER: "station-reports",
+      REPORT_TIME_ZONE: "Europe/Lisbon",
+    });
+    assert.equal(custom.storage.reportsContainer, "station-reports");
+    assert.equal(custom.reportTimeZone, "Europe/Lisbon");
+    assert.equal(loadConfig({ ...LOCAL, REPORT_TIME_ZONE: "UTC" }).reportTimeZone, "UTC");
+    assert.ok(
+      issues({ ...LOCAL, REPORT_TIME_ZONE: "Mars/Olympus" }).some((i) =>
+        i.startsWith("REPORT_TIME_ZONE must be an IANA time zone"),
+      ),
+    );
+    assert.ok(
+      issues({ ...LOCAL, STORAGE_REPORTS_CONTAINER: "Reports_1" }).includes(
+        "STORAGE_REPORTS_CONTAINER must be a valid Azure Blob container name",
+      ),
+    );
+    assert.ok(
+      issues({ ...LOCAL, STORAGE_REPORTS_CONTAINER: "originals" }).includes(
+        "STORAGE_REPORTS_CONTAINER must not be the originals container",
+      ),
+    );
+  });
+
   it("validates the worker timings", () => {
     assert.ok(
       issues({ ...LOCAL, WORKER_LOCK_TIMEOUT_SECONDS: "60", HUB_PUBLISH_RETRY_MAX_MS: "30000" })

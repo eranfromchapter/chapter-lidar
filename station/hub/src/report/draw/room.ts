@@ -177,7 +177,14 @@ export function layoutRoom(
     extent.maxY,
   );
 
-  // Dimension strings around the bounding box (and the inscribed rectangle).
+  // Dimension strings around the bounding box (and the inscribed rectangle), 9 pt outside
+  // whatever is drawn on that side: the walls run outside the room and can be thicker than 9 pt.
+  const drawn = {
+    minX: ROOM_BOX.x + left,
+    minY: ROOM_BOX.y + top,
+    maxX: ROOM_BOX.x + left + (extent.maxX - extent.minX) * s,
+    maxY: ROOM_BOX.y + top + (extent.maxY - extent.minY) * s,
+  };
   const rectOf = (corners: readonly Point[]) => {
     const pts = corners.map((corner) => view.page(corner));
     return {
@@ -191,14 +198,14 @@ export function layoutRoom(
   const dims: DimensionString[] = [
     {
       side: "top",
-      at: b.minY - DIM_OFFSET,
+      at: Math.min(b.minY, drawn.minY) - DIM_OFFSET,
       from: b.minX,
       to: b.maxX,
       text: feetInches(room.metrics.boundingBox.alongM),
     },
     {
       side: "left",
-      at: b.minX - DIM_OFFSET,
+      at: Math.min(b.minX, drawn.minX) - DIM_OFFSET,
       from: b.minY,
       to: b.maxY,
       text: feetInches(room.metrics.boundingBox.acrossM),
@@ -209,7 +216,7 @@ export function layoutRoom(
     dims.push(
       {
         side: "bottom",
-        at: b.maxY + DIM_OFFSET,
+        at: Math.max(b.maxY, drawn.maxY) + DIM_OFFSET,
         from: i.minX,
         to: i.maxX,
         text: feetInches(room.metrics.inscribed.alongM),
@@ -217,7 +224,7 @@ export function layoutRoom(
       },
       {
         side: "right",
-        at: b.maxX + DIM_OFFSET,
+        at: Math.max(b.maxX, drawn.maxX) + DIM_OFFSET,
         from: i.minY,
         to: i.maxY,
         text: feetInches(room.metrics.inscribed.acrossM),

@@ -3,14 +3,18 @@
 import type { HubApi } from "@chapter/station-hub";
 import type { Database } from "./db.js";
 import type { Logger } from "./logger.js";
-import type { OriginalsReader } from "./storage.js";
+import type { OriginalsReader, ReportsWriter } from "./storage.js";
 
 export interface WorkerContext {
   readonly db: Database;
   readonly originals: OriginalsReader;
+  /** Where the spatial report PDFs are stored for the web review. */
+  readonly reports: ReportsWriter;
   readonly hub: HubApi;
   readonly logger: Logger;
   readonly reviewBaseUrl: string;
+  /** IANA zone of the spatial report's printed dates (REPORT_TIME_ZONE). */
+  readonly reportTimeZone: string;
   readonly retryBaseSeconds: number;
   readonly retryMaxSeconds: number;
   readonly publishRetryBaseMs: number;

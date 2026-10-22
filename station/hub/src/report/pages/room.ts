@@ -106,7 +106,7 @@ export function paginateRoom(canvas: Canvas, model: Model, room: ModelRoom): Pag
       used += TILES_H + 8 + canvas.blockHeight(dimensionLine(room), DIM_LINE, RW) + 8;
       const note = noteText(room);
       if (note !== undefined) {
-        used += 6 + canvas.blockHeight(note, NOTE, RW - 18) + 6 + 8;
+        used += 1.5 + 6 + canvas.blockHeight(note, NOTE, RW - 19.5) + 6 + 8;
       }
     }
     const lines: ItemLine[] = [];
@@ -226,10 +226,10 @@ export function drawRoomPage(ctx: PageContext, page: Extract<PageSpec, { kind: "
     y += 8;
     const note = noteText(room);
     if (note !== undefined) {
-      const lines = canvas.wrap(note, NOTE, RW - 18);
-      const height = 6 + lines.length * NOTE.line + 6;
+      const lines = canvas.wrap(note, NOTE, RW - 19.5);
+      const height = 0.75 + 6 + lines.length * NOTE.line + 6 + 0.75;
       canvas.roundedBorder(RX, y, RW, height, 4, 0.75, COLOR.line);
-      canvas.lines(lines, NOTE, RX + 9, y + 6, RW - 18);
+      canvas.lines(lines, NOTE, RX + 0.75 + 9, y + 0.75 + 6, RW - 19.5);
       y += height + 8;
     }
   }

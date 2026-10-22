@@ -2,11 +2,11 @@
 // floor (or the floors side by side) with north and scale, and the data column: station verdict,
 // overview and capture.
 
-import { northSymbol, type NorthSymbol, type Verdict } from "@chapter/capture-contract";
+import type { NorthSymbol, Verdict } from "@chapter/capture-contract";
 import { dateSpan, numberWord, shortDate, sqFt as sqFtText, fixed, ftIn, cuFt } from "../format.js";
 import type { Canvas, Run } from "../layout/canvas.js";
 import type { Model, ModelFloor } from "../model.js";
-import { skippedEntries, taskWords } from "../model.js";
+import { floorNorthSymbol, NO_SCAN_MODEL_SYMBOL, skippedEntries, taskWords } from "../model.js";
 import { drawGlyph, type GlyphKind } from "../draw/glyphs.js";
 import {
   drawFloor,
@@ -49,14 +49,6 @@ export function coverSentence(verdict: Verdict, checksPage: number, blockers?: n
       return `Not usable yet. ${numberWord(count)} ${count === 1 ? "blocker is" : "blockers are"} named on page ${checksPage}; the package must be re-sealed.`;
     }
   }
-}
-
-/** Rotation the drawing applies to the plan, counter-clockwise degrees (compass 2.5: rho). */
-function symbolOf(floor: ModelFloor, available: boolean): NorthSymbol {
-  if (!available) {
-    return { kind: "box", box: "Orientation: not verified", caption: WORDS.noScanModel };
-  }
-  return northSymbol(floor.compass, -floor.rotationDegrees);
 }
 
 const LABEL: TextStyle = {
@@ -118,13 +110,8 @@ function drawNotAvailable(canvas: Canvas, floor: ModelFloor | undefined): void {
   const y = 102 + (392 - height) / 2;
   canvas.roundedBorder(x, y, 300, height, 4, 0.75, COLOR.line);
   canvas.lines(lines, style, x + 9, y + 6, 282);
-  const symbol: NorthSymbol = {
-    kind: "box",
-    box: "Orientation: not verified",
-    caption: WORDS.noScanModel,
-  };
-  const size = northBlockSize(canvas, symbol, 32);
-  drawNorthBlock(canvas, symbol, 470, 506 - size.height, 32);
+  const size = northBlockSize(canvas, NO_SCAN_MODEL_SYMBOL, 32);
+  drawNorthBlock(canvas, NO_SCAN_MODEL_SYMBOL, 470, 506 - size.height, 32);
 }
 
 /** The bottom-left block: scale bar + note, then the not-scanned line. Returns its top. */
@@ -188,7 +175,7 @@ function notScannedLines(canvas: Canvas, entries: readonly string[], width: numb
 
 function drawOneFloor(ctx: PageContext, floor: ModelFloor): void {
   const { canvas, model } = ctx;
-  const symbol = symbolOf(floor, true);
+  const symbol = floorNorthSymbol(floor);
   const northSize = northBlockSize(canvas, symbol, 32);
   const northRect: Rect = {
     x: 428,
@@ -244,7 +231,7 @@ function drawFloors(ctx: PageContext): void {
     extra = `+${omitted.length} floors on pages ${Math.min(...pages)}–${Math.max(...pages)}`;
   }
   const arrowSize = 26;
-  const symbols = shown.map((floor) => symbolOf(floor, floor.metrics !== undefined));
+  const symbols = shown.map((floor) => floorNorthSymbol(floor));
   const blockHeights = symbols.map((symbol) => northBlockSize(canvas, symbol, arrowSize).height);
   // Unit extents (metres) of each drawing at scale 1, then the common scale.
   const unitViews = shown.map((floor) =>
@@ -515,14 +502,15 @@ function truncateRuns(canvas: Canvas, runs: readonly Run[], width: number): Run[
 function drawVerdictBlock(canvas: Canvas, model: Model, checksPage: number, top: number): number {
   const verdict = model.verdict;
   const look = VERDICT_STYLE[verdict.outcome];
-  const innerX = DATA_X + 11;
-  const innerWidth = DATA_WIDTH - 22;
+  const innerX = DATA_X + 1.5 + 11;
+  const innerWidth = DATA_WIDTH - 25;
   const sentenceStyle: TextStyle = { ...TYPE.dense, line: 11 };
   const sentence = coverSentence(verdict, checksPage, model.counts.blockers);
   const sentenceLines = canvas.wrap(sentence, sentenceStyle, innerWidth);
-  const height = 8 + 9 + 4 + 14 + 4 + sentenceLines.length * sentenceStyle.line + 9;
+  // Border 1.5 on both sides around padding 8 / 9 (CSS border-box sizes add the border).
+  const height = 1.5 + 8 + 9 + 4 + 14 + 4 + sentenceLines.length * sentenceStyle.line + 9 + 1.5;
   canvas.roundedBorder(DATA_X, top, DATA_WIDTH, height, 6, 1.5, look.border);
-  let y = top + 8;
+  let y = top + 1.5 + 8;
   canvas.line(
     `Station verdict · ${shortDate(verdict.evaluatedAt, model.timeZone)}`,
     TYPE.kickerInner,

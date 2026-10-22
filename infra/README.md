@@ -25,6 +25,7 @@ characters, so they use the short token `stg` / `prod` (decided 2026-10-17, spec
 | Container registry (shared) | `acrchaptercapture`                                  | Created by the production deployment in `rg-chapter-capture-production`. Admin user off.    |
 | Storage account             | `stchaptercapturestg` / `stchaptercaptureprod`       | StorageV2, HTTPS only, TLS 1.2, no public blob access, shared key off, infra encryption on. |
 | Blob container              | `originals`                                          | Versioning, soft delete, version-level immutability, default time-based retention policy.   |
+| Blob container              | `reports`                                            | The station's spatial report PDFs (one per verdict, written once). Versioning, soft delete. |
 | Key Vault                   | `kv-chapter-capture-stg` / `kv-chapter-capture-prod` | RBAC authorization, soft delete, purge protection.                                          |
 | Postgres Flexible Server    | `pg-chapter-capture-<env>`                           | Postgres 16, Entra auth on, password auth off, database `chapter_capture`.                  |
 | Log Analytics workspace     | `log-chapter-capture-<env>`                          | Container Apps logs.                                                                        |
@@ -42,6 +43,7 @@ Default region: `eastus2` (East US 2, the closest region to New York and Miami).
 | -------------------------------- | ------------------------------------------------------- | ------------------------------------------ |
 | API app (system-assigned)        | Storage Blob Data Contributor, Storage Blob Delegator   | storage account                            |
 | Worker app (system-assigned)     | Storage Blob Data Reader                                | storage account                            |
+| Worker app (system-assigned)     | Storage Blob Data Contributor                           | container `reports`                        |
 | API app, worker app              | Key Vault Secrets User                                  | Key Vault                                  |
 | API app, worker app, migrate job | AcrPull                                                 | registry                                   |
 | API app, worker app, migrate job | own Postgres role (Entra principal, see admin step 7)   | database `chapter_capture`                 |
@@ -80,6 +82,8 @@ Names match `station/api/src/core/config.ts`. Set on the api, the worker and the
 | `HUB_BASE_URL`                | parameter `hubBaseUrl` (`CAPTURE_HUB_BASE_URL`, https)                               |
 | `AZURE_STORAGE_ACCOUNT_URL`   | blob endpoint of the storage account                                                 |
 | `STORAGE_ORIGINALS_CONTAINER` | `originals`                                                                          |
+| `STORAGE_REPORTS_CONTAINER`   | `reports`                                                                            |
+| `REPORT_TIME_ZONE`            | `America/New_York` (dates printed in the spatial report; the worker reads it)        |
 | `HUB_SERVICE_CREDENTIAL`      | Key Vault reference `hub-service-credential` (api and worker, not in bootstrap mode) |
 
 `DATABASE_URL`, `PGPASSWORD` and `AZURE_CLIENT_ID` are not set: the identities are

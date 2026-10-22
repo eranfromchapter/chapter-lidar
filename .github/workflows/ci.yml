@@ -63,6 +63,14 @@ jobs:
             exit 1
           fi
 
+      # The spatial report's snapshot and black-and-white tests rasterize pages with pdftoppm
+      # (station/hub/test/report-visual); in CI they fail without it.
+      - name: Install poppler-utils
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends poppler-utils
+          pdftoppm -v
+
       # Runs the workspace tests, then scripts/swift-test.sh.
       - name: Unit
         run: npm test

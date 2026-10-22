@@ -2,10 +2,9 @@
 // 5.2.3): the contents (or the floor's note) and the legend on the left, the floor with its
 // outer dimension strings, north and scale on the right.
 
-import { northSymbol, type NorthSymbol } from "@chapter/capture-contract";
 import type { Canvas } from "../layout/canvas.js";
 import type { Model, ModelFloor } from "../model.js";
-import { skippedEntries } from "../model.js";
+import { floorNorthSymbol, NO_SCAN_MODEL_SYMBOL, skippedEntries } from "../model.js";
 import {
   dimensionRects,
   drawDimensions,
@@ -38,7 +37,10 @@ export const LEGEND_HEIGHT = 9 + PLAN_LEGEND.length * (5 + 10);
 
 /** The contents note under the rows. */
 export function contentsNote(model: Model): string {
-  return model.rooms.every((room) => room.photos.length > 0) || model.photosOmitted
+  if (model.photosOmitted) {
+    return WORDS.contentsNoteNoPhotos;
+  }
+  return model.rooms.every((room) => room.photos.length > 0)
     ? WORDS.contentsNotePhotos
     : WORDS.contentsNoteSomePhotos;
 }
@@ -270,13 +272,8 @@ function drawUnavailable(canvas: Canvas, floor: ModelFloor): void {
   const y = REGION.y + (REGION.height - height) / 2 - 30;
   canvas.roundedBorder(x, y, 300, height, 4, 0.75, COLOR.line);
   canvas.lines(lines, style, x + 9, y + (height - lines.length * style.line) / 2, 282);
-  const symbol: NorthSymbol = {
-    kind: "box",
-    box: "Orientation: not verified",
-    caption: WORDS.noScanModel,
-  };
-  const size = northBlockSize(canvas, symbol, 32);
-  drawNorthBlock(canvas, symbol, 756 - size.width / 2, 502 - size.height, 32);
+  const size = northBlockSize(canvas, NO_SCAN_MODEL_SYMBOL, 32);
+  drawNorthBlock(canvas, NO_SCAN_MODEL_SYMBOL, 756 - size.width / 2, 502 - size.height, 32);
 }
 
 /**
@@ -293,7 +290,7 @@ function drawFloorRegion(ctx: PageContext, floor: ModelFloor, notesTop: number):
   if (fitted === undefined) {
     return;
   }
-  const symbol = northSymbol(floor.compass, -floor.rotationDegrees);
+  const symbol = floorNorthSymbol(floor);
   const north = northBlockSize(canvas, symbol, 32);
   const blockAt = (scale: number, top?: number): Rect => {
     const bar = scaleBar(canvas, scale);

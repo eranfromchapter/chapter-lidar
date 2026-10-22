@@ -16,7 +16,10 @@
 // - DB_POOL_MAX [4]
 // - AZURE_STORAGE_ACCOUNT_URL (managed identity, Azure) or AZURE_STORAGE_CONNECTION_STRING
 //   (secret, Azurite locally): one is required; the account URL wins.
-//   STORAGE_ORIGINALS_CONTAINER [originals]
+//   STORAGE_ORIGINALS_CONTAINER [originals], STORAGE_REPORTS_CONTAINER [reports] (the
+//   spatial report PDFs the worker writes for the web review)
+// - REPORT_TIME_ZONE [America/New_York]: IANA zone of the dates and times printed in the
+//   spatial report (the plan sheet prints in the same zone)
 // - HUB_MODE fake|live [fake]; fake (the in-process fake HUB) is refused in production
 // - HUB_BASE_URL (https in production), HUB_SERVICE_CREDENTIAL (secret): required when live
 // - REVIEW_BASE_URL (required, no default): web review screen base URL for the station links in
@@ -26,6 +29,7 @@
 //   HUB_PUBLISH_RETRY_BASE_MS [2000], HUB_PUBLISH_RETRY_MAX_MS [30000]
 
 import { hostname } from "node:os";
+import { DEFAULT_REPORT_TIME_ZONE } from "@chapter/station-hub";
 
 export type WorkerEnv = "development" | "test" | "production";
 export type LogLevel = "fatal" | "error" | "warn" | "info" | "debug" | "trace" | "silent";
@@ -57,7 +61,10 @@ export interface WorkerConfig {
     readonly connectionString?: string;
     readonly accountUrl?: string;
     readonly originalsContainer: string;
+    readonly reportsContainer: string;
   };
+  /** IANA zone of the spatial report's printed dates. */
+  readonly reportTimeZone: string;
   readonly hub: {
     readonly mode: HubMode;
     readonly baseUrl?: string;
@@ -247,6 +254,16 @@ export function loadConfig(env: Env = process.env): WorkerConfig {
   if (!CONTAINER_NAME.test(originalsContainer)) {
     read.issues.push("STORAGE_ORIGINALS_CONTAINER must be a valid Azure Blob container name");
   }
+  const reportsContainer = read.raw("STORAGE_REPORTS_CONTAINER") ?? "reports";
+  if (!CONTAINER_NAME.test(reportsContainer)) {
+    read.issues.push("STORAGE_REPORTS_CONTAINER must be a valid Azure Blob container name");
+  } else if (reportsContainer === originalsContainer) {
+    read.issues.push("STORAGE_REPORTS_CONTAINER must not be the originals container");
+  }
+  const reportTimeZone = read.raw("REPORT_TIME_ZONE") ?? DEFAULT_REPORT_TIME_ZONE;
+  if (!Intl.supportedValuesOf("timeZone").includes(reportTimeZone) && reportTimeZone !== "UTC") {
+    read.issues.push("REPORT_TIME_ZONE must be an IANA time zone, for example America/New_York");
+  }
   const connectionString = read.raw("AZURE_STORAGE_CONNECTION_STRING");
   const accountUrl = read.url(
     "AZURE_STORAGE_ACCOUNT_URL",
@@ -307,9 +324,11 @@ export function loadConfig(env: Env = process.env): WorkerConfig {
         ...(connectionString === undefined ? {} : { connectionString }),
         ...(accountUrl === undefined ? {} : { accountUrl }),
         originalsContainer,
+        reportsContainer,
       },
       "connectionString",
     ),
+    reportTimeZone,
     hub: hideSecret(
       {
         mode: hubMode,
@@ -355,6 +374,8 @@ export function describeConfig(config: WorkerConfig): Record<string, unknown> {
         : { auth: "url" },
     storage: config.storage.accountUrl ? "account-url" : "connection-string",
     originalsContainer: config.storage.originalsContainer,
+    reportsContainer: config.storage.reportsContainer,
+    reportTimeZone: config.reportTimeZone,
     hubMode: config.hub.mode,
     hubBaseUrl: config.hub.baseUrl,
     hubCredential: config.hub.serviceCredential === undefined ? "unset" : "set",

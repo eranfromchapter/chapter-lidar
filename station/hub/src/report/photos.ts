@@ -7,10 +7,19 @@
 // decoded with heic-decode (libheif in WebAssembly), which applies the HEIF rotation, and then
 // reduced by sharp from the raw pixels.
 
-import decodeHeic from "heic-decode";
+import { createRequire } from "node:module";
 import sharp from "sharp";
 
 sharp.concurrency(1);
+
+/** heic-decode@2.1.0 (CommonJS, no types): the primary image of a HEIC/HEIF file as RGBA. */
+type DecodeHeic = (options: { buffer: Uint8Array | ArrayBuffer }) => Promise<{
+  readonly width: number;
+  readonly height: number;
+  /** RGBA, 4 bytes per pixel, row by row. */
+  readonly data: Uint8ClampedArray;
+}>;
+const decodeHeic = createRequire(import.meta.url)("heic-decode") as DecodeHeic;
 
 export interface PhotoSize {
   readonly width: number;

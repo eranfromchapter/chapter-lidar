@@ -1,4 +1,4 @@
-// Storage account for capture originals.
+// Storage account for capture originals and the station's spatial reports.
 //
 // - StorageV2, HTTPS only, TLS 1.2 minimum, no public blob access.
 // - Shared key access is disabled. The station signs uploads and downloads with user-delegation
@@ -116,6 +116,18 @@ resource originalsRetention 'Microsoft.Storage/storageAccounts/blobServices/cont
   }
 }
 
+// The station's spatial report PDFs (one per verdict, written once by the worker, read through
+// short-lived links by the api). Blob versioning and soft delete come from the blob service; no
+// immutability policy: they are derived documents, not originals.
+resource reports 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobService
+  name: 'reports'
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
 output storageAccountName string = storage.name
 output blobEndpoint string = storage.properties.primaryEndpoints.blob
 output originalsContainerName string = originals.name
+output reportsContainerName string = reports.name
