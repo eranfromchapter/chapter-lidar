@@ -425,7 +425,8 @@
     }
 
     /// Finishes the floor: stops the scan, writes the originals, records the scan's compass
-    /// reading in the capture, maps the capture model.
+    /// reading in the capture (or why there is none; nothing when the session read no compass,
+    /// `CompassResult`), maps the capture model.
     public func finishFloor() async {
       guard let session, var record = builtRecord, !isFinishing else { return }
       isFinishing = true

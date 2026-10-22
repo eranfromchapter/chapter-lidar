@@ -129,8 +129,10 @@ export function variants(): Variant[] {
       (record.captures[0] as CaptureRecord["captures"][number]).headingAccuracy = 31;
     }),
   );
+  // No compass fields at all in a 1.1.0 record: a capture scanned before the app read the compass
+  // (carried over from an older revision), not graded (Q-B).
   add(
-    "capture record 1.1.0 without a compass reading",
+    "capture record 1.1.0 with a capture scanned before the compass",
     withJson<CaptureRecord>(box, p("capture_record"), (record) => {
       record.schemaVersion = "1.1.0";
     }),

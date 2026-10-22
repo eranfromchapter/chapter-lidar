@@ -364,6 +364,11 @@ function twoFloorHouse(): FixtureSpec {
       { axis: "B", from: "Upper Hall west wall", to: "Upper Hall east wall", lengthM: 5 },
     ],
     coverageNotes: "The stair void is open: no wall or rail was captured along its edge.",
+    // Scanned with the compass, but no reading: the compass was not calibrated (the drawn
+    // "Floor 1 verified · Floor 2 not read" sample, Limited). The app writes why for every floor
+    // it scans with the compass; a floor with no compass field at all is one scanned before the
+    // compass, which the station does not grade (owner question Q-B).
+    compass: { issue: "not_calibrated" },
   };
   return {
     name: "two-floor-house",

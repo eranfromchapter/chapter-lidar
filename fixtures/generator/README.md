@@ -19,12 +19,12 @@ Placeholder data only: address `100 Example Street, Testville, NY 00000`, deal i
 `fixtures/generated/index.json` (`generatedFormatVersion` 1.1.0) lists everything below except
 the RoomPlan-only fixtures: `fixtures` (the good ones), `broken`, `legacy` and `samples`.
 
-| Fixture              | Visit and captures  | Shape                                                                                                                              | Compass (capture record)                                  |
-| -------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| `box-room`           | 1 visit, 1 capture  | 4.000 x 3.000 m, ceiling 2.700 m, 1 door, 1 window, 1 table                                                                        | none (record 1.0.0)                                       |
-| `l-shaped-room`      | 1 visit, 1 capture  | 6.000 x 4.000 m outline minus a 3.000 x 2.000 m corner (18 m2), ceiling 2.700 m                                                    | none (record 1.0.0)                                       |
-| `two-room-apartment` | 1 visit, 1 capture  | Living Room 5.000 x 4.000 m + Bedroom 3.000 x 4.000 m, 1 door, 2 windows, 1 passage                                                | approximate: 87.5°, ±12°, magnetic (record 1.1.0)         |
-| `two-floor-house`    | 1 visit, 2 captures | Floor 1 6.000 x 5.000 m (2.700 m); Floor 2 with a 1.000 x 3.000 m stair void (2.500 m); floor-to-floor 2.950 m; 2 shared landmarks | Floor 1 verified: 212.4°, ±8°, true; Floor 2 none (1.1.0) |
+| Fixture              | Visit and captures  | Shape                                                                                                                              | Compass (capture record)                                            |
+| -------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `box-room`           | 1 visit, 1 capture  | 4.000 x 3.000 m, ceiling 2.700 m, 1 door, 1 window, 1 table                                                                        | none (record 1.0.0)                                                 |
+| `l-shaped-room`      | 1 visit, 1 capture  | 6.000 x 4.000 m outline minus a 3.000 x 2.000 m corner (18 m2), ceiling 2.700 m                                                    | none (record 1.0.0)                                                 |
+| `two-room-apartment` | 1 visit, 1 capture  | Living Room 5.000 x 4.000 m + Bedroom 3.000 x 4.000 m, 1 door, 2 windows, 1 passage                                                | approximate: 87.5°, ±12°, magnetic (record 1.1.0)                   |
+| `two-floor-house`    | 1 visit, 2 captures | Floor 1 6.000 x 5.000 m (2.700 m); Floor 2 with a 1.000 x 3.000 m stair void (2.500 m); floor-to-floor 2.950 m; 2 shared landmarks | Floor 1 verified: 212.4°, ±8°, true; Floor 2 not calibrated (1.1.0) |
 
 Each good fixture folder holds:
 
@@ -32,8 +32,8 @@ Each good fixture folder holds:
   house: floor-to-floor, stair void, landmark positions in each capture's own frame).
 - `package/`: a complete v2 intake package laid out exactly per `contract/schema/layout.json`,
   with `manifest.json` (schema 1.1.0; sha256 and bytes of every file), `capture-record.json`
-  (1.1.0 when a capture has a compass reading, else 1.0.0, so both versions stay covered),
-  `field-controls.json`, and per capture: `roomplan.json`, `depth-samples.bin`,
+  (1.1.0 when a capture has a compass reading or issue, else 1.0.0, so both versions stay
+  covered), `field-controls.json`, and per capture: `roomplan.json`, `depth-samples.bin`,
   `capture-model.json`, `plan.dxf`, `rooms.csv`, `plan-sheet.pdf` (role `plan_pdf`), `plan.png`,
   `plan.svg`, `mesh.glb`, `mesh.obj`, `mesh.mtl`, `mesh-texture.png`, `points.las` and one site
   photo JPEG per captured room. No `spatial-report.pdf`: the spatial report is a station output

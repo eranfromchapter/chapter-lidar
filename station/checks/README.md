@@ -51,9 +51,15 @@ verified or approximate reading is info ("True north from the compass.", "North 
 approximate."); any other is the limitation "Plan orientation is not verified; north is not
 shown." with the reason as the measured value (a reading outside the scan names its time and the
 scan's). The next action is None: a reading cannot be added to a finished scan, so the verdict
-lists no next action for it. A capture record 1.0.0 comes from an app that never read the compass
-(owner question Q-B): with `COMPASS_LIMITATION_FOR_LEGACY_RECORDS` false (the default) the check
-is not applicable with one info finding, "No compass reading recorded; orientation not
-verified" (the drawn sample's wording, without a full stop), and the outcome is unchanged; true
-grades its captures like 1.1.0 ones, which makes every package of an app before the compass
-Limited. No capture record: not applicable, no finding.
+lists no next action for it. A capture scanned before the app read the compass has none of the
+compass fields (`scannedBeforeCompass`): every capture of a capture record 1.0.0, and in a 1.1.0
+record a capture carried over from a revision written before the compass, or scanned by a build
+that does not read it (the app writes a reading or `headingIssue` for every capture it scans
+with the compass). Owner question Q-B: with
+`COMPASS_LIMITATION_FOR_LEGACY_RECORDS` false (the default) such a capture is not graded: a 1.0.0
+record gets one info finding, "No compass reading recorded; orientation not verified" (the drawn
+sample's wording, without a full stop), and each such capture of a 1.1.0 record the same finding
+for that capture; the check is not applicable when no capture is graded, and the outcome is
+unchanged. True grades those captures like the others (no compass reading), which makes every
+package of an app before the compass, and every revision carrying such a floor over, Limited. No
+capture record: not applicable, no finding.

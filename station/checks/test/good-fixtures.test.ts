@@ -1,7 +1,7 @@
 // F8 AC1: every synthetic good fixture gets outcome ready, with no blocker or limitation
 // finding, and a verdict that validates against the contract. The one exception is by design:
-// the two-floor house's Floor 2 has no compass reading, so it is limited by orientation.compass
-// alone (GOOD_LIMITATIONS).
+// the two-floor house's Floor 2 has no compass reading (the compass was not calibrated), so it is
+// limited by orientation.compass alone (GOOD_LIMITATIONS).
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";

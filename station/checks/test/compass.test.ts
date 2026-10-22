@@ -1,7 +1,8 @@
 // Check 5b, orientation.compass (compass spec 8.2): the rule set (13 rules, evaluator 1.1.0),
 // the compass findings of every generated fixture, every compass test vector of the contract run
-// through the station, and owner question Q-B (capture records 1.0.0) under both settings of
-// COMPASS_LIMITATION_FOR_LEGACY_RECORDS.
+// through the station, and owner question Q-B (captures scanned before the app read the compass:
+// capture records 1.0.0, and captures without compass fields in a 1.1.0 record, carried over from
+// an older revision) under both settings of COMPASS_LIMITATION_FOR_LEGACY_RECORDS.
 
 import assert from "node:assert/strict";
 import { join, resolve } from "node:path";
@@ -20,6 +21,7 @@ import {
   ORIENTATION_NOT_VERIFIED,
   checkCompass,
   compassCheck,
+  scannedBeforeCompass,
 } from "../src/checks/compass.js";
 import { CheckContext } from "../src/context.js";
 import { outcomeOf } from "../src/finding.js";
@@ -45,6 +47,10 @@ const index = readIndex();
 /** The info finding of a 1.0.0 record: the drawn sample's wording (compass G4), no full stop. */
 const LEGACY_MESSAGE = "No compass reading recorded; orientation not verified";
 
+/** Measured value of a 1.1.0 record's capture that has no compass fields. */
+const BEFORE_COMPASS =
+  "scanned before the app read the compass (no compass fields in capture record 1.1.0)";
+
 function compassFindings(verdict: Verdict): Verdict["findings"] {
   return verdict.findings.filter((item) => item.ruleId === RULE);
 }
@@ -64,6 +70,14 @@ const COMPASS_FIELDS = [
   "headingRecordedAt",
   "headingIssue",
 ] as const;
+
+/** The two-floor house's Floor 1 reading: verified, true north 212.4°, ±8°. */
+const FLOOR_1_VERIFIED: Partial<Capture> = {
+  heading: 212.4,
+  headingAccuracy: 8,
+  headingSource: "true",
+  headingRecordedAt: "2026-10-17T14:02:20Z",
+};
 
 /**
  * The package with the capture record at `schemaVersion` and each capture's compass fields
@@ -136,14 +150,15 @@ describe("compass findings of the generated fixtures", () => {
         },
       ],
     },
-    // Floor 1 verified; Floor 2 has no reading. The limitation comes first (verdict order).
+    // Floor 1 verified; Floor 2 scanned with the compass but not calibrated: a limitation. The
+    // limitation comes first (verdict order).
     "two-floor-house": {
       status: "failed",
       findings: [
         {
           severity: "limitation",
           message: ORIENTATION_NOT_VERIFIED,
-          measured: "No compass reading recorded; orientation not verified",
+          measured: "Compass not calibrated; orientation not verified",
         },
         verified,
       ],
@@ -190,21 +205,61 @@ describe("compass findings of the generated fixtures", () => {
           const capture: Capture | undefined = record.captures.find(
             (c) => c.captureId === item.captureId,
           );
-          assert.equal(item.areaKey, capture?.areaKey);
-          assert.equal(item.expected, COMPASS_EXPECTED);
+          assert.ok(capture !== undefined);
+          assert.equal(item.areaKey, capture.areaKey);
+          // Nothing is expected of a capture scanned before the app read the compass.
+          assert.equal(item.expected, scannedBeforeCompass(capture) ? undefined : COMPASS_EXPECTED);
         }
       }
     });
   }
 
-  it("the two-floor house is limited by Floor 2's orientation alone and asks for nothing", () => {
-    const verdict = runChecks(loadGood("two-floor-house"), HUB_ADDRESS);
+  it("the two-floor house is limited by Floor 2 alone and asks for nothing", () => {
+    // Floor 2 as the app writes a floor scanned with the compass and no reading: why (compass
+    // spec 1.5). The drawn "Floor 1 verified · Floor 2 not read" sample.
+    const pkg = loadGood("two-floor-house");
+    assert.equal(pkg.captureRecord?.schemaVersion, "1.1.0");
+    assert.deepEqual(
+      pkg.captureRecord.captures.map((capture) => [
+        capture.label,
+        capture.headingIssue,
+        scannedBeforeCompass(capture),
+      ]),
+      [
+        ["Floor 1", undefined, false],
+        ["Floor 2", "not_calibrated", false],
+      ],
+    );
+    const verdict = runChecks(pkg, HUB_ADDRESS);
+    assert.equal(compassStatus(verdict), "failed");
     assert.equal(verdict.outcome, "limited");
     assert.deepEqual(verdict.limitations, [`Floor 2: ${ORIENTATION_NOT_VERIFIED}`]);
     assert.deepEqual(verdict.nextActions, []);
     assert.equal(
       verdict.summary,
       "Usable for preliminary existing-condition plans with 1 named limitation. Continue the work the evidence supports.",
+    );
+    assert.deepEqual(
+      compassFindings(verdict).map((item) => [item.areaKey, item.severity, item.message]),
+      [
+        ["floor-2", "limitation", ORIENTATION_NOT_VERIFIED],
+        ["floor-1", "info", "True north from the compass."],
+      ],
+    );
+  });
+
+  it("the same house with Floor 2 carried over from before the compass is ready", () => {
+    const pkg = withReadings(loadGood("two-floor-house"), "1.1.0", [FLOOR_1_VERIFIED, {}]);
+    const verdict = runChecks(pkg, HUB_ADDRESS);
+    assert.equal(compassStatus(verdict), "passed");
+    assert.equal(verdict.outcome, "ready");
+    assert.deepEqual(verdict.limitations, []);
+    assert.deepEqual(
+      compassFindings(verdict).map((item) => [item.areaKey, item.severity, item.message]),
+      [
+        ["floor-1", "info", "True north from the compass."],
+        ["floor-2", "info", LEGACY_MESSAGE],
+      ],
     );
   });
 
@@ -288,6 +343,25 @@ describe("compass test vectors through the station", () => {
       assert.deepEqual(rest, []);
       assert.equal(item.captureId, pkg.captureRecord.captures[0]?.captureId);
       assert.equal(item.nextAction, "None");
+      if (scannedBeforeCompass(vector.capture)) {
+        // No compass field at all: scanned before the app read the compass, not graded (Q-B).
+        // The evaluator still calls it no reading; graded under the other setting.
+        assert.equal(vector.expected.reason, "no_reading");
+        assert.deepEqual(
+          [item.severity, item.message, item.measured, item.expected],
+          ["info", LEGACY_MESSAGE, BEFORE_COMPASS, undefined],
+        );
+        assert.equal(compassStatus(verdict), "not_applicable");
+        assert.equal(verdict.outcome, "ready");
+        const [graded] = compassCheck({ limitationForLegacyRecords: true })(
+          new CheckContext(pkg, HUB_ADDRESS),
+        ).findings;
+        assert.deepEqual(
+          [graded?.severity, graded?.message, graded?.measured],
+          ["limitation", ORIENTATION_NOT_VERIFIED, vector.expected.detail],
+        );
+        return;
+      }
       const usable = vector.expected.kind !== "not_verified";
       assert.equal(item.severity, usable ? "info" : "limitation");
       assert.equal(
@@ -341,6 +415,14 @@ describe("compass test vectors through the station", () => {
     );
     assert.ok(outside.some((vector) => vector.capture.finishedAt === undefined));
     assert.ok(outside.some((vector) => vector.capture.finishedAt !== undefined));
+    // Both kinds of capture without a heading: with headingIssue (graded) and with no field.
+    assert.ok(vectors.some((vector) => scannedBeforeCompass(vector.capture)));
+    assert.ok(
+      vectors.some(
+        (vector) =>
+          vector.capture.heading === undefined && vector.capture.headingIssue !== undefined,
+      ),
+    );
   });
 });
 
@@ -452,24 +534,171 @@ describe("Q-B: capture records 1.0.0", () => {
     });
   });
 
-  it("1.1.0 records are graded the same under both settings", () => {
+  it("1.1.0 records whose captures all carry compass fields are graded the same under both settings", () => {
     for (const pkg of [
-      house,
       loadGood("two-room-apartment"),
+      house,
       loadBroken("compass-time-outside-scan"),
+      withReadings(house, "1.1.0", [{ headingIssue: "unavailable" }, { headingIssue: "rejected" }]),
     ]) {
       assert.equal(pkg.captureRecord?.schemaVersion, "1.1.0");
+      assert.ok(pkg.captureRecord.captures.every((capture) => !scannedBeforeCompass(capture)));
       assert.deepEqual(run(true, pkg), run(false, pkg));
       assert.equal(run(false, pkg).notApplicable, undefined);
     }
   });
+});
 
-  it("a 1.1.0 record without readings is graded, not excused", () => {
-    const output = run(false, withReadings(box, "1.1.0", [{}]));
-    assert.equal(output.notApplicable, undefined);
-    assert.deepEqual(
-      output.findings.map((item) => [item.severity, item.measured]),
-      [["limitation", "No compass reading recorded; orientation not verified"]],
-    );
+describe("Q-B: captures of a 1.1.0 record scanned before the app read the compass", () => {
+  const box = loadGood("box-room");
+  const house = loadGood("two-floor-house");
+  const run = (limitationForLegacyRecords: boolean, pkg: LoadedPackage) =>
+    compassCheck({ limitationForLegacyRecords })(new CheckContext(pkg, HUB_ADDRESS));
+  /** The box room re-sealed by an app that reads the compass: record 1.1.0, Floor 1 carried over. */
+  const carriedBox = withReadings(box, "1.1.0", [{}]);
+  /** The house re-sealed: record 1.1.0, both floors carried over from a 1.0.0 revision. */
+  const carriedHouse = withReadings(house, "1.1.0", [{}, {}]);
+  /** Floor 1 scanned again without a reading (not calibrated), Floor 2 carried over. */
+  const rescanned = withReadings(house, "1.1.0", [{ headingIssue: "not_calibrated" }, {}]);
+  /** Floor 1 scanned again with a verified reading, Floor 2 carried over. */
+  const newFloorVerified = withReadings(house, "1.1.0", [FLOOR_1_VERIFIED, {}]);
+
+  it("a capture is scanned before the compass when it has none of the five compass fields", () => {
+    assert.equal(scannedBeforeCompass({}), true);
+    const one: Array<Partial<Capture>> = [
+      { heading: 212.4 },
+      { headingAccuracy: 8 },
+      { headingSource: "true" },
+      { headingRecordedAt: "2026-10-17T14:02:20Z" },
+      { headingIssue: "rejected" },
+      { headingIssue: "not_calibrated" },
+      { headingIssue: "unavailable" },
+    ];
+    for (const fields of one) {
+      assert.equal(scannedBeforeCompass(fields), false, JSON.stringify(fields));
+    }
+  });
+
+  it("the station's setting is the critique default: such captures are not graded", () => {
+    assert.equal(COMPASS_LIMITATION_FOR_LEGACY_RECORDS, false);
+    for (const pkg of [carriedBox, carriedHouse, rescanned, newFloorVerified, house]) {
+      assert.deepEqual(checkCompass(new CheckContext(pkg, HUB_ADDRESS)), run(false, pkg));
+    }
+  });
+
+  describe("false (default): the 1.0.0 treatment for each such capture", () => {
+    it("one capture: not applicable with its info finding, outcome unchanged", () => {
+      const output = run(false, carriedBox);
+      assert.equal(output.notApplicable, true);
+      const capture = carriedBox.captureRecord?.captures[0];
+      assert.deepEqual(output.findings, [
+        {
+          ruleId: RULE,
+          severity: "info",
+          message: LEGACY_MESSAGE,
+          filePath: pathOf(carriedBox, "capture_record"),
+          measured: BEFORE_COMPASS,
+          nextAction: "None",
+          captureId: capture?.captureId,
+          areaKey: capture?.areaKey,
+        },
+      ]);
+      const verdict = runChecks(carriedBox, HUB_ADDRESS);
+      assert.equal(compassStatus(verdict), "not_applicable");
+      assert.equal(verdict.outcome, "ready");
+      assert.deepEqual(verdict, runChecks(carriedBox, HUB_ADDRESS), "deterministic");
+    });
+
+    it("every capture carried over: not applicable, one info finding per floor", () => {
+      const output = run(false, carriedHouse);
+      assert.equal(output.notApplicable, true);
+      assert.deepEqual(
+        output.findings.map((item) => [item.severity, item.areaKey, item.message, item.measured]),
+        [
+          ["info", "floor-1", LEGACY_MESSAGE, BEFORE_COMPASS],
+          ["info", "floor-2", LEGACY_MESSAGE, BEFORE_COMPASS],
+        ],
+      );
+      const verdict = runChecks(carriedHouse, HUB_ADDRESS);
+      assert.equal(compassStatus(verdict), "not_applicable");
+      assert.equal(verdict.outcome, "ready");
+      const result = validateVerdict(verdict);
+      assert.ok(result.ok, result.ok ? "" : formatErrors(result.errors));
+    });
+
+    it("a new floor with a reading next to one carried over: passed", () => {
+      const output = run(false, newFloorVerified);
+      assert.equal(output.notApplicable, undefined);
+      assert.deepEqual(
+        output.findings.map((item) => [item.severity, item.areaKey, item.expected]),
+        [
+          ["info", "floor-1", COMPASS_EXPECTED],
+          ["info", "floor-2", undefined],
+        ],
+      );
+      assert.equal(compassStatus(runChecks(newFloorVerified, HUB_ADDRESS)), "passed");
+    });
+
+    it("a new floor without a reading next to one carried over: only the new floor limits", () => {
+      const output = run(false, rescanned);
+      assert.equal(output.notApplicable, undefined);
+      assert.deepEqual(
+        output.findings.map((item) => [item.severity, item.areaKey, item.measured]),
+        [
+          ["limitation", "floor-1", "Compass not calibrated; orientation not verified"],
+          ["info", "floor-2", BEFORE_COMPASS],
+        ],
+      );
+      const verdict = runChecks(rescanned, HUB_ADDRESS);
+      assert.equal(compassStatus(verdict), "failed");
+      assert.equal(verdict.outcome, "limited");
+      assert.deepEqual(verdict.limitations, [`Floor 1: ${ORIENTATION_NOT_VERIFIED}`]);
+      assert.deepEqual(verdict.nextActions, []);
+    });
+  });
+
+  describe("true: every such capture is a limitation (no compass reading)", () => {
+    it("one capture", () => {
+      const output = run(true, carriedBox);
+      assert.equal(output.notApplicable, undefined);
+      const capture = carriedBox.captureRecord?.captures[0];
+      assert.deepEqual(output.findings, [
+        {
+          ruleId: RULE,
+          severity: "limitation",
+          message: ORIENTATION_NOT_VERIFIED,
+          filePath: pathOf(carriedBox, "capture_record"),
+          measured: "No compass reading recorded; orientation not verified",
+          nextAction: "None",
+          captureId: capture?.captureId,
+          areaKey: capture?.areaKey,
+          expected: COMPASS_EXPECTED,
+        },
+      ]);
+      assert.equal(outcomeOf(output.findings), "limited");
+    });
+
+    it("a new floor verified next to one carried over: the carried floor limits", () => {
+      const output = run(true, newFloorVerified);
+      assert.deepEqual(
+        output.findings.map((item) => [item.severity, item.areaKey, item.measured]),
+        [
+          ["info", "floor-1", "True heading 212°, accuracy ±8°"],
+          ["limitation", "floor-2", "No compass reading recorded; orientation not verified"],
+        ],
+      );
+      assert.equal(outcomeOf(output.findings), "limited");
+    });
+
+    it("every capture carried over: one limitation per floor", () => {
+      const output = run(true, carriedHouse);
+      assert.deepEqual(
+        output.findings.map((item) => [item.severity, item.areaKey]),
+        [
+          ["limitation", "floor-1"],
+          ["limitation", "floor-2"],
+        ],
+      );
+    });
   });
 });

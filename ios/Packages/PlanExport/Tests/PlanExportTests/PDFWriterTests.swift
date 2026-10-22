@@ -84,14 +84,17 @@ final class PDFWriterTests: XCTestCase {
 
   func testPlanSheetShowsTheCompassStateOfItsCapture() throws {
     // box-room: a 1.0.0 record, no reading. two-floor-house: Floor 1 verified 212.4 ±8 true,
-    // Floor 2 no reading. two-room-apartment: magnetic ±12, approximate.
+    // Floor 2 no reading, the compass was not calibrated. two-room-apartment: magnetic ±12,
+    // approximate.
     let unread = ["Orientation: not verified", "No compass reading"]
+    let notCalibrated = ["Orientation: not verified", "Compass not calibrated"]
     let verified = ["N", "True north \u{00B7} compass", "\u{00B1}8\u{00B0} \u{00B7} 212\u{00B0}"]
     let approximate = [
       "N", "Approx. north \u{00B7} compass", "\u{00B1}12\u{00B0} \u{00B7} magnetic",
     ]
     let cases: [(fixture: String, floor: Int, texts: [String])] = [
-      ("box-room", 0, unread), ("two-floor-house", 0, verified), ("two-floor-house", 1, unread),
+      ("box-room", 0, unread), ("two-floor-house", 0, verified),
+      ("two-floor-house", 1, notCalibrated),
       ("two-room-apartment", 0, approximate),
     ]
     for (fixture, floor, texts) in cases {
@@ -277,7 +280,7 @@ final class PDFWriterTests: XCTestCase {
     }
     XCTAssertEqual(try compass("box-room", 0), .notVerified(.noReading, accuracy: nil))
     XCTAssertEqual(try compass("two-floor-house", 0), .verified(heading: 212.4, accuracy: 8))
-    XCTAssertEqual(try compass("two-floor-house", 1), .notVerified(.noReading, accuracy: nil))
+    XCTAssertEqual(try compass("two-floor-house", 1), .notVerified(.notCalibrated, accuracy: nil))
     XCTAssertEqual(
       try compass("two-room-apartment", 0),
       .approximate(heading: 87.5, accuracy: 12, source: .magnetic))

@@ -153,6 +153,8 @@ final class FakeCompassTests: XCTestCase {
     XCTAssertEqual(nonePrecheck, .notCalibrated)
     XCTAssertNil(none.cameraSample())
     XCTAssertNil(none.replayCompass.reading)
+    XCTAssertEqual(
+      none.replayCompass.issue, .notCalibrated, "the scan records the reason its pre-check gave")
 
     let noCompass = FakeCompass(.verified, isAvailable: false)
     let unavailable = await noCompass.precheck()
@@ -191,6 +193,6 @@ final class FakeCompassTests: XCTestCase {
     XCTAssertEqual(
       FakeCompass(.none).replayCompass.result(startedAt: start)
         .state(capturedAt: captured, finishedAt: finished),
-      .notVerified(.noReading, accuracy: nil))
+      .notVerified(.notCalibrated, accuracy: nil))
   }
 }

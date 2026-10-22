@@ -2,9 +2,15 @@ import CaptureContract
 import Foundation
 
 /// What one floor's scan found (compass §3.3 step 9): the heading of the capture's −Z axis with
-/// its accuracy, north and time, or none, with the issue when the phone knows why (§1.5). The
-/// cases of the contract's `CompassResultValue`, which `CaptureRecord.Capture.setCompass(_:)`
-/// writes; `CaptureFlowModel.finishFloor()` is the only caller on the phone.
+/// its accuracy, north and time, or none with the issue that left none (§1.5). The cases of the
+/// contract's `CompassResultValue`, which `CaptureRecord.Capture.setCompass(_:)` writes;
+/// `CaptureFlowModel.finishFloor()` is the only caller on the phone.
+///
+/// A scan read with the compass always gives a reading or an issue (`HeadingWindow.result`).
+/// `.none(issue: nil)` means the session did not read the compass at all (a `LiveCaptureSession`
+/// without a compass service, a replay without a compass script): the capture then carries no
+/// compass field, like one scanned by an app before the compass, which the station does not
+/// grade (`orientation.compass`, owner question Q-B). No issue is made up for it.
 public typealias CompassResult = CompassResultValue
 
 extension CompassResultValue {

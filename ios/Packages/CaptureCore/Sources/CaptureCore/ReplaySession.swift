@@ -24,7 +24,8 @@ public struct ReplaySource: Sendable, Equatable {
 /// Scripts for tests and UI tests:
 /// - `compass`: right after `.stateChanged(.running)` the chip reads `.compass(.reading)`; from
 ///   step 1 it shows the script's reading (or `.notVerified`), and `finish()` returns its result.
-///   Without a script the session reads no compass (`.none(issue: nil)`), as before.
+///   Without a script the session reads no compass (`.none(issue: nil)`): the capture carries
+///   no compass field, as in a scan without a compass service.
 /// - `trackingLost`: steps during which tracking is lost (`.tracking(.lost(since:))` on entering
 ///   the range, `.tracking(.normal)` on leaving it).
 public actor ReplaySession: CaptureSession {

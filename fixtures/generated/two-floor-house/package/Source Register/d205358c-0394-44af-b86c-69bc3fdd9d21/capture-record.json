@@ -44,7 +44,8 @@
       "finishedAt": "2026-10-17T14:50:40Z",
       "coverageNotes": "The stair void is open: no wall or rail was captured along its edge.",
       "omittedRooms": [],
-      "inaccessibleRooms": []
+      "inaccessibleRooms": [],
+      "headingIssue": "not_calibrated"
     }
   ]
 }

@@ -47,7 +47,9 @@ final class HeadingWindowTests: XCTestCase {
     var window = HeadingWindow()
     feed(Array(CompassPoses.window(from: 0).prefix(7)), into: &window)
     XCTAssertNil(window.best)
-    XCTAssertEqual(window.result(), .none(issue: nil))
+    XCTAssertEqual(
+      window.result(), .none(issue: .rejected),
+      "samples came, but too few in a row to be matched to the scan")
   }
 
   func testASpreadAboveTheAccuracyIsRejected() {
@@ -77,6 +79,16 @@ final class HeadingWindowTests: XCTestCase {
     }
     XCTAssertNil(window.best)
     XCTAssertEqual(window.diagnostics.dropped[.turning], 16)
+    XCTAssertEqual(window.result(), .none(issue: .rejected))
+  }
+
+  func testPairsNeverTrackedNormallyAreRejected() {
+    var window = HeadingWindow()
+    for index in 0..<40 {
+      window.add(CompassPoses.pair(at: Double(index) * 0.25, trackingNormal: false))
+    }
+    XCTAssertEqual(window.diagnostics.dropped[.trackingNotNormal], 40)
+    XCTAssertEqual(window.result(), .none(issue: .rejected))
   }
 
   func testEachGateDropsThePair() {
@@ -165,11 +177,52 @@ final class HeadingWindowTests: XCTestCase {
     XCTAssertEqual(window.result(), .none(issue: .rejected), "the field was calibrated at first")
   }
 
-  func testNoPairsAtAllHasNoIssue() {
+  /// The phone has a compass (nothing marked it unavailable), but no motion sample was ever
+  /// paired with a frame: the readings could not be matched to the scan. Unavailable would say
+  /// "no compass on the device", which only `markUnavailable()` knows (compass §1.5).
+  func testNoPairedSampleIsRejectedNotUnavailable() {
     var window = HeadingWindow()
     window.addUnpaired()
-    XCTAssertEqual(window.result(), .none(issue: nil))
+    XCTAssertEqual(
+      window.result(), .none(issue: .rejected), "Core Motion delivered nothing near a frame")
     XCTAssertEqual(window.diagnostics.unpaired, 1)
+    XCTAssertEqual(HeadingWindow().result(), .none(issue: .rejected), "no frame at all")
+  }
+
+  func testOnlyAPhoneWithoutACompassIsUnavailable() {
+    var window = HeadingWindow()
+    window.markUnavailable()
+    XCTAssertEqual(window.result(), .none(issue: .unavailable))
+    window.addUnpaired()
+    XCTAssertEqual(window.result(), .none(issue: .unavailable))
+  }
+
+  /// A capture record 1.1.0 capture with neither a reading nor an issue is one scanned without the
+  /// compass (station orientation.compass): every result of a scan read with the compass names
+  /// one or the other.
+  func testEveryResultHasAReadingOrAnIssue() {
+    var scenarios: [String: HeadingWindow] = ["never fed": HeadingWindow()]
+    func scenario(_ name: String, _ pairs: [CompassPair]) {
+      var window = HeadingWindow()
+      for pair in pairs { window.add(pair) }
+      scenarios[name] = window
+    }
+    scenario("accepted", CompassPoses.window(from: 0))
+    scenario("seven pairs", Array(CompassPoses.window(from: 0).prefix(7)))
+    scenario(
+      "turning", (0..<16).map { CompassPoses.pair(at: Double($0) * 0.25, rotationRate: 0.5) })
+    scenario(
+      "not calibrated", (0..<16).map { CompassPoses.pair(at: Double($0) * 0.25, accuracy: -1) })
+    scenario(
+      "inconsistent",
+      CompassPoses.window(
+        from: 0, compassHeadings: [206.0, 212, 212, 212, 212, 212, 212, 218], accuracy: 4))
+    for (name, window) in scenarios {
+      switch window.result() {
+      case .reading: XCTAssertEqual(name, "accepted")
+      case .none(let issue): XCTAssertNotNil(issue, name)
+      }
+    }
   }
 
   func testABetterWindowLaterWins() throws {

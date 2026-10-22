@@ -67,8 +67,10 @@ export interface GoodLimitation {
 
 /**
  * Limitations of the good fixtures; none has a blocker. Every good fixture is ready except the
- * two-floor house: its capture record is 1.1.0 and Floor 2 was scanned without a compass reading
- * (compass spec 4.5), so that floor's orientation is not verified.
+ * two-floor house: its capture record is 1.1.0 and Floor 2 was scanned with the compass but got no
+ * reading (headingIssue not_calibrated; compass spec 4.5), so that floor's orientation is not
+ * verified. (A floor with no compass field at all would be one scanned before the compass, which
+ * orientation.compass does not grade.)
  */
 export const GOOD_LIMITATIONS: Readonly<Record<string, readonly GoodLimitation[]>> = {
   "two-floor-house": [
