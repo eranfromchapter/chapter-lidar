@@ -96,6 +96,8 @@ final class AppShellOptionsTests: XCTestCase {
     XCTAssertNil(odd.visitsRoot)
     XCTAssertNil(odd.trackingLost)
     XCTAssertEqual(odd.scanStep, 0.5)
+    XCTAssertEqual(UITestLaunchOptions(arguments: ["-ChapterUITestScanStep", "30"]).scanStep, 30)
+    XCTAssertEqual(UITestLaunchOptions(arguments: ["-ChapterUITestScanStep", "61"]).scanStep, 0.5)
     let fresh = UUID()
     XCTAssertEqual(odd.visitsFolderName(fresh: fresh), "UITestVisits-\(fresh.uuidString)")
   }

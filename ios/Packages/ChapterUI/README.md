@@ -15,7 +15,8 @@ on Linux and macOS. There is no `.apple-only` marker at the package root, so
 `scripts/swift-test.sh` builds the package on Linux (which checks those guards); the marker files
 in the two source folders document that they need Apple frameworks. The macOS runner
 (`.github/workflows/ios.yml`, job `ChapterUI`) builds it for iOS and runs the tests on the iPhone
-17 Pro simulator with **iOS 26.0**, the runtime the snapshot references are recorded on: the
+17 Pro simulator with **iOS 26.0**, the runtime the snapshot references are recorded on, or a point
+release of it (the runner image has 26.0.1; `scripts/snapshot-simulator.sh` picks it): the
 package tests (scheme `ChapterUI-Package`) and the app-hosted snapshot tests (scheme
 `ChapterUISnapshots` of the XcodeGen project, `HostedTests/` with the empty host app
 `SnapshotHost/`; see Snapshot tests).
@@ -23,6 +24,8 @@ package tests (scheme `ChapterUI-Package`) and the app-hosted snapshot tests (sc
 ```sh
 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer   # the pinned Xcode
 DESTINATION='platform=iOS Simulator,name=iPhone 17 Pro,OS=26.0'
+# or, from the repository root, the simulator CI uses (iOS 26.0 or 26.0.x, downloaded if missing):
+# DESTINATION="$(scripts/snapshot-simulator.sh)"
 cd ios/Packages/ChapterUI
 xcodebuild test -scheme ChapterUI-Package -destination "$DESTINATION"
 # The app-hosted snapshots (from the repository root):
@@ -126,11 +129,17 @@ final class HomeSnapshotTests: ChapterSnapshotTestCase {
   area 62 / 34) in light appearance and drawn at scale 3; Dynamic Type with `contentSize:`
   (`.accessibilityExtraLarge` is AX3).
 - **References are recorded on the iPhone 17 Pro simulator with iOS 26.0**
-  (`ChapterSnapshot.referenceSystemVersion`), and ios.yml pins that runtime
-  (`SNAPSHOT_SIMULATOR_DESTINATION`). Another iOS version draws the system chrome differently,
-  beyond the tolerance (iOS 18.5: the navigation bar boards differ by 1.5–4.4 %, the switch board
-  by 0.8 %); a failure on another runtime says so. When the pin moves, record again on the new
-  runtime, or take the `*.actual.png` files of a failing CI run (artifact
+  (`ChapterSnapshot.referenceSystemVersion`), and ios.yml compares them on that iOS version or a
+  point release of it, which the harness treats as the same system: `scripts/snapshot-simulator.sh`
+  reads the version from the harness, picks the iPhone 17 Pro of that runtime on the runner image
+  (26.0.1 there; 26.0 itself first when present), downloads the reference version (or, when
+  Xcode does not offer it, its first point release on offer) when the image has neither, boots the device before the tests (again when a boot hangs, as the first boot of
+  26.0.1 there usually does at "Waiting on BackBoard"), and never falls back to another iOS
+  version. Another iOS version draws the system
+  chrome differently, beyond the tolerance (iOS 18.5: the navigation bar boards differ by
+  1.5–4.4 %, the switch board by 0.8 %); a failure on another runtime says so. When
+  `referenceSystemVersion` moves, record again on the new runtime, or take the `*.actual.png`
+  files of a failing CI run (artifact
   `xcresult-<package>`, folder `snapshots-<package>`; `snapshots-<package>-hosted` for the hosted
   tests) as the new `__Snapshots__/<test file>/<name>.png`, after looking at each.
 - A snapshot fails when more than 0.5 % of its pixels differ by more than 8/255 in any channel

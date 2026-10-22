@@ -22,11 +22,13 @@
   /// On a mismatch the new image, the reference and a diff are attached to the test and written
   /// to `$SNAPSHOT_ARTIFACTS` (default: the temporary directory, `ChapterUISnapshots/`).
   ///
-  /// Run on an iPhone 17 Pro simulator with iOS 26.0 (`referenceSystemVersion`; CI: ios.yml
-  /// pins it), whose screen is the 402 × 874 pt @3x artboard frame. Other iOS versions draw the
-  /// system chrome (navigation bar, switches) differently, by more than the tolerance.
+  /// Run on an iPhone 17 Pro simulator with iOS 26.0 (`referenceSystemVersion`, or a point
+  /// release of it; CI: ios.yml runs on the one scripts/snapshot-simulator.sh picks), whose
+  /// screen is the 402 × 874 pt @3x artboard frame. Other iOS versions draw the system chrome
+  /// (navigation bar, switches) differently, by more than the tolerance.
   public enum ChapterSnapshot {
     /// The iOS version of the simulator every phone reference is recorded and compared on.
+    /// scripts/snapshot-simulator.sh reads it from this line to pick CI's simulator.
     public static let referenceSystemVersion = "26.0"
 
     /// Registers the fonts and applies the navigation bar appearance, as the app does at launch.

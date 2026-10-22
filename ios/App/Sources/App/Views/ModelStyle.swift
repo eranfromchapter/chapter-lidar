@@ -2241,6 +2241,22 @@ enum ModelStyle {
       }
     }
 
+    /// The x of the lines between `doors` equal doors across a front `w` wide, left to right
+    /// (none for one door): -w / 2 + w * i / doors for i in 1..<doors. Spelled out with typed
+    /// steps because the one-line closure (`(1..<doors).map { -w / 2 + w * Float($0) /
+    /// Float(doors) }`) is too slow for Xcode 26's type checker ("unable to type-check this
+    /// expression in reasonable time"); same operations in the same order, so the same values.
+    private func doorLines(_ w: Float, doors: Int) -> [Float] {
+      let left: Float = -w / 2
+      let count = Float(doors)
+      var xs: [Float] = []
+      for i in 1..<doors {
+        let offset: Float = w * Float(i) / count
+        xs.append(left + offset)
+      }
+      return xs
+    }
+
     private func handle(
       _ p: Parts, x: Float, y: Float, z: Float, vertical: Bool, length: Float, _ m: SCNMaterial
     ) {
@@ -2262,7 +2278,7 @@ enum ModelStyle {
         // A panel (a wardrobe front or a cupboard door seen alone).
         p.box(-w / 2, w / 2, 0, h, -d / 2, d / 2, body)
         let doors = max(1, Int((w / 0.5).rounded()))
-        let xs = (1..<doors).map { -w / 2 + w * Float($0) / Float(doors) }
+        let xs = doorLines(w, doors: doors)
         frontLines(p, w, z: d / 2, xs: xs, ys: [], y0: 0.02, y1: h - 0.02, line)
         return
       }
@@ -2312,7 +2328,7 @@ enum ModelStyle {
         let rows = min(max(Int((y1 - y0) / 0.2), 2), 6)
         let columns = w > 1.3 ? 2 : 1
         let rowH = (y1 - y0) / Float(rows)
-        let ys = (1..<rows).map { y0 + rowH * Float($0) }
+        let ys: [Float] = (1..<rows).map { (r: Int) -> Float in y0 + rowH * Float(r) }
         frontLines(p, w, z: front, xs: columns == 2 ? [0] : [], ys: ys, y0: y0, y1: y1, line)
         for r in 0..<rows {
           let y = y0 + rowH * (Float(r) + 0.55)
@@ -2328,7 +2344,7 @@ enum ModelStyle {
       // Doors (with a drawer row under a kitchen worktop).
       let doors = max(1, Int((w / 0.55).rounded()))
       let doorTop = stone ? y1 - min(0.17, y1 * 0.2) : y1
-      let xs = (1..<doors).map { -w / 2 + w * Float($0) / Float(doors) }
+      let xs = doorLines(w, doors: doors)
       frontLines(p, w, z: front, xs: xs, ys: stone ? [doorTop] : [], y0: y0, y1: y1, line)
       let doorW = w / Float(doors)
       for i in 0..<doors {
@@ -2492,7 +2508,7 @@ enum ModelStyle {
         let body = material(Palette.wood), line = material(Palette.woodLine)
         p.box(-w / 2, w / 2, 0, top, -d / 2, d / 2 - 0.02, body)
         let doors = max(1, Int((w / 0.5).rounded()))
-        let xs = (1..<doors).map { -w / 2 + w * Float($0) / Float(doors) }
+        let xs = doorLines(w, doors: doors)
         frontLines(p, w, z: d / 2 - 0.02, xs: xs, ys: [], y0: 0.02, y1: top - 0.02, line)
       }
       let rim = min(0.06, min(w, d) * 0.15)

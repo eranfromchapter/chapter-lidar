@@ -147,8 +147,11 @@ final class ReplayFlowUITests: XCTestCase {
   /// The text drawn inside `element`, read from its pixels (Vision): for the elements whose
   /// accessibility label replaces what they draw (the compass row and chip).
   private func drawnText(of element: XCUIElement) -> String {
+    recognizedText(in: element.screenshot().image)
+  }
+
+  private func recognizedText(in shot: UIImage) -> String {
     // Three times larger: the 13 pt chip text is small for text recognition.
-    let shot = element.screenshot().image
     let size = CGSize(width: shot.size.width * 3, height: shot.size.height * 3)
     let large = UIGraphicsImageRenderer(size: size).image { _ in
       shot.draw(in: CGRect(origin: .zero, size: size))
@@ -162,15 +165,17 @@ final class ReplayFlowUITests: XCTestCase {
       .joined(separator: " | ")
   }
 
-  /// `drawn` holds `expected` once what text recognition confuses is set aside: spaces, the
-  /// middle dot (read as "•", "-" or ".") and the plus-minus sign (read as "+", "‡" or "†").
+  /// Sets aside what text recognition confuses: spaces, the middle dot (read as "•", "-" or
+  /// ".") and the plus-minus sign (read as "+", "‡" or "†").
+  private func plain(_ text: String) -> String {
+    String(
+      text.lowercased().filter { !" ·•-.|".contains($0) }.map { "±‡†".contains($0) ? "+" : $0 })
+  }
+
+  /// `drawn` holds `expected` once what text recognition confuses is set aside (`plain`).
   private func assertDrawn(
     _ element: XCUIElement, _ expected: String, file: StaticString = #filePath, line: UInt = #line
   ) {
-    func plain(_ text: String) -> String {
-      String(
-        text.lowercased().filter { !" ·•-.|".contains($0) }.map { "±‡†".contains($0) ? "+" : $0 })
-    }
     var drawn = ""
     let deadline = Date().addingTimeInterval(10)
     repeat {
@@ -181,6 +186,47 @@ final class ReplayFlowUITests: XCTestCase {
     XCTAssertTrue(
       plain(drawn).contains(plain(expected)), "drawn \"\(drawn)\", expected \"\(expected)\"",
       file: file, line: line)
+  }
+
+  /// The compass row draws "{verdict} · read {AGO}" with the {AGO} VoiceOver says at the same
+  /// moment: "just now" both ways, "12 seconds ago" said and "12 s ago" drawn, "3 minutes ago"
+  /// said and "3 min ago" drawn. "Just now" lasts 5 s, and on a slow runner text recognition
+  /// alone can take longer, so the age is compared with the label read around the screenshot
+  /// (just before and just after it, in case a second ticks over in between), not with a
+  /// fixed "just now".
+  private func assertDrawnAge(
+    _ row: XCUIElement, verdict: String, file: StaticString = #filePath, line: UInt = #line
+  ) {
+    func expected(fromLabel spoken: String) -> String? {
+      // "Compass. North 212 degrees true, plus or minus 8 degrees. Verified, read just now."
+      guard let range = spoken.range(of: "\(verdict), read ", options: .backwards) else {
+        return nil
+      }
+      var ago = String(spoken[range.upperBound...])
+      if ago.hasSuffix(".") { ago.removeLast() }
+      ago = ago.replacingOccurrences(of: " seconds ago", with: " s ago")
+        .replacingOccurrences(of: " minutes ago", with: " min ago")
+        .replacingOccurrences(of: " minute ago", with: " min ago")
+      return "\(verdict) · read \(ago)"
+    }
+    var drawn = ""
+    var expectations: [String] = []
+    let deadline = Date().addingTimeInterval(10)
+    repeat {
+      let before = row.label
+      let shot = row.screenshot().image
+      let after = row.label
+      expectations = [before, after].compactMap(expected(fromLabel:))
+      drawn = recognizedText(in: shot)
+      if expectations.contains(where: { plain(drawn).contains(plain($0)) }) { break }
+      Thread.sleep(forTimeInterval: 0.5)
+    } while Date() < deadline
+    XCTAssertFalse(
+      expectations.isEmpty, "no \"\(verdict), read\" in \(row.label)", file: file, line: line)
+    XCTAssertTrue(
+      expectations.contains(where: { plain(drawn).contains(plain($0)) }),
+      "drawn \"\(drawn)\", expected \(expectations.joined(separator: " or "))", file: file,
+      line: line)
   }
 
   /// "Fonts" registered and every UIKit text of the screen in Inter or Times (phone-capture
@@ -293,7 +339,7 @@ final class ReplayFlowUITests: XCTestCase {
       "Compass. North 212 degrees true, plus or minus 8 degrees. Verified, read just now.")
     // What the row draws (U2, compass §13.4), not only what VoiceOver says.
     assertDrawn(compass, "North 212° true · ±8°")
-    assertDrawn(compass, "Verified · read just now")
+    assertDrawnAge(compass, verdict: "Verified")
     XCTAssertEqual(compass.textFields.count, 0, "the heading is never typed")
     XCTAssertEqual(app.buttons["capture.startScan"].label, "Choose what you are scanning")
     assertFonts("What are you scanning?")
@@ -1083,7 +1129,12 @@ final class ReplayFlowUITests: XCTestCase {
   }
 
   func testCompassNone() {
-    launch(compass: "none", ["-ChapterUITestScanStep", "2.5"])
+    // The chip reads "Compass reading" until the replay's first step. One step every 30 s keeps
+    // that state long enough to be seen on a slow machine: on the CI runner the first look at
+    // the chip came 17 s after Start scan (its accessibility queries take seconds there), so a
+    // 2.5 s step had already moved on to "Compass not verified". The first wall (Finish floor)
+    // comes at step 3, 90 s in.
+    launch(compass: "none", ["-ChapterUITestScanStep", "30"])
     openStepTwo()
     waitForLabel(
       element("compass.row"),
@@ -1092,12 +1143,12 @@ final class ReplayFlowUITests: XCTestCase {
     tap(app.buttons["capture.mode.floor"])
     tap(app.buttons["capture.startScan"])
     let chip = element("scan.compass")
-    waitForLabel(chip, "Compass reading", timeout: 10)
+    waitForLabel(chip, "Compass reading", timeout: 25)
     shot("56 Live scan, compass reading")
-    waitForLabel(chip, "Compass not verified", timeout: 15)
+    waitForLabel(chip, "Compass not verified", timeout: 60)
     shot("57 Live scan, compass not verified")
     let finish = app.buttons["scan.finish"]
-    waitFor("Finish floor enabled") { finish.isEnabled }
+    waitFor("Finish floor enabled", timeout: 120) { finish.isEnabled }
     finish.tap()
 
     // No camera heading: nothing pre-filled.

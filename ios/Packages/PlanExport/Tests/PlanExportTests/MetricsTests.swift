@@ -75,8 +75,12 @@ final class RoomMetricsTests: XCTestCase {
   func testRotatedRoomIsMeasuredAlongItsOwnAxis() throws {
     let angle = 30.0 * .pi / 180
     // A 4 x 3 m room turned 30 degrees counter-clockwise on the plan (plan y is model -z).
-    let corners = [(0.0, 0.0), (0.0, -3.0), (4.0, -3.0), (4.0, 0.0)].map { x, y in
-      (x * cos(angle) - y * sin(angle), -(x * sin(angle) + y * cos(angle)))
+    // Typed steps: as one untyped closure this is too slow for Xcode 26's type checker.
+    let unturned: [(Double, Double)] = [(0.0, 0.0), (0.0, -3.0), (4.0, -3.0), (4.0, 0.0)]
+    let corners = unturned.map { (x: Double, y: Double) -> (Double, Double) in
+      let planX: Double = x * cos(angle) - y * sin(angle)
+      let planY: Double = -(x * sin(angle) + y * cos(angle))
+      return (planX, planY)
     }
     let model = Outlines.model([.init(id: "room-1", label: "Room", corners: corners)])
     let room = try XCTUnwrap(try PlanMetrics(model).rooms.first)
@@ -729,8 +733,10 @@ final class PlanTotalsTests: XCTestCase {
     }
     // A sharp corner (about 11 degrees) is bevelled, so its piece stays near the corner.
     let sliver = [Point2(x: 0, y: 0), Point2(x: 5, y: 0), Point2(x: 0, y: 1)]
-    let reach = PlanTotals.offsetPieces(sliver, by: t).flatMap { $0 }
-      .map { max(-$0.x, $0.x - 5, -$0.y, $0.y - 1) }.max() ?? 0
+    // Typed steps: as one chained expression this is too slow for Xcode 26's type checker.
+    let piecePoints: [Point2] = PlanTotals.offsetPieces(sliver, by: t).flatMap { $0 }
+    let reaches = piecePoints.map { (p: Point2) -> Double in max(-p.x, p.x - 5, -p.y, p.y - 1) }
+    let reach: Double = reaches.max() ?? 0
     XCTAssertLessThanOrEqual(reach, PlanTotals.exteriorMitreLimit * t + 1e-9)
   }
 }

@@ -93,7 +93,7 @@ live scan is true; scans with tracking trouble have fewer depth samples, as inte
 
 `Tests/CaptureUITests` draws every screen and state with `ChapterUISnapshotTesting` (402 × 874 pt
 at scale 3) and compares with `__Snapshots__/`, recorded on the iPhone 17 Pro simulator with iOS
-26.0 (the CI pin). In package tests the system chrome comes out as ChapterUI's README describes
+26.0 (`ChapterSnapshot.referenceSystemVersion`; CI runs them on 26.0 or a point release of it). In package tests the system chrome comes out as ChapterUI's README describes
 (no glass back pill, no switch knob) and system alerts are not drawn: the words, button order and
 actions of the address-different alert of 1c are unit tests (`AddressDifferentAlert`,
 `CaptureFlowModel.addressAlert`), and the drawn alert is checked by the app's UI tests. "Keyboard

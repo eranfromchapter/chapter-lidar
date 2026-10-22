@@ -69,7 +69,7 @@ public enum LaunchModeResolver {
 /// - `-ChapterUITestTrackingLost <first> <last>`: the replay loses tracking from step `first`
 ///   to step `last` (phone-capture §10.3 U5).
 /// - `-ChapterUITestScanStep <seconds>`: the replay plays one step every that many seconds
-///   (default 0.5), so the live scan's states can be seen.
+///   (default 0.5, at most 60), so the live scan's states can be seen.
 /// - `-ChapterUITestV1Visits`: before the home reads the disk, visit folders as the v1 app left
 ///   them are made from the fixture (scans only, a draft, a sealed package; no `visit.json`).
 /// - `-ChapterUITestNotifyDuringScan`: 1.5 s into a live scan, the "Verdict: …" notification of
@@ -130,7 +130,7 @@ public struct UITestLaunchOptions: Equatable, Sendable {
       lost = first...last
     }
     let step = values(after: Self.scanStepArgument)?.first.flatMap(TimeInterval.init)
-      .flatMap { $0 > 0 && $0 <= 10 ? $0 : nil }
+      .flatMap { $0 > 0 && $0 <= 60 ? $0 : nil }
     self.init(
       compass: compass ?? "verified", visitsRoot: root,
       projectsOffline: arguments.contains(Self.offlineArgument), trackingLost: lost,
