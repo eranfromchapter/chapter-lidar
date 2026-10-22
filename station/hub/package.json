@@ -2,7 +2,7 @@
   "name": "@chapter/station-hub",
   "version": "1.0.0",
   "private": true,
-  "description": "Chapter Capture station HUB publish: HUB client (upload, document search, deal lookup), verdict report PDF, HubPublisher and a fake HUB for tests.",
+  "description": "Chapter Capture station HUB publish: HUB client (upload, document search, deal lookup), the spatial report PDF, HubPublisher and a fake HUB for tests.",
   "type": "module",
   "engines": {
     "node": ">=22.13.0"
@@ -25,17 +25,30 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --import tsx --test \"test/**/*.test.ts\""
+    "test": "node --import tsx --test \"test/**/*.test.ts\"",
+    "brand-assets": "node scripts/generate-brand-assets.mjs",
+    "brand-assets:check": "node scripts/generate-brand-assets.mjs --check"
   },
   "dependencies": {
     "@chapter/capture-contract": "1.1.0",
-    "pdfkit": "0.20.2"
+    "heic-decode": "2.1.0",
+    "pdfkit": "0.20.2",
+    "qrcode": "1.5.4",
+    "sharp": "0.35.5"
   },
   "devDependencies": {
+    "@fontsource/cousine": "5.3.0",
+    "@fontsource/tinos": "5.3.0",
     "@types/node": "22.20.5",
     "@types/pdfkit": "0.17.6",
+    "@types/pngjs": "6.0.5",
+    "@types/qrcode": "1.5.5",
+    "jsqr": "1.4.0",
+    "pixelmatch": "7.1.0",
+    "pngjs": "7.0.0",
     "tsx": "4.23.15",
     "typescript": "5.9.3",
-    "unpdf": "1.9.0"
+    "unpdf": "1.9.0",
+    "wawoff2": "2.0.1"
   }
 }

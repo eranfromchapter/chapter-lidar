@@ -14,9 +14,9 @@ export interface PublishedFile {
   readonly name: string;
   /** HUB folder (uploaded), null for linked files. */
   readonly folder: string | null;
-  /** Package path; null for the verdict report. */
+  /** Package path; null for the spatial report. */
   readonly path: string | null;
-  /** Manifest role, "manifest" or "verdict_report". */
+  /** Manifest role, "manifest" or "spatial_report" (older rows: "verdict_report"). */
   readonly role: string;
   readonly sha256: string;
   readonly bytes: number;

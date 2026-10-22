@@ -48,6 +48,12 @@ param blobEndpoint string
 @description('Name of the originals container.')
 param originalsContainerName string
 
+@description('Name of the container of the station\'s spatial report PDFs.')
+param reportsContainerName string
+
+@description('IANA time zone of the dates and times printed in the spatial report.')
+param reportTimeZone string = 'America/New_York'
+
 @description('Postgres server FQDN.')
 param postgresHost string
 
@@ -202,6 +208,15 @@ var commonEnv = [
   {
     name: 'STORAGE_ORIGINALS_CONTAINER'
     value: originalsContainerName
+  }
+  // The worker writes the spatial reports there; the api signs read links to them.
+  {
+    name: 'STORAGE_REPORTS_CONTAINER'
+    value: reportsContainerName
+  }
+  {
+    name: 'REPORT_TIME_ZONE'
+    value: reportTimeZone
   }
 ]
 

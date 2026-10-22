@@ -1,0 +1,90 @@
+{
+  "source": "PlanExport PlanMetrics (Swift), recorded with the T4 parity harness",
+  "model": "fixtures/generated/l-shaped-room/package/Original Exports/floor-1/1208cea9-d678-44fb-9f0d-7dfa9f28b311/capture-model.json",
+  "rooms": [
+    {
+      "bbox": {
+        "acrossM": 4,
+        "alongM": 6,
+        "angle": 0,
+        "longM": 6,
+        "shortM": 4
+      },
+      "ceiling": {
+        "approximate": false,
+        "basis": "roomWalls",
+        "heightM": 2.7,
+        "reasons": []
+      },
+      "floorAreaM2": 18,
+      "frameAngle": 0,
+      "id": "room-1",
+      "inscribed": {
+        "acrossM": 4,
+        "alongM": 3,
+        "angle": 0,
+        "longM": 4,
+        "shortM": 3
+      },
+      "label": "L Room",
+      "objects": [],
+      "openings": [
+        {
+          "areaM2": 1.8900000000000001,
+          "heightM": 2.1,
+          "id": "door-1",
+          "type": "door",
+          "widthM": 0.9
+        },
+        {
+          "areaM2": 1.44,
+          "heightM": 1.2,
+          "id": "window-1",
+          "type": "window",
+          "widthM": 1.2
+        },
+        {
+          "areaM2": 1.44,
+          "heightM": 1.2,
+          "id": "window-2",
+          "type": "window",
+          "widthM": 1.2
+        },
+        {
+          "areaM2": 2.1,
+          "heightM": 2.1,
+          "id": "opening-1",
+          "type": "opening",
+          "widthM": 1
+        }
+      ],
+      "perimeterM": 20,
+      "strings": {
+        "bboxLong": "19' 8.2\"",
+        "bboxShort": "13' 1.5\"",
+        "ceiling": "8' 10.3\"",
+        "floorArea": "193.8 ft²",
+        "inscribedLong": "13' 1.5\"",
+        "inscribedShort": "9' 10.1\"",
+        "perimeter": "65' 7.4\""
+      },
+      "type": null,
+      "volumeM3": 48.6,
+      "wallAreaExclM2": 47.13000000000001,
+      "wallAreaInclM2": 54.00000000000001,
+      "walledLengthM": 20
+    }
+  ],
+  "totals": {
+    "bathrooms": 0,
+    "bedrooms": 0,
+    "livableAreaM2": 18,
+    "perimeter": "65' 7.4\"",
+    "perimeterM": 20,
+    "roomCount": 1,
+    "volumeIsApproximate": false,
+    "volumeM3": 48.6,
+    "wallAreaM2": 47.13000000000001,
+    "windowAreaM2": 2.88
+  }
+}

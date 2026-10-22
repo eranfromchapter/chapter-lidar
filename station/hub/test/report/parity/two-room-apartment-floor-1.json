@@ -1,0 +1,153 @@
+{
+  "source": "PlanExport PlanMetrics (Swift), recorded with the T4 parity harness",
+  "model": "fixtures/generated/two-room-apartment/package/Original Exports/floor-1/80d5ff80-5172-40f3-acc9-5cf59acdfd61/capture-model.json",
+  "rooms": [
+    {
+      "bbox": {
+        "acrossM": 4,
+        "alongM": 5,
+        "angle": 0,
+        "longM": 5,
+        "shortM": 4
+      },
+      "ceiling": {
+        "approximate": false,
+        "basis": "roomWalls",
+        "heightM": 2.7,
+        "reasons": []
+      },
+      "floorAreaM2": 20,
+      "frameAngle": 0,
+      "id": "room-1",
+      "inscribed": {
+        "acrossM": 4,
+        "alongM": 5,
+        "angle": 0,
+        "longM": 5,
+        "shortM": 4
+      },
+      "label": "Living Room",
+      "objects": [
+        {
+          "category": "sofa",
+          "id": "object-1",
+          "sizeM": [2, 0.8, 0.9]
+        }
+      ],
+      "openings": [
+        {
+          "areaM2": 1.8900000000000001,
+          "heightM": 2.1,
+          "id": "door-1",
+          "type": "door",
+          "widthM": 0.9
+        },
+        {
+          "areaM2": 1.7999999999999998,
+          "heightM": 1.2,
+          "id": "window-1",
+          "type": "window",
+          "widthM": 1.5
+        },
+        {
+          "areaM2": 2.1,
+          "heightM": 2.1,
+          "id": "opening-1",
+          "type": "opening",
+          "widthM": 1
+        }
+      ],
+      "perimeterM": 18,
+      "strings": {
+        "bboxLong": "16' 4.9\"",
+        "bboxShort": "13' 1.5\"",
+        "ceiling": "8' 10.3\"",
+        "floorArea": "215.3 ft²",
+        "inscribedLong": "16' 4.9\"",
+        "inscribedShort": "13' 1.5\"",
+        "perimeter": "59' 0.7\""
+      },
+      "type": null,
+      "volumeM3": 54,
+      "wallAreaExclM2": 42.81,
+      "wallAreaInclM2": 48.6,
+      "walledLengthM": 18
+    },
+    {
+      "bbox": {
+        "acrossM": 4,
+        "alongM": 3,
+        "angle": 0,
+        "longM": 4,
+        "shortM": 3
+      },
+      "ceiling": {
+        "approximate": false,
+        "basis": "roomWalls",
+        "heightM": 2.7,
+        "reasons": []
+      },
+      "floorAreaM2": 12,
+      "frameAngle": 0,
+      "id": "room-2",
+      "inscribed": {
+        "acrossM": 4,
+        "alongM": 3,
+        "angle": 0,
+        "longM": 4,
+        "shortM": 3
+      },
+      "label": "Bedroom",
+      "objects": [
+        {
+          "category": "bed",
+          "id": "object-2",
+          "sizeM": [1.6, 0.5, 2]
+        }
+      ],
+      "openings": [
+        {
+          "areaM2": 1.8900000000000001,
+          "heightM": 2.1,
+          "id": "door-1",
+          "type": "door",
+          "widthM": 0.9
+        },
+        {
+          "areaM2": 1.44,
+          "heightM": 1.2,
+          "id": "window-2",
+          "type": "window",
+          "widthM": 1.2
+        }
+      ],
+      "perimeterM": 14,
+      "strings": {
+        "bboxLong": "13' 1.5\"",
+        "bboxShort": "9' 10.1\"",
+        "ceiling": "8' 10.3\"",
+        "floorArea": "129.2 ft²",
+        "inscribedLong": "13' 1.5\"",
+        "inscribedShort": "9' 10.1\"",
+        "perimeter": "45' 11.2\""
+      },
+      "type": null,
+      "volumeM3": 32.400000000000006,
+      "wallAreaExclM2": 34.470000000000006,
+      "wallAreaInclM2": 37.800000000000004,
+      "walledLengthM": 14
+    }
+  ],
+  "totals": {
+    "bathrooms": 0,
+    "bedrooms": 0,
+    "livableAreaM2": 32,
+    "perimeter": "104' 11.8\"",
+    "perimeterM": 32,
+    "roomCount": 2,
+    "volumeIsApproximate": false,
+    "volumeM3": 86.4,
+    "wallAreaM2": 77.28,
+    "windowAreaM2": 3.2399999999999998
+  }
+}

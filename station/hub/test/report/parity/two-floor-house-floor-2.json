@@ -1,0 +1,76 @@
+{
+  "source": "PlanExport PlanMetrics (Swift), recorded with the T4 parity harness",
+  "model": "fixtures/generated/two-floor-house/package/Original Exports/floor-2/e236b82f-337b-45f5-ab4b-6a8f3eb64ffc/capture-model.json",
+  "rooms": [
+    {
+      "bbox": {
+        "acrossM": 6,
+        "alongM": 5,
+        "angle": 0,
+        "longM": 6,
+        "shortM": 5
+      },
+      "ceiling": {
+        "approximate": false,
+        "basis": "roomWalls",
+        "heightM": 2.5,
+        "reasons": []
+      },
+      "floorAreaM2": 27,
+      "frameAngle": 0,
+      "id": "room-1",
+      "inscribed": {
+        "acrossM": 5,
+        "alongM": 5,
+        "angle": 0,
+        "longM": 5,
+        "shortM": 5
+      },
+      "label": "Upper Hall",
+      "objects": [],
+      "openings": [
+        {
+          "areaM2": 1.44,
+          "heightM": 1.2,
+          "id": "window-1",
+          "type": "window",
+          "widthM": 1.2
+        },
+        {
+          "areaM2": 1.44,
+          "heightM": 1.2,
+          "id": "window-2",
+          "type": "window",
+          "widthM": 1.2
+        }
+      ],
+      "perimeterM": 22,
+      "strings": {
+        "bboxLong": "19' 8.2\"",
+        "bboxShort": "16' 4.9\"",
+        "ceiling": "8' 2.4\"",
+        "floorArea": "290.6 ft²",
+        "inscribedLong": "16' 4.9\"",
+        "inscribedShort": "16' 4.9\"",
+        "perimeter": "72' 2.1\""
+      },
+      "type": null,
+      "volumeM3": 67.5,
+      "wallAreaExclM2": 42.12,
+      "wallAreaInclM2": 45,
+      "walledLengthM": 18
+    }
+  ],
+  "totals": {
+    "bathrooms": 0,
+    "bedrooms": 0,
+    "livableAreaM2": 27,
+    "perimeter": "72' 2.1\"",
+    "perimeterM": 22,
+    "roomCount": 1,
+    "volumeIsApproximate": false,
+    "volumeM3": 67.5,
+    "wallAreaM2": 42.12,
+    "windowAreaM2": 2.88
+  }
+}

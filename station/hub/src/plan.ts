@@ -1,27 +1,32 @@
 // What a publication sends to the HUB and what it only links, and where each file goes.
 //
 // Folder rules (project Files tab):
-// - visit-wide files (the verdict report PDF and manifest.json): Capture/<visitId>/r<revision>
+// - visit-wide files (the station's spatial report PDF and manifest.json):
+//   Capture/<visitId>/r<revision>
 // - per-capture files: Capture/<areaKey>/<captureId>/r<revision>
 //
-// Uploaded: the verdict report PDF, manifest.json, and the plan DXF, rooms CSV, plan PDF,
-// Spatial Report PDF and plan PNG of every capture. A file over 45 MiB is never uploaded (the
-// HUB caps uploads at 50 MB). Every package file that is not uploaded (too large, or a role the
-// HUB does not get: meshes, LAS, photos, raw data, ...) is listed in the report with a station
-// link that requires Entra sign-in: ${REVIEW_BASE_URL}/packages/<packageId>?file=<path>.
+// Uploaded: the spatial report PDF (spatial-report-<verdictId>.pdf, made by the station after
+// the checks), manifest.json, and the plan DXF, rooms CSV, plan sheet PDF and plan PNG of every
+// capture. A file over 45 MiB is never uploaded (the HUB caps uploads at 50 MB). Every package
+// file that is not uploaded (too large, or a role the HUB does not get: meshes, LAS, photos, raw
+// data, the retired phone report spatial_report_pdf of packages sealed before v2, ...) is listed
+// in the report with a station link that requires Entra sign-in:
+// ${REVIEW_BASE_URL}/packages/<packageId>?file=<path>.
 
-import type { Role } from "@chapter/capture-contract";
+import type { PhotoDirection, PhotoSubject, Role } from "@chapter/capture-contract";
 import { HubError } from "./errors.js";
 
 /** Largest file the station uploads to the HUB: 45 MiB. */
 export const MAX_HUB_UPLOAD_BYTES = 45 * 1024 * 1024;
 
-/** Package file roles uploaded to the HUB (when not over the size limit). */
+/**
+ * Package file roles uploaded to the HUB (when not over the size limit). The phone's retired
+ * spatial_report_pdf is never uploaded next to the station's spatial report: it is linked.
+ */
 export const HUB_UPLOAD_ROLES: readonly Role[] = Object.freeze([
   "plan_dxf",
   "rooms_csv",
   "plan_pdf",
-  "spatial_report_pdf",
   "plan_png",
 ]);
 
@@ -37,6 +42,13 @@ export interface PackageFileRecord {
   readonly sha256: string;
   readonly bytes: number;
   readonly mime?: string;
+  /** Manifest photo labels (role photo): where the spatial report shows the photo. */
+  readonly photo?: {
+    readonly room: string;
+    readonly direction: PhotoDirection;
+    readonly subject: PhotoSubject;
+    readonly takenAt: string;
+  };
 }
 
 /** The package revision being published. */
@@ -51,6 +63,10 @@ export interface PublishPackage {
   readonly manifestSha256: string;
   readonly manifestBytes: number;
   readonly files: readonly PackageFileRecord[];
+  /** Manifest sealedAt (printed on the report). */
+  readonly sealedAt?: string;
+  /** Number of manifest entries (default: files.length). */
+  readonly manifestFileCount?: number;
 }
 
 export type PlannedSource = "report" | "manifest" | "package";
@@ -83,7 +99,7 @@ export interface PlannedLink {
 export type PlannedFile = PlannedUpload | PlannedLink;
 
 export interface PublicationPlan {
-  /** Where the verdict report goes (its bytes are rendered from this plan). */
+  /** Where the spatial report goes (its bytes are rendered from this plan). */
   readonly report: { readonly folder: string; readonly name: string };
   /** Every other file: manifest and package files, in package path order. */
   readonly files: readonly PlannedFile[];
@@ -105,9 +121,9 @@ export function captureFolder(areaKey: string, captureId: string, revision: numb
   return `Capture/${areaKey}/${captureId}/r${revision}`;
 }
 
-/** Name of the verdict report: one per verdict, so a new verdict never replaces an old file. */
+/** Name of the spatial report: one per verdict, so a new verdict never replaces an old file. */
 export function reportName(verdictId: string): string {
-  return `verdict-report-${verdictId}.pdf`;
+  return `spatial-report-${verdictId}.pdf`;
 }
 
 /** Authenticated station link of one package file (the review screen, behind Entra sign-in). */

@@ -275,6 +275,7 @@ module apps 'modules/containerapps.bicep' = {
     keyVaultUri: keyVault.outputs.vaultUri
     blobEndpoint: storage.outputs.blobEndpoint
     originalsContainerName: storage.outputs.originalsContainerName
+    reportsContainerName: storage.outputs.reportsContainerName
     postgresHost: postgres.outputs.fqdn
     postgresDatabase: postgres.outputs.databaseName
     hubBaseUrl: hubBaseUrl
@@ -310,6 +311,7 @@ module roles 'modules/roles.bicep' = {
   scope: rg
   params: {
     storageAccountName: storage.outputs.storageAccountName
+    reportsContainerName: storage.outputs.reportsContainerName
     keyVaultName: keyVault.outputs.keyVaultName
     apiAppName: names.apiApp
     workerAppName: names.workerApp

@@ -1,4 +1,4 @@
-// F9 AC5: the verdict report contains the outcome, every finding and the not-certification
+// F9 AC5: the spatial report contains the outcome, every finding and the not-certification
 // statement as extractable text.
 
 import assert from "node:assert/strict";
@@ -9,10 +9,10 @@ import {
   REPORT_NOT_CERTIFICATION,
   outcomeInPlainWords,
   pdfSafeText,
-  renderVerdictReport,
+  renderSpatialReport,
   type ReportFile,
 } from "../src/index.js";
-import { MIB, makeTestPackage, pdfText, squash } from "./helpers.js";
+import { MIB, REVIEW_BASE_URL, makeTestPackage, pdfText, squash } from "./helpers.js";
 
 const RECORD = makeTestPackage().captureRecord;
 
@@ -20,20 +20,25 @@ async function render(
   verdict: Verdict,
   files: ReportFile[] = [],
   captureRecord = RECORD,
-): Promise<{ text: string; bytes: Buffer }> {
-  const bytes = await renderVerdictReport({
+): Promise<{ text: string; bytes: Buffer; checksPage: number }> {
+  const rendered = await renderSpatialReport({
     verdict,
     packageId: verdict.packageId,
     dealId: "fixture-deal-0001",
     captureRecord,
     reportLocation: {
       folder: `Capture/${verdict.visitId}/r1`,
-      name: `verdict-report-${verdict.verdictId}.pdf`,
+      name: `spatial-report-${verdict.verdictId}.pdf`,
     },
     files,
     maxUploadBytes: 45 * MIB,
+    reviewBaseUrl: REVIEW_BASE_URL,
   });
-  return { text: await pdfText(bytes), bytes };
+  return {
+    text: await pdfText(rendered.bytes),
+    bytes: rendered.bytes,
+    checksPage: rendered.checksPage,
+  };
 }
 
 function assertHasFinding(text: string, finding: Finding): void {
@@ -52,15 +57,16 @@ function assertHasFinding(text: string, finding: Finding): void {
   }
 }
 
-describe("verdict report", () => {
+describe("spatial report (F9 AC5)", () => {
   it("holds the outcome, every finding and the statements (limited)", async () => {
     const { verdict } = makeTestPackage();
     assert.ok(validateVerdict(verdict).ok);
-    const { text, bytes } = await render(verdict);
+    const { text, bytes, checksPage } = await render(verdict);
     assert.equal(bytes.subarray(0, 5).toString("latin1"), "%PDF-");
     const squashed = squash(text);
-    assert.ok(squashed.includes("Outcome:LIMITED"));
-    assert.ok(squashed.includes(squash(outcomeInPlainWords(verdict))));
+    assert.ok(squashed.includes(squash("Limited: usable with named limitations")));
+    assert.ok(squashed.includes("STATIONVERDICT"));
+    assert.ok(squashed.includes(squash(outcomeInPlainWords(verdict, checksPage))));
     assert.ok(squashed.includes(squash(verdict.summary)));
     for (const finding of verdict.findings) {
       assertHasFinding(text, finding);
@@ -73,7 +79,7 @@ describe("verdict report", () => {
     }
     assert.ok(squashed.includes(squash(verdict.statement)));
     assert.ok(squashed.includes(squash(REPORT_NOT_CERTIFICATION)));
-    assert.ok(text.includes("not a certification of measurements"));
+    assert.ok(text.includes("not a certification of any property model or measurement"));
   });
 
   it("holds every finding of a long blocked verdict across pages, symbols spelled out", async () => {
@@ -98,7 +104,7 @@ describe("verdict report", () => {
     };
     assert.ok(validateVerdict(verdict).ok);
     const { text } = await render(verdict);
-    assert.ok(squash(text).includes("Outcome:BLOCKED"));
+    assert.ok(squash(text).includes(squash("Blocked: missing information prevents the task")));
     for (const finding of findings) {
       assertHasFinding(text, finding);
     }
@@ -119,10 +125,10 @@ describe("verdict report", () => {
       nextActions: [],
     };
     assert.ok(validateVerdict(verdict).ok);
-    const { text } = await render(verdict);
+    const { text, checksPage } = await render(verdict);
     const squashed = squash(text);
-    assert.ok(squashed.includes("Outcome:READY"));
-    assert.ok(squashed.includes(squash(outcomeInPlainWords(verdict))));
+    assert.ok(squashed.includes(squash("Ready for preliminary existing-condition plans")));
+    assert.ok(squashed.includes(squash(outcomeInPlainWords(verdict, checksPage))));
     assert.ok(squashed.includes("Nofindings."));
     assert.ok(squashed.includes(squash(REPORT_NOT_CERTIFICATION)));
   });

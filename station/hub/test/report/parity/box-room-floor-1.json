@@ -1,0 +1,82 @@
+{
+  "source": "PlanExport PlanMetrics (Swift), recorded with the T4 parity harness",
+  "model": "fixtures/generated/box-room/package/Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/capture-model.json",
+  "rooms": [
+    {
+      "bbox": {
+        "acrossM": 3,
+        "alongM": 4,
+        "angle": 0,
+        "longM": 4,
+        "shortM": 3
+      },
+      "ceiling": {
+        "approximate": false,
+        "basis": "roomWalls",
+        "heightM": 2.7,
+        "reasons": []
+      },
+      "floorAreaM2": 12,
+      "frameAngle": 0,
+      "id": "room-1",
+      "inscribed": {
+        "acrossM": 3,
+        "alongM": 4,
+        "angle": 0,
+        "longM": 4,
+        "shortM": 3
+      },
+      "label": "Test Room",
+      "objects": [
+        {
+          "category": "table",
+          "id": "object-1",
+          "sizeM": [1.2, 0.75, 0.8]
+        }
+      ],
+      "openings": [
+        {
+          "areaM2": 1.8900000000000001,
+          "heightM": 2.1,
+          "id": "door-1",
+          "type": "door",
+          "widthM": 0.9
+        },
+        {
+          "areaM2": 1.44,
+          "heightM": 1.2,
+          "id": "window-1",
+          "type": "window",
+          "widthM": 1.2
+        }
+      ],
+      "perimeterM": 14,
+      "strings": {
+        "bboxLong": "13' 1.5\"",
+        "bboxShort": "9' 10.1\"",
+        "ceiling": "8' 10.3\"",
+        "floorArea": "129.2 ft²",
+        "inscribedLong": "13' 1.5\"",
+        "inscribedShort": "9' 10.1\"",
+        "perimeter": "45' 11.2\""
+      },
+      "type": null,
+      "volumeM3": 32.400000000000006,
+      "wallAreaExclM2": 34.470000000000006,
+      "wallAreaInclM2": 37.800000000000004,
+      "walledLengthM": 14
+    }
+  ],
+  "totals": {
+    "bathrooms": 0,
+    "bedrooms": 0,
+    "livableAreaM2": 12,
+    "perimeter": "45' 11.2\"",
+    "perimeterM": 14,
+    "roomCount": 1,
+    "volumeIsApproximate": false,
+    "volumeM3": 32.400000000000006,
+    "wallAreaM2": 34.470000000000006,
+    "windowAreaM2": 1.44
+  }
+}

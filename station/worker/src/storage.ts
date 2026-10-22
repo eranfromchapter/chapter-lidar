@@ -1,7 +1,9 @@
-// Read access to the originals container (Azure Blob; Azurite locally).
+// Read access to the originals container and write-once access to the reports container
+// (Azure Blob; Azurite locally).
 //
-// - Account URL (Azure): DefaultAzureCredential (the worker's managed identity). Read only; the
-//   worker never writes, overwrites or deletes an original.
+// - Account URL (Azure): DefaultAzureCredential (the worker's managed identity). The worker
+//   never writes, overwrites or deletes an original; it only creates spatial report blobs, each
+//   once (createReportsWriter).
 // - Connection string (Azurite locally).
 //
 // Blob names always come from package_files.blob_name (a re-uploaded file lives in
@@ -70,10 +72,10 @@ function wrap(error: unknown, operation: string): StorageError {
   return new StorageError(`${operation} failed: ${message}`, "ClientError");
 }
 
-export function createOriginalsReader(
+function serviceClient(
   config: WorkerConfig["storage"],
   credential?: TokenCredential,
-): OriginalsReader {
+): BlobServiceClient {
   let service: BlobServiceClient;
   if (config.accountUrl !== undefined) {
     service = new BlobServiceClient(config.accountUrl, credential ?? new DefaultAzureCredential());
@@ -90,7 +92,119 @@ export function createOriginalsReader(
   } else {
     throw new StorageError("originals storage is not configured", "NotConfigured");
   }
-  return blobReader(service.getContainerClient(config.originalsContainer));
+  return service;
+}
+
+export function createOriginalsReader(
+  config: WorkerConfig["storage"],
+  credential?: TokenCredential,
+): OriginalsReader {
+  return blobReader(
+    serviceClient(config, credential).getContainerClient(config.originalsContainer),
+  );
+}
+
+// MARK: Reports
+
+/** Writes the station's spatial reports (container `reports`). */
+export interface ReportsWriter {
+  readonly container: string;
+  /**
+   * Stores a report under `blobName`, once: the blob is created only when it does not exist. An
+   * existing blob with the same SHA-256 is success (a retried job); a different one is refused
+   * (ReportConflictError): a stored report is never replaced.
+   */
+  write(blobName: string, data: Uint8Array, sha256: string): Promise<"created" | "exists">;
+  /** The bytes of a stored report. */
+  read(blobName: string): Promise<Uint8Array>;
+}
+
+/** A different report is already stored under the name. Another attempt cannot fix it. */
+export class ReportConflictError extends Error {
+  readonly retryable = false;
+
+  constructor(
+    readonly blobName: string,
+    /** SHA-256 the stored blob was written with (its metadata), when it has one. */
+    readonly storedSha256?: string,
+  ) {
+    super(`A different spatial report is already stored as ${blobName}; it is not replaced`);
+    this.name = "ReportConflictError";
+  }
+}
+
+/** Metadata key holding the SHA-256 of a stored report. */
+export const REPORT_SHA256_METADATA = "sha256";
+
+/** The part of a container client the reports writer uses (tests fake it). */
+export interface ReportsContainer {
+  readonly containerName: string;
+  getBlockBlobClient(name: string): {
+    upload(
+      body: Uint8Array,
+      length: number,
+      options: {
+        blobHTTPHeaders: { blobContentType: string };
+        metadata: Record<string, string>;
+        conditions: { ifNoneMatch: string };
+      },
+    ): Promise<unknown>;
+    getProperties(): Promise<{ metadata?: Record<string, string>; contentLength?: number }>;
+    downloadToBuffer(): Promise<Buffer>;
+  };
+}
+
+export function reportsWriter(container: ReportsContainer): ReportsWriter {
+  return {
+    container: container.containerName,
+    async write(blobName, data, sha256) {
+      const blob = container.getBlockBlobClient(blobName);
+      try {
+        await blob.upload(data, data.byteLength, {
+          blobHTTPHeaders: { blobContentType: "application/pdf" },
+          metadata: { [REPORT_SHA256_METADATA]: sha256 },
+          conditions: { ifNoneMatch: "*" },
+        });
+        return "created";
+      } catch (error) {
+        // If-None-Match: * on an existing blob: 409 BlobAlreadyExists (412 on some services).
+        const exists =
+          error instanceof RestError && (error.statusCode === 409 || error.statusCode === 412);
+        if (!exists) {
+          throw wrap(error, "report upload");
+        }
+      }
+      let properties;
+      try {
+        properties = await blob.getProperties();
+      } catch (error) {
+        throw wrap(error, "report properties");
+      }
+      if (
+        properties.metadata?.[REPORT_SHA256_METADATA] === sha256 &&
+        properties.contentLength === data.byteLength
+      ) {
+        return "exists";
+      }
+      throw new ReportConflictError(blobName, properties.metadata?.[REPORT_SHA256_METADATA]);
+    },
+    async read(blobName) {
+      try {
+        return await container.getBlockBlobClient(blobName).downloadToBuffer();
+      } catch (error) {
+        throw wrap(error, "report download");
+      }
+    },
+  };
+}
+
+export function createReportsWriter(
+  config: WorkerConfig["storage"],
+  credential?: TokenCredential,
+): ReportsWriter {
+  return reportsWriter(
+    serviceClient(config, credential).getContainerClient(config.reportsContainer),
+  );
 }
 
 export function blobReader(container: ContainerClient): OriginalsReader {

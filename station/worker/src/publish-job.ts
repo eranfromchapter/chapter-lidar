@@ -1,4 +1,6 @@
-// publish job: puts the package's current verdict into the HUB through HubPublisher.
+// publish job: puts the package's current verdict into the HUB through HubPublisher, with the
+// station's spatial report of that verdict (rendered by the publisher, stored here for the web
+// review in the reports container and spatial_reports before anything is uploaded).
 //
 // The HUB-level retries (5 attempts with exponential backoff, then publish_failed) happen inside
 // HubPublisher while this job holds its lock. The job ends succeeded when the publication is
@@ -16,10 +18,12 @@ import {
 import {
   HubPublisher,
   scrub,
+  type PackageFileRecord,
   type PublishPackage,
   type PublishRequest,
 } from "@chapter/station-hub";
 import { auditPackage } from "./audit.js";
+import { storeSpatialReport } from "./report-store.js";
 import { TerminalJobError, errorText, type WorkerContext } from "./context.js";
 import {
   readManifest,
@@ -31,6 +35,41 @@ import {
 import { PgPublicationStore, markPublicationFailed } from "./publication-store.js";
 import { LeaseLostError, finishJob, requeueJob, retryDelaySeconds, type Lease } from "./queue.js";
 import { manifestPath } from "./storage.js";
+
+const DIRECTIONS = new Set(["N", "E", "S", "W"]);
+const SUBJECTS = new Set([
+  "opening",
+  "cabinetry",
+  "ceiling",
+  "fixture",
+  "equipment",
+  "defect",
+  "general",
+]);
+
+/** The manifest photo labels the spatial report places a photo by, when complete. */
+export function photoLabels(value: unknown): PackageFileRecord["photo"] {
+  if (value === null || typeof value !== "object") {
+    return undefined;
+  }
+  const { room, direction, subject, takenAt } = value as Record<string, unknown>;
+  if (
+    typeof room !== "string" ||
+    typeof direction !== "string" ||
+    !DIRECTIONS.has(direction) ||
+    typeof subject !== "string" ||
+    !SUBJECTS.has(subject) ||
+    typeof takenAt !== "string"
+  ) {
+    return undefined;
+  }
+  return {
+    room,
+    direction: direction as NonNullable<PackageFileRecord["photo"]>["direction"],
+    subject: subject as NonNullable<PackageFileRecord["photo"]>["subject"],
+    takenAt,
+  };
+}
 
 async function currentVerdictId(ctx: WorkerContext, packageId: string): Promise<string | null> {
   const result = await ctx.db.query<{ verdict_id: string }>(
@@ -73,12 +112,22 @@ export async function runPublishJob(ctx: WorkerContext, lease: Lease): Promise<v
       ? (pkg.manifest.files as unknown[])
       : [];
     const mimes = new Map<string, string>();
+    const photos = new Map<string, NonNullable<PackageFileRecord["photo"]>>();
     for (const entry of manifestFiles) {
-      const { path, mime } = (entry ?? {}) as { path?: unknown; mime?: unknown };
+      const { path, mime, photo } = (entry ?? {}) as {
+        path?: unknown;
+        mime?: unknown;
+        photo?: unknown;
+      };
       if (typeof path === "string" && typeof mime === "string") {
         mimes.set(path, mime);
       }
+      const labels = photoLabels(photo);
+      if (typeof path === "string" && labels !== undefined) {
+        photos.set(path, labels);
+      }
     }
+    const sealedAt = typeof pkg.manifest?.sealedAt === "string" ? pkg.manifest.sealedAt : undefined;
     const publishPackage: PublishPackage = {
       packageId,
       dealId: pkg.deal_id,
@@ -87,6 +136,8 @@ export async function runPublishJob(ctx: WorkerContext, lease: Lease): Promise<v
       manifestPath: manifestPath(pkg.visit_id),
       manifestSha256: pkg.manifest_sha256 ?? "",
       manifestBytes: manifestData.byteLength,
+      ...(sealedAt === undefined ? {} : { sealedAt }),
+      manifestFileCount: manifestFiles.length,
       files: files.map((file) => ({
         path: file.path,
         role: file.role as Role,
@@ -95,6 +146,9 @@ export async function runPublishJob(ctx: WorkerContext, lease: Lease): Promise<v
         sha256: file.sha256,
         bytes: file.bytes,
         ...(mimes.has(file.path) ? { mime: mimes.get(file.path) as string } : {}),
+        ...(photos.has(file.path)
+          ? { photo: photos.get(file.path) as NonNullable<PackageFileRecord["photo"]> }
+          : {}),
       })),
     };
     const byPath = new Map(files.map((file) => [file.path, file]));
@@ -125,6 +179,10 @@ export async function runPublishJob(ctx: WorkerContext, lease: Lease): Promise<v
       baseDelayMs: ctx.publishRetryBaseMs,
       maxDelayMs: ctx.publishRetryMaxMs,
       logger: ctx.logger,
+      reportTimeZone: ctx.reportTimeZone,
+      // The spatial report is stored for the web review before anything goes to the HUB.
+      onReportRendered: (report, rendered) =>
+        storeSpatialReport(ctx, packageId, report, rendered, lease.job.job_id),
       ...(ctx.sleep === undefined ? {} : { sleep: ctx.sleep }),
     });
     const result = await publisher.publish(request);

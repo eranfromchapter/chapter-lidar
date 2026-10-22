@@ -1,0 +1,725 @@
+{
+  "source": "PlanExport PlanMetrics (Swift), recorded with the T4 parity harness",
+  "model": "fixtures/generated/sample-424/package/Original Exports/floor-1/33ede7f4-cfcb-4cd6-9af5-7daffee829a9/capture-model.json",
+  "rooms": [
+    {
+      "bbox": {
+        "acrossM": 6.237,
+        "alongM": 3.299,
+        "angle": 0,
+        "longM": 6.237,
+        "shortM": 3.299
+      },
+      "ceiling": {
+        "approximate": false,
+        "basis": "roomWalls",
+        "heightM": 2.504,
+        "reasons": []
+      },
+      "floorAreaM2": 17.409292999999995,
+      "frameAngle": 0,
+      "id": "room-1",
+      "inscribed": {
+        "acrossM": 4.933,
+        "alongM": 2.891,
+        "angle": 0,
+        "longM": 4.933,
+        "shortM": 2.891
+      },
+      "label": "Bedroom 1",
+      "objects": [
+        {
+          "category": "bed",
+          "id": "object-1",
+          "sizeM": [2.278, 0.6, 1.964]
+        },
+        {
+          "category": "storage",
+          "id": "object-11",
+          "sizeM": [0.754, 1.2, 1.1]
+        },
+        {
+          "category": "storage",
+          "id": "object-12",
+          "sizeM": [0.346, 1.8, 1.728]
+        },
+        {
+          "category": "table",
+          "id": "object-13",
+          "sizeM": [0.707, 0.6, 0.628]
+        }
+      ],
+      "openings": [
+        {
+          "areaM2": 1.47,
+          "heightM": 2.1,
+          "id": "door-2",
+          "type": "door",
+          "widthM": 0.7
+        },
+        {
+          "areaM2": 1.47,
+          "heightM": 2.1,
+          "id": "door-3",
+          "type": "door",
+          "widthM": 0.7
+        },
+        {
+          "areaM2": 3.1424000000000003,
+          "heightM": 1.6,
+          "id": "window-1",
+          "type": "window",
+          "widthM": 1.964
+        }
+      ],
+      "perimeterM": 19.072,
+      "strings": {
+        "bboxLong": "20' 5.6\"",
+        "bboxShort": "10' 9.9\"",
+        "ceiling": "8' 2.6\"",
+        "floorArea": "187.4 ft²",
+        "inscribedLong": "16' 2.2\"",
+        "inscribedShort": "9' 5.8\"",
+        "perimeter": "62' 6.9\""
+      },
+      "type": null,
+      "volumeM3": 43.592869671999985,
+      "wallAreaExclM2": 41.673888,
+      "wallAreaInclM2": 47.756288,
+      "walledLengthM": 19.072
+    },
+    {
+      "bbox": {
+        "acrossM": 1.2090000000000005,
+        "alongM": 1.068,
+        "angle": 0,
+        "longM": 1.2090000000000005,
+        "shortM": 1.068
+      },
+      "ceiling": {
+        "approximate": false,
+        "basis": "roomWalls",
+        "heightM": 2.4955,
+        "reasons": []
+      },
+      "floorAreaM2": 1.2912120000000034,
+      "frameAngle": 0,
+      "id": "room-2",
+      "inscribed": {
+        "acrossM": 1.2090000000000005,
+        "alongM": 1.068,
+        "angle": 0,
+        "longM": 1.2090000000000005,
+        "shortM": 1.068
+      },
+      "label": "Closet",
+      "objects": [],
+      "openings": [
+        {
+          "areaM2": 1.47,
+          "heightM": 2.1,
+          "id": "door-2",
+          "type": "door",
+          "widthM": 0.7
+        }
+      ],
+      "perimeterM": 4.554000000000001,
+      "strings": {
+        "bboxLong": "3' 11.6\"",
+        "bboxShort": "3' 6.0\"",
+        "ceiling": "8' 2.2\"",
+        "floorArea": "13.9 ft²",
+        "inscribedLong": "3' 11.6\"",
+        "inscribedShort": "3' 6.0\"",
+        "perimeter": "14' 11.3\""
+      },
+      "type": null,
+      "volumeM3": 3.2222195460000083,
+      "wallAreaExclM2": 9.894507000000003,
+      "wallAreaInclM2": 11.364507000000003,
+      "walledLengthM": 4.554000000000001
+    },
+    {
+      "bbox": {
+        "acrossM": 6.001,
+        "alongM": 3.4879999999999995,
+        "angle": 0,
+        "longM": 6.001,
+        "shortM": 3.4879999999999995
+      },
+      "ceiling": {
+        "approximate": false,
+        "basis": "roomWalls",
+        "heightM": 2.484,
+        "reasons": []
+      },
+      "floorAreaM2": 20.931487999999998,
+      "frameAngle": 0,
+      "id": "room-3",
+      "inscribed": {
+        "acrossM": 6.001,
+        "alongM": 3.4879999999999995,
+        "angle": 0,
+        "longM": 6.001,
+        "shortM": 3.4879999999999995
+      },
+      "label": "Living Room",
+      "objects": [
+        {
+          "category": "sofa",
+          "id": "object-2",
+          "sizeM": [1.964, 0.85, 0.974]
+        },
+        {
+          "category": "sofa",
+          "id": "object-3",
+          "sizeM": [0.817, 0.85, 1.964]
+        },
+        {
+          "category": "table",
+          "id": "object-4",
+          "sizeM": [0.817, 0.45, 1.257]
+        }
+      ],
+      "openings": [
+        {
+          "areaM2": 1.5183,
+          "heightM": 2.1,
+          "id": "door-1",
+          "type": "door",
+          "widthM": 0.723
+        },
+        {
+          "areaM2": 2.9664,
+          "heightM": 1.6,
+          "id": "window-2",
+          "type": "window",
+          "widthM": 1.854
+        },
+        {
+          "areaM2": 2.1126,
+          "heightM": 2.1,
+          "id": "opening-1",
+          "type": "opening",
+          "widthM": 1.006
+        },
+        {
+          "areaM2": 1.7808,
+          "heightM": 2.1,
+          "id": "opening-2",
+          "type": "opening",
+          "widthM": 0.848
+        }
+      ],
+      "perimeterM": 18.978,
+      "strings": {
+        "bboxLong": "19' 8.3\"",
+        "bboxShort": "11' 5.3\"",
+        "ceiling": "8' 1.8\"",
+        "floorArea": "225.3 ft²",
+        "inscribedLong": "19' 8.3\"",
+        "inscribedShort": "11' 5.3\"",
+        "perimeter": "62' 3.2\""
+      },
+      "type": null,
+      "volumeM3": 51.993816192,
+      "wallAreaExclM2": 38.845046999999994,
+      "wallAreaInclM2": 47.223147,
+      "walledLengthM": 18.978
+    },
+    {
+      "bbox": {
+        "acrossM": 5.405,
+        "alongM": 0.9429999999999996,
+        "angle": 0,
+        "longM": 5.405,
+        "shortM": 0.9429999999999996
+      },
+      "ceiling": {
+        "approximate": false,
+        "basis": "roomWalls",
+        "heightM": 2.474,
+        "reasons": []
+      },
+      "floorAreaM2": 5.096914999999996,
+      "frameAngle": 0,
+      "id": "room-4",
+      "inscribed": {
+        "acrossM": 5.405,
+        "alongM": 0.9429999999999996,
+        "angle": 0,
+        "longM": 5.405,
+        "shortM": 0.9429999999999996
+      },
+      "label": "Room 2",
+      "objects": [
+        {
+          "category": "storage",
+          "id": "object-6",
+          "sizeM": [0.723, 2, 1.917]
+        }
+      ],
+      "openings": [],
+      "perimeterM": 12.696,
+      "strings": {
+        "bboxLong": "17' 8.8\"",
+        "bboxShort": "3' 1.1\"",
+        "ceiling": "8' 1.4\"",
+        "floorArea": "54.9 ft²",
+        "inscribedLong": "17' 8.8\"",
+        "inscribedShort": "3' 1.1\"",
+        "perimeter": "41' 7.8\""
+      },
+      "type": null,
+      "volumeM3": 12.609767709999991,
+      "wallAreaExclM2": 31.443852,
+      "wallAreaInclM2": 31.443852,
+      "walledLengthM": 12.696
+    },
+    {
+      "bbox": {
+        "acrossM": 3.676,
+        "alongM": 2.1049999999999986,
+        "angle": 0,
+        "longM": 3.676,
+        "shortM": 2.1049999999999986
+      },
+      "ceiling": {
+        "approximate": false,
+        "basis": "roomWalls",
+        "heightM": 2.474,
+        "reasons": []
+      },
+      "floorAreaM2": 7.7379799999999985,
+      "frameAngle": 0,
+      "id": "room-5",
+      "inscribed": {
+        "acrossM": 3.676,
+        "alongM": 2.1049999999999986,
+        "angle": 0,
+        "longM": 3.676,
+        "shortM": 2.1049999999999986
+      },
+      "label": "Bedroom 2",
+      "objects": [
+        {
+          "category": "bed",
+          "id": "object-5",
+          "sizeM": [1.178, 0.6, 1.964]
+        }
+      ],
+      "openings": [
+        {
+          "areaM2": 1.4847,
+          "heightM": 2.1,
+          "id": "door-7",
+          "type": "door",
+          "widthM": 0.707
+        }
+      ],
+      "perimeterM": 11.561999999999998,
+      "strings": {
+        "bboxLong": "12' 0.7\"",
+        "bboxShort": "6' 10.9\"",
+        "ceiling": "8' 1.4\"",
+        "floorArea": "83.3 ft²",
+        "inscribedLong": "12' 0.7\"",
+        "inscribedShort": "6' 10.9\"",
+        "perimeter": "37' 11.2\""
+      },
+      "type": null,
+      "volumeM3": 19.14376252,
+      "wallAreaExclM2": 27.119688,
+      "wallAreaInclM2": 28.604388,
+      "walledLengthM": 11.561999999999998
+    },
+    {
+      "bbox": {
+        "acrossM": 0.629,
+        "alongM": 2.074,
+        "angle": 0,
+        "longM": 2.074,
+        "shortM": 0.629
+      },
+      "ceiling": {
+        "approximate": true,
+        "basis": "roomWalls",
+        "heightM": 2.474,
+        "reasons": ["wallHeightsDiffer"]
+      },
+      "floorAreaM2": 1.3045459999999984,
+      "frameAngle": 0,
+      "id": "room-6",
+      "inscribed": {
+        "acrossM": 0.629,
+        "alongM": 2.074,
+        "angle": 0,
+        "longM": 2.074,
+        "shortM": 0.629
+      },
+      "label": "Room 4",
+      "objects": [],
+      "openings": [
+        {
+          "areaM2": 1.3188,
+          "heightM": 2.1,
+          "id": "opening-4",
+          "type": "opening",
+          "widthM": 0.628
+        }
+      ],
+      "perimeterM": 5.405999999999999,
+      "strings": {
+        "bboxLong": "6' 9.7\"",
+        "bboxShort": "2' 0.8\"",
+        "ceiling": "8' 1.4\"",
+        "floorArea": "14.0 ft²",
+        "inscribedLong": "6' 9.7\"",
+        "inscribedShort": "2' 0.8\"",
+        "perimeter": "17' 8.8\""
+      },
+      "type": null,
+      "volumeM3": 3.2274468039999964,
+      "wallAreaExclM2": 11.694768,
+      "wallAreaInclM2": 13.013568,
+      "walledLengthM": 5.405999999999999
+    },
+    {
+      "bbox": {
+        "acrossM": 1.4449999999999994,
+        "alongM": 2.106,
+        "angle": 0,
+        "longM": 2.106,
+        "shortM": 1.4449999999999994
+      },
+      "ceiling": {
+        "approximate": false,
+        "basis": "roomWalls",
+        "heightM": 2.449,
+        "reasons": []
+      },
+      "floorAreaM2": 3.0431700000000035,
+      "frameAngle": 0,
+      "id": "room-7",
+      "inscribed": {
+        "acrossM": 1.4449999999999994,
+        "alongM": 2.106,
+        "angle": 0,
+        "longM": 2.106,
+        "shortM": 1.4449999999999994
+      },
+      "label": "Bathroom 2",
+      "objects": [
+        {
+          "category": "bathtub",
+          "id": "object-7",
+          "sizeM": [0.471, 0.55, 1.335]
+        },
+        {
+          "category": "toilet",
+          "id": "object-14",
+          "sizeM": [0.314, 0.75, 0.44]
+        }
+      ],
+      "openings": [
+        {
+          "areaM2": 1.47,
+          "heightM": 2.1,
+          "id": "door-4",
+          "type": "door",
+          "widthM": 0.7
+        }
+      ],
+      "perimeterM": 7.1019999999999985,
+      "strings": {
+        "bboxLong": "6' 10.9\"",
+        "bboxShort": "4' 8.9\"",
+        "ceiling": "8' 0.4\"",
+        "floorArea": "32.8 ft²",
+        "inscribedLong": "6' 10.9\"",
+        "inscribedShort": "4' 8.9\"",
+        "perimeter": "23' 3.6\""
+      },
+      "type": null,
+      "volumeM3": 7.452723330000008,
+      "wallAreaExclM2": 15.958238999999994,
+      "wallAreaInclM2": 17.428238999999994,
+      "walledLengthM": 7.1019999999999985
+    },
+    {
+      "bbox": {
+        "acrossM": 2.1049999999999995,
+        "alongM": 1.383,
+        "angle": 0,
+        "longM": 2.1049999999999995,
+        "shortM": 1.383
+      },
+      "ceiling": {
+        "approximate": false,
+        "basis": "roomWalls",
+        "heightM": 2.479,
+        "reasons": []
+      },
+      "floorAreaM2": 2.9112150000000003,
+      "frameAngle": 0,
+      "id": "room-8",
+      "inscribed": {
+        "acrossM": 2.1049999999999995,
+        "alongM": 1.383,
+        "angle": 0,
+        "longM": 2.1049999999999995,
+        "shortM": 1.383
+      },
+      "label": "Bathroom 1",
+      "objects": [
+        {
+          "category": "bathtub",
+          "id": "object-8",
+          "sizeM": [1.257, 0.55, 0.393]
+        }
+      ],
+      "openings": [
+        {
+          "areaM2": 1.47,
+          "heightM": 2.1,
+          "id": "door-5",
+          "type": "door",
+          "widthM": 0.7
+        }
+      ],
+      "perimeterM": 6.975999999999999,
+      "strings": {
+        "bboxLong": "6' 10.9\"",
+        "bboxShort": "4' 6.4\"",
+        "ceiling": "8' 1.6\"",
+        "floorArea": "31.3 ft²",
+        "inscribedLong": "6' 10.9\"",
+        "inscribedShort": "4' 6.4\"",
+        "perimeter": "22' 10.6\""
+      },
+      "type": null,
+      "volumeM3": 7.216901985000001,
+      "wallAreaExclM2": 15.823503999999998,
+      "wallAreaInclM2": 17.293504,
+      "walledLengthM": 6.975999999999999
+    },
+    {
+      "bbox": {
+        "acrossM": 1.1630000000000003,
+        "alongM": 0.7070000000000001,
+        "angle": 0,
+        "longM": 1.1630000000000003,
+        "shortM": 0.7070000000000001
+      },
+      "ceiling": {
+        "approximate": false,
+        "basis": "roomWalls",
+        "heightM": 2.464,
+        "reasons": []
+      },
+      "floorAreaM2": 0.822241,
+      "frameAngle": 0,
+      "id": "room-9",
+      "inscribed": {
+        "acrossM": 1.1630000000000003,
+        "alongM": 0.7070000000000001,
+        "angle": 0,
+        "longM": 1.1630000000000003,
+        "shortM": 0.7070000000000001
+      },
+      "label": "Room 5",
+      "objects": [],
+      "openings": [],
+      "perimeterM": 3.7400000000000007,
+      "strings": {
+        "bboxLong": "3' 9.8\"",
+        "bboxShort": "2' 3.8\"",
+        "ceiling": "8' 1.0\"",
+        "floorArea": "8.9 ft²",
+        "inscribedLong": "3' 9.8\"",
+        "inscribedShort": "2' 3.8\"",
+        "perimeter": "12' 3.2\""
+      },
+      "type": null,
+      "volumeM3": 2.026001824,
+      "wallAreaExclM2": 9.243640000000003,
+      "wallAreaInclM2": 9.243640000000003,
+      "walledLengthM": 3.7400000000000007
+    },
+    {
+      "bbox": {
+        "acrossM": 1.995,
+        "alongM": 3.0629999999999997,
+        "angle": 0,
+        "longM": 3.0629999999999997,
+        "shortM": 1.995
+      },
+      "ceiling": {
+        "approximate": false,
+        "basis": "roomWalls",
+        "heightM": 2.504,
+        "reasons": []
+      },
+      "floorAreaM2": 5.104796999999997,
+      "frameAngle": 0,
+      "id": "room-10",
+      "inscribed": {
+        "acrossM": 1.995,
+        "alongM": 2.231,
+        "angle": 0,
+        "longM": 2.231,
+        "shortM": 1.995
+      },
+      "label": "Room 1",
+      "objects": [],
+      "openings": [
+        {
+          "areaM2": 1.7808,
+          "heightM": 2.1,
+          "id": "door-8",
+          "type": "door",
+          "widthM": 0.848
+        }
+      ],
+      "perimeterM": 10.116,
+      "strings": {
+        "bboxLong": "10' 0.6\"",
+        "bboxShort": "6' 6.5\"",
+        "ceiling": "8' 2.6\"",
+        "floorArea": "54.9 ft²",
+        "inscribedLong": "7' 3.8\"",
+        "inscribedShort": "6' 6.5\"",
+        "perimeter": "33' 2.3\""
+      },
+      "type": null,
+      "volumeM3": 12.782411687999993,
+      "wallAreaExclM2": 23.549664,
+      "wallAreaInclM2": 25.330464,
+      "walledLengthM": 10.116
+    },
+    {
+      "bbox": {
+        "acrossM": 2.0890000000000004,
+        "alongM": 1.9949999999999992,
+        "angle": 0,
+        "longM": 2.0890000000000004,
+        "shortM": 1.9949999999999992
+      },
+      "ceiling": {
+        "approximate": false,
+        "basis": "roomWalls",
+        "heightM": 2.525,
+        "reasons": []
+      },
+      "floorAreaM2": 4.167554999999997,
+      "frameAngle": 0,
+      "id": "room-11",
+      "inscribed": {
+        "acrossM": 2.0890000000000004,
+        "alongM": 1.9949999999999992,
+        "angle": 0,
+        "longM": 2.0890000000000004,
+        "shortM": 1.9949999999999992
+      },
+      "label": "Kitchen",
+      "objects": [
+        {
+          "category": "stove",
+          "id": "object-9",
+          "sizeM": [0.864, 0.9, 0.66]
+        },
+        {
+          "category": "sink",
+          "id": "object-10",
+          "sizeM": [0.471, 0.9, 0.408]
+        }
+      ],
+      "openings": [
+        {
+          "areaM2": 1.47,
+          "heightM": 2.1,
+          "id": "door-6",
+          "type": "door",
+          "widthM": 0.7
+        },
+        {
+          "areaM2": 1.4847,
+          "heightM": 2.1,
+          "id": "opening-3",
+          "type": "opening",
+          "widthM": 0.707
+        }
+      ],
+      "perimeterM": 8.168,
+      "strings": {
+        "bboxLong": "6' 10.2\"",
+        "bboxShort": "6' 6.5\"",
+        "ceiling": "8' 3.4\"",
+        "floorArea": "44.9 ft²",
+        "inscribedLong": "6' 10.2\"",
+        "inscribedShort": "6' 6.5\"",
+        "perimeter": "26' 9.6\""
+      },
+      "type": null,
+      "volumeM3": 10.523076374999992,
+      "wallAreaExclM2": 17.6695,
+      "wallAreaInclM2": 20.6242,
+      "walledLengthM": 8.168
+    },
+    {
+      "bbox": {
+        "acrossM": 3.031999999999999,
+        "alongM": 1.54,
+        "angle": 0,
+        "longM": 3.031999999999999,
+        "shortM": 1.54
+      },
+      "ceiling": {
+        "approximate": false,
+        "basis": "roomWalls",
+        "heightM": 2.51,
+        "reasons": []
+      },
+      "floorAreaM2": 4.153436000000006,
+      "frameAngle": 0,
+      "id": "room-12",
+      "inscribed": {
+        "acrossM": 3.031999999999999,
+        "alongM": 1.0060000000000002,
+        "angle": 0,
+        "longM": 3.031999999999999,
+        "shortM": 1.0060000000000002
+      },
+      "label": "Room 3",
+      "objects": [],
+      "openings": [],
+      "perimeterM": 8.780581369585112,
+      "strings": {
+        "bboxLong": "9' 11.4\"",
+        "bboxShort": "5' 0.6\"",
+        "ceiling": "8' 2.8\"",
+        "floorArea": "44.7 ft²",
+        "inscribedLong": "9' 11.4\"",
+        "inscribedShort": "3' 3.6\"",
+        "perimeter": "28' 9.7\""
+      },
+      "type": null,
+      "volumeM3": 10.425124360000016,
+      "wallAreaExclM2": 22.039259237658626,
+      "wallAreaInclM2": 22.039259237658626,
+      "walledLengthM": 8.780581369585112
+    }
+  ],
+  "totals": {
+    "bathrooms": 0,
+    "bedrooms": 0,
+    "livableAreaM2": 73.97384799999998,
+    "perimeter": "384' 4.2\"",
+    "perimeterM": 117.15058136958511,
+    "roomCount": 12,
+    "volumeIsApproximate": true,
+    "volumeM3": 184.21612200599998,
+    "wallAreaM2": 264.9555562376586,
+    "windowAreaM2": 6.1088000000000005
+  }
+}

@@ -231,6 +231,13 @@ check(
   policy?.resource.properties?.allowProtectedAppendWrites === false,
 );
 
+// The spatial reports container: private, in the same account (versioning and soft delete).
+const reports = ofType("Microsoft.Storage/storageAccounts/blobServices/containers").filter(
+  (entry) => nameEndsWith(entry.resource.name, "default", "reports"),
+);
+check(`container "reports" is defined`, reports.length === 1, `found ${reports.length}`);
+check(`"reports" is private`, reports[0]?.resource.properties?.publicAccess === "None");
+
 // Retention set by the parameter files.
 if (stagingParams && productionParams) {
   const days = (params) => params.parameters?.originalsRetentionDays?.value;

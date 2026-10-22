@@ -3,16 +3,20 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { validateCaptureModel } from "@chapter/capture-contract";
 import { FakeHub, FAKE_PROJECT_RECORD_ID, startFakeHubServer } from "../src/fake/index.js";
 import { HubPublisher, LiveHubApi, MemoryPublicationStore } from "../src/index.js";
 import {
   REVIEW_BASE_URL,
   harness,
   makeTestPackage,
+  pdfText,
   sha256,
   sortPairs,
+  squash,
   storedPairs,
 } from "./helpers.js";
+import { syntheticModel } from "./report/support.js";
 
 describe("HubPublisher publish", () => {
   it("uploads exactly the report, the manifest and the plan files into their folders", async () => {
@@ -23,11 +27,11 @@ describe("HubPublisher publish", () => {
     assert.equal(result.status, "published");
     assert.equal(result.attempts, 1);
     assert.deepEqual(sortPairs(storedPairs(hub)), sortPairs(test.expectedUploads()));
-    // 2 visit-wide files + 5 plan files per capture.
-    assert.equal(hub.documents.length, 12);
+    // 2 visit-wide files (spatial report, manifest) + 4 plan files per capture.
+    assert.equal(hub.documents.length, 10);
 
     const uploads = hub.requestsOf("upload");
-    assert.equal(uploads.length, 12);
+    assert.equal(uploads.length, 10);
     for (const upload of uploads) {
       assert.equal(upload.status, 201);
       assert.equal(upload.dealId, test.pkg.dealId);
@@ -43,7 +47,7 @@ describe("HubPublisher publish", () => {
     const byName = (folder: string, name: string) =>
       hub.documents.find((doc) => doc.folder === folder && doc.name === name);
     assert.ok(byName(visit, "manifest.json"));
-    assert.ok(byName(visit, `verdict-report-${test.verdict.verdictId}.pdf`));
+    assert.ok(byName(visit, `spatial-report-${test.verdict.verdictId}.pdf`));
     for (const file of test.pkg.files.filter((f) => f.role === "plan_dxf")) {
       assert.ok(byName(`Capture/${file.areaKey}/${file.captureId}/r1`, "plan.dxf"));
     }
@@ -67,7 +71,12 @@ describe("HubPublisher publish", () => {
     assert.equal(row?.error, null);
     const uploaded = row?.files.filter((f) => f.kind === "uploaded") ?? [];
     const linked = row?.files.filter((f) => f.kind === "linked") ?? [];
-    assert.equal(uploaded.length, 12);
+    assert.equal(uploaded.length, 10);
+    // The report is recorded with role spatial_report and its verdict.
+    const reportEntry = uploaded.find((f) => f.name.startsWith("spatial-report-"));
+    assert.equal(reportEntry?.role, "spatial_report");
+    assert.equal(reportEntry?.verdictId, test.verdict.verdictId);
+    assert.equal(reportEntry?.path, null);
     assert.deepEqual(linked.map((f) => f.role).sort(), [
       "capture_record",
       "field_controls",
@@ -88,8 +97,167 @@ describe("HubPublisher publish", () => {
       assert.match(file.sha256, /^[0-9a-f]{64}$/);
       assert.ok(file.documentId, "HUB document id recorded");
     }
-    // Only the plan files were read from storage.
-    assert.equal(test.reads.length, 10);
+    // Read from storage: the 8 plan files, and the report's sources (field controls, 2 photos;
+    // the test package has no capture model). Meshes and LAS are never read.
+    assert.equal(test.reads.length, 11);
+    assert.deepEqual(
+      test.pkg.files
+        .filter((f) => ["field_controls", "photo"].includes(f.role))
+        .map((f) => f.path)
+        .filter((path) => !test.reads.includes(path)),
+      [],
+    );
+    assert.ok(!test.reads.some((path) => /mesh\.glb$|points\.las$/.test(path)));
+  });
+
+  it("links the phone's retired spatial report of a legacy package and never uploads it", async () => {
+    const test = makeTestPackage({ legacyPhoneReport: true });
+    const { hub, store, publisher } = harness();
+    const result = await publisher.publish(test.request());
+    assert.equal(result.status, "published");
+    assert.equal(hub.documents.length, 10);
+    assert.ok(!hub.documents.some((doc) => doc.name === "spatial-report.pdf"));
+    const legacy = store
+      .get(test.pkg.packageId)
+      ?.files.filter((f) => f.role === "spatial_report_pdf");
+    assert.equal(legacy?.length, 2);
+    for (const entry of legacy ?? []) {
+      assert.equal(entry.kind, "linked");
+      assert.equal(entry.reason, "not_published");
+      assert.ok(entry.url?.startsWith(`${REVIEW_BASE_URL}/packages/${test.pkg.packageId}?file=`));
+    }
+    // The station's report lists them with their station links.
+    const report = hub.documents.find((d) => d.name.startsWith("spatial-report-"));
+    assert.ok(report);
+    const text = squash(await pdfText(report.data));
+    for (const entry of legacy ?? []) {
+      assert.ok(text.includes(squash(entry.url ?? "")), entry.path ?? "");
+    }
+  });
+
+  it("hands the rendered report to onReportRendered before uploading it", async () => {
+    const test = makeTestPackage();
+    const seen: Array<{ sha256: string; uploadsBefore: number; verdictId: string }> = [];
+    const { hub, publisher } = harness({
+      onReportRendered: async (report, verdict) => {
+        seen.push({
+          sha256: report.sha256,
+          uploadsBefore: hub.requestsOf("upload").length,
+          verdictId: verdict.verdictId,
+        });
+        assert.equal(report.name, `spatial-report-${verdict.verdictId}.pdf`);
+        assert.ok(report.pages >= 5);
+        assert.ok(report.checksPage >= 2 && report.checksPage <= report.pages);
+      },
+    });
+    await publisher.publish(test.request());
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0]?.uploadsBefore, 0);
+    assert.equal(seen[0]?.verdictId, test.verdict.verdictId);
+    const report = hub.documents.find((d) => d.name.startsWith("spatial-report-"));
+    assert.equal(report?.sha256, seen[0]?.sha256);
+  });
+
+  it("uploads the report onReportRendered keeps instead of a re-render that differs", async () => {
+    // An earlier attempt stored this verdict's report; the renderer changed since. The HUB gets
+    // the stored file, so it is the same as the web review's.
+    const test = makeTestPackage();
+    const keptBytes = Buffer.from("%PDF-1.7 the report an earlier attempt stored");
+    const { hub, store, publisher } = harness({
+      onReportRendered: async (report) => ({
+        ...report,
+        bytes: keptBytes,
+        sha256: sha256(keptBytes),
+      }),
+    });
+    const result = await publisher.publish(test.request());
+    assert.equal(result.status, "published");
+    const report = hub.documents.find((d) => d.name.startsWith("spatial-report-"));
+    assert.equal(report?.sha256, sha256(keptBytes));
+    assert.deepEqual(Buffer.from(report?.data ?? []), keptBytes);
+    const entry = store.get(test.pkg.packageId)?.files.find((f) => f.role === "spatial_report");
+    assert.equal(entry?.sha256, sha256(keptBytes));
+    assert.equal(entry?.bytes, keptBytes.byteLength);
+  });
+
+  it("fails the publication when the kept report is not this verdict's file", async () => {
+    const test = makeTestPackage();
+    const { hub, store, publisher } = harness({
+      onReportRendered: async (report) => ({
+        ...report,
+        name: "spatial-report-00000000-0000-4000-8000-000000000000.pdf",
+        bytes: Buffer.from("%PDF-1.7 other"),
+        sha256: sha256(Buffer.from("%PDF-1.7 other")),
+      }),
+    });
+    const result = await publisher.publish(test.request());
+    assert.equal(result.status, "publish_failed");
+    assert.equal(hub.requestsOf("upload").length, 0);
+    assert.equal(store.get(test.pkg.packageId)?.status, "publish_failed");
+  });
+
+  it("leaves publish() when onReportRendered fails, before any upload", async () => {
+    const test = makeTestPackage();
+    const { hub, store, publisher } = harness({
+      onReportRendered: async () => {
+        throw new Error("reports container unavailable");
+      },
+    });
+    await assert.rejects(publisher.publish(test.request()), /reports container unavailable/);
+    assert.equal(hub.requestsOf("upload").length, 0);
+    assert.notEqual(store.get(test.pkg.packageId)?.status, "publish_failed");
+  });
+
+  it("publishes when a floor's model is valid but its geometry cannot be measured", async () => {
+    // A door on a wall id that names no wall: the contract accepts it, the measurement engine
+    // (like the phone's PlanExport) refuses it. That floor's plan is "not available"; the
+    // publication still goes through with the rest of the report.
+    const test = makeTestPackage();
+    const capture = test.captureRecord.captures[0];
+    assert.ok(capture);
+    const model = syntheticModel(
+      [{ label: "Living Room", w: 5, d: 4, doors: 1 }],
+      capture.captureId,
+    );
+    model.visitId = test.pkg.visitId;
+    model.areaKey = capture.areaKey;
+    const door = model.doors[0];
+    assert.ok(door);
+    door.wallId = "wall-that-is-not-there";
+    assert.equal(validateCaptureModel(model).ok, true);
+    const path = `Original Exports/${capture.areaKey}/${capture.captureId}/capture-model.json`;
+    const bytes = new TextEncoder().encode(JSON.stringify(model));
+    const pkg = {
+      ...test.pkg,
+      files: [
+        ...test.pkg.files,
+        {
+          path,
+          role: "capture_model" as const,
+          captureId: capture.captureId,
+          areaKey: capture.areaKey,
+          sha256: sha256(bytes),
+          bytes: bytes.byteLength,
+          mime: "application/json",
+        },
+      ],
+    };
+    const base = test.request();
+    const { hub, store, publisher } = harness();
+    const result = await publisher.publish(
+      test.request({
+        pkg,
+        readFile: async (file) => (file === path ? bytes : base.readFile(file)),
+      }),
+    );
+    assert.equal(result.status, "published");
+    assert.equal(store.get(test.pkg.packageId)?.status, "published");
+    const report = hub.documents.find((d) => d.name.startsWith("spatial-report-"));
+    assert.ok(report);
+    const text = squash(await pdfText(report.data));
+    assert.ok(
+      text.includes(squash("Plan not available: the scan model of Floor 1 could not be read.")),
+    );
   });
 
   it("verifies every upload through the document search", async () => {
@@ -124,7 +292,7 @@ describe("HubPublisher publish", () => {
       assert.equal(result.status, "published");
       assert.deepEqual(sortPairs(storedPairs(server.hub)), sortPairs(test.expectedUploads()));
       assert.ok(server.hub.requests.every((r) => r.authorized));
-      const report = server.hub.documents.find((d) => d.name.startsWith("verdict-report-"));
+      const report = server.hub.documents.find((d) => d.name.startsWith("spatial-report-"));
       assert.ok(report);
       assert.equal(report.sha256, sha256(report.data));
     } finally {

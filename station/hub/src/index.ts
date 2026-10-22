@@ -1,7 +1,7 @@
 // @chapter/station-hub: HUB publishing for the station worker. The HUB client (upload,
 // document search, deal lookup), the publication plan (folders, 45 MiB rule, station links), the
-// verdict report PDF and HubPublisher (idempotent, retried, verified). The fake HUB for tests is
-// in "@chapter/station-hub/fake".
+// station's spatial report PDF and HubPublisher (idempotent, retried, verified). The fake HUB
+// for tests is in "@chapter/station-hub/fake".
 
 export {
   HubError,
@@ -51,21 +51,41 @@ export {
   DEFAULT_MAX_ATTEMPTS,
   DEFAULT_MAX_DELAY_MS,
   HubPublisher,
+  SPATIAL_REPORT_ROLE,
   isRetryable,
+  reportFilesOf,
   type HubPublisherOptions,
   type PublishRequest,
   type PublishResult,
 } from "./publisher.js";
 export {
   REPORT_NOT_CERTIFICATION,
+  REPORT_STATEMENT_CHECKS,
+  REPORT_STATEMENT_FULL,
+  REPORT_STATEMENT_SHORT,
   REPORT_TITLE,
+  coverSentence,
   outcomeInPlainWords,
   pdfSafeText,
+  renderSpatialReport,
   renderVerdictReport,
+  type RenderedReport,
   type ReportFile,
   type ReportFileLocation,
+  type ReportFloor,
   type ReportInput,
+  type SpatialReportInput,
 } from "./report.js";
+export { DEFAULT_REPORT_TIME_ZONE, isTimeZone } from "./report/format.js";
+export type { ReportFloorSource, ReportModel, ReportPhoto } from "./report/input.js";
+export { PHOTO_FULL, PHOTO_SMALL, reducePhoto } from "./report/photos.js";
+export {
+  PHOTO_BUDGET_BYTES,
+  loadReportSources,
+  type ReportSources,
+  type SourceFile,
+  type SourceRequest,
+} from "./report/sources.js";
 export {
   MemoryPublicationStore,
   fileKey,

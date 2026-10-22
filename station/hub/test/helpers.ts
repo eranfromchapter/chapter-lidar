@@ -35,7 +35,15 @@ export interface TestPackageOptions {
   /** Size of floor-1's plan.pdf (default small). */
   readonly planPdfBytes?: number;
   readonly verdict?: Partial<Verdict>;
+  /**
+   * A package sealed by an app before v2: each capture also has the phone's retired
+   * spatial-report.pdf (role spatial_report_pdf).
+   */
+  readonly legacyPhoneReport?: boolean;
 }
+
+/** Roles the station uploads to the HUB (when not over 45 MiB). */
+export const UPLOAD_ROLES: readonly Role[] = ["plan_dxf", "rooms_csv", "plan_pdf", "plan_png"];
 
 export interface TestPackage {
   readonly pkg: PublishPackage;
@@ -85,7 +93,13 @@ export function makeTestPackage(options: TestPackageOptions = {}): TestPackage {
   ];
   const files = new Map<string, Uint8Array>();
   const records: PackageFileRecord[] = [];
-  const add = (path: string, role: Role, data: Uint8Array, capture?: (typeof captures)[number]) => {
+  const add = (
+    path: string,
+    role: Role,
+    data: Uint8Array,
+    capture?: (typeof captures)[number],
+    photo?: PackageFileRecord["photo"],
+  ) => {
     files.set(path, data);
     records.push({
       path,
@@ -94,6 +108,7 @@ export function makeTestPackage(options: TestPackageOptions = {}): TestPackage {
       bytes: data.byteLength,
       ...(MIME[role] === undefined ? {} : { mime: MIME[role] }),
       ...(capture === undefined ? {} : { captureId: capture.captureId, areaKey: capture.areaKey }),
+      ...(photo === undefined ? {} : { photo }),
     });
   };
   add(
@@ -119,12 +134,14 @@ export function makeTestPackage(options: TestPackageOptions = {}): TestPackage {
       ),
       capture,
     );
-    add(
-      `${dir}/spatial-report.pdf`,
-      "spatial_report_pdf",
-      bytesOf(`%PDF report ${capture.captureId}`),
-      capture,
-    );
+    if (options.legacyPhoneReport === true) {
+      add(
+        `${dir}/spatial-report.pdf`,
+        "spatial_report_pdf",
+        bytesOf(`%PDF report ${capture.captureId}`),
+        capture,
+      );
+    }
     add(`${dir}/plan.png`, "plan_png", bytesOf(`PNG ${capture.captureId}`), capture);
     add(`${dir}/mesh.glb`, "mesh_glb", bytesOf(`glTF ${capture.captureId}`), capture);
     add(`${dir}/points.las`, "point_cloud_las", bytesOf(`LASF ${capture.captureId}`), capture);
@@ -133,6 +150,7 @@ export function makeTestPackage(options: TestPackageOptions = {}): TestPackage {
       "photo",
       bytesOf(`JPEG ${capture.captureId}`),
       capture,
+      { room: "Living Room", direction: "N", subject: "general", takenAt: "2026-10-17T14:05:00Z" },
     );
   }
   const manifestPath = `Source Register/${visitId}/manifest.json`;
@@ -148,6 +166,8 @@ export function makeTestPackage(options: TestPackageOptions = {}): TestPackage {
     manifestSha256: sha256(manifestBytes),
     manifestBytes: manifestBytes.byteLength,
     files: records,
+    sealedAt: "2026-10-17T15:10:00Z",
+    manifestFileCount: records.length,
   };
   const verdict: Verdict = {
     ...LIMITED_EXAMPLE,
@@ -214,16 +234,11 @@ export function makeTestPackage(options: TestPackageOptions = {}): TestPackage {
     expectedUploads: () => {
       const visit = `Capture/${visitId}/r1`;
       const out = [
-        { folder: visit, name: `verdict-report-${verdict.verdictId}.pdf` },
+        { folder: visit, name: `spatial-report-${verdict.verdictId}.pdf` },
         { folder: visit, name: "manifest.json" },
       ];
       for (const record of records) {
-        if (
-          ["plan_dxf", "rooms_csv", "plan_pdf", "spatial_report_pdf", "plan_png"].includes(
-            record.role,
-          ) &&
-          record.bytes <= 45 * MIB
-        ) {
+        if (UPLOAD_ROLES.includes(record.role) && record.bytes <= 45 * MIB) {
           out.push({
             folder: `Capture/${record.areaKey}/${record.captureId}/r1`,
             name: record.path.slice(record.path.lastIndexOf("/") + 1),
