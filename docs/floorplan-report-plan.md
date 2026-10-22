@@ -6,6 +6,27 @@ Reference: Polycam Spatial Report of the same apartment (20 pages, Letter landsc
 Polycam app screenshots, reviewed 2026-10-18. Gap analysis: two real iPhone 17 Pro Max exports
 of that apartment (kept local, never committed) and the code at commit 80182ea.
 
+## Design v2 update (2026-10-21)
+
+Decided by Eran on Oct 21, 2026 (`docs/waves/design/DESIGN.md`, "Design v2"); these lines
+replace the matching ones below:
+
+- **The phone report is retired.** The phone no longer writes `spatial-report.pdf`
+  (role `spatial_report_pdf` is retired in manifest 1.1.0; legacy 1.0.0 packages keep it and the
+  station never uploads it to the HUB). The multi-page report of phase 7 is made by the station
+  after its checks: the spatial report (`spatial-report-{verdictId}.pdf`), which also replaces the
+  station's verdict report and goes to the HUB.
+- **plan.pdf became the plan sheet**: `plan-sheet.pdf`, one Tabloid 11 x 17 page per capture,
+  made on the phone with no verdict, at a scale stepped down 1:50 → 1:100 → 1:200 (1:500 for an
+  exterior capture), never fitted to the page. plan.png and plan.svg are drawn from the same
+  sheet drawing, without a north symbol. The colour Floorplan of phase 8 is unchanged.
+- **The manual north override is withdrawn** (phase 9). North comes only from the phone's compass,
+  read at the start of each floor's scan, in three states (verified ±10°, approximate ±30°, not
+  verified); a heading is never typed or taken from a map. The phone's location is used only to
+  turn the compass into true north and is never stored. Build spec: `compass` (Design v2).
+- Brand: the real Chapter logo and Inter on every output and screen; Times for titles, Courier
+  for ids, dimensions and scale labels.
+
 ## Decisions
 
 Decided by Eran, 2026-10-18:
@@ -13,8 +34,8 @@ Decided by Eran, 2026-10-18:
 | Topic | Decision |
 |---|---|
 | Multi-room scanning | Operators keep walking through doorways. The app splits rooms automatically; a Rooms screen after the scan lets the operator rename, retype, merge and split. |
-| Location | The app asks for location while scanning: latitude, longitude, altitude and true north (compass). If permission is denied, the scan still works and the report says so. |
-| Report files | A new multi-page Floorplan Report PDF and a colour floor plan are added. Today's plan.pdf/png/svg/dxf, spatial-report.pdf and rooms.csv stay (unit fixes only). |
+| Location | The app asks for location while scanning: latitude, longitude, altitude and true north (compass). If permission is denied, the scan still works and the report says so. **Design v2:** location only turns the compass into true north and is never stored; with Location off north is magnetic (approximate at best). |
+| Report files | A new multi-page Floorplan Report PDF and a colour floor plan are added. Today's plan.pdf/png/svg/dxf, spatial-report.pdf and rooms.csv stay (unit fixes only). **Design v2:** plan.pdf is now the plan sheet `plan-sheet.pdf`; the phone's spatial-report.pdf is retired; the multi-page report is the station's spatial report. |
 | Branding | Chapter name, logo and colours from the app design. Own disclaimer, drafted for Eran's review. No Polycam branding or wording. |
 
 Defaults until Eran says otherwise:
@@ -71,14 +92,16 @@ Each phase ships on the phone and is tested on Linux (Swift packages) or the iOS
 6. **Drawing engine.** PDF colour and dashes, colour PNG, furniture/fixture/appliance symbols,
    room-type colours, thick walls along room boundaries, compass, feet scale bar, dimension
    placement with collision checks.
-7. **Floorplan Report PDF** (new file and file role, uploaded to the HUB): overview with totals,
+7. **Floorplan Report PDF** (Design v2: made by the station after its checks as the spatial
+   report, not on the phone; uploaded to the HUB): overview with totals,
    table of contents and fully dimensioned plan, room schedule, then 1-3 pages per room with
    bounding-box and inscribed overlays, numbered markers, key map, and Furniture, Fixtures,
    Appliances, Openings and casing tables. Station deployed before the app.
 8. **In-app screens.** Floorplan (colour plan, room names and areas, total area, compass, Edit,
    Download), Report (preview, Configure, Download), Files (every file, Quick Look, Share).
 9. **Location and true north.** One location fix at the property; heading sampled during the scan
-   and paired with the camera yaw; manual north override in the Rooms screen.
+   and paired with the camera yaw. ~~Manual north override in the Rooms screen~~: withdrawn
+   (Design v2, Oct 21, 2026): north is never typed; see the `compass` build spec.
 10. **3D viewer.** Layers (walls, doors, windows, objects), orbit, top and walk views, measuring,
     Share. Furniture models and textured floors are a later decision.
 11. **Station check of report numbers.** Recompute the totals from capture-model.json and flag a
