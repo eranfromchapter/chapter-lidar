@@ -2,7 +2,8 @@ import Foundation
 
 /// Minimal PDF 1.7 writer: pages of vector lines, polylines, rectangles, Bezier paths (arcs,
 /// circles) and text in the Chapter fonts with WinAnsi encoding: Inter Regular (F1) and Inter
-/// SemiBold (F2), embedded, and the standard Times-Roman (F3) for titles. Gray or RGB colour,
+/// SemiBold (F2), embedded, and the standard Times-Roman (F3) for titles, Courier (F4) for ids,
+/// dimensions and scales and Times-Italic (F5) for the tagline. Gray or RGB colour,
 /// dash patterns, line caps and joins, and clipping. Content streams are uncompressed so every
 /// string stays extractable as text. Coordinates are points with the origin at the bottom-left
 /// of the page.
@@ -252,10 +253,21 @@ final class PDFPage {
     return out
   }
 
-  /// Fonts drawn with on this page (1 Inter Regular, 2 Inter SemiBold, 3 Times-Roman); the
-  /// document declares and embeds only these.
+  /// Fonts drawn with on this page (1 Inter Regular, 2 Inter SemiBold, 3 Times-Roman, 4 Courier,
+  /// 5 Times-Italic); the document declares and embeds only these.
   private(set) var fontsUsed: Set<Int> = []
   var usesSerif: Bool { fontsUsed.contains(3) }
+
+  /// Font resource number of `font` (`/F1` ... `/F5`).
+  static func fontNumber(_ font: DrawingFont) -> Int {
+    switch font {
+    case .interRegular: return 1
+    case .interSemiBold: return 2
+    case .timesRoman: return 3
+    case .courier: return 4
+    case .timesItalic: return 5
+    }
+  }
 
   /// Draws `text` with its baseline start, centre or end at (x, y), turned counter-clockwise by
   /// `rotation` degrees. Uses the current fill colour. `bold` sets it in Inter SemiBold (F2),
@@ -267,10 +279,21 @@ final class PDFPage {
     anchor: Anchor = .leading, rotation: Double = 0, serif: Bool = false,
     letterSpacing: Double = 0
   ) {
+    self.text(
+      text, x: x, y: y, size: size, font: DrawingFont(bold: bold, serif: serif), anchor: anchor,
+      rotation: rotation, letterSpacing: letterSpacing)
+  }
+
+  /// As `text(_:x:y:size:bold:anchor:rotation:serif:letterSpacing:)`, in `font`: Courier is F4
+  /// and Times-Italic F5 (standard fonts, not embedded).
+  func text(
+    _ text: String, x: Double, y: Double, size: Double, font: DrawingFont,
+    anchor: Anchor = .leading, rotation: Double = 0, letterSpacing: Double = 0
+  ) {
     let clean = Format.composed(Format.singleLine(text))
     guard !clean.isEmpty else { return }
     let width =
-      FontMetrics.width(clean, size: size, bold: bold, serif: serif)
+      FontMetrics.width(clean, size: size, font: font)
       + letterSpacing * Double(max(0, clean.unicodeScalars.count - 1))
     let shift: Double
     switch anchor {
@@ -285,9 +308,9 @@ final class PDFPage {
     let startY = y + shift * s
     let spaced = letterSpacing != 0
     if spaced { emit("q\n") }
-    let font = serif ? 3 : bold ? 2 : 1
-    fontsUsed.insert(font)
-    emit("BT /F\(font) \(PDFPage.num(size)) Tf ")
+    let number = PDFPage.fontNumber(font)
+    fontsUsed.insert(number)
+    emit("BT /F\(number) \(PDFPage.num(size)) Tf ")
     if spaced { emit("\(PDFPage.num(letterSpacing)) Tc ") }
     emit(
       "\(Format.fixed(c, 5)) \(Format.fixed(s, 5)) \(Format.fixed(-s, 5)) \(Format.fixed(c, 5)) "
@@ -364,7 +387,8 @@ struct PDFDocument {
   func render() -> Data {
     // Object numbers: 1 catalog, 2 pages, 3 info, then page and content stream pairs, then
     // the fonts the pages use: Inter Regular (F1) and Inter SemiBold (F2) each as a font, its
-    // descriptor and its embedded program, Times-Roman (F3) as a standard font.
+    // descriptor and its embedded program; Times-Roman (F3), Courier (F4) and Times-Italic (F5)
+    // as standard fonts.
     var objects: [[UInt8]] = []
     func ascii(_ text: String) -> [UInt8] { Array(text.utf8) }
     // A document information string: plain ASCII as a literal; anything else as UTF-16BE with
@@ -385,9 +409,9 @@ struct PDFDocument {
     let used = pages.reduce(into: Set<Int>()) { $0.formUnion($1.fontsUsed) }
     var fontNumbers: [Int: Int] = [:]
     var next = 4 + pageCount * 2
-    for font in [1, 2, 3] where used.contains(font) {
+    for font in [1, 2, 3, 4, 5] where used.contains(font) {
       fontNumbers[font] = next
-      next += font == 3 ? 1 : 3
+      next += font >= 3 ? 1 : 3
     }
     let fontResources = fontNumbers.keys.sorted().map { " /F\($0) \(fontNumbers[$0]!) 0 R" }
       .joined()
@@ -411,12 +435,13 @@ struct PDFDocument {
       stream.append(contentsOf: ascii("endstream"))
       objects.append(stream)
     }
-    for font in [1, 2, 3] {
+    let standard = [3: "Times-Roman", 4: "Courier", 5: "Times-Italic"]
+    for font in [1, 2, 3, 4, 5] {
       guard let number = fontNumbers[font] else { continue }
-      if font == 3 {
+      if let name = standard[font] {
         objects.append(
           ascii(
-            "<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman /Encoding /WinAnsiEncoding >>"
+            "<< /Type /Font /Subtype /Type1 /BaseFont /\(name) /Encoding /WinAnsiEncoding >>"
           ))
         continue
       }

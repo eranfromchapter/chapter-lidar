@@ -112,7 +112,7 @@ struct AnnotationLayout {
     self.wallPieces = wallPieces.map(Obstacle.init)
   }
 
-  private mutating func add(_ item: DrawingItem, _ layer: DrawingLayer) {
+  mutating func add(_ item: DrawingItem, _ layer: DrawingLayer) {
     items[layer, default: []].append(item)
   }
 
@@ -415,6 +415,12 @@ struct AnnotationLayout {
     let lineGap = 0.15 * style.roomNameSize * k
     let height = AnnotationLayout.blockHeight(block, lineGap: lineGap)
     let halfWidth = AnnotationLayout.blockWidth(block) / 2
+    return roomLabelPlace(halfWidth: halfWidth, height: height, polygon: polygon)
+  }
+
+  /// The best place for the centre of a label box `2 halfWidth` by `height` inside the room
+  /// (see `placeRoomLabel`); nil when it fits nowhere.
+  func roomLabelPlace(halfWidth: Double, height: Double, polygon: [Point2]) -> Point2? {
     let u = Point2(x: 1, y: 0)
     func box(at c: Point2) -> OrientedBox {
       OrientedBox(center: c, u: u, halfWidth: halfWidth, halfHeight: height / 2)

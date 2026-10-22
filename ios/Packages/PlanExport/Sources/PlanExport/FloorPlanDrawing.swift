@@ -113,6 +113,17 @@ struct FloorPlanStyle: Sendable {
 /// widths and text sizes are paper sizes at 1:`scaleDenominator`, written in plan millimetres,
 /// so the drawing is built for the scale it is printed at (`fitted` picks one for a page).
 public struct FloorPlanDrawing: Sendable {
+  /// Which drawing: the colour Floorplan (the phone's Floorplan page and screen, `tools/
+  /// plan-render`), or the plan sheet's monochrome drawing (plan-sheet §3.4): design-token
+  /// palette, walls filled in ink at least 2 pt thick, doors as thresholds without swing,
+  /// object boxes with four fixture symbols, room fills by class, capitalised room names and
+  /// the sheet's two tiers of outside dimensions (`PlanSheetDimensions`); no inside dimensions,
+  /// north arrow or scale bar on the drawing.
+  public enum Rendition: String, Hashable, Sendable {
+    case floorplan
+    case planSheet
+  }
+
   public struct Options: Hashable, Sendable {
     /// Print scale: plan millimetres per paper millimetre (50 for 1:50).
     public var scaleDenominator: Double
@@ -144,6 +155,11 @@ public struct FloorPlanDrawing: Sendable {
     /// Further quarter turns counter-clockwise after squaring, so a plan can be laid on a page
     /// the way it fits best.
     public var quarterTurns: Int
+    /// The colour Floorplan (default) or the plan sheet's drawing.
+    public var rendition: Rendition
+    /// The capture's mode, for the plan sheet's room fills: every room of an `exterior` capture
+    /// is outdoor. Not used by the colour Floorplan.
+    public var captureMode: CaptureMode?
 
     public init(
       scaleDenominator: Double = 50, units: UnitFormatter = UnitFormatter(system: .imperial),
@@ -151,8 +167,10 @@ public struct FloorPlanDrawing: Sendable {
       roomAreas: Bool = true, symbols: Bool = true, scaleBar: Bool = true,
       north: CompassState? = nil, alignToWalls: Bool = true,
       interiorWallThicknessM: Double = 0.1143, exteriorWallThicknessM: Double = 0.1524,
-      quarterTurns: Int = 0
+      quarterTurns: Int = 0, rendition: Rendition = .floorplan, captureMode: CaptureMode? = nil
     ) {
+      self.rendition = rendition
+      self.captureMode = captureMode
       self.scaleDenominator = scaleDenominator
       self.units = units
       self.exteriorDimensions = exteriorDimensions
@@ -212,8 +230,19 @@ public struct FloorPlanDrawing: Sendable {
   let droppedInteriorDimensions: Int
   /// Short outside runs left without a dimension (see `AnnotationLayout`).
   let omittedExterior: Int
+  /// Plan sheet rendition only: its dimension strings, the building box `B` they measure from
+  /// (walls at the assumed thicknesses, plan metres) and each room's fill class by room id.
+  let sheetDimensions: [SheetDimension]
+  let sheetFrame: PlanBounds?
+  let fillClasses: [String: RoomFillClass]
 
   public init(model: CaptureModel, options: Options = Options()) throws {
+    try self.init(model: model, options: options, metrics: nil)
+  }
+
+  /// `metrics` (the model's `PlanMetrics`) saves measuring the rooms again for the plan sheet's
+  /// dimension values when the caller has it; the colour Floorplan does not use it.
+  init(model: CaptureModel, options: Options, metrics: PlanMetrics?) throws {
     let style = FloorPlanStyle()
     var geometry = try PlanGeometry(model: model)
     guard geometry.bounds != nil else { throw PlanExportError.noPlanGeometry }
@@ -242,10 +271,17 @@ public struct FloorPlanDrawing: Sendable {
           clear: polygon, areaM2: room.areaM2))
     }
 
+    // The plan sheet draws every wall at least 2 pt thick on paper (plan-sheet §3.4); its
+    // dimensions still measure the assumed thicknesses (`assumedWalls`).
+    let sheet = options.rendition == .planSheet
+    let pointM = 25.4 / 72 * k
+    let drawnExterior =
+      sheet ? max(options.exteriorWallThicknessM, 2 * pointM) : options.exteriorWallThicknessM
+    let drawnInterior =
+      sheet ? max(options.interiorWallThicknessM, 2 * pointM) : options.interiorWallThicknessM
     let walls = WallLayout(
       rooms: rooms.map(\.polygon), walls: geometry.walls.filter { $0.length > 0 },
-      openings: geometry.openings, exterior: options.exteriorWallThicknessM,
-      interior: options.interiorWallThicknessM)
+      openings: geometry.openings, exterior: drawnExterior, interior: drawnInterior)
     for index in rooms.indices {
       rooms[index].clear = FloorPlanDrawing.clearOutline(rooms[index].polygon, walls: walls)
     }
@@ -267,7 +303,8 @@ public struct FloorPlanDrawing: Sendable {
         let source = model.objects.first { $0.id == object.id }
         let attributes = source?.attributes ?? [:]
         if var symbol = FloorPlanSymbols.symbol(
-          for: object, attributes: attributes, lines: lines, tables: tables)
+          for: object, attributes: attributes, lines: lines, tables: tables,
+          rendition: options.rendition)
         {
           if let box = source?.box {
             symbol.overhead = box.center.y - abs(box.sizeM.y) / 2 - floor >= 1.0
@@ -276,6 +313,39 @@ public struct FloorPlanDrawing: Sendable {
           symbols.append(symbol)
         }
       }
+    }
+
+    if sheet {
+      let assumedWalls =
+        drawnExterior == options.exteriorWallThicknessM
+          && drawnInterior == options.interiorWallThicknessM
+        ? walls
+        : WallLayout(
+          rooms: rooms.map(\.polygon), walls: geometry.walls.filter { $0.length > 0 },
+          openings: geometry.openings, exterior: options.exteriorWallThicknessM,
+          interior: options.interiorWallThicknessM)
+      let parts = FloorPlanDrawing.sheetParts(
+        model: model, geometry: geometry, rooms: rooms, walls: walls,
+        assumedWalls: assumedWalls, symbols: symbols, options: options,
+        metrics: try metrics ?? PlanMetrics(model), rotation: theta)
+      self.options = options
+      self.style = style
+      self.items = parts.items
+      self.bounds = FloorPlanDrawing.extent(of: parts.items)
+      self.rotationDegrees = theta * 180 / .pi
+      self.rooms = rooms
+      self.walls = walls
+      self.symbols = symbols
+      self.labels = parts.labels
+      self.exteriorDimensions = []
+      self.droppedInteriorDimensions = 0
+      self.omittedExterior = 0
+      self.grossAreaM2 = assumedWalls.grossAreaM2
+      self.roomAreaM2 = rooms.map(\.areaM2).reduce(0, +)
+      self.sheetDimensions = parts.dimensions
+      self.sheetFrame = parts.frame
+      self.fillClasses = parts.classes
+      return
     }
 
     var items: [DrawingItem] = []
@@ -478,6 +548,9 @@ public struct FloorPlanDrawing: Sendable {
     self.omittedExterior = layout.omittedExteriorDimensions
     self.grossAreaM2 = walls.grossAreaM2
     self.roomAreaM2 = rooms.map(\.areaM2).reduce(0, +)
+    self.sheetDimensions = []
+    self.sheetFrame = nil
+    self.fillClasses = [:]
   }
 
   /// The drawing at the largest whole-number scale (1:n) that fits `widthMM` by `heightMM` of
@@ -553,6 +626,20 @@ public struct FloorPlanDrawing: Sendable {
       high = Point2(x: max(high.x, p.x), y: max(high.y, p.y))
     }
     return ((high.x - low.x) * 1000, (high.y - low.y) * 1000)
+  }
+
+  /// Extent of the plan itself (walls and rooms, without annotations), plan millimetres; nil
+  /// when it has neither.
+  var planBoundsMM: Bounds? {
+    let points = walls.pieces.flatMap { $0 } + rooms.flatMap(\.polygon)
+    guard let first = points.first else { return nil }
+    var low = first
+    var high = first
+    for p in points {
+      low = Point2(x: min(low.x, p.x), y: min(low.y, p.y))
+      high = Point2(x: max(high.x, p.x), y: max(high.y, p.y))
+    }
+    return Bounds(minX: low.x * 1000, minY: low.y * 1000, maxX: high.x * 1000, maxY: high.y * 1000)
   }
 
   /// Estimate of the whole-number scale (1:n) at which this drawing, redrawn, would just fit

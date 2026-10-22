@@ -527,7 +527,7 @@ public enum FloorplanWriter {
       renderer.draw(items)
       var document = PDFDocument(
         title: documentTitle, author: "Chapter", subject: "Floor plan",
-        creator: "\(PlanExportInfo.generator) \(PlanExportInfo.generatorVersion)",
+        creator: "\(PlanExportInfo.generator) \(PlanExportInfo.floorplanVersion)",
         creationDate: options.creationDate)
       document.pages = [pdfPage]
       return document.render()

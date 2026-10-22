@@ -4,10 +4,24 @@ import XCTest
 
 @testable import PlanExport
 
-/// plan.png labels: Inter outlines read from the fonts the PDFs embed, set as the PDFs set them.
+/// plan.png labels: Inter outlines read from the fonts the PDFs embed, set as the PDFs set them
+/// (`RasterCanvas`).
 final class PNGTextTests: XCTestCase {
   private let regular = GlyphOutlines.interRegular
   private let semiBold = GlyphOutlines.interSemiBold
+
+  /// A render read back in grey (Rec. 709), one byte per pixel.
+  private struct Gray {
+    var width: Int
+    var height: Int
+    var pixels: [UInt8]
+
+    init(_ canvas: RasterCanvas) {
+      width = canvas.width
+      height = canvas.height
+      pixels = canvas.grayPixels
+    }
+  }
 
   /// Ink extent of one glyph in font units: (minX, maxX, minY, maxY).
   private func bounds(_ font: GlyphOutlines, _ character: Unicode.Scalar) -> [Double] {
@@ -19,7 +33,7 @@ final class PNGTextTests: XCTestCase {
   }
 
   /// Columns and rows of the pixels more than half covered by black ink.
-  private func inkBox(_ canvas: GrayCanvas) -> (minX: Int, maxX: Int, minY: Int, maxY: Int)? {
+  private func inkBox(_ canvas: Gray) -> (minX: Int, maxX: Int, minY: Int, maxY: Int)? {
     var box: (minX: Int, maxX: Int, minY: Int, maxY: Int)?
     for y in 0..<canvas.height {
       for x in 0..<canvas.width where canvas.pixels[y * canvas.width + x] < 128 {
@@ -32,15 +46,24 @@ final class PNGTextTests: XCTestCase {
     return box
   }
 
+  /// `text` drawn black on a 600 x 300 px canvas, its baseline at row 200, through the
+  /// canvas's drawing of a `DrawingText` (pixels as millimetres, y down).
   private func canvas(
     _ text: String, x: Double = 40, emPixels: Double = 100, rotation: Double = 0,
-    centered: Bool = false, bold: Bool = false
-  ) -> GrayCanvas {
-    var canvas = GrayCanvas(width: 600, height: 300)
-    canvas.text(
-      text, origin: Point2(x: x, y: 200), emPixels: emPixels, rotation: rotation,
-      centered: centered, bold: bold, gray: 0)
-    return canvas
+    centered: Bool = false, bold: Bool = false, letterSpacing: Double = 0
+  ) -> Gray {
+    var canvas = RasterCanvas(width: 600, height: 300)
+    canvas.draw(
+      [
+        .text(
+          DrawingText(
+            text, position: DrawingPoint(x: x, y: 200), size: emPixels,
+            rotationDegrees: rotation, anchor: centered ? .center : .leading,
+            font: bold ? .interSemiBold : .interRegular, letterSpacing: letterSpacing,
+            color: DrawingColor(0, 0, 0), layer: .roomLabel))
+      ], scale: 1
+    ) { Point2(x: $0.x, y: $0.y) }
+    return Gray(canvas)
   }
 
   func testOutlinesAreTheInterFontsThePDFsEmbed() {
@@ -78,24 +101,24 @@ final class PNGTextTests: XCTestCase {
   func testNonzeroFillPaintsOverlapsOnceAndCoversEdgesExactly() {
     // Inter's outlines overlap (its e is one self-crossing contour): two overlapping squares
     // wound the same way are one shape, painted once, with no hole where they cross.
-    var canvas = GrayCanvas(width: 40, height: 20)
+    var canvas = RasterCanvas(width: 40, height: 20)
     func square(_ x: Double) -> [Point2] {
       [
         Point2(x: x, y: 2), Point2(x: x + 10, y: 2), Point2(x: x + 10, y: 12),
         Point2(x: x, y: 12),
       ]
     }
-    canvas.fillNonzero([square(2), square(7)], gray: 0.5)
-    let row = Array(canvas.pixels[(5 * 40)..<(6 * 40)])
+    canvas.fill([square(2), square(7)], color: DrawingColor(0.5, 0.5, 0.5))
+    let row = Array(Gray(canvas).pixels[(5 * 40)..<(6 * 40)])
     XCTAssertEqual(Array(row[2..<17]), [UInt8](repeating: 128, count: 15))
     XCTAssertEqual(row[1], 255)
     XCTAssertEqual(row[17], 255)
     // An edge through the middle of a pixel covers half of it.
-    var half = GrayCanvas(width: 10, height: 10)
-    half.fillNonzero(
+    var half = RasterCanvas(width: 10, height: 10)
+    half.fill(
       [[Point2(x: 2.5, y: 0), Point2(x: 6, y: 0), Point2(x: 6, y: 10), Point2(x: 2.5, y: 10)]],
-      gray: 0)
-    XCTAssertEqual(Array(half.pixels[0..<10]), [255, 255, 128, 0, 0, 0, 255, 255, 255, 255])
+      color: DrawingColor(0, 0, 0))
+    XCTAssertEqual(Array(Gray(half).pixels[0..<10]), [255, 255, 128, 0, 0, 0, 255, 255, 255, 255])
   }
 
   func testCanvasTextHasInterCapitalsAndLowercase() throws {
@@ -147,41 +170,18 @@ final class PNGTextTests: XCTestCase {
     XCTAssertEqual(turned.maxY - turned.minY, upright.maxX - upright.minX, accuracy: 2)
     XCTAssertEqual(turned.maxX, 299, "the baseline is the right edge")
     // SemiBold carries more ink than Regular.
-    func ink(_ canvas: GrayCanvas) -> Int { canvas.pixels.reduce(0) { $0 + 255 - Int($1) } }
+    func ink(_ canvas: Gray) -> Int { canvas.pixels.reduce(0) { $0 + 255 - Int($1) } }
     XCTAssertGreaterThan(
       Double(ink(canvas("Hallway", bold: true))), Double(ink(canvas("Hallway"))) * 1.15)
     // A character WinAnsi lacks draws as ?, as in the PDF.
     XCTAssertEqual(canvas("\u{2713}").pixels, canvas("?").pixels)
   }
 
-  func testPNGRoomLabelIsSetInInterSemiBoldAtItsPDFWidth() throws {
-    // One 4 x 3 m room at 1:50: 112 x 92 mm, label point in the middle at (56, 46) mm, the
-    // name 3.2 mm SemiBold centred on a baseline 1 mm above it.
-    let png = try PNGFile(
-      try PNGWriter.write(model: Synthetic.room(width: 4, length: 3, label: "Kitchen")).data)
-    func pixels(_ mm: Double) -> Double { mm * 300 / 25.4 }
-    let baselineRow = Int(pixels(92 - 47))
-    var minX = Int.max
-    var maxX = Int.min
-    for y in Int(pixels(92 - 50))..<baselineRow {
-      for x in Int(pixels(30))..<Int(pixels(82)) where png.rgb(x, y)[0] < 128 {
-        minX = min(minX, x)
-        maxX = max(maxX, x)
-      }
-    }
-    let font = semiBold
-    let scale = pixels(3.2) / font.unitsPerEm
-    let k = bounds(font, "K")
-    let n = bounds(font, "n")
-    let advanceN = font.advances[font.glyph(for: "n")]
-    let width = pixels(FontMetrics.width("Kitchen", size: 3.2, bold: true))
-    // Ink from K's left side bearing to n's right side bearing inside the PDF width.
-    let expectedMin = pixels(56) - width / 2 + k[0] * scale
-    let expectedMax = pixels(56) + width / 2 - (advanceN - n[1]) * scale
-    XCTAssertEqual(Double(minX), expectedMin, accuracy: 2)
-    XCTAssertEqual(Double(maxX + 1), expectedMax, accuracy: 2)
-    // Ink in the brand black.
-    XCTAssertTrue(
-      (Int(pixels(30))..<Int(pixels(82))).contains { png.rgb($0, baselineRow - 5) == [35, 31, 32] })
+  func testLetterSpacingAddsItsSpaceAfterEachCharacter() throws {
+    // "HH" spaced 20 px: the second H ends 20 px further right; the first does not move.
+    let plain = try XCTUnwrap(inkBox(canvas("HH", bold: true)))
+    let spaced = try XCTUnwrap(inkBox(canvas("HH", bold: true, letterSpacing: 20)))
+    XCTAssertEqual(spaced.minX, plain.minX)
+    XCTAssertEqual(Double(spaced.maxX - plain.maxX), 20, accuracy: 1)
   }
 }

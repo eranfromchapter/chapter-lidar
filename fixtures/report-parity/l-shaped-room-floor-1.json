@@ -1,0 +1,106 @@
+{
+  "areaKey" : "floor-1",
+  "captureId" : "1208cea9-d678-44fb-9f0d-7dfa9f28b311",
+  "fixture" : "l-shaped-room",
+  "label" : "Floor 1",
+  "mode" : "room",
+  "north" : {
+    "dominantAngleDeg" : 0,
+    "reason" : "no_reading",
+    "report" : {
+      "box" : "Orientation: not verified",
+      "caption" : "No compass reading",
+      "kind" : "not_verified"
+    },
+    "state" : "not_verified",
+    "unturned" : {
+      "box" : "Orientation: not verified",
+      "caption" : "No compass reading",
+      "kind" : "not_verified"
+    }
+  },
+  "rooms" : [
+    {
+      "bbox" : {
+        "acrossM" : 4,
+        "alongM" : 6,
+        "angleRadians" : 0
+      },
+      "ceiling" : {
+        "approximate" : false,
+        "heightM" : 2.7,
+        "reasons" : [
+
+        ]
+      },
+      "fillClass" : "other",
+      "floorAreaM2" : 18,
+      "formatted" : {
+        "acrossDimension" : "13' 1.5\"",
+        "alongDimension" : "19' 8.2\"",
+        "boundingBox" : "19' 8.2\" × 13' 1.5\"",
+        "ceiling" : "8' 10.3\"",
+        "floorArea" : "193.8 sq ft",
+        "floorAreaMetric" : "18.0 m²",
+        "inscribed" : "13' 1.5\" × 9' 10.1\"",
+        "perimeter" : "65' 7.4\""
+      },
+      "id" : "room-1",
+      "inscribed" : {
+        "acrossM" : 4,
+        "alongM" : 3
+      },
+      "label" : "L Room",
+      "objects" : [
+
+      ],
+      "openings" : [
+        {
+          "areaM2" : 1.8900000000000001,
+          "heightM" : 2.1,
+          "id" : "door-1",
+          "type" : "door",
+          "widthM" : 0.9
+        },
+        {
+          "areaM2" : 1.44,
+          "heightM" : 1.2,
+          "id" : "window-1",
+          "type" : "window",
+          "widthM" : 1.2
+        },
+        {
+          "areaM2" : 1.44,
+          "heightM" : 1.2,
+          "id" : "window-2",
+          "type" : "window",
+          "widthM" : 1.2
+        },
+        {
+          "areaM2" : 2.1,
+          "heightM" : 2.1,
+          "id" : "opening-1",
+          "type" : "opening",
+          "widthM" : 1
+        }
+      ],
+      "perimeterM" : 20,
+      "volumeM3" : 48.6,
+      "wallAreaExclM2" : 47.13000000000001,
+      "wallAreaInclM2" : 54.00000000000001
+    }
+  ],
+  "totals" : {
+    "bathrooms" : 0,
+    "bedrooms" : 0,
+    "floorArea" : "193.8 sq ft · 18.0 m²",
+    "livableAreaM2" : 18,
+    "perimeterM" : 20,
+    "roomCount" : 1,
+    "scannedRooms" : 1,
+    "volumeIsApproximate" : false,
+    "volumeM3" : 48.6,
+    "wallAreaM2" : 47.13000000000001,
+    "windowAreaM2" : 2.88
+  }
+}

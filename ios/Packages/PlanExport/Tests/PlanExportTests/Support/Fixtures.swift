@@ -109,6 +109,49 @@ enum Fixtures {
   static func all() throws -> [FixtureCapture] {
     try names.flatMap { try load($0) }
   }
+
+  /// The 424 West End Ave sample of the design artboards (12 rooms, 14 objects, two rooms not
+  /// scanned, compass verified 212.4° ±8 true), kept out of `names` so the Floorplan goldens
+  /// recorded before it existed stay as they are.
+  static func sample424() throws -> FixtureCapture {
+    try XCTUnwrap(load("sample-424").first)
+  }
+
+  /// Every capture the plan sheet tests write: the generated fixtures and the 424 sample.
+  static func sheetCaptures() throws -> [FixtureCapture] {
+    try all() + [sample424()]
+  }
+}
+
+/// The compass states of the plan sheet goldens (plan-sheet §13.2): the 424 sample's own
+/// verified reading (212.4° ±8 true), approximate (magnetic ±12) and none.
+enum CompassVariant: String, CaseIterable {
+  case verified
+  case approximate
+  case notVerified = "not-verified"
+
+  func apply(to record: CaptureRecord) -> CaptureRecord {
+    var record = record
+    for index in record.captures.indices {
+      var capture = record.captures[index]
+      switch self {
+      case .verified:
+        capture.setCompass(
+          .reading(
+            heading: 212.4, accuracy: 8, source: .trueNorth,
+            recordedAt: UTCTimestamp(secondsSince1970: capture.capturedAt.secondsSince1970 + 9)))
+      case .approximate:
+        capture.setCompass(
+          .reading(
+            heading: 212.4, accuracy: 12, source: .magnetic,
+            recordedAt: UTCTimestamp(secondsSince1970: capture.capturedAt.secondsSince1970 + 9)))
+      case .notVerified:
+        capture.setCompass(.none(issue: nil))
+      }
+      record.captures[index] = capture
+    }
+    return record
+  }
 }
 
 /// The synthetic whole-apartment walk-through (fixtures/generated/roomplan-only), mapped and
