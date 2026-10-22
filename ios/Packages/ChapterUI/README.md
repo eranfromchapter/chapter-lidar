@@ -133,7 +133,9 @@ final class HomeSnapshotTests: ChapterSnapshotTestCase {
   point release of it, which the harness treats as the same system: `scripts/snapshot-simulator.sh`
   reads the version from the harness, picks the iPhone 17 Pro of that runtime on the runner image
   (26.0.1 there; 26.0 itself first when present), downloads the reference version when the image
-  has neither, and never falls back to another iOS version. Another iOS version draws the system
+  has neither, boots the device before the tests (again when a boot hangs, as the first boot of
+  26.0.1 there usually does at "Waiting on BackBoard"), and never falls back to another iOS
+  version. Another iOS version draws the system
   chrome differently, beyond the tolerance (iOS 18.5: the navigation bar boards differ by
   1.5–4.4 %, the switch board by 0.8 %); a failure on another runtime says so. When
   `referenceSystemVersion` moves, record again on the new runtime, or take the `*.actual.png`

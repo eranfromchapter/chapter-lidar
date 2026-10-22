@@ -151,7 +151,8 @@ jobs:
             -derivedDataPath "${RUNNER_TEMP}/DerivedData" \
             CODE_SIGNING_ALLOWED=NO
 
-      # Waits for the simulators to load, then picks (or downloads) the snapshot runtime.
+      # Waits for the simulators to load, picks (or downloads) the snapshot runtime, and boots
+      # its iPhone 17 Pro, again when a boot hangs.
       - name: Snapshot simulator
         if: steps.present.outputs.present == 'true' && steps.present.outputs.has_tests == 'true'
         id: simulator

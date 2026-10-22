@@ -16,7 +16,10 @@
 #      (`xcodebuild -downloadPlatform iOS -buildVersion <version>`: about 8 GB, several minutes)
 #      and takes that;
 #   4. takes an available device of that name on that runtime, or creates one;
-#   5. prints `platform=iOS Simulator,id=<UDID>` on stdout (the log goes to stderr) and, on
+#   5. builds the runtime's dyld shared cache if it has none yet, boots the device and waits until
+#      it has finished booting, at most SIMULATOR_BOOT_SECONDS; a boot that hangs is shut down
+#      and tried again (the third time on an erased device);
+#   6. prints `platform=iOS Simulator,id=<UDID>` on stdout (the log goes to stderr) and, on
 #      GitHub Actions, writes `destination=` and `runtime=` to $GITHUB_OUTPUT.
 # It never falls back to another iOS version: the snapshots are compared on the reference system
 # or the script fails.
@@ -24,7 +27,9 @@
 # Usage: scripts/snapshot-simulator.sh [device name]   (default: iPhone 17 Pro)
 #   SNAPSHOT_IOS_VERSION     use this reference version instead of the harness's
 #   SIMULATOR_WAIT_SECONDS   bound of the wait of step 1 (default 240)
-# Exit codes: 0 destination printed, 1 no reference runtime or device and none could be installed.
+#   SIMULATOR_BOOT_SECONDS   bound of each boot attempt of step 5 (default 180)
+# Exit codes: 0 destination printed, 1 no reference runtime or device and none could be installed,
+#   or the device did not finish booting.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -105,6 +110,67 @@ if [[ -z "${udid}" ]]; then
   fi
   log "Creating ${name} on iOS ${runtime_version}."
   udid="$(xcrun simctl create "${name}" "${device_type}" "${runtime_id}")"
+fi
+
+# The runtime's dyld shared cache: a no-op when it exists (as on the runner image), else built
+# now rather than while the tests run.
+started=${SECONDS}
+xcrun simctl runtime dyld_shared_cache update "${runtime_id}" >&2
+log "dyld shared cache of iOS ${runtime_version} ready ($((SECONDS - started)) s)."
+
+# Boots the device and waits until it has finished booting (data migration, BackBoard, the system
+# app), for at most $1 seconds. On the macos-15 runner the first boot of an iOS 26.0.1 device
+# often stops at "Waiting on BackBoard" for good (9 of 15 first boots in October 2026, none got
+# past it in 180-240 s; left to xcodebuild, such a device hangs app launches and accessibility
+# and runs the tests several times slower), while a second boot after `simctl shutdown` finished
+# in 41-75 s every time (5 of 5).
+boot_device() {
+  local limit=$1 started=${SECONDS} status_log pid
+  status_log="$(mktemp -t snapshot-simulator-boot)"
+  xcrun simctl bootstatus "${udid}" -b >"${status_log}" 2>&1 &
+  pid=$!
+  while kill -0 "${pid}" 2>/dev/null; do
+    if ((SECONDS - started >= limit)); then
+      kill "${pid}" 2>/dev/null || true
+      wait "${pid}" 2>/dev/null || true
+      log "Not booted after ${limit} s, still at: $(grep -E $'^\t[A-Z]' "${status_log}" | tail -n 1 | tr -d '\t')."
+      rm -f "${status_log}"
+      return 1
+    fi
+    sleep 2
+  done
+  if wait "${pid}"; then
+    # The stages it went through, or simctl's one line ("Device already booted, ...").
+    local stages
+    stages="$(grep -E $'^\t[A-Z]' "${status_log}" | tr -d '\t' | uniq | paste -sd ',' - | sed 's/,/, /g')"
+    [[ -n "${stages}" ]] || stages="$(grep -v -e '^Monitoring' -e '^$' "${status_log}" | head -n 1)"
+    log "${name} booted in $((SECONDS - started)) s (${stages})."
+    rm -f "${status_log}"
+    return 0
+  fi
+  log "simctl bootstatus failed:"
+  cat "${status_log}" >&2
+  rm -f "${status_log}"
+  return 1
+}
+
+boot_seconds="${SIMULATOR_BOOT_SECONDS:-180}"
+booted=0
+for attempt in 1 2 3; do
+  log "Booting ${name} on iOS ${runtime_version} (attempt ${attempt} of 3, at most ${boot_seconds} s)..."
+  if boot_device "${boot_seconds}"; then
+    booted=1
+    break
+  fi
+  xcrun simctl shutdown "${udid}" >&2 || true
+  if ((attempt == 2)); then
+    log "Erasing ${name}."
+    xcrun simctl erase "${udid}" >&2
+  fi
+done
+if ((booted == 0)); then
+  log "::error::${name} on iOS ${runtime_version} did not finish booting in 3 attempts."
+  exit 1
 fi
 
 destination="platform=iOS Simulator,id=${udid}"
