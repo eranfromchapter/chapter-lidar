@@ -2,10 +2,11 @@
 // of PlanExport's PlanMetrics gives the phone's numbers for every good fixture capture model.
 //
 // The goldens in ./parity were recorded from PlanExport's PlanMetrics (Swift) on each capture
-// model under fixtures/generated. They stand in for fixtures/report-parity (track T5's
-// ReportParityGoldenTests) until those land; then this test reads those files instead.
-// Numbers agree within 1e-9 relative (1e-6 for the inscribed rectangle's raster search),
-// printed strings exactly.
+// model under fixtures/generated, with the engine's inner values (frame angle, walled length,
+// ceiling basis) that fixtures/report-parity leaves out. What the plan sheet prints from those
+// fixtures (PlanExport's ReportParityGoldenTests: names, fill classes, numbers, north) is
+// compared in plan-sheet-parity.test.ts. Numbers agree within 1e-9 relative (1e-6 for the
+// inscribed rectangle's raster search), printed strings exactly.
 
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";

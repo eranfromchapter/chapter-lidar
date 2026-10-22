@@ -79,6 +79,13 @@ describe("fills (plan-sheet 3.4.1)", () => {
     assert.equal(fillClass("Kitchen", "kitchen", ["sink"], "exterior"), "outdoor");
   });
 
+  it("types a room the model leaves untyped from its label, as the plan sheet does", () => {
+    // "Lounge" is a living room by its label, "Pantry" a closet: its stove does not make it wet.
+    assert.equal(fillClass("Lounge", undefined, [], "floor"), "habitable");
+    assert.equal(fillClass("Pantry", undefined, ["stove"], "floor"), "other");
+    assert.equal(fillClass("Guest suite", undefined, ["bed"], "floor"), "habitable");
+  });
+
   it("types a 1.0.0 room from its label", () => {
     assert.equal(typeFromLabel("Primary Bedroom"), "bedroom");
     assert.equal(typeFromLabel("Shower room"), "bathroom");

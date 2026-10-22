@@ -203,7 +203,10 @@ const LABEL_TYPES: ReadonlyArray<readonly [RoomType, readonly string[]]> = [
   ["office", ["office", "study"]],
 ];
 
-/** The room type a 1.0.0 model implies by its label (PlanExport FloorPlanStyle.type(fromLabel:)). */
+/**
+ * The room type a label implies (PlanExport FloorPlanStyle.type(fromLabel:)), for a room the
+ * model gives no type: every room of a 1.0.0 model, and an untyped room of a 1.1.0 one.
+ */
 export function typeFromLabel(label: string): RoomType | undefined {
   const text = label.toLowerCase();
   for (const [type, words] of LABEL_TYPES) {
@@ -217,13 +220,15 @@ export function typeFromLabel(label: string): RoomType | undefined {
 const has = (text: string, words: readonly string[]) => words.some((word) => text.includes(word));
 
 /**
- * Fill class of a room (plan-sheet 3.4.1, shared with the plan sheet): outdoor labels, then wet
- * and habitable by type or label, then by objects for untyped rooms, else other. Every room of
- * an exterior capture is outdoor.
+ * Fill class of a room (plan-sheet 3.4.1, the plan sheet's `RoomFillClass.of`, critique R-35):
+ * outdoor labels, then wet and habitable by type or label, then by objects for rooms with no
+ * type (or `other`), else other. Every room of an exterior capture is outdoor. `modelType` is
+ * the capture model's type; a room without one takes the type its label implies
+ * (`typeFromLabel`), as on the sheet, so an untyped "Pantry" is a closet whatever it holds.
  */
 export function fillClass(
   label: string,
-  type: RoomType | undefined,
+  modelType: RoomType | undefined,
   categories: readonly string[],
   mode: CaptureMode | undefined,
 ): FillClass {
@@ -231,6 +236,7 @@ export function fillClass(
   if (mode === "exterior" || has(text, ["balcony", "terrace", "patio", "deck", "porch"])) {
     return "outdoor";
   }
+  const type = modelType ?? typeFromLabel(label);
   if (
     (type !== undefined && ["bathroom", "kitchen", "laundry"].includes(type)) ||
     has(text, ["bath", "kitchen", "laundry", "wc", "toilet", "shower"])
@@ -375,9 +381,7 @@ export function buildModel(input: SpatialReportInput): Model {
     const claimed = new Set<ReportPhoto>();
     const rooms: ModelRoom[] = roomsInOrder.map(({ room, modelIndex }) => {
       const sourceRoom = model?.rooms[modelIndex];
-      const type =
-        sourceRoom?.type ??
-        (model?.schemaVersion === "1.0.0" ? typeFromLabel(room.label) : undefined);
+      const type = sourceRoom?.type;
       const categories = room.objects.map((object) => object.category);
       const key = normalizeLabel(room.label);
       const roomPhotos = ownPhotos.filter(
