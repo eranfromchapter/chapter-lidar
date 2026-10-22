@@ -1,6 +1,7 @@
 import AppCore
 import ChapterUI
 import SwiftUI
+import UIKit
 
 struct RootView: View {
   let model: AppModel
@@ -17,10 +18,49 @@ struct RootView: View {
         AppNavigation(home: home)
       }
     }
+    .background(WindowTint(color: ChapterTheme.Swatch.ink.uiColor))
     #if DEBUG
-      // The UI tests' font check (`debug.fonts`, `debug.fontAudit`), drawn only in their mode.
-      .overlay(alignment: .bottomLeading) { UITestFontAudit() }
+      // The UI tests' hidden checks (`debug.fonts`, `debug.fontAudit`, `debug.uploadedRecord`,
+      // `debug.nextRevisionNotice`), drawn only in their mode.
+      .overlay(alignment: .bottomLeading) {
+        HStack(spacing: 0) {
+          UITestFontAudit()
+          UITestProbeView()
+        }
+      }
     #endif
+  }
+}
+
+/// Ink as the window's tint: what UIKit draws on its own takes it too, above all the system
+/// alerts' buttons ("Call the PM", "Re-seal"), which SwiftUI's `tint` (`chapterRoot()`) does
+/// not reach and which would otherwise be the system blue (off-brand).
+private struct WindowTint: UIViewRepresentable {
+  let color: UIColor
+
+  func makeUIView(context: Context) -> TintView {
+    let view = TintView()
+    view.color = color
+    return view
+  }
+
+  func updateUIView(_ view: TintView, context: Context) {
+    view.color = color
+    view.apply()
+  }
+
+  final class TintView: UIView {
+    var color: UIColor = .label
+
+    override func didMoveToWindow() {
+      super.didMoveToWindow()
+      apply()
+    }
+
+    func apply() {
+      guard let window, window.tintColor != color else { return }
+      window.tintColor = color
+    }
   }
 }
 
@@ -44,6 +84,8 @@ struct NotConfiguredView: View {
       }
       Spacer()
     }
+    // On the 16 pt margin, whatever the longest line (not centred as a block).
+    .frame(maxWidth: .infinity, alignment: .leading)
     .padding(.horizontal, ChapterTheme.Metric.screenPadding)
     .padding(.top, 48)
     .chapterContentWidth()
@@ -70,6 +112,8 @@ struct SignInView: View {
       }
       Spacer()
     }
+    // On the 16 pt margin, as the button below (not centred as a block).
+    .frame(maxWidth: .infinity, alignment: .leading)
     .padding(.horizontal, ChapterTheme.Metric.screenPadding)
     .padding(.top, 48)
     .chapterContentWidth()

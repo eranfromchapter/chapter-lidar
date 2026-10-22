@@ -15,7 +15,8 @@ import XCTest
   /// accuracy, source and time.
   @MainActor
   final class LocationNotStoredTests: XCTestCase {
-    private var base: URL!
+    // Set and read by setUp, the tests and tearDown, which XCTest runs one after the other.
+    nonisolated(unsafe) private var base: URL!
 
     override func setUpWithError() throws {
       base = try Fixtures.temporaryDirectory()

@@ -1,0 +1,194 @@
+{
+  "files" : [
+    {
+      "bytes" : 1148,
+      "derivedFrom" : [
+
+      ],
+      "generator" : "chapter-capture-ios/CaptureCore",
+      "generatorVersion" : "1.0.0",
+      "mime" : "application/json",
+      "path" : "Source Register/c1b6d1fb-17af-4f4a-877c-2565ef9bdb86/capture-record.json",
+      "role" : "capture_record",
+      "sha256" : "c664017f4331087cb20cdd864221b033b5291f6db2c33eb32c2cfd69599f9e04"
+    },
+    {
+      "bytes" : 2768,
+      "derivedFrom" : [
+
+      ],
+      "generator" : "chapter-capture-ios/FieldKit",
+      "generatorVersion" : "1.0.0",
+      "mime" : "application/json",
+      "path" : "Field Measurements/c1b6d1fb-17af-4f4a-877c-2565ef9bdb86/field-controls.json",
+      "role" : "field_controls",
+      "sha256" : "d6d52becf7ce728b378c11a901be3e42d11bdcbf79e6189c00f72b4a1e62bd51"
+    },
+    {
+      "areaKey" : "floor-1",
+      "bytes" : 3442,
+      "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+      "derivedFrom" : [
+
+      ],
+      "generator" : "chapter-capture-ios/CaptureCore",
+      "generatorVersion" : "1.0.0",
+      "mime" : "application/json",
+      "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/roomplan.json",
+      "role" : "raw_roomplan_json",
+      "sha256" : "438a3c24833b0e48e9b908367656a0be2a0ed20b33a3d3c82c49693dfa5ca2f6"
+    },
+    {
+      "areaKey" : "floor-1",
+      "bytes" : 14224,
+      "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+      "derivedFrom" : [
+
+      ],
+      "generator" : "chapter-capture-ios/CaptureCore",
+      "generatorVersion" : "1.0.0",
+      "mime" : "application/octet-stream",
+      "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/depth-samples.bin",
+      "role" : "raw_depth",
+      "sha256" : "4e30958048d51aabc36fa61d59d50515f59eee29426b61e438d15ee9bafb9fba"
+    },
+    {
+      "areaKey" : "floor-1",
+      "bytes" : 2902,
+      "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+      "derivedFrom" : [
+        "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/roomplan.json"
+      ],
+      "generator" : "chapter-capture-ios/CaptureCore",
+      "generatorVersion" : "1.0.0",
+      "mime" : "application/json",
+      "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/capture-model.json",
+      "role" : "capture_model",
+      "sha256" : "3ef27e8881e40350c16dd8651d89ea142f3103343b69e55d61b2ecfd85e83b93"
+    },
+    {
+      "areaKey" : "floor-1",
+      "bytes" : 4636,
+      "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+      "derivedFrom" : [
+        "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/capture-model.json"
+      ],
+      "generator" : "chapter-capture-ios/PlanExport",
+      "generatorVersion" : "1.0.0",
+      "mime" : "image/vnd.dxf",
+      "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/plan.dxf",
+      "role" : "plan_dxf",
+      "sha256" : "a44fed151c4d47aa8123cdb38e3ee4823a2a3b43978b9d947e9faf7b2c65f989"
+    },
+    {
+      "areaKey" : "floor-1",
+      "bytes" : 296,
+      "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+      "derivedFrom" : [
+        "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/capture-model.json"
+      ],
+      "generator" : "chapter-capture-ios/PlanExport",
+      "generatorVersion" : "1.0.0",
+      "mime" : "text/csv",
+      "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/rooms.csv",
+      "role" : "rooms_csv",
+      "sha256" : "01d6aa25d22909f3b110823d0daa3a79c999035876eea704cff03dbebd29897e"
+    },
+    {
+      "areaKey" : "floor-1",
+      "bytes" : 154277,
+      "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+      "derivedFrom" : [
+        "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/capture-model.json"
+      ],
+      "generator" : "chapter-capture-ios/PlanExport",
+      "generatorVersion" : "1.0.0",
+      "mime" : "application/pdf",
+      "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/plan.pdf",
+      "role" : "plan_pdf",
+      "sha256" : "5c234706e1c827ebdf629c7238e6b7d58ec98bc399777d1defc08ba597a81e6e"
+    },
+    {
+      "areaKey" : "floor-1",
+      "bytes" : 164577,
+      "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+      "derivedFrom" : [
+        "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/capture-model.json"
+      ],
+      "generator" : "chapter-capture-ios/PlanExport",
+      "generatorVersion" : "1.0.0",
+      "mime" : "application/pdf",
+      "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/spatial-report.pdf",
+      "role" : "spatial_report_pdf",
+      "sha256" : "896aef213948eb3a4741bdeeae04429bfd20f6b0fe3ec6a60fea45132cffa123"
+    },
+    {
+      "areaKey" : "floor-1",
+      "bytes" : 58763,
+      "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+      "derivedFrom" : [
+        "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/capture-model.json"
+      ],
+      "generator" : "chapter-capture-ios/PlanExport",
+      "generatorVersion" : "1.0.0",
+      "mime" : "image/png",
+      "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/plan.png",
+      "role" : "plan_png",
+      "sha256" : "588e9754ed0dade4ee9a131a0aec8756a27d800a8162f3fe36f2387d6cfac1be"
+    },
+    {
+      "areaKey" : "floor-1",
+      "bytes" : 9116,
+      "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+      "derivedFrom" : [
+        "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/capture-model.json"
+      ],
+      "generator" : "chapter-capture-ios/PlanExport",
+      "generatorVersion" : "1.0.0",
+      "mime" : "image/svg+xml",
+      "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/plan.svg",
+      "role" : "plan_svg",
+      "sha256" : "e45472d31c7376d4161dd3f90a201f70ee30cee9a1df5442143f21f6906bcabe"
+    },
+    {
+      "areaKey" : "floor-1",
+      "bytes" : 32315,
+      "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+      "derivedFrom" : [
+        "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/depth-samples.bin"
+      ],
+      "generator" : "chapter-capture-ios/MeshExport",
+      "generatorVersion" : "0.1.0",
+      "mime" : "application/vnd.las",
+      "path" : "Original Exports/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/points.las",
+      "role" : "point_cloud_las",
+      "sha256" : "69ee678481ddab0b1679b2aaed4d68bce2e7e864307866ffaa7d26a74d8c77d7"
+    },
+    {
+      "areaKey" : "floor-1",
+      "bytes" : 219,
+      "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+      "derivedFrom" : [
+
+      ],
+      "generator" : "chapter-capture-ios/FieldKit",
+      "generatorVersion" : "1.0.0",
+      "mime" : "image/jpeg",
+      "path" : "Site Photos/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/photo-0001.jpg",
+      "photo" : {
+        "direction" : "N",
+        "room" : "Test Room",
+        "subject" : "general",
+        "takenAt" : "2026-10-17T14:07:11Z"
+      },
+      "role" : "photo",
+      "sha256" : "002c11d07bdd7d304e8f6e1bd30facb253200718cf90db773605cbbc5b6dda03"
+    }
+  ],
+  "layoutVersion" : "1.0.0",
+  "packageId" : "29d10508-818d-47ed-a206-1a0a0b0d1deb",
+  "revision" : 1,
+  "schemaVersion" : "1.0.0",
+  "sealedAt" : "2026-10-21T22:48:45Z",
+  "visitId" : "c1b6d1fb-17af-4f4a-877c-2565ef9bdb86"
+}

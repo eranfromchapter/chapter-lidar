@@ -72,6 +72,8 @@ public enum LaunchModeResolver {
 ///   (default 0.5), so the live scan's states can be seen.
 /// - `-ChapterUITestV1Visits`: before the home reads the disk, visit folders as the v1 app left
 ///   them are made from the fixture (scans only, a draft, a sealed package; no `visit.json`).
+/// - `-ChapterUITestNotifyDuringScan`: 1.5 s into a live scan, the "Verdict: …" notification of
+///   another capture's newest package is tapped (the open visit must survive it).
 public struct UITestLaunchOptions: Equatable, Sendable {
   public static let compassArgument = "-ChapterUITestCompass"
   public static let visitsRootArgument = "-ChapterUITestVisitsRoot"
@@ -79,6 +81,7 @@ public struct UITestLaunchOptions: Equatable, Sendable {
   public static let trackingLostArgument = "-ChapterUITestTrackingLost"
   public static let scanStepArgument = "-ChapterUITestScanStep"
   public static let v1VisitsArgument = "-ChapterUITestV1Visits"
+  public static let notifyDuringScanArgument = "-ChapterUITestNotifyDuringScan"
   public static let defaultScanStep: TimeInterval = 0.5
 
   /// `verified`, `approximate` or `none` (`FakeCompass.Script`).
@@ -89,11 +92,12 @@ public struct UITestLaunchOptions: Equatable, Sendable {
   public var trackingLost: ClosedRange<Int>?
   public var scanStep: TimeInterval
   public var seedsV1Visits: Bool
+  public var notifiesDuringScan: Bool
 
   public init(
     compass: String = "verified", visitsRoot: String? = nil, projectsOffline: Bool = false,
     trackingLost: ClosedRange<Int>? = nil, scanStep: TimeInterval = Self.defaultScanStep,
-    seedsV1Visits: Bool = false
+    seedsV1Visits: Bool = false, notifiesDuringScan: Bool = false
   ) {
     self.compass = compass
     self.visitsRoot = visitsRoot
@@ -101,6 +105,7 @@ public struct UITestLaunchOptions: Equatable, Sendable {
     self.trackingLost = trackingLost
     self.scanStep = scanStep
     self.seedsV1Visits = seedsV1Visits
+    self.notifiesDuringScan = notifiesDuringScan
   }
 
   public init(arguments: [String]) {
@@ -130,7 +135,8 @@ public struct UITestLaunchOptions: Equatable, Sendable {
       compass: compass ?? "verified", visitsRoot: root,
       projectsOffline: arguments.contains(Self.offlineArgument), trackingLost: lost,
       scanStep: step ?? Self.defaultScanStep,
-      seedsV1Visits: arguments.contains(Self.v1VisitsArgument))
+      seedsV1Visits: arguments.contains(Self.v1VisitsArgument),
+      notifiesDuringScan: arguments.contains(Self.notifyDuringScanArgument))
   }
 
   /// The visits folder's name under Application Support.

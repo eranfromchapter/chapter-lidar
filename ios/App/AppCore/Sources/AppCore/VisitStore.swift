@@ -83,8 +83,20 @@ public struct VisitFile: Codable, Equatable, Sendable {
         revision: revision.number, basePackageId: revision.basePackageId, isRevisionMode: true)
     }
     return VisitFlow(
-      resuming: record, noRoomsSkipped: noRoomsSkipped, isSealed: isSealed,
+      resuming: record, noRoomsSkipped: sealedConfirmation, isSealed: isSealed,
       revision: sealedRevision ?? 1)
+  }
+
+  /// "All rooms scanned" as a sealed visit has it. Sealing needs "Rooms not scanned" to pass, so
+  /// a sealed visit without the tap is one migrated from the v1 app before the migration kept it
+  /// (the v1 app held the tap in memory only): it counts as confirmed for its captures, so the
+  /// read-only overview never shows a ■ that cannot be fixed. A recorded skipped room still
+  /// wins (`NoRoomsSkippedConfirmation.isConfirmed`).
+  var sealedConfirmation: NoRoomsSkippedConfirmation {
+    guard isSealed, noRoomsSkipped.confirmedCaptureIds == nil else { return noRoomsSkipped }
+    var confirmed = noRoomsSkipped
+    confirmed.confirm(for: record)
+    return confirmed
   }
 }
 
@@ -104,17 +116,24 @@ public enum VisitStoreError: Error, Equatable, Sendable, CustomStringConvertible
 public enum VisitStore {
   public static let fileName = "visit.json"
 
+  private struct FormatVersion: Decodable {
+    var formatVersion: Int
+  }
+
   /// The visit's file; nil when the workspace has none (a v1 workspace, or an empty folder).
   public static func load(_ workspace: VisitWorkspace) throws -> VisitFile? {
     let url = workspace.visitURL
     guard FileManager.default.fileExists(atPath: url.path) else { return nil }
     do {
-      let file = try CaptureContractJSON.makeDecoder().decode(
-        VisitFile.self, from: Data(contentsOf: url))
-      guard file.formatVersion == VisitFile.currentFormatVersion else {
-        throw VisitStoreError.unreadable("unknown format version \(file.formatVersion)")
+      let data = try Data(contentsOf: url)
+      let decoder = CaptureContractJSON.makeDecoder()
+      // The version first: a file of a newer app says so, rather than a missing field.
+      if let version = try? decoder.decode(FormatVersion.self, from: data).formatVersion,
+        version != VisitFile.currentFormatVersion
+      {
+        throw VisitStoreError.unreadable("unknown format version \(version)")
       }
-      return file
+      return try decoder.decode(VisitFile.self, from: data)
     } catch let error as VisitStoreError {
       throw error
     } catch {
@@ -141,13 +160,21 @@ public enum VisitStore {
   }
 
   /// The visit's file, or for a workspace of the v1 app (no `visit.json`) one built from what it
-  /// holds, and saved: the capture record of its newest sealed package (then the visit is
-  /// sealed), else of its newest "Package ready" draft (not sealed; "All rooms scanned" is asked
-  /// again). Nil when there is neither (an empty folder, or scans without a capture record:
-  /// `legacyScans`). Nothing is deleted or moved.
+  /// holds, and saved (`migrate`). Nil when there is neither, and when `visit.json` is there but
+  /// cannot be read (it is never overwritten; `load` says why).
   public static func loadOrMigrate(_ workspace: VisitWorkspace) -> VisitFile? {
     if let file = try? load(workspace) { return file }
     guard !FileManager.default.fileExists(atPath: workspace.visitURL.path) else { return nil }
+    return migrate(workspace)
+  }
+
+  /// The `visit.json` of a workspace the v1 app wrote, built from what it holds, and saved: the
+  /// capture record of its newest sealed package (then the visit is sealed, and "All rooms
+  /// scanned" counts as confirmed: the v1 app sealed only after that checklist item passed),
+  /// else of its newest "Package ready" draft (not sealed; "All rooms scanned" is asked again).
+  /// Nil when there is neither (an empty folder, or scans without a capture record:
+  /// `legacyScans`). Nothing is deleted or moved.
+  static func migrate(_ workspace: VisitWorkspace) -> VisitFile? {
     let packages = sealedPackages(of: workspace)
     let source: (record: CaptureRecord, date: Date, sealed: Bool)?
     if let newest = packages.last, let record = SealedPackageSummary.captureRecord(of: newest) {
@@ -159,9 +186,11 @@ public enum VisitStore {
     }
     guard let source else { return nil }
     let created = folderDate(workspace.root) ?? source.record.visitedAt.date
+    var noRoomsSkipped = NoRoomsSkippedConfirmation()
+    if source.sealed { noRoomsSkipped.confirm(for: source.record) }
     let file = VisitFile(
       createdAt: UTCTimestamp(min(created, source.date)), updatedAt: UTCTimestamp(source.date),
-      record: source.record, isSealed: source.sealed)
+      record: source.record, noRoomsSkipped: noRoomsSkipped, isSealed: source.sealed)
     // Best effort: a workspace that cannot be written to still lists from memory.
     try? save(file, to: workspace)
     return file

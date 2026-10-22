@@ -47,6 +47,8 @@ final class VisitModel {
   private(set) var packages: [SealedPackage]
   /// Package status was opened on its own (a Sealed row, a notification): Back leaves the visit.
   private(set) var packageAtRoot = false
+  /// "Rename rooms", from the photo step (that capture) or Before you leave (every capture).
+  var renaming: RoomNamingDraft?
 
   @ObservationIgnored let services: AppServices
   @ObservationIgnored let workspace: VisitWorkspace
@@ -59,8 +61,6 @@ final class VisitModel {
   @ObservationIgnored private var revisionStartedAt: UTCTimestamp?
   @ObservationIgnored private var mapping: Task<Void, Never>?
   @ObservationIgnored private var cachedVerdicts: [LowercaseUUID: VerdictStatus] = [:]
-  @ObservationIgnored private lazy var notices = NextRevisionNotifier(
-    sender: StationNextRevisionNotices(client: services.station))
 
   /// A new capture at "New capture". Its workspace folder is created by the first Start scan,
   /// so an abandoned New capture leaves nothing on the phone.
@@ -111,15 +111,31 @@ final class VisitModel {
         .verdict
     }
     mapCaptures()
+    // The station may have missed the notice of a revision begun before the app was closed.
+    revisionChanged()
   }
 
   private static var appInfo: CaptureRecord.AppInfo {
     CaptureRecord.AppInfo.from(bundle: .main) ?? CaptureRecord.AppInfo(version: "0.0.0", build: "0")
   }
 
-  /// Stops background work when the visit leaves the screen.
+  /// Stops background work when the visit leaves the screen. A next-revision notice still
+  /// waiting is sent all the same (`RevisionNoticeSchedule` belongs to the home).
   func close() {
     mapping?.cancel()
+  }
+
+  /// Work that closing the visit now would lose, so a tapped notification must not replace it
+  /// (`HomeModel.openPackage`): a live scan (its originals are written at Finish floor), New
+  /// capture or What are you scanning? before the scan, a photo taken and not saved, a field
+  /// control or room names being typed.
+  var hasWorkToLose: Bool {
+    if captureModel != nil || renaming != nil { return true }
+    switch flow.step {
+    case .photos: return photoModel?.pendingOriginal != nil
+    case .controls: return controlsModel?.entry != nil
+    default: return false
+    }
   }
 
   // MARK: Navigation (phone-capture §3.0, §5.3)
@@ -240,6 +256,7 @@ final class VisitModel {
       makePhotoModel(captureId: capture.captureId, room: nil)
       message = nil
       save()
+      revisionChanged()
     } catch {
       message = String(describing: error)
     }
@@ -409,6 +426,7 @@ final class VisitModel {
   func photosDone() {
     photos = photoStore.records
     do { try flow.photosDone() } catch { message = String(describing: error) }
+    revisionChanged()
   }
 
   private func makeControlsModel() {
@@ -424,6 +442,7 @@ final class VisitModel {
       persist: { [weak self] next in
         try FieldControlsFile.write(next, intoPackageRoot: root, knownCaptures: refs)
         self?.controls = next
+        self?.revisionChanged()
       })
   }
 
@@ -556,6 +575,7 @@ final class VisitModel {
       plan = nil
       revisionPlan = nil
       message = nil
+      revisionChanged()
       return nil
     } catch {
       return "The names could not be saved: \(String(describing: error))"
@@ -593,8 +613,7 @@ final class VisitModel {
         buildError = "The sealed revision \(flow.revision - 1) is not on this phone."
         return
       }
-      let nextActions = (cachedVerdicts[base.packageId] ?? home?.snapshot(for: base.packageId)?.verdict)?
-        .nextVisit.map(\.action) ?? []
+      let nextActions = baseNextActions(base)
       Task {
         let result = await Task.detached(priority: .userInitiated) {
           Result {
@@ -607,11 +626,9 @@ final class VisitModel {
         switch result {
         case .success(let plan):
           revisionPlan = plan
-          // The web shows "Revision n · not sealed · on the phone" (phone-package §10.4); best
-          // effort, never shown, never blocking.
-          let notices = self.notices
-          let notice = plan.changes.notice(updatedAt: .now())
-          Task { await notices.changed(notice, basePackageId: base.packageId) }
+          // The review's own build: its notice goes now (phone-package §10.4).
+          await home?.revisionNotices.built(
+            plan.changes.notice(updatedAt: .now()), basePackageId: base.packageId)
         case .failure(let error): buildError = String(describing: error)
         }
       }
@@ -655,7 +672,7 @@ final class VisitModel {
     isSealing = true
     sealError = nil
     let destination = workspace.packageURL(packageId: draft.packageId.rawValue)
-    let wasRevision = flow.isRevisionMode
+    let revisedBase = flow.isRevisionMode ? flow.basePackageId : nil
     Task {
       let result = await Task.detached {
         Result { try PackageAssembler().assemble(draft, at: destination) }
@@ -671,9 +688,8 @@ final class VisitModel {
           revisionStartedAt = nil
           save()
           _ = home?.coordinator(for: sealed, dealId: dealId)
-          if wasRevision {
-            let notices = self.notices
-            Task { await notices.stop() }
+          if let revisedBase {
+            await home?.revisionNotices.stop(basePackageId: revisedBase)
           }
           if services.asksForNotifications { VerdictNotifier.shared.requestPermission() }
         } catch {
@@ -776,6 +792,7 @@ final class VisitModel {
       (try? VisitStore.loadControls(workspace, visitId: record.visitId)) ?? controls
     photos = photoStore.records
     save()
+    revisionChanged()
   }
 
   /// "Re-seal as revision n+1" after Upload stopped (phone-package §4.2): a full build of the
@@ -818,6 +835,40 @@ final class VisitModel {
         resealError = SealFailureText.make(error)
       }
     }
+  }
+
+  // MARK: Next-revision notice (phone-package §10.4)
+
+  /// Revision mode: something revision n would carry changed (a floor, a photo, a control, a
+  /// room name), or the revision just began or was reopened. The home's schedule rebuilds the
+  /// station's notice from the visit as it is now, 10 s after the last change; the web shows it
+  /// as "Revision n · not sealed · on the phone". Best effort: never shown, never blocking.
+  func revisionChanged() {
+    guard flow.isRevisionMode, let record = flow.record, let baseId = flow.basePackageId,
+      let base = packages.first(where: { $0.packageId == baseId }),
+      let schedule = home?.revisionNotices
+    else { return }
+    let builder = self.builder
+    let photos = photoStore.records
+    let controls = self.controls ?? FieldControlsEditor(visitId: record.visitId).controls
+    let roomNames = rooms.names
+    let nextActions = baseNextActions(base)
+    schedule.changed(basePackageId: baseId) {
+      try await Task.detached(priority: .utility) {
+        let plan = try builder.revisionPlan(
+          base: base, record: record, photos: photos, controls: controls, roomNames: roomNames,
+          baseNextActions: nextActions)
+        // Only the notice is kept: Revision n builds its own files when it is reviewed.
+        try? FileManager.default.removeItem(at: plan.draftFolder)
+        return plan.changes.notice(updatedAt: .now())
+      }.value
+    }
+  }
+
+  /// The next actions of the base revision's verdict (`answersNextAction`, §10.4).
+  private func baseNextActions(_ base: SealedPackage) -> [String] {
+    (cachedVerdicts[base.packageId] ?? home?.snapshot(for: base.packageId)?.verdict)?
+      .nextVisit.map(\.action) ?? []
   }
 
   // MARK: Floors

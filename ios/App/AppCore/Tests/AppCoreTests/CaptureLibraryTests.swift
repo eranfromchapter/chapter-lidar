@@ -242,6 +242,46 @@ final class CaptureLibraryTests: XCTestCase {
     XCTAssertTrue(missing.isEmpty)
   }
 
+  // MARK: A visit.json that cannot be read (phone-capture §9 R7)
+
+  func testAnUnreadableVisitStaysListedWithItsPackage() throws {
+    let fixture = try SealedFixture(in: base)
+    let workspace = fixture.visit.workspace
+    try Data("{\"formatVersion\": 1, \"record\": ".utf8).write(to: workspace.visitURL)
+    let visit = try XCTUnwrap(CaptureLibrary.visit(workspace), "not hidden from the home")
+    XCTAssertNil(visit.file)
+    XCTAssertFalse(visit.isLegacyScansOnly)
+    XCTAssertEqual(visit.packages.map(\.packageId), [fixture.sealed.packageId])
+    XCTAssertTrue(visit.unreadable?.hasPrefix("The visit could not be read") == true)
+    let row = try XCTUnwrap(CaptureLibrary.row(for: visit, timeZone: utc))
+    XCTAssertEqual(row.title, "Fixture box-room", "the sealed package's project title")
+    XCTAssertEqual(row.subtitle, "1 room · could not be read")
+    XCTAssertEqual(row.status, RowStatusValue(.missing, "Unreadable"))
+    XCTAssertEqual(row.destination, .overview)
+    XCTAssertEqual(
+      try Data(contentsOf: workspace.visitURL), Data("{\"formatVersion\": 1, \"record\": ".utf8),
+      "never rewritten")
+
+    let state = CaptureLibrary.load(visitsRoot: base, operatorName: "x", timeZone: utc)
+    XCTAssertEqual(state.inProgress.map(\.id), [workspace.id])
+  }
+
+  func testAVisitFromANewerAppWithNothingElseIsListedByDate() throws {
+    let workspace = try VisitWorkspace.create(in: base)
+    try Data(#"{"formatVersion": 2}"#.utf8).write(to: workspace.visitURL)
+    let written = try XCTUnwrap(
+      try workspace.visitURL.resourceValues(forKeys: [.contentModificationDateKey])
+        .contentModificationDate)
+    let row = try row(workspace)
+    XCTAssertEqual(row.title, "Capture of \(CaptureText.sealedDate(written, timeZone: utc))")
+    XCTAssertEqual(row.subtitle, "Could not be read")
+    XCTAssertEqual(row.status?.word, "Unreadable")
+    XCTAssertEqual(row.sortDate, written)
+    XCTAssertTrue(
+      try XCTUnwrap(CaptureLibrary.visit(workspace)).unreadable?.contains("format version 2")
+        == true)
+  }
+
   // MARK: v1 workspaces (the owner's visits on the phone)
 
   func testV1VisitsShowUpAfterTheUpdate() throws {

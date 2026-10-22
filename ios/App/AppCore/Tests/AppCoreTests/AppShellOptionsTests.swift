@@ -70,12 +70,13 @@ final class AppShellOptionsTests: XCTestCase {
     XCTAssertNil(defaults.trackingLost)
     XCTAssertEqual(defaults.scanStep, 0.5)
     XCTAssertFalse(defaults.seedsV1Visits)
+    XCTAssertFalse(defaults.notifiesDuringScan)
 
     let options = UITestLaunchOptions(arguments: [
       "-ChapterUITestReplay", "box-room", "-ChapterUITestCompass", "none",
       "-ChapterUITestVisitsRoot", "stable-1", "-ChapterUITestOffline",
       "-ChapterUITestTrackingLost", "2", "4", "-ChapterUITestScanStep", "1.5",
-      "-ChapterUITestV1Visits",
+      "-ChapterUITestV1Visits", "-ChapterUITestNotifyDuringScan",
     ])
     XCTAssertEqual(options.compass, "none")
     XCTAssertEqual(options.visitsRoot, "stable-1")
@@ -84,6 +85,7 @@ final class AppShellOptionsTests: XCTestCase {
     XCTAssertEqual(options.trackingLost, 2...4)
     XCTAssertEqual(options.scanStep, 1.5)
     XCTAssertTrue(options.seedsV1Visits)
+    XCTAssertTrue(options.notifiesDuringScan)
 
     // Unknown or unsafe values fall back.
     let odd = UITestLaunchOptions(arguments: [

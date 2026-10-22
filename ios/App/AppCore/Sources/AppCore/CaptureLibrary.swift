@@ -13,15 +13,20 @@ public struct CaptureLibraryVisit: Sendable {
   public let packages: [SealedPackage]
   /// Scans of a v1 workspace without a capture record (`VisitStore.legacyScans`).
   public let legacyScans: [VisitStore.LegacyScan]
+  /// Why `visit.json` could not be read (torn, or written by a newer app): the visit is listed
+  /// all the same, so it and its sealed packages do not vanish from the home (phone-capture §9
+  /// R7). Nil when the file was read, or there is none.
+  public let unreadable: String?
 
   public init(
     workspace: VisitWorkspace, file: VisitFile?, packages: [SealedPackage],
-    legacyScans: [VisitStore.LegacyScan] = []
+    legacyScans: [VisitStore.LegacyScan] = [], unreadable: String? = nil
   ) {
     self.workspace = workspace
     self.file = file
     self.packages = packages
     self.legacyScans = legacyScans
+    self.unreadable = unreadable
   }
 
   /// The newest revision's package.
@@ -29,7 +34,7 @@ public struct CaptureLibraryVisit: Sendable {
 
   /// A v1 visit that has only scans: listed so its scans stay reachable, but it cannot be
   /// resumed or packaged (no HUB project, address or operator was kept).
-  public var isLegacyScansOnly: Bool { file == nil && !legacyScans.isEmpty }
+  public var isLegacyScansOnly: Bool { file == nil && unreadable == nil && !legacyScans.isEmpty }
 }
 
 /// The Captures home from disk (phone-capture §5.4, critique R-28): one row per visit, from its
@@ -39,7 +44,8 @@ public struct CaptureLibraryVisit: Sendable {
 /// on the first read (`VisitStore.loadOrMigrate`).
 public enum CaptureLibrary {
   /// Every workspace under `visitsRoot` with something to show, by folder name. Empty folders
-  /// (the v1 app made one at every launch) and unreadable ones are left out; nothing is deleted.
+  /// (the v1 app made one at every launch) are left out; one whose `visit.json` cannot be read
+  /// is listed as such (`unreadable`). Nothing is deleted.
   public static func visits(visitsRoot: URL) -> [CaptureLibraryVisit] {
     let folders =
       (try? FileManager.default.contentsOfDirectory(
@@ -54,8 +60,16 @@ public enum CaptureLibrary {
 
   /// One workspace; nil when it holds neither a visit nor a scan.
   public static func visit(_ workspace: VisitWorkspace) -> CaptureLibraryVisit? {
-    let file = VisitStore.loadOrMigrate(workspace)
     let packages = VisitStore.sealedPackages(of: workspace)
+    let file: VisitFile?
+    do {
+      file = try VisitStore.load(workspace) ?? VisitStore.migrate(workspace)
+    } catch {
+      // Listed with what it says, and never rewritten.
+      return CaptureLibraryVisit(
+        workspace: workspace, file: nil, packages: packages,
+        unreadable: String(describing: error))
+    }
     if file != nil {
       return CaptureLibraryVisit(workspace: workspace, file: file, packages: packages)
     }
@@ -82,6 +96,9 @@ public enum CaptureLibrary {
     timeZone: TimeZone = .current
   ) -> CapturesHomeState.Row? {
     let id = visit.workspace.id
+    if visit.unreadable != nil {
+      return unreadableRow(visit, timeZone: timeZone)
+    }
     guard let file = visit.file else {
       return legacyRow(id: id, scans: visit.legacyScans, timeZone: timeZone)
     }
@@ -122,6 +139,28 @@ public enum CaptureLibrary {
   /// "Scan of Oct 20, 2026".
   public static func legacyTitle(_ date: Date, timeZone: TimeZone = .current) -> String {
     "Scan of \(CaptureText.sealedDate(date, timeZone: timeZone))"
+  }
+
+  /// "Could not be read" (In progress, ■ Unreadable): a visit whose `visit.json` cannot be read.
+  /// The title is the project's, from its newest sealed package or "Package ready" draft when
+  /// there is one, else "Capture of Oct 21, 2026" (the file's date). Tapping it opens the newest
+  /// sealed package's status, or says why it cannot be opened.
+  static func unreadableRow(_ visit: CaptureLibraryVisit, timeZone: TimeZone)
+    -> CapturesHomeState.Row
+  {
+    let record =
+      visit.newestPackage.flatMap(SealedPackageSummary.captureRecord(of:))
+      ?? VisitStore.newestDraftRecord(of: visit.workspace)?.record
+    let date =
+      (try? visit.workspace.visitURL.resourceValues(forKeys: [.contentModificationDateKey]))?
+      .contentModificationDate ?? visit.newestPackage?.manifest.sealedAt.date ?? Date()
+    return CapturesHomeState.Row(
+      id: visit.workspace.id,
+      title: record.map(ProjectTitle.of)
+        ?? "Capture of \(CaptureText.sealedDate(date, timeZone: timeZone))",
+      subtitle: record.map { "\(CaptureCountText.make($0)) \u{00B7} could not be read" }
+        ?? "Could not be read",
+      status: RowStatusValue(.missing, "Unreadable"), destination: .overview, sortDate: date)
   }
 
   static func verdict(_ outcome: VerdictOutcome) -> CapturesHomeState.Row.Verdict {

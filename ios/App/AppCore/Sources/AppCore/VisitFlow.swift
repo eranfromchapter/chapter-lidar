@@ -336,3 +336,32 @@ public struct VisitFlow: Equatable, Sendable {
     }
   }
 }
+
+/// Where a tapped "Verdict: …" notification opens its package (`HomeModel.openPackage`). The
+/// banner shows in the foreground too, so the tap can come while the operator scans another
+/// capture: the open visit is never replaced while it holds work that is not on disk yet.
+public enum PackageOpening: Equatable, Sendable {
+  /// The open visit shows it in its own flow (a sealed visit's package): Package status, or
+  /// Verdict received.
+  case inOpenVisit
+  /// On top of the screen the operator is on; the open visit stays as it is and Back returns to
+  /// it (during a live scan, the package is there once the scan ends).
+  case onTop
+  /// The visit that holds it is opened in place of the open one, whose work is all on disk.
+  case openItsVisit
+
+  /// - Parameters:
+  ///   - openVisitHoldsIt: the package is one of the open visit's.
+  ///   - openVisitShowsIt: the open visit can show it in its flow (sealed, not being revised).
+  ///   - openVisitHasWorkToLose: closing the open visit now would lose work (a live scan, an
+  ///     unsaved New capture or floor, a photo or entry not saved).
+  public static func decide(
+    hasOpenVisit: Bool, openVisitHoldsIt: Bool, openVisitShowsIt: Bool,
+    openVisitHasWorkToLose: Bool
+  ) -> PackageOpening {
+    guard hasOpenVisit else { return .openItsVisit }
+    if openVisitHasWorkToLose { return .onTop }
+    if openVisitHoldsIt { return openVisitShowsIt ? .inOpenVisit : .onTop }
+    return .openItsVisit
+  }
+}

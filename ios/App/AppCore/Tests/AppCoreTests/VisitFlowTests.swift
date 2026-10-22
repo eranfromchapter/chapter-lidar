@@ -416,4 +416,48 @@ final class VisitFlowTests: XCTestCase {
     XCTAssertFalse(VisitFlow().noRoomsSkippedConfirmed)
     XCTAssertEqual(VisitFlow().noRoomsSkipped, NoRoomsSkippedConfirmation())
   }
+
+  // MARK: A tapped verdict notification (PackageOpening)
+
+  func testANotificationNeverReplacesAVisitWithWorkToLose() {
+    // A live scan of a new capture, an unsaved New capture, a photo not saved: the package of
+    // yesterday's capture goes on top, the visit stays.
+    XCTAssertEqual(
+      PackageOpening.decide(
+        hasOpenVisit: true, openVisitHoldsIt: false, openVisitShowsIt: false,
+        openVisitHasWorkToLose: true),
+      .onTop)
+    XCTAssertEqual(
+      PackageOpening.decide(
+        hasOpenVisit: true, openVisitHoldsIt: true, openVisitShowsIt: true,
+        openVisitHasWorkToLose: true),
+      .onTop)
+  }
+
+  func testANotificationOpensItsPackageWhereNothingIsLost() {
+    // Nothing open: the visit that holds it.
+    XCTAssertEqual(
+      PackageOpening.decide(
+        hasOpenVisit: false, openVisitHoldsIt: false, openVisitShowsIt: false,
+        openVisitHasWorkToLose: false),
+      .openItsVisit)
+    // Another visit open with everything on disk: replaced by the package's visit.
+    XCTAssertEqual(
+      PackageOpening.decide(
+        hasOpenVisit: true, openVisitHoldsIt: false, openVisitShowsIt: false,
+        openVisitHasWorkToLose: false),
+      .openItsVisit)
+    // The open sealed visit's own package: in its flow.
+    XCTAssertEqual(
+      PackageOpening.decide(
+        hasOpenVisit: true, openVisitHoldsIt: true, openVisitShowsIt: true,
+        openVisitHasWorkToLose: false),
+      .inOpenVisit)
+    // The base revision while revision n is edited: on top, the revision stays open.
+    XCTAssertEqual(
+      PackageOpening.decide(
+        hasOpenVisit: true, openVisitHoldsIt: true, openVisitShowsIt: false,
+        openVisitHasWorkToLose: false),
+      .onTop)
+  }
 }

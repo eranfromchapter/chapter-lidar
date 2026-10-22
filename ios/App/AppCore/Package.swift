@@ -57,7 +57,9 @@ let package = Package(
         .product(name: "FieldKit", package: "FieldKit"),
         .product(name: "PackageKit", package: "PackageKit"),
         .product(name: "StationClient", package: "StationClient"),
-      ]
+      ],
+      // Visit folders of the v1 app, read in place (`Fixtures.v1Visits`).
+      exclude: ["Fixtures"]
     ),
   ]
 )

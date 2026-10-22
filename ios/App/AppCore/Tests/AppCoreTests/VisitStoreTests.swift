@@ -150,6 +150,40 @@ final class VisitStoreTests: XCTestCase {
     ])
     XCTAssertEqual(file.flow(sealedRevision: 1).step, .overview)
     XCTAssertTrue(file.flow(sealedRevision: 1).isReadOnly)
+    // The v1 app sealed only once "Rooms not scanned" passed: the read-only overview must not
+    // show it ■ Missing, which nothing on a sealed visit can fix.
+    XCTAssertEqual(
+      file.noRoomsSkipped.confirmedCaptureIds,
+      Set(fixture.visit.record.captures.map(\.captureId)))
+    XCTAssertTrue(file.flow(sealedRevision: 1).noRoomsSkippedConfirmed)
+  }
+
+  func testASealedFileWithoutTheTapCountsAsConfirmed() throws {
+    // A sealed visit.json written by the first migration, before it kept the tap.
+    let sealed = VisitFile(
+      createdAt: Make.t1402, updatedAt: Make.t1402, record: record(), isSealed: true)
+    XCTAssertNil(sealed.noRoomsSkipped.confirmedCaptureIds)
+    XCTAssertTrue(sealed.flow(sealedRevision: 1).noRoomsSkippedConfirmed)
+    // "Add to this capture" carries it over for the sealed floors; a new floor asks again.
+    var revision = VisitFlow(
+      revisionOf: sealed.record, base: LowercaseUUID(), baseRevision: 1,
+      noRoomsSkipped: sealed.flow(sealedRevision: 1).noRoomsSkipped)
+    XCTAssertTrue(revision.noRoomsSkippedConfirmed)
+    try revision.addFloor()
+    try revision.scanStarted()
+    try revision.floorFinished(Make.record([Make.capture("Floor 3")]))
+    XCTAssertFalse(revision.noRoomsSkippedConfirmed)
+
+    // A recorded skipped room still decides: the item passes on its note, not on a tap.
+    let skipped = VisitFile(
+      createdAt: Make.t1402, updatedAt: Make.t1402,
+      record: Make.record([Make.capture("Floor 1", omitted: ["Attic"])]), isSealed: true)
+    XCTAssertFalse(skipped.flow(sealedRevision: 1).noRoomsSkippedConfirmed)
+
+    // Not sealed: asked again, as the spec says for a visit migrated from its draft.
+    let draft = VisitFile(
+      createdAt: Make.t1402, updatedAt: Make.t1402, record: record(), isSealed: false)
+    XCTAssertFalse(draft.flow(sealedRevision: nil).noRoomsSkippedConfirmed)
   }
 
   func testV1ScansWithoutACaptureRecordAreKeptAsLegacyScans() throws {

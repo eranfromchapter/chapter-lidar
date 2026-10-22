@@ -7,6 +7,7 @@ import ChapterUI
 import FieldKitUI
 import FieldRules
 import SwiftUI
+import UIKit
 
 /// The app's one NavigationStack (phone-capture §3.0, critique R-18c): the Captures home at the
 /// root, the open visit's screens pushed from its flow (`VisitModel.routes`), a floor's scan or a
@@ -14,8 +15,6 @@ import SwiftUI
 /// screen uses the system navigation bar and back chevron.
 struct AppNavigation: View {
   let home: HomeModel
-  /// "Rename rooms", from the photo step (that capture) or Before you leave (every capture).
-  @State private var renaming: RoomNamingDraft?
 
   var body: some View {
     NavigationStack(path: Binding(get: { home.path }, set: { home.setPath($0) })) {
@@ -27,6 +26,8 @@ struct AppNavigation: View {
         .navigationDestination(for: AppRoute.self) { route in
           destination(route)
         }
+        // The back of every screen pushed on the home says where it goes (phone-capture §3.5).
+        .background(BackButtonTitle(title: "Back to captures"))
     }
     .fullScreenCover(
       isPresented: Binding(get: { home.visit?.isScanning ?? false }, set: { _ in })
@@ -37,8 +38,14 @@ struct AppNavigation: View {
     }
     .onChange(of: home.visit?.captureModel?.step) { _, step in
       home.visit?.captureStepChanged(step)
+      #if DEBUG
+        UITestHooks.captureStepChanged(step, home: home)
+      #endif
     }
-    .sheet(item: $renaming) { draft in
+    .sheet(
+      item: Binding(
+        get: { home.visit?.renaming }, set: { draft in home.visit?.renaming = draft })
+    ) { draft in
       RoomNamesSheet(draft: draft) { home.visit?.renameRooms($0) }
     }
     .alert(
@@ -88,6 +95,8 @@ struct AppNavigation: View {
           model: model, source: visit.services.photoSource,
           onDone: { visit.photosDone() },
           onRenameRooms: renameAction(visit, captureId: model.capture.ref.captureId))
+          // Each saved photo is a change of revision n (its notice, §10.4).
+          .onChange(of: model.savedCount) { visit.revisionChanged() }
       }
     case .controls:
       if let model = visit?.controlsModel {
@@ -143,7 +152,7 @@ struct AppNavigation: View {
   /// button) when there is no room to rename.
   private func renameAction(_ visit: VisitModel, captureId: LowercaseUUID?) -> (() -> Void)? {
     guard visit.roomNamingDraft(captureId: captureId) != nil else { return nil }
-    return { renaming = visit.roomNamingDraft(captureId: captureId) }
+    return { visit.renaming = visit.roomNamingDraft(captureId: captureId) }
   }
 }
 
@@ -199,7 +208,9 @@ private struct RevisionRoute: View {
 }
 
 /// Package status, then Verdict received, of one package: the coordinator's snapshot, and what
-/// the open visit can do with it (Try again, Re-seal as revision n+1, Add to this capture).
+/// the open visit can do with it (Try again, Re-seal as revision n+1, Add to this capture). A
+/// package pushed on top of the visit's own screens (`HomeModel.openPackage`) only closes again:
+/// "Continue revision n" goes back to the revision under it.
 private struct PackageRoute: View {
   let home: HomeModel
   let packageId: LowercaseUUID
@@ -208,14 +219,18 @@ private struct PackageRoute: View {
   var body: some View {
     let visit = home.visit
     let owned = visit?.packages.contains { $0.packageId == packageId } == true ? visit : nil
+    let inFlow = owned?.routes.contains(.packageStatus(packageId)) == true ? owned : nil
     PackageStatusView(
       packageId: packageId, snapshot: home.snapshot(for: packageId),
       options: owned?.packageOptions(for: packageId, notificationsAllowed: home.notificationsAllowed)
         ?? standaloneOptions,
       actions: PackageStatusActions(
         retry: { home.runningCoordinator(for: packageId)?.retry() },
-        reseal: owned.map { visit in { visit.resealAfterFailure() } },
-        addToCapture: owned.map { visit in { visit.addToCapture() } },
+        reseal: inFlow.map { visit in { visit.resealAfterFailure() } },
+        addToCapture: owned.map { visit -> () -> Void in
+          guard inFlow != nil else { return { home.closePackageOnTop(packageId) } }
+          return { visit.addToCapture() }
+        },
         openInHub: { openURL($0) }))
       .task(id: packageId) { home.preparePackage(packageId) }
       .onAppear { PackageRouter.shared.visiblePackageId = packageId }
@@ -307,6 +322,59 @@ private struct PhotoStep: View {
       #else
         EmptyView()
       #endif
+    }
+  }
+}
+
+/// The title of the home's back item: what VoiceOver says for the system back chevron of every
+/// screen pushed on the Captures home ("Back to captures", phone-capture §3.5 and Appendix A).
+/// The chevron-only style (`chapterBackChevronOnly`) keeps it off the screen; the system back
+/// stays (one header pattern, critique R-18c). SwiftUI has no modifier for it, so it is set on
+/// the home's own navigation item.
+private struct BackButtonTitle: UIViewControllerRepresentable {
+  let title: String
+
+  func makeUIViewController(context: Context) -> Controller {
+    Controller(backTitle: title)
+  }
+
+  func updateUIViewController(_ controller: Controller, context: Context) {
+    controller.backTitle = title
+    controller.apply()
+  }
+
+  final class Controller: UIViewController {
+    var backTitle: String
+
+    init(backTitle: String) {
+      self.backTitle = backTitle
+      super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func loadView() {
+      view = UIView()
+      view.isUserInteractionEnabled = false
+      view.isAccessibilityElement = false
+    }
+
+    override func didMove(toParent parent: UIViewController?) {
+      super.didMove(toParent: parent)
+      apply()
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+      super.viewWillAppear(animated)
+      apply()
+    }
+
+    /// The navigation item of the stack's root: the home's hosting controller.
+    func apply() {
+      guard let root = navigationController?.viewControllers.first else { return }
+      if root.navigationItem.backButtonTitle != backTitle {
+        root.navigationItem.backButtonTitle = backTitle
+      }
     }
   }
 }

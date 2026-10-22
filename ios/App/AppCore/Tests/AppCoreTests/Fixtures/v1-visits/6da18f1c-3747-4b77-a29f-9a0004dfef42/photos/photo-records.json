@@ -1,0 +1,17 @@
+[
+  {
+    "areaKey" : "floor-1",
+    "bytes" : 219,
+    "captureId" : "22bfb513-226d-4eca-bde1-0b6cb0c84aad",
+    "format" : "jpeg",
+    "labels" : {
+      "direction" : "N",
+      "room" : "Test Room",
+      "subject" : "general",
+      "takenAt" : "2026-10-17T14:07:11Z"
+    },
+    "path" : "Site Photos/floor-1/22bfb513-226d-4eca-bde1-0b6cb0c84aad/photo-0001.jpg",
+    "sequence" : 1,
+    "sha256" : "002c11d07bdd7d304e8f6e1bd30facb253200718cf90db773605cbbc5b6dda03"
+  }
+]

@@ -1,3 +1,4 @@
+import Vision
 import XCTest
 
 /// The phone's screens end to end in the Debug replay mode (bundled box-room capture, fixture
@@ -121,6 +122,67 @@ final class ReplayFlowUITests: XCTestCase {
     tap(back)
   }
 
+  /// The colour of the screen at `point` (points), as 0…255 red, green and blue.
+  private func color(at point: CGPoint) -> (red: Int, green: Int, blue: Int) {
+    let image = app.screenshot().image
+    guard let cgImage = image.cgImage, let data = cgImage.dataProvider?.data,
+      let bytes = CFDataGetBytePtr(data)
+    else { return (0, 0, 0) }
+    let x = Int(point.x * image.scale)
+    let y = Int(point.y * image.scale)
+    let offset = y * cgImage.bytesPerRow + x * (cgImage.bitsPerPixel / 8)
+    let first = Int(bytes[offset])
+    let third = Int(bytes[offset + 2])
+    // BGRA (little-endian, alpha first) or RGBA.
+    let isBGRA = cgImage.bitmapInfo.contains(.byteOrder32Little)
+    return (isBGRA ? third : first, Int(bytes[offset + 1]), isBGRA ? first : third)
+  }
+
+  /// What VoiceOver says for the system back of the screen on top.
+  private var backLabel: String {
+    let back = app.navigationBars.buttons["BackButton"]
+    return back.waitForExistence(timeout: 10) ? back.label : "no back button"
+  }
+
+  /// The text drawn inside `element`, read from its pixels (Vision): for the elements whose
+  /// accessibility label replaces what they draw (the compass row and chip).
+  private func drawnText(of element: XCUIElement) -> String {
+    // Three times larger: the 13 pt chip text is small for text recognition.
+    let shot = element.screenshot().image
+    let size = CGSize(width: shot.size.width * 3, height: shot.size.height * 3)
+    let large = UIGraphicsImageRenderer(size: size).image { _ in
+      shot.draw(in: CGRect(origin: .zero, size: size))
+    }
+    guard let image = large.cgImage else { return "" }
+    let request = VNRecognizeTextRequest()
+    request.recognitionLevel = .accurate
+    request.usesLanguageCorrection = false
+    try? VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
+    return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+      .joined(separator: " | ")
+  }
+
+  /// `drawn` holds `expected` once what text recognition confuses is set aside: spaces, the
+  /// middle dot (read as "•", "-" or ".") and the plus-minus sign (read as "+", "‡" or "†").
+  private func assertDrawn(
+    _ element: XCUIElement, _ expected: String, file: StaticString = #filePath, line: UInt = #line
+  ) {
+    func plain(_ text: String) -> String {
+      String(
+        text.lowercased().filter { !" ·•-.|".contains($0) }.map { "±‡†".contains($0) ? "+" : $0 })
+    }
+    var drawn = ""
+    let deadline = Date().addingTimeInterval(10)
+    repeat {
+      drawn = drawnText(of: element)
+      if plain(drawn).contains(plain(expected)) { break }
+      Thread.sleep(forTimeInterval: 0.5)
+    } while Date() < deadline
+    XCTAssertTrue(
+      plain(drawn).contains(plain(expected)), "drawn \"\(drawn)\", expected \"\(expected)\"",
+      file: file, line: line)
+  }
+
   /// "Fonts" registered and every UIKit text of the screen in Inter or Times (phone-capture
   /// §10.4, phone-field §15.3).
   private func assertFonts(_ screen: String, file: StaticString = #filePath, line: UInt = #line) {
@@ -209,6 +271,7 @@ final class ReplayFlowUITests: XCTestCase {
     tap(app.buttons["captures.newCapture"])
     XCTAssertTrue(app.staticTexts["New capture"].waitForExistence(timeout: 10))
     XCTAssertTrue(app.staticTexts["Step 1 of 3"].exists)
+    XCTAssertEqual(backLabel, "Back to captures")
     XCTAssertEqual(app.buttons["capture.continue"].label, "Choose a HUB project to continue")
     XCTAssertFalse(app.buttons["capture.continue"].isEnabled)
     shot("02 New capture, no project")
@@ -228,7 +291,9 @@ final class ReplayFlowUITests: XCTestCase {
     waitForLabel(
       compass,
       "Compass. North 212 degrees true, plus or minus 8 degrees. Verified, read just now.")
-    XCTAssertTrue(app.staticTexts["North 212° true · ±8°"].exists || compass.label.contains("212"))
+    // What the row draws (U2, compass §13.4), not only what VoiceOver says.
+    assertDrawn(compass, "North 212° true · ±8°")
+    assertDrawn(compass, "Verified · read just now")
     XCTAssertEqual(compass.textFields.count, 0, "the heading is never typed")
     XCTAssertEqual(app.buttons["capture.startScan"].label, "Choose what you are scanning")
     assertFonts("What are you scanning?")
@@ -247,6 +312,7 @@ final class ReplayFlowUITests: XCTestCase {
     let chip = element("scan.compass")
     XCTAssertTrue(chip.waitForExistence(timeout: 20))
     waitForLabel(chip, "Compass verified, true north, plus or minus 8 degrees", timeout: 20)
+    assertDrawn(chip, "N · true · ±8°")
     XCTAssertTrue(element("scan.title").label.hasPrefix("Floor 1 · Whole floor"))
     shot("05 Live scan")
     let finish = app.buttons["scan.finish"]
@@ -292,16 +358,29 @@ final class ReplayFlowUITests: XCTestCase {
     tap(app.buttons["photo.direction.N"])
     XCTAssertTrue(anyText(containing: "chosen by you").waitForExistence(timeout: 5))
     tap(app.buttons["photo.subject.general"])
-    // "Rename rooms" from the room picker ("More").
+    // "Rename rooms" from the room picker ("More", phone-field §15.3): the room of the photo
+    // being labeled follows its new name.
     tap(app.buttons["photo.moreRooms"])
-    XCTAssertTrue(app.buttons["photo.renameRooms"].waitForExistence(timeout: 10))
+    let renameFromMore = app.buttons["photo.renameRooms"]
+    XCTAssertTrue(renameFromMore.waitForExistence(timeout: 10))
     shot("09 Room picker")
-    app.buttons["Cancel"].firstMatch.tap()
+    renameFromMore.tap()
+    XCTAssertTrue(nameField.waitForExistence(timeout: 10), "Rename rooms opens from More")
+    XCTAssertEqual(nameField.value as? String, "Shower")
+    XCTAssertEqual(noPhotoYet.label, "No photo yet", "the photo being labeled is not saved yet")
+    replaceText(in: nameField, with: "Shower room")
+    tap(app.buttons["rooms.save"])
+    let renamed = app.buttons["photo.room.Shower room"]
+    XCTAssertTrue(renamed.waitForExistence(timeout: 10))
+    XCTAssertTrue(renamed.isSelected, "the chosen room follows its new name")
+    XCTAssertFalse(app.buttons["photo.room.Shower"].exists)
+    shot("09b Label a photo, renamed from More")
     tap(app.buttons["photo.doneWithPhotos"])
 
     // Capture overview (phone-capture §3.5): back from the photos.
     let review = app.buttons["overview.review"]
     XCTAssertTrue(review.waitForExistence(timeout: 15))
+    XCTAssertEqual(backLabel, "Back to captures", "phone-capture §3.5 item 1")
     XCTAssertTrue(app.staticTexts["UI test visit"].exists, "the project title")
     XCTAssertTrue(app.staticTexts["Deal UITEST-0001"].exists)
     XCTAssertTrue(
@@ -344,7 +423,7 @@ final class ReplayFlowUITests: XCTestCase {
     type("2", into: element("entry.inches"))
     saveEntry()
     tap(app.buttons["controls.row.floor-1.ceilingHeight"])
-    tap(app.buttons["entry.room.Shower"])
+    tap(app.buttons["entry.room.Shower room"])
     type("8", into: element("entry.feet"))
     type("1", into: element("entry.inches"))
     saveEntry()
@@ -367,13 +446,12 @@ final class ReplayFlowUITests: XCTestCase {
     shot("14 Before you leave, open")
     tap(app.buttons["checklist.allRoomsScanned"])
     waitForLabel(element("checklist.detail.skippedRoomsRecorded"), "All rooms scanned")
-    // Rename again from the checklist: the photo labeled Shower follows the new name.
+    // Rename again from the checklist: the photo labeled Shower room follows the new name.
     tap(app.buttons["checklist.renameRooms"])
     XCTAssertTrue(nameField.waitForExistence(timeout: 10))
-    XCTAssertEqual(nameField.value as? String, "Shower")
+    XCTAssertEqual(nameField.value as? String, "Shower room")
     XCTAssertFalse(noPhotoYet.exists, "the room has its photo")
-    nameField.tap()
-    nameField.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 12) + "Walk-in shower")
+    replaceText(in: nameField, with: "Walk-in shower")
     tap(app.buttons["rooms.save"])
     XCTAssertTrue(app.staticTexts["1 photo, 1 room covered"].waitForExistence(timeout: 10))
     XCTAssertFalse(app.staticTexts["Walk-in shower has no photo"].exists)
@@ -414,6 +492,17 @@ final class ReplayFlowUITests: XCTestCase {
     XCTAssertTrue(app.staticTexts["Revision 1 \u{00B7} sealed"].exists)
     assertFonts("Package status")
     shot("17 Uploaded")
+    // The capture record the station stored (compass §13.4): schema 1.1.0 and the four heading
+    // fields of the verified reading.
+    let uploaded = element("debug.uploadedRecord")
+    waitFor("the station has the capture record") {
+      let value = uploaded.value as? String ?? ""
+      return value.hasPrefix("schemaVersion 1.1.0 \u{00B7} Floor 1: heading ")
+    }
+    let stored = uploaded.value as? String ?? ""
+    XCTAssertFalse(stored.contains("heading none"), stored)
+    XCTAssertTrue(
+      stored.hasSuffix("\u{00B7} accuracy 8 \u{00B7} source true \u{00B7} recorded"), stored)
 
     // Back on the overview of the sealed visit: "Upload status", no new floor; the floor row
     // opens the scan's Floorplan (with its north symbol).
@@ -474,7 +563,13 @@ final class ReplayFlowUITests: XCTestCase {
     tap(app.buttons["account.signOut"].firstMatch)
     XCTAssertTrue(app.staticTexts["Sign in"].waitForExistence(timeout: 10))
     XCTAssertTrue(app.staticTexts["Use your Chapter Microsoft account."].exists)
-    XCTAssertTrue(anyText(containing: "Chapter Renovation").exists, "the real logo")
+    let logo = anyText(containing: "Chapter Renovation")
+    XCTAssertTrue(logo.exists, "the real logo")
+    // On the 16 pt margin, as the button (not centred as a block).
+    XCTAssertEqual(logo.frame.minX, 16, accuracy: 1)
+    XCTAssertEqual(app.staticTexts["Sign in"].frame.minX, 16, accuracy: 1)
+    XCTAssertEqual(
+      app.staticTexts["Use your Chapter Microsoft account."].frame.minX, 16, accuracy: 1)
     assertFonts("Sign in")
     shot("24 Sign in")
     tap(app.buttons["signIn.microsoft"])
@@ -518,6 +613,11 @@ final class ReplayFlowUITests: XCTestCase {
             + "capture again. Nothing is saved.")
       ).firstMatch.exists)
     shot("30 New capture, address different")
+    // The default button takes the app's ink, not the system blue (the window's tint).
+    let call = alert.buttons["Call the PM"].frame
+    let fill = color(at: CGPoint(x: call.minX + 10, y: call.midY))
+    XCTAssertLessThan(fill.blue - max(fill.red, fill.green), 25, "not blue: \(fill)")
+    XCTAssertLessThan(max(fill.red, fill.green, fill.blue), 90, "ink: \(fill)")
     alert.buttons["Go back"].tap()
     XCTAssertTrue(alert.waitForNonExistence(timeout: 5))
     XCTAssertTrue(app.staticTexts["New capture"].exists, "Go back stays on New capture")
@@ -716,6 +816,17 @@ final class ReplayFlowUITests: XCTestCase {
     waitFor("mapped") { floor.label.contains("One room \u{00B7} 1 room \u{00B7} 1 photo") }
     XCTAssertTrue(app.staticTexts["Fixture box-room"].exists)
     shot("28 Capture overview, v1 visit")
+
+    // The sealed visit opens read-only with "Rooms not scanned" passed: the v1 app sealed only
+    // once it passed, and nothing on a sealed visit could fix a ■ there.
+    goBack()
+    tap(sealed)
+    let skipped = app.buttons["overview.skippedRooms"]
+    XCTAssertTrue(skipped.waitForExistence(timeout: 15))
+    XCTAssertTrue(skipped.label.contains("All rooms scanned"), skipped.label)
+    XCTAssertFalse(skipped.label.contains("Missing"), skipped.label)
+    waitForLabel(app.buttons["overview.review"], "Upload status")
+    shot("29 Capture overview, sealed v1 visit")
   }
 
   // MARK: phone-package §13.3 (2) and (5): the verdict, then revision 2
@@ -753,6 +864,23 @@ final class ReplayFlowUITests: XCTestCase {
     tap(app.buttons["photo.direction.S"])
     tap(app.buttons["photo.subject.ceiling"])
     tap(app.buttons["photo.doneWithPhotos"])
+    XCTAssertTrue(review.waitForExistence(timeout: 15))
+
+    // The station hears of the change before the review (phone-package §10.4: the web's
+    // "Revision 2 · not sealed · on the phone"), and again when the app comes back.
+    let notice = element("debug.nextRevisionNotice")
+    func sent() -> Int { Int((notice.value as? String)?.split(separator: " ").last ?? "") ?? 0 }
+    waitFor("the notice of the new photo", timeout: 60) {
+      let value = notice.value as? String ?? ""
+      return value.hasPrefix("revision 2 \u{00B7} ") && value.contains("photo")
+    }
+    Thread.sleep(forTimeInterval: 3)  // nothing else is waiting to be sent
+    let sentBefore = sent()
+    XCUIDevice.shared.press(.home)
+    Thread.sleep(forTimeInterval: 1)
+    app.activate()
+    XCTAssertTrue(review.waitForExistence(timeout: 15))
+    waitFor("sent again on the foreground", timeout: 30) { sent() == sentBefore + 1 }
     tap(review)
 
     // Revision 2: what changed.
@@ -760,11 +888,34 @@ final class ReplayFlowUITests: XCTestCase {
     XCTAssertTrue(anyText(containing: "1 photo").waitForExistence(timeout: 60))
     let manifest = element("revision.manifest")
     XCTAssertTrue(manifest.waitForExistence(timeout: 30))
-    XCTAssertTrue(manifest.label.contains("entries"), manifest.label)
+    // "{n} → {n+1} entries": one entry more than revision 1.
+    let counts = manifest.label.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
+    XCTAssertEqual(counts.count, 2, manifest.label)
+    XCTAssertEqual(counts.last, counts.first.map { $0 + 1 }, manifest.label)
+    XCTAssertTrue(
+      manifest.label.contains("\(counts.first ?? 0) \u{2192} \(counts.last ?? 0) entries"),
+      manifest.label)
     XCTAssertTrue(anyText(containing: "Only the 1 new file is uploaded.").exists)
     assertFonts("Revision 2")
     shot("43 Revision 2")
     tap(app.buttons["revision.seal"])
+
+    // Package status: every category but Site photos is Confirmed at once (carried over).
+    let plans = element("upload.category.plans")
+    XCTAssertTrue(plans.waitForExistence(timeout: 30))
+    let categories = app.descendants(matching: .any).matching(
+      NSPredicate(format: "identifier BEGINSWITH 'upload.category.'"))
+    let carried = categories.allElementsBoundByIndex.filter {
+      $0.identifier != "upload.category.photos"
+    }
+    XCTAssertGreaterThanOrEqual(carried.count, 1)
+    waitFor("carried over: confirmed", timeout: 10) {
+      carried.allSatisfy { $0.exists && $0.label.hasSuffix(", confirmed") }
+    }
+    for category in carried {
+      XCTAssertTrue(category.label.hasSuffix(", confirmed"), category.label)
+    }
+    shot("43b Uploading revision 2, carried over")
 
     // Revision 2 uploads only its new file and gets its own verdict.
     XCTAssertTrue(card.waitForExistence(timeout: 90), "revision 2's verdict")
@@ -789,6 +940,47 @@ final class ReplayFlowUITests: XCTestCase {
     XCTAssertTrue(card.waitForExistence(timeout: 15))
     goBack()
     XCTAssertTrue(app.staticTexts["Captures"].waitForExistence(timeout: 10))
+  }
+
+  // MARK: A verdict notification tapped during a live scan
+
+  /// The banner of another capture's verdict is tapped while a new capture is being scanned:
+  /// the scan goes on, the package is shown once it is over, and Back returns to the new floor,
+  /// nothing lost (the open visit is never replaced while it holds unsaved work).
+  func testVerdictNotificationDuringALiveScanKeepsTheScan() {
+    launch(["-ChapterUITestV1Visits", "-ChapterUITestNotifyDuringScan"])
+    XCTAssertTrue(app.staticTexts["In progress"].waitForExistence(timeout: 30))
+    openStepTwo()
+    tap(app.buttons["capture.mode.floor"])
+    tap(app.buttons["capture.startScan"])
+    let finish = app.buttons["scan.finish"]
+    XCTAssertTrue(finish.waitForExistence(timeout: 20))
+    // The notification is tapped 1.5 s into the scan.
+    Thread.sleep(forTimeInterval: 3)
+    XCTAssertTrue(finish.exists, "the live scan is still on screen")
+    XCTAssertTrue(element("scan.compass").exists)
+    shot("70 Live scan, a notification tapped")
+    waitFor("Finish floor enabled") { finish.isEnabled }
+    finish.tap()
+    XCTAssertTrue(finish.waitForNonExistence(timeout: 30), "the scan is over")
+
+    // The tapped package (the sealed v1 capture), on top once the scan is over.
+    XCTAssertTrue(element("station.checks").waitForExistence(timeout: 30), "its Package status")
+    // Its subtitle is its own address, not the new capture's (618 Valley Street).
+    XCTAssertTrue(anyText(containing: "100 Example Street").exists, "the v1 capture's package")
+    XCTAssertFalse(element("photo.coverage").isHittable, "under the package")
+    shot("71 Package status over the new capture")
+    goBack()
+    XCTAssertTrue(element("photo.coverage").waitForExistence(timeout: 15), "the new floor's photos")
+    leavePhotosForTheOverview()
+    XCTAssertTrue(app.buttons["overview.floor.floor-1"].waitForExistence(timeout: 10), "kept")
+    XCTAssertTrue(app.staticTexts["UI test visit"].exists)
+    goBack()
+    let row = app.buttons.matching(
+      NSPredicate(format: "identifier BEGINSWITH 'captures.row.' AND label CONTAINS 'UI test visit'")
+    ).firstMatch
+    XCTAssertTrue(row.waitForExistence(timeout: 10), "the new capture is on the phone")
+    XCTAssertTrue(row.label.contains("1 floor \u{00B7} not sealed yet"), row.label)
   }
 
   // MARK: phone-package §13.3 (3): paused offline

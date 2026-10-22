@@ -55,6 +55,9 @@ final class HomeModel {
 
   @ObservationIgnored let services: AppServices
   @ObservationIgnored let operatorInfo: SignedInOperator
+  /// The station's next-revision notices of the visits in revision mode (phone-package §10.4).
+  /// The home's, not a visit's: a change made just before its visit closes is still sent.
+  @ObservationIgnored let revisionNotices: RevisionNoticeSchedule
   @ObservationIgnored private weak var app: AppModel?
   @ObservationIgnored private var visits: [CaptureLibraryVisit] = []
   @ObservationIgnored private var isRefreshing = false
@@ -63,6 +66,9 @@ final class HomeModel {
     self.app = app
     self.services = services
     self.operatorInfo = operatorInfo
+    revisionNotices = RevisionNoticeSchedule(
+      sender: StationNextRevisionNotices(client: services.station),
+      delay: services.revisionNoticeDelay)
     state = CapturesHomeState(rows: [], operatorName: operatorInfo.name, isLoading: true)
     snapshots = app.liveSnapshots
     reload()
@@ -118,6 +124,17 @@ final class HomeModel {
       extra = [.legacyScans(entry.workspace.id)]
       return
     }
+    if let reason = entry.unreadable {
+      // Its newest sealed package stays reachable (its upload and verdict go on); else why.
+      visit?.close()
+      visit = nil
+      if let newest = entry.newestPackage {
+        extra = [.packageStatus(newest.packageId)]
+      } else {
+        alertMessage = "This capture could not be read: \(reason). Its files stay on this phone."
+      }
+      return
+    }
     guard let opened = openVisit(entry) else { return }
     if row.destination == .verdict, let newest = entry.newestPackage {
       opened.showPackage(newest.packageId, atRoot: true)
@@ -125,25 +142,53 @@ final class HomeModel {
   }
 
   /// A tapped "Verdict: …" notification (`PackageRouter.openPackage(id:)`): that package's
-  /// Package status, or Verdict received once the verdict is known.
+  /// Package status, or Verdict received once the verdict is known. The open visit is never
+  /// closed under the operator's hands (`PackageOpening`): while it has work to lose (a live
+  /// scan, an unsaved New capture, a photo not saved) or is being revised, the package goes on
+  /// top of the screen and Back returns to it; during a live scan it is there once the scan ends.
   func openPackage(id: LowercaseUUID) {
     if visits.allSatisfy({ !$0.packages.contains { $0.packageId == id } }) { reload() }
     guard let entry = visits.first(where: { $0.packages.contains { $0.packageId == id } }) else {
       return
     }
-    extra = []
-    if let open = visit, open.workspace == entry.workspace, open.canShowPackage(id) {
-      open.showPackage(id, atRoot: false)
-      return
+    let open = visit
+    let holdsIt = open?.workspace == entry.workspace
+    switch PackageOpening.decide(
+      hasOpenVisit: open != nil, openVisitHoldsIt: holdsIt,
+      openVisitShowsIt: holdsIt && open?.canShowPackage(id) == true,
+      openVisitHasWorkToLose: open?.hasWorkToLose == true)
+    {
+    case .inOpenVisit:
+      extra = []
+      open?.showPackage(id, atRoot: false)
+    case .onTop:
+      if extra.last != .packageStatus(id) { extra.append(.packageStatus(id)) }
+    case .openItsVisit:
+      extra = []
+      if let opened = openVisit(entry) {
+        if opened.canShowPackage(id) {
+          opened.showPackage(id, atRoot: true)
+        } else {
+          // Its visit is being revised: the package over its overview.
+          extra = [.packageStatus(id)]
+        }
+      } else {
+        // Its visit cannot be opened (an unreadable visit.json): the package on its own.
+        visit = nil
+        extra = [.packageStatus(id)]
+      }
     }
-    if let opened = openVisit(entry), opened.canShowPackage(id) {
-      opened.showPackage(id, atRoot: true)
-    } else {
-      // A package the visit cannot show now (its visit is in revision mode): on its own.
-      visit?.close()
-      visit = nil
-      extra = [.packageStatus(id)]
-    }
+  }
+
+  /// A package pushed on top of the visit's own screens (`openPackage`) is closed: back to
+  /// what was under it ("Continue revision n" on it, or Back).
+  func closePackageOnTop(_ id: LowercaseUUID) {
+    extra.removeAll { $0 == .packageStatus(id) }
+  }
+
+  /// The app came back to the foreground: the next-revision notices go again (§10.4).
+  func appBecameActive() {
+    Task { await revisionNotices.flush() }
   }
 
   /// Closes the open visit and lists the captures again.
@@ -181,6 +226,9 @@ final class HomeModel {
   }
 
   // MARK: Rows
+
+  /// The visits as last read from disk.
+  var visitsOnDisk: [CaptureLibraryVisit] { visits }
 
   /// Re-reads the visits from disk and builds the rows with the live snapshots.
   func reload() {

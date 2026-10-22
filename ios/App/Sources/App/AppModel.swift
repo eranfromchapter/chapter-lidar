@@ -33,6 +33,9 @@ struct AppServices {
   /// Ask for the verdict notification after the first seal (phone-package Q10). Off in UI tests,
   /// where the system's permission alert would cover the screens under test.
   var asksForNotifications = true
+  /// Seconds without a change before revision n's notice is rebuilt and sent (phone-package
+  /// §10.4: 10 s; shorter in UI tests).
+  var revisionNoticeDelay: TimeInterval = 10
 
   /// The photo step's heading provider over `compass`.
   @MainActor var photoHeading: PhotoHeadingProviding? {
@@ -219,8 +222,11 @@ final class AppModel {
     _ = EntraSignIn.handle(url)
   }
 
+  /// The app is in the foreground again: the uploads retry and the next-revision notices go
+  /// again (phone-package §10.4).
   func didBecomeActive() {
     for upload in uploads.values { upload.retry() }
+    if case .home(let home) = screen { home.appBecameActive() }
   }
 
   // MARK: Home
