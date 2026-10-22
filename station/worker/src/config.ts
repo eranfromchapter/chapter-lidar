@@ -23,7 +23,7 @@
 // - HUB_MODE fake|live [fake]; fake (the in-process fake HUB) is refused in production
 // - HUB_BASE_URL (https in production), HUB_SERVICE_CREDENTIAL (secret): required when live
 // - REVIEW_BASE_URL (required, no default): web review screen base URL for the station links in
-//   the verdict report (https unless loopback)
+//   the spatial report (https unless loopback)
 // - WORKER_ID [hostname-pid], WORKER_POLL_INTERVAL_MS [2000], WORKER_LOCK_TIMEOUT_SECONDS [900],
 //   WORKER_RETRY_BASE_SECONDS [30], WORKER_RETRY_MAX_SECONDS [900],
 //   HUB_PUBLISH_RETRY_BASE_MS [2000], HUB_PUBLISH_RETRY_MAX_MS [30000]
@@ -296,7 +296,7 @@ export function loadConfig(env: Env = process.env): WorkerConfig {
   // No default: a wrong review link in a report sent to the HUB is worse than not starting.
   const reviewRaw = read.required(
     "REVIEW_BASE_URL",
-    " (web review screen base URL for the station links in the verdict report)",
+    " (web review screen base URL for the station links in the spatial report)",
   );
   const reviewBaseUrl =
     reviewRaw === "" ? "" : (read.url("REVIEW_BASE_URL", reviewRaw, false) ?? "");

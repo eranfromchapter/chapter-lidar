@@ -2,7 +2,7 @@
   "name": "@chapter/station-hub",
   "version": "1.0.0",
   "private": true,
-  "description": "Chapter Capture station HUB publish: HUB client (upload, document search, deal lookup), verdict report PDF, HubPublisher and a fake HUB for tests.",
+  "description": "Chapter Capture station HUB publish: HUB client (upload, document search, deal lookup), the spatial report PDF, HubPublisher and a fake HUB for tests.",
   "type": "module",
   "engines": {
     "node": ">=22.13.0"
