@@ -212,7 +212,9 @@ public struct FloorPlanDrawing: Sendable {
   /// Primitives in drawing order.
   public let items: [DrawingItem]
   public let bounds: Bounds
-  /// How far the capture's plan was turned (counter-clockwise) to square it with the sheet.
+  /// How far the capture's plan was turned clockwise to square it with the sheet (and turned a
+  /// quarter): the drawing shows the plan turned by `-rotationDegrees` counter-clockwise, the
+  /// rotation ρ the north symbol takes (compass §2.5, critique R-7).
   public let rotationDegrees: Double
   /// Floor area within the outside faces of the exterior walls, with the assumed thickness.
   public let grossAreaM2: Double

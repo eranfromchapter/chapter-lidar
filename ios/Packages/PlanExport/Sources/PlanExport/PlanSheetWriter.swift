@@ -8,8 +8,8 @@ public struct PlanSheetOutput: Sendable {
   public let scaleDenominator: Int
   /// Quarter turns counter-clockwise after squaring: 0, or 3 (one clockwise).
   public let quarterTurns: Int
-  /// How far the drawing turns the capture's plan (counter-clockwise, degrees): squaring and
-  /// quarter turn.
+  /// How far the drawing turns the capture's plan clockwise (degrees): squaring and quarter
+  /// turn. The north arrow's angle is the heading minus it (ρ = −this, compass §2.5).
   public let drawingRotationDegrees: Double
   /// The north symbol in the title block: angle and captions for this drawing.
   public let north: NorthSymbol
