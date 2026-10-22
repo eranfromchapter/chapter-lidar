@@ -64,7 +64,8 @@ jobs:
           fi
 
       # The spatial report's snapshot and black-and-white tests rasterize pages with pdftoppm
-      # (station/hub/test/report-visual); in CI they fail without it.
+      # (station/hub/test/report-visual) and compare them with the committed snapshots; in CI
+      # they fail without pdftoppm or without a snapshot (never skipped).
       - name: Install poppler-utils
         run: |
           sudo apt-get update
@@ -73,7 +74,20 @@ jobs:
 
       # Runs the workspace tests, then scripts/swift-test.sh.
       - name: Unit
+        env:
+          REPORT_SNAPSHOT_OUT: ${{ runner.temp }}/report-snapshots
         run: npm test
+
+      # A report page that no longer matches its snapshot: the page as rendered here and its
+      # diff, to compare (or to record as __snapshots__/linux/ when only the rasterizer differs).
+      - name: Keep the report pages that differ
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: report-snapshots
+          path: ${{ runner.temp }}/report-snapshots
+          if-no-files-found: ignore
+          retention-days: 14
 
       # Export test output is written by the Swift tests above. A package whose
       # test-output folder exists must pass every check for its file kinds.

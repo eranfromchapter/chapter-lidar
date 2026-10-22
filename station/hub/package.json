@@ -25,7 +25,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --import tsx --test \"test/**/*.test.ts\""
+    "test": "node --import tsx --test \"test/**/*.test.ts\"",
+    "brand-assets": "node scripts/generate-brand-assets.mjs",
+    "brand-assets:check": "node scripts/generate-brand-assets.mjs --check"
   },
   "dependencies": {
     "@chapter/capture-contract": "1.1.0",
@@ -35,6 +37,8 @@
     "sharp": "0.35.5"
   },
   "devDependencies": {
+    "@fontsource/cousine": "5.3.0",
+    "@fontsource/tinos": "5.3.0",
     "@types/node": "22.20.5",
     "@types/pdfkit": "0.17.6",
     "@types/pngjs": "6.0.5",
@@ -44,6 +48,7 @@
     "pngjs": "7.0.0",
     "tsx": "4.23.15",
     "typescript": "5.9.3",
-    "unpdf": "1.9.0"
+    "unpdf": "1.9.0",
+    "wawoff2": "2.0.1"
   }
 }

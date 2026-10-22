@@ -1,5 +1,5 @@
 // Spatial report text formatting (spec 11.1 format.test.ts): engine rounding, unit conversion,
-// dates in the report's time zone, plurals, number words and WinAnsi-safe text.
+// dates in the report's time zone, plurals, number words, page lists and WinAnsi-safe text.
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -22,6 +22,7 @@ import {
   time,
 } from "../../src/report/format.js";
 import { decimals, METRES_PER_INCH } from "../../src/report/metrics/units.js";
+import { omittedFloorsText, pagesText } from "../../src/report/words.js";
 
 const NY = "America/New_York";
 
@@ -141,6 +142,20 @@ describe("words", () => {
     assert.equal(formatBytes(1024), "1.0 KiB (1024 bytes)");
     assert.equal(formatBytes(1_258_291), "1.2 MiB (1258291 bytes)");
     assert.equal(formatBytes(47_185_920), "45.0 MiB (47185920 bytes)");
+  });
+
+  it("prints one page, a range of consecutive pages, or a list", () => {
+    assert.equal(pagesText([4]), "page 4");
+    assert.equal(pagesText([5, 4]), "pages 4–5");
+    assert.equal(pagesText([4, 5, 6]), "pages 4–6");
+    assert.equal(pagesText([3, 5]), "pages 3 and 5");
+    assert.equal(pagesText([6, 3, 5]), "pages 3, 5 and 6");
+  });
+
+  it("names the floors a four-floor cover leaves out, singular for one", () => {
+    assert.equal(omittedFloorsText([4]), "+1 floor on page 4");
+    assert.equal(omittedFloorsText([4, 5]), "+2 floors on pages 4–5");
+    assert.equal(omittedFloorsText([3, 5]), "+2 floors on pages 3 and 5");
   });
 });
 

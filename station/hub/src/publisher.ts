@@ -4,8 +4,9 @@
 //    nothing to do.
 // 2. Plans the files (plan.ts): uploads into Capture/... folders, station links for the rest.
 //    Reads the report's sources (capture models, field controls, photos) and renders the
-//    spatial report (report/), hands it to onReportRendered (the worker stores it) and records
-//    the links.
+//    spatial report (report/), hands it to onReportRendered (the worker stores it; it may hand
+//    back the report an earlier attempt stored, which is uploaded instead) and records the
+//    links.
 // 3. Up to maxAttempts attempts, with exponential backoff between them (429, 5xx, network
 //    errors and a failed verification are retried; any other HUB answer fails at once):
 //    - for every upload not yet recorded: look it up by document search first (an earlier
@@ -78,9 +79,15 @@ export interface HubPublisherOptions {
   readonly reportTimeZone?: string;
   /**
    * Called with the rendered spatial report before anything is uploaded (the worker stores it
-   * for the web review). A throw leaves publish() as it is, like a store failure.
+   * for the web review). It may return the report the station already keeps for this verdict
+   * (stored by an earlier attempt, from a renderer that has changed since): that one is uploaded
+   * instead, so the HUB and the web review hold the same file. A throw leaves publish() as it
+   * is, like a store failure.
    */
-  readonly onReportRendered?: (report: RenderedReport, verdict: Verdict) => Promise<void>;
+  readonly onReportRendered?: (
+    report: RenderedReport,
+    verdict: Verdict,
+  ) => Promise<RenderedReport | void>;
   /** Budget of the report's reduced photos (tests lower it). */
   readonly reportPhotoBudgetBytes?: number;
 }
@@ -294,7 +301,21 @@ export class HubPublisher {
       return this.#failAtOnce(pkg.packageId, error);
     }
     if (this.#onReportRendered !== undefined) {
-      await this.#onReportRendered(rendered, verdict);
+      const kept = await this.#onReportRendered(rendered, verdict);
+      if (kept !== undefined && kept.sha256 !== rendered.sha256) {
+        if (kept.name !== rendered.name || kept.bytes.byteLength > this.#maxUploadBytes) {
+          return this.#failAtOnce(
+            pkg.packageId,
+            new HubError("conflict", `The kept spatial report ${kept.name} cannot be uploaded`),
+          );
+        }
+        report = kept.bytes;
+        uploads = uploads.map((item) =>
+          item.source === "report"
+            ? { ...item, sha256: kept.sha256, bytes: kept.bytes.byteLength }
+            : item,
+        );
+      }
     }
 
     for (const entry of links) {

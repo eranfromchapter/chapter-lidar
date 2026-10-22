@@ -87,6 +87,35 @@ export const WORDS = {
   noScanModel: "No scan model",
 } as const;
 
+/**
+ * Pages as printed in sentences (spec 4.2): one page "page 4"; consecutive pages as a range
+ * "pages 4–6" (en dash); otherwise listed, "pages 3 and 5", "pages 3, 5 and 6".
+ */
+export function pagesText(pages: readonly number[]): string {
+  const sorted = [...new Set(pages)].sort((a, b) => a - b);
+  const first = sorted[0];
+  const last = sorted[sorted.length - 1];
+  if (first === undefined || last === undefined) {
+    return "";
+  }
+  if (sorted.length === 1) {
+    return `page ${first}`;
+  }
+  if (last - first === sorted.length - 1) {
+    return `pages ${first}–${last}`;
+  }
+  return `pages ${sorted.slice(0, -1).join(", ")} and ${last}`;
+}
+
+/**
+ * Cover with four or more floors (spec 5.1.1): the floors not drawn there and their plan pages,
+ * "+1 floor on page 4", "+2 floors on pages 4–5".
+ */
+export function omittedFloorsText(planPages: readonly number[]): string {
+  const n = planPages.length;
+  return `+${n} ${n === 1 ? "floor" : "floors"} on ${pagesText(planPages)}`;
+}
+
 /** Legend of the floor plan page: sample kind and text. */
 export const PLAN_LEGEND = [
   ["wall", "Wall, scanned"],

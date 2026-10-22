@@ -115,13 +115,19 @@ export interface ReportsWriter {
    * (ReportConflictError): a stored report is never replaced.
    */
   write(blobName: string, data: Uint8Array, sha256: string): Promise<"created" | "exists">;
+  /** The bytes of a stored report. */
+  read(blobName: string): Promise<Uint8Array>;
 }
 
 /** A different report is already stored under the name. Another attempt cannot fix it. */
 export class ReportConflictError extends Error {
   readonly retryable = false;
 
-  constructor(readonly blobName: string) {
+  constructor(
+    readonly blobName: string,
+    /** SHA-256 the stored blob was written with (its metadata), when it has one. */
+    readonly storedSha256?: string,
+  ) {
     super(`A different spatial report is already stored as ${blobName}; it is not replaced`);
     this.name = "ReportConflictError";
   }
@@ -144,6 +150,7 @@ export interface ReportsContainer {
       },
     ): Promise<unknown>;
     getProperties(): Promise<{ metadata?: Record<string, string>; contentLength?: number }>;
+    downloadToBuffer(): Promise<Buffer>;
   };
 }
 
@@ -179,7 +186,14 @@ export function reportsWriter(container: ReportsContainer): ReportsWriter {
       ) {
         return "exists";
       }
-      throw new ReportConflictError(blobName);
+      throw new ReportConflictError(blobName, properties.metadata?.[REPORT_SHA256_METADATA]);
+    },
+    async read(blobName) {
+      try {
+        return await container.getBlockBlobClient(blobName).downloadToBuffer();
+      } catch (error) {
+        throw wrap(error, "report download");
+      }
     },
   };
 }

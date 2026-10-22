@@ -20,7 +20,7 @@ import { drawNorthBlock, northBlockSize } from "../draw/north-arrow.js";
 import { drawScaleBar, scaleBar } from "../draw/scale-bar.js";
 import type { PlanView } from "../draw/plan-view.js";
 import { COLOR, FONT, TYPE, type TextStyle } from "../tokens.js";
-import { WORDS } from "../words.js";
+import { WORDS, omittedFloorsText } from "../words.js";
 import { drawFrame, type PageContext } from "./context.js";
 
 const PLAN: Rect = { x: 36, y: 102, width: 476, height: 426 };
@@ -227,8 +227,7 @@ function drawFloors(ctx: PageContext): void {
       .slice(0, 3);
     shown = model.floors.filter((floor) => largest.includes(floor));
     const omitted = model.floors.filter((floor) => !largest.includes(floor));
-    const pages = omitted.map((floor) => index.plan(floor.index));
-    extra = `+${omitted.length} floors on pages ${Math.min(...pages)}–${Math.max(...pages)}`;
+    extra = omittedFloorsText(omitted.map((floor) => index.plan(floor.index)));
   }
   const arrowSize = 26;
   const symbols = shown.map((floor) => floorNorthSymbol(floor));

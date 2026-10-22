@@ -79,6 +79,8 @@ COPY --from=build /repo/contract/ts/dist contract/ts/dist
 COPY contract/schema contract/schema
 COPY --from=build /repo/station/checks/dist station/checks/dist
 COPY --from=build /repo/station/hub/dist station/hub/dist
+# Inter, the logo and the LGPL libraries (libvips, libheif) the image carries.
+COPY station/hub/THIRD_PARTY_NOTICES.md station/hub/
 COPY --from=build /repo/station/worker/dist station/worker/dist
 USER node
 WORKDIR /app/station/worker

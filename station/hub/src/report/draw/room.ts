@@ -22,7 +22,7 @@ import { WALL_MATCH_ANGLE_DEGREES, WALL_MATCH_DISTANCE_M } from "../metrics/room
 import { feetInches } from "../metrics/units.js";
 import { COLOR } from "../tokens.js";
 import { drawMarker } from "./glyphs.js";
-import { drawDimensions, type DimensionString, type Rect } from "./floor.js";
+import { dimensionRects, drawDimensions, type DimensionString, type Rect } from "./floor.js";
 import {
   PlanView,
   assumedThickness,
@@ -46,6 +46,9 @@ export const ROOM_BOX: Rect = { x: 58, y: 118, width: 271, height: 314 };
 const DIM_MARGIN = 24;
 const DIM_OFFSET = 9;
 const MIN_WALL = 2;
+/** Item markers are drawn 12 pt wide (0.75 pt stroke): half their extent from the centre. */
+const MARKER_SIZE = 12;
+const MARKER_HALF = MARKER_SIZE / 2 + 0.5;
 
 interface WallPiece {
   readonly a: Point;
@@ -233,10 +236,20 @@ export function layoutRoom(
     );
   }
 
-  // Markers in table order, nudged off each other.
+  // Markers in table order, nudged off each other and off the dimension strings (a marker
+  // moved up from a wall would otherwise land on the string above it).
   const objectById = new Map(objects.map((object) => [object.id, object]));
   const openingById = new Map(roomOpenings(floor, room).map((opening) => [opening.id, opening]));
   const markers: Array<RoomLayout["markers"][number]> = [];
+  const strings = dimensionRects(canvas, dims);
+  const clearOfStrings = (p: Point) =>
+    strings.every(
+      (rect) =>
+        p.x + MARKER_HALF <= rect.x ||
+        p.x - MARKER_HALF >= rect.x + rect.width ||
+        p.y + MARKER_HALF <= rect.y ||
+        p.y - MARKER_HALF >= rect.y + rect.height,
+    );
   for (const item of room.items) {
     const shape = ITEM_GROUPS.find((g) => g.group === item.group)?.shape ?? "circle";
     let at: Point | undefined;
@@ -250,7 +263,8 @@ export function layoutRoom(
     if (at === undefined) {
       continue;
     }
-    const free = (p: Point) => markers.every((m) => Math.hypot(m.x - p.x, m.y - p.y) >= 12.5);
+    const free = (p: Point) =>
+      markers.every((m) => Math.hypot(m.x - p.x, m.y - p.y) >= 12.5) && clearOfStrings(p);
     let placed = at;
     if (!free(at)) {
       for (const [dx, dy] of [
@@ -317,7 +331,7 @@ export function drawRoom(
     }
   });
   for (const marker of layout.markers) {
-    drawMarker(canvas, marker.shape, marker.x, marker.y, 12, marker.label);
+    drawMarker(canvas, marker.shape, marker.x, marker.y, MARKER_SIZE, marker.label);
   }
   drawDimensions(canvas, layout.dims);
 }

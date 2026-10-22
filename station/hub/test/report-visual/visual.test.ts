@@ -1,17 +1,27 @@
 // Visual snapshots and the black-and-white proof of the spatial report (spec 11.3; SR-AC5,
 // SR-AC6). Each scenario page is rasterized with `pdftoppm -r 96` (792 pt -> 1056 px, the
-// artboards' size) and compared with __snapshots__/{platform}/{scenario}.png by pixelmatch
-// (threshold 0.1, at most 0.5 % of the pixels differ). Rasterizers differ between platforms, so
-// each platform keeps its own snapshots; a platform without them skips the comparison with a
-// notice. Record or update: UPDATE_REPORT_SNAPSHOTS=1 npm test -w @chapter/station-hub.
+// artboards' size) and compared with __snapshots__/{scenario}.png by pixelmatch (threshold 0.1,
+// at most 0.5 % of the pixels differ). Record or update:
+//   UPDATE_REPORT_SNAPSHOTS=1 npm test -w @chapter/station-hub
 //
-// pdftoppm (poppler-utils) is required in CI; locally the test is skipped without it.
+// The snapshots are the same on every platform: Inter is embedded in the report, and the two
+// PDF standard fonts the report does not embed (Times-Roman, Courier) are drawn from fixed font
+// files instead of whatever the machine has. pdftoppm runs with its own fontconfig file
+// (FONTCONFIG_FILE) that knows only Tinos and Cousine (metric twins of Times and Courier, from
+// the @fontsource devDependencies, WOFF2 -> TrueType with wawoff2) and maps Times and Courier to
+// them. A platform whose rasterizer still differs can keep its own snapshots in
+// __snapshots__/{platform}/ (UPDATE_REPORT_SNAPSHOTS=platform); they are used when present.
+//
+// pdftoppm (poppler-utils) is required in CI; locally the tests are skipped without it. A
+// missing snapshot fails (never a skip). A missing or differing page is written, with its diff,
+// to REPORT_SNAPSHOT_OUT (CI keeps it as an artifact), else to a temp folder.
 // The B&W assertions read greyscale rasters (`pdftoppm -gray`): the three room fill greys differ
 // by at least 3 % lightness and the blocked glyph stays dark.
 
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { before, describe, it } from "node:test";
@@ -32,8 +42,10 @@ import {
   verdict424,
 } from "../report/support.js";
 
-const SNAPSHOTS = fileURLToPath(new URL(`./__snapshots__/${process.platform}/`, import.meta.url));
-const UPDATE = process.env.UPDATE_REPORT_SNAPSHOTS === "1";
+const SNAPSHOTS = fileURLToPath(new URL("./__snapshots__/", import.meta.url));
+const PLATFORM_SNAPSHOTS = join(SNAPSHOTS, process.platform);
+const UPDATE = process.env.UPDATE_REPORT_SNAPSHOTS;
+const CI = process.env.CI !== undefined && process.env.CI !== "" && process.env.CI !== "false";
 const MAX_DIFF = 0.005;
 
 function hasPdftoppm(): boolean {
@@ -46,29 +58,84 @@ function hasPdftoppm(): boolean {
 }
 
 const POPPLER = hasPdftoppm();
-if (!POPPLER && process.env.CI !== undefined) {
+if (!POPPLER && CI) {
   throw new Error("pdftoppm (poppler-utils) is required in CI for the report snapshots");
 }
 const work = mkdtempSync(join(tmpdir(), "report-visual-"));
+const out = process.env.REPORT_SNAPSHOT_OUT ?? work;
+
+// MARK: Fonts for the PDF standard fonts
+
+const require = createRequire(import.meta.url);
+const wawoff2 = require("wawoff2") as { decompress(data: Uint8Array): Promise<Uint8Array> };
+
+/**
+ * A fontconfig file that knows only Tinos (for Times) and Cousine (for Courier), so pdftoppm
+ * draws the report's standard-font text with the same glyphs on every machine.
+ */
+async function standardFontsConfig(): Promise<string> {
+  const dir = join(work, "fonts");
+  mkdirSync(dir, { recursive: true });
+  const fonts = [
+    ["@fontsource/tinos/files/tinos-latin-400-normal.woff2", "Tinos-Regular.ttf"],
+    ["@fontsource/cousine/files/cousine-latin-400-normal.woff2", "Cousine-Regular.ttf"],
+  ] as const;
+  for (const [source, name] of fonts) {
+    writeFileSync(join(dir, name), await wawoff2.decompress(readFileSync(require.resolve(source))));
+  }
+  const xml = (text: string) =>
+    text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const alias = (families: readonly string[], to: string) =>
+    families
+      .map(
+        (family) =>
+          `  <alias binding="same"><family>${family}</family><prefer><family>${to}</family></prefer></alias>`,
+      )
+      .join("\n");
+  const config = join(work, "fonts.conf");
+  writeFileSync(
+    config,
+    [
+      `<?xml version="1.0"?>`,
+      `<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">`,
+      `<fontconfig>`,
+      `  <dir>${xml(dir)}</dir>`,
+      `  <cachedir>${xml(join(work, "fontconfig-cache"))}</cachedir>`,
+      alias(["Times", "Times-Roman", "Times New Roman"], "Tinos"),
+      alias(["Courier", "Courier New"], "Cousine"),
+      `</fontconfig>`,
+      ``,
+    ].join("\n"),
+  );
+  return config;
+}
+
+let fontsConfig: Promise<string> | undefined;
 
 /** One page of a PDF at 96 dpi, colour or grey. */
-function rasterize(pdf: Uint8Array, page: number, gray = false): PNG {
+async function rasterize(pdf: Uint8Array, page: number, gray = false): Promise<PNG> {
+  fontsConfig ??= standardFontsConfig();
+  const env = { ...process.env, FONTCONFIG_FILE: await fontsConfig };
   const file = join(work, `in-${Date.now()}-${Math.random().toString(16).slice(2)}.pdf`);
   writeFileSync(file, pdf);
   const prefix = `${file}.p${page}${gray ? "g" : ""}`;
-  execFileSync("pdftoppm", [
-    "-r",
-    "96",
-    "-png",
-    ...(gray ? ["-gray"] : []),
-    "-f",
-    String(page),
-    "-l",
-    String(page),
-    "-singlefile",
-    file,
-    prefix,
-  ]);
+  execFileSync(
+    "pdftoppm",
+    [
+      "-r",
+      "96",
+      "-png",
+      ...(gray ? ["-gray"] : []),
+      "-f",
+      String(page),
+      "-l",
+      String(page),
+      "-singlefile",
+      file,
+      prefix,
+    ],
+    { env },
+  );
   return PNG.sync.read(readFileSync(`${prefix}.png`));
 }
 
@@ -215,17 +282,22 @@ function renderOnce(scenario: Scenario): Promise<{ pdf: Buffer; pages: PageSpec[
   return found;
 }
 
-function compare(name: string, actual: PNG): { skipped?: string } {
-  const file = join(SNAPSHOTS, `${name}.png`);
-  if (UPDATE) {
-    mkdirSync(SNAPSHOTS, { recursive: true });
-    writeFileSync(file, PNG.sync.write(actual));
-    return {};
+function compare(name: string, actual: PNG): void {
+  const own = join(PLATFORM_SNAPSHOTS, `${name}.png`);
+  const shared = join(SNAPSHOTS, `${name}.png`);
+  if (UPDATE === "1" || UPDATE === "platform") {
+    const dir = UPDATE === "platform" ? PLATFORM_SNAPSHOTS : SNAPSHOTS;
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, `${name}.png`), PNG.sync.write(actual));
+    return;
   }
+  const file = existsSync(own) ? own : shared;
   if (!existsSync(file)) {
-    return {
-      skipped: `no ${process.platform} snapshot ${name}.png (record with UPDATE_REPORT_SNAPSHOTS=1)`,
-    };
+    mkdirSync(out, { recursive: true });
+    writeFileSync(join(out, `${name}.png`), PNG.sync.write(actual));
+    assert.fail(
+      `no snapshot ${name}.png (the page is in ${out}; record with UPDATE_REPORT_SNAPSHOTS=1)`,
+    );
   }
   const expected = PNG.sync.read(readFileSync(file));
   assert.deepEqual([actual.width, actual.height], [expected.width, expected.height], name);
@@ -235,28 +307,24 @@ function compare(name: string, actual: PNG): { skipped?: string } {
   });
   const share = different / (actual.width * actual.height);
   if (share > MAX_DIFF) {
-    writeFileSync(join(work, `${name}-actual.png`), PNG.sync.write(actual));
-    writeFileSync(join(work, `${name}-diff.png`), PNG.sync.write(diff));
+    mkdirSync(out, { recursive: true });
+    writeFileSync(join(out, `${name}.png`), PNG.sync.write(actual));
+    writeFileSync(join(out, `${name}-diff.png`), PNG.sync.write(diff));
   }
   assert.ok(
     share <= MAX_DIFF,
-    `${name}: ${(share * 100).toFixed(2)} % of the pixels differ (actual and diff in ${work})`,
+    `${name}: ${(share * 100).toFixed(2)} % of the pixels differ (actual and diff in ${out})`,
   );
-  return {};
 }
 
 describe("report snapshots", { skip: POPPLER ? false : "pdftoppm not installed" }, () => {
   for (const scenario of SCENARIOS) {
-    it(scenario.name, async (t) => {
+    it(scenario.name, async () => {
       const { pdf, pages } = await renderOnce(scenario);
       const page = scenario.page(pages);
-      const colour = compare(scenario.name, rasterize(pdf, page));
-      if (colour.skipped !== undefined) {
-        t.skip(colour.skipped);
-        return;
-      }
+      compare(scenario.name, await rasterize(pdf, page));
       if (scenario.gray === true) {
-        compare(`${scenario.name}-gray`, rasterize(pdf, page, true));
+        compare(`${scenario.name}-gray`, await rasterize(pdf, page, true));
       }
     });
   }
@@ -293,12 +361,18 @@ describe("black-and-white proof", { skip: POPPLER ? false : "pdftoppm not instal
 
   before(async () => {
     const limited = await renderOnce(SCENARIOS[0] as Scenario);
-    cover = { colour: rasterize(limited.pdf, 1), gray: rasterize(limited.pdf, 1, true) };
+    cover = {
+      colour: await rasterize(limited.pdf, 1),
+      gray: await rasterize(limited.pdf, 1, true),
+    };
     const blocked = await renderOnce(
       SCENARIOS.find((s) => s.name === "1r-checks-blocked") as Scenario,
     );
     const page = first("checks")(blocked.pages);
-    checks = { colour: rasterize(blocked.pdf, page), gray: rasterize(blocked.pdf, page, true) };
+    checks = {
+      colour: await rasterize(blocked.pdf, page),
+      gray: await rasterize(blocked.pdf, page, true),
+    };
   });
 
   it("keeps the three room fills apart in grey (at least 3 % lightness)", () => {

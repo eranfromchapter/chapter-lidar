@@ -331,3 +331,39 @@ describe("page numbers printed on other pages", () => {
     assert.ok(has(checks, `SHA-256 fingerprints · page ${index.record}`));
   });
 });
+
+describe("cover with four or more floors", () => {
+  const floor = (label: string, w: number) => ({
+    label,
+    rooms: [{ label: `${label} room`, w, d: 3 }],
+  });
+
+  it("draws the three largest and names the other floor and its page, singular", async () => {
+    const input = syntheticInput([
+      floor("Floor 1", 6),
+      floor("Floor 2", 5),
+      floor("Basement", 2),
+      floor("Attic", 4),
+    ]);
+    const report = await renderSpatialReport(input);
+    const [cover] = await pageTexts(report.bytes);
+    const index = new PageIndex(layoutOf(input).pages);
+    assert.ok(has(cover as string, `+1 floor on page ${index.plan(2)}`), cover);
+    assert.ok(!(cover as string).includes("floors on pages"));
+  });
+
+  it("lists the pages of two floors that are not next to each other", async () => {
+    const input = syntheticInput([
+      floor("Floor 1", 6),
+      floor("Floor 2", 2),
+      floor("Floor 3", 5),
+      floor("Basement", 1.5),
+      floor("Attic", 4),
+    ]);
+    const report = await renderSpatialReport(input);
+    const [cover] = await pageTexts(report.bytes);
+    const index = new PageIndex(layoutOf(input).pages);
+    assert.equal(index.plan(3), index.plan(1) + 2);
+    assert.ok(has(cover as string, `+2 floors on pages ${index.plan(1)} and ${index.plan(3)}`));
+  });
+});

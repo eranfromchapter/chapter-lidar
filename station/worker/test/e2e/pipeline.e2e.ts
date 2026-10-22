@@ -1,5 +1,6 @@
 // F9 AC6: against the local stack a sealed fixture package reaches a stored verdict, a stored
-// spatial report and a HUB publication within 120 s, and re-running the job is idempotent.
+// spatial report and a HUB publication within 120 s, and re-running the job is idempotent. A
+// re-run by a worker whose render differs keeps the report stored first.
 //
 //   station/api/scripts/local-up.sh && npm run test:e2e --workspace station/worker
 //
@@ -110,34 +111,39 @@ async function settled(packageId: string): Promise<boolean> {
   );
 }
 
+/** An in-process worker against the local stack and the fake HUB server. */
+function startE2eWorker(workerId: string, reportTimeZone: string): StartedWorker {
+  const config = loadConfig({
+    NODE_ENV: "test",
+    LOG_LEVEL: "info",
+    DB_AUTH: "url",
+    DATABASE_URL,
+    AZURE_STORAGE_CONNECTION_STRING: AZURITE_CONNECTION_STRING,
+    STORAGE_ORIGINALS_CONTAINER: "originals",
+    STORAGE_REPORTS_CONTAINER: "reports",
+    REPORT_TIME_ZONE: reportTimeZone,
+    HUB_MODE: "live",
+    HUB_BASE_URL: server.url,
+    HUB_SERVICE_CREDENTIAL: server.hub.credential,
+    REVIEW_BASE_URL,
+    WORKER_ID: workerId,
+    WORKER_POLL_INTERVAL_MS: "200",
+    WORKER_RETRY_BASE_SECONDS: "1",
+    WORKER_RETRY_MAX_SECONDS: "2",
+    HUB_PUBLISH_RETRY_BASE_MS: "100",
+    HUB_PUBLISH_RETRY_MAX_MS: "500",
+  });
+  return startWorker(
+    config,
+    createLogger("info", (line) => logs.push(line)),
+  );
+}
+
 describe("station worker end to end (local stack)", { timeout: 300_000 }, () => {
   before(async () => {
     stack = await connectStack();
     server = await startFakeHubServer();
-    const config = loadConfig({
-      NODE_ENV: "test",
-      LOG_LEVEL: "info",
-      DB_AUTH: "url",
-      DATABASE_URL,
-      AZURE_STORAGE_CONNECTION_STRING: AZURITE_CONNECTION_STRING,
-      STORAGE_ORIGINALS_CONTAINER: "originals",
-      STORAGE_REPORTS_CONTAINER: "reports",
-      REPORT_TIME_ZONE: "America/New_York",
-      HUB_MODE: "live",
-      HUB_BASE_URL: server.url,
-      HUB_SERVICE_CREDENTIAL: server.hub.credential,
-      REVIEW_BASE_URL,
-      WORKER_ID: "e2e-worker",
-      WORKER_POLL_INTERVAL_MS: "200",
-      WORKER_RETRY_BASE_SECONDS: "1",
-      WORKER_RETRY_MAX_SECONDS: "2",
-      HUB_PUBLISH_RETRY_BASE_MS: "100",
-      HUB_PUBLISH_RETRY_MAX_MS: "500",
-    });
-    worker = startWorker(
-      config,
-      createLogger("info", (line) => logs.push(line)),
-    );
+    worker = startE2eWorker("e2e-worker", "America/New_York");
   });
 
   after(async () => {
@@ -466,5 +472,70 @@ describe("station worker end to end (local stack)", { timeout: 300_000 }, () => 
     assert.equal(checks?.status, "succeeded");
     assert.equal(checks?.attempts, 2, "the dead worker's attempt counts");
     assert.equal((await verdicts(packageId)).length, 1);
+  });
+
+  it("keeps the stored report when a newer worker's render of the same verdict differs", async () => {
+    // Attempt 1 stores the report, then the HUB refuses every upload: publish_failed. The job
+    // is run again by a worker that prints times in another zone (as after a deploy): its
+    // render differs, the stored report is not replaced, and the HUB gets the stored one.
+    server.hub.failNext({ operation: "upload", status: 503, times: 1000 });
+    let packageId: string;
+    try {
+      ({ packageId } = await seedSealedPackage(stack));
+      await waitFor(
+        async () =>
+          (await publication(packageId))[0]?.status === "publish_failed" &&
+          (await settled(packageId))
+            ? true
+            : undefined,
+        120_000,
+        "a publication that failed after the report was stored",
+      );
+    } finally {
+      server.hub.clearFailures();
+    }
+    const stored = (await spatialReport(packageId))[0]!;
+    const publishJob = (await jobsOf(packageId)).find((job) => job.type === "publish")!;
+    assert.equal(publishJob.status, "failed");
+
+    await worker.stop();
+    worker = startE2eWorker("e2e-worker-tokyo", "Asia/Tokyo");
+    try {
+      await stack.db.query(
+        `UPDATE jobs SET status = 'queued', attempts = 0, run_after = now(), finished_at = NULL, last_error = NULL
+          WHERE job_id = $1`,
+        [publishJob.job_id],
+      );
+      await waitFor(
+        async () =>
+          (await publication(packageId))[0]?.status === "published" && (await settled(packageId))
+            ? true
+            : undefined,
+        120_000,
+        "the publication by the newer worker",
+      );
+    } finally {
+      await worker.stop();
+      worker = startE2eWorker("e2e-worker", "America/New_York");
+    }
+
+    const after = await spatialReport(packageId);
+    assert.equal(after.length, 1);
+    assert.equal(after[0]?.sha256, stored.sha256, "the stored report's row is unchanged");
+    const blob = await stack.reports.getBlobClient(stored.blob_name).downloadToBuffer();
+    assert.equal(sha256(blob), stored.sha256, "the stored report is not replaced");
+    const report = server.hub.documents.find((doc) => doc.name === stored.file_name);
+    assert.equal(report?.sha256, stored.sha256, "the HUB holds the stored report");
+    const audits = await stack.db.query<{ action: string; details: Record<string, unknown> }>(
+      `SELECT action, details FROM audit_log WHERE target_type = 'package' AND target_id = $1 ORDER BY audit_id`,
+      [packageId],
+    );
+    assert.deepEqual(
+      audits.rows.map((row) => row.action),
+      ["verdict.store", "report.store", "hub.publish_failed", "report.kept", "hub.publish"],
+    );
+    const kept = audits.rows.find((row) => row.action === "report.kept");
+    assert.equal(kept?.details.sha256, stored.sha256);
+    assert.notEqual(kept?.details.renderedSha256, stored.sha256);
   });
 });

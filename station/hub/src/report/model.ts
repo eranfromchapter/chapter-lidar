@@ -25,7 +25,7 @@ import {
 import { cuFt, dimensionPair, ftIn, sqFt } from "./format.js";
 import type { ReportFloor, ReportModel, ReportPhoto, SpatialReportInput } from "./input.js";
 import { dominantAngle, longSide, shortSide } from "./metrics/metrics-geometry.js";
-import type { Point } from "./metrics/plan-geometry.js";
+import { PlanGeometryError, type Point } from "./metrics/plan-geometry.js";
 import {
   isApproximate,
   planMetrics,
@@ -312,6 +312,26 @@ function itemsOf(metrics: RoomMetrics): ItemRow[] {
 
 // MARK: Build
 
+/**
+ * The measurements of one floor's model. A model the contract accepts can still describe
+ * geometry the measurement engine refuses (PlanGeometryError, e.g. a door on a wall id that
+ * names no wall; the phone's PlanExport refuses it the same way): that floor is "unreadable"
+ * (spec 6.2: "Plan not available ... could not be read") and the rest of the report is made.
+ */
+function measured(source: ReportModel): { status: ReportModel; metrics?: PlanMetrics } {
+  if (source.status !== "ok") {
+    return { status: source };
+  }
+  try {
+    return { status: source, metrics: planMetrics(source.model) };
+  } catch (error) {
+    if (error instanceof PlanGeometryError) {
+      return { status: { status: "unreadable" } };
+    }
+    throw error;
+  }
+}
+
 function floorSources(input: SpatialReportInput): SpatialReportInput["floors"] {
   if (input.floors !== undefined) {
     return input.floors;
@@ -346,11 +366,8 @@ export function buildModel(input: SpatialReportInput): Model {
     const capture = record?.captures.find((c) => c.captureId === source.captureId);
     const label = capture?.label ?? source.areaKey;
     const mode = capture?.mode;
-    let metrics: PlanMetrics | undefined;
-    if (source.model.status === "ok") {
-      metrics = planMetrics(source.model.model);
-    }
-    const model = source.model.status === "ok" ? source.model.model : undefined;
+    const { status, metrics } = measured(source.model);
+    const model = status.status === "ok" ? status.model : undefined;
     const ownPhotos = photos.filter((photo) => photo.captureId === source.captureId);
     const roomsInOrder = (metrics?.rooms ?? [])
       .map((room, modelIndex) => ({ room, modelIndex }))
@@ -406,7 +423,7 @@ export function buildModel(input: SpatialReportInput): Model {
       label,
       ...(mode === undefined ? {} : { mode }),
       ...(capture === undefined ? {} : { capture }),
-      source: source.model,
+      source: status,
       ...(metrics === undefined ? {} : { metrics }),
       rooms,
       skipped: skippedAll.filter((room) => room.captureId === source.captureId),

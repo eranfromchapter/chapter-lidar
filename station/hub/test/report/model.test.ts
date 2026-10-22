@@ -1,10 +1,11 @@
 // The report model (spec 11.1 model.test.ts): unlabeled rooms, fills, totals, order, skipped
-// rooms, rule results, cover sentences, compass states and the north arrow, rectangular rooms.
+// rooms, rule results, cover sentences, compass states and the north arrow, rectangular rooms,
+// models the measurement engine refuses.
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { Capture, CaptureModel } from "@chapter/capture-contract";
-import { coverSentence, outcomeInPlainWords } from "../../src/report/index.js";
+import { validateCaptureModel, type Capture, type CaptureModel } from "@chapter/capture-contract";
+import { coverSentence, outcomeInPlainWords, renderSpatialReport } from "../../src/report/index.js";
 import {
   buildModel,
   fillClass,
@@ -14,7 +15,7 @@ import {
   skippedEntries,
   typeFromLabel,
 } from "../../src/report/model.js";
-import { input424, syntheticInput, verdict424, type SyntheticRoom } from "./support.js";
+import { input424, pageTexts, syntheticInput, verdict424, type SyntheticRoom } from "./support.js";
 
 type Room = CaptureModel["rooms"][number];
 const room = (label: string, extra: Partial<Room> = {}): Room => ({
@@ -370,5 +371,69 @@ describe("rectangular rooms", () => {
     assert.equal(byName.get("Box")?.rectangular, true);
     assert.equal(byName.get("L-shaped")?.rectangular, false);
     assert.equal(byName.get("Box")?.words.bbox, `13' 1.5" × 9' 10.1"`);
+  });
+});
+
+describe("models the measurement engine refuses", () => {
+  // A door on a wall id that names no wall passes the contract's schema but not the engine
+  // (PlanGeometryError, as PlanExport's unknownWall). Only that floor is "unreadable".
+  const input = () => {
+    const base = syntheticInput([
+      { label: "Floor 1", rooms: [{ label: "Living Room", w: 5, d: 4, doors: 1 }] },
+      { label: "Floor 2", rooms: [{ label: "Bedroom", w: 4, d: 3, doors: 1 }] },
+    ]);
+    const floors = (base.floors ?? []).map((floor, i) => {
+      if (i !== 1 || floor.model.status !== "ok") {
+        return floor;
+      }
+      const model = structuredClone(floor.model.model);
+      const door = model.doors[0];
+      assert.ok(door);
+      door.wallId = "wall-that-is-not-there";
+      assert.equal(validateCaptureModel(model).ok, true);
+      return { ...floor, model: { status: "ok" as const, model } };
+    });
+    return { ...base, floors };
+  };
+
+  it("marks that floor unreadable and keeps the others", () => {
+    const model = buildModel(input());
+    assert.deepEqual(
+      model.floors.map((floor) => [floor.label, floor.source.status, floor.rooms.length]),
+      [
+        ["Floor 1", "ok", 1],
+        ["Floor 2", "unreadable", 0],
+      ],
+    );
+    assert.equal(model.floors[1]?.metrics, undefined);
+    assert.equal(model.totals.roomsScanned, 1);
+    assert.deepEqual(
+      reportFloors(model).map((floor) => floor.areaKey),
+      ["floor-1"],
+    );
+  });
+
+  it("still renders the report, saying that floor's plan could not be read", async () => {
+    const rendered = await renderSpatialReport(input());
+    const text = (await pageTexts(rendered.bytes)).join("\n");
+    assert.ok(text.includes("Plan not available: the scan model of Floor 2 could not be read."));
+    assert.deepEqual(
+      rendered.floors.map((floor) => floor.areaKey),
+      ["floor-1"],
+    );
+  });
+
+  it("does not hide other errors", () => {
+    const broken = input();
+    const floor = broken.floors[0];
+    assert.ok(floor !== undefined && floor.model.status === "ok");
+    // Not geometry the engine refuses: a model without its room list is a programming error.
+    const model = { ...floor.model.model, rooms: undefined } as unknown as CaptureModel;
+    assert.throws(() =>
+      buildModel({
+        ...broken,
+        floors: [{ ...floor, model: { status: "ok", model } }],
+      }),
+    );
   });
 });
