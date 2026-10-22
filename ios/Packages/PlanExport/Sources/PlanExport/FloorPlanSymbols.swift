@@ -47,10 +47,11 @@ enum FloorPlanSymbols {
   }
 
   /// `lines`: room edges and walls, to find each object's back. `tables`: table footprints,
-  /// so a chair at a table turns its back to the table.
+  /// so a chair at a table turns its back to the table. `rendition` `.planSheet` draws the
+  /// plan sheet's set (`drawSheet`): a box for every object, with the four fixture symbols.
   static func symbol(
     for object: PlanObject, attributes: [String: String], lines: [(Point2, Point2)],
-    tables: [PlanObject]
+    tables: [PlanObject], rendition: FloorPlanDrawing.Rendition = .floorplan
   ) -> PlacedSymbol? {
     guard object.corners.count == 4 else { return nil }
     let c = object.center
@@ -115,7 +116,14 @@ enum FloorPlanSymbols {
     let k = chosen.depth
     var outline = PathBuilder()
     var details = PathBuilder()
-    draw(kind: kind, h: h, k: k, frame: frame, outline: &outline, details: &details)
+    switch rendition {
+    case .floorplan:
+      draw(kind: kind, h: h, k: k, frame: frame, outline: &outline, details: &details)
+    case .planSheet:
+      drawSheet(
+        category: object.category, h: h, k: k, frame: frame, outline: &outline,
+        details: &details)
+    }
     let footprint = Geo.counterClockwise([
       frame.map(-h, -k), frame.map(h, -k), frame.map(h, k), frame.map(-h, k),
     ])
@@ -156,6 +164,45 @@ enum FloorPlanSymbols {
     case .toilet: return "toilet"
     case .washerDryer: return "washer-dryer"
     case .other: return "other"
+    }
+  }
+
+  /// The plan sheet's symbol set (plan-sheet §3.4, artboard 1b), in the local frame (x across,
+  /// y from the front, -k, to the back, +k, the side nearest a wall): the oriented box for every
+  /// category, and for four fixtures a symbol. `outline` is filled with the page colour and
+  /// stroked; `details` are stroked only.
+  /// - toilet: the tank, full width and 0.30 of the depth at the back, and the bowl, an ellipse
+  ///   centred 0.64 of the depth from the back, radii 0.46 w and 0.34 d (no box);
+  /// - sink: the box and an ellipse in its middle, radii 0.34 w and 0.32 d;
+  /// - bathtub: the box and a rectangle inset i = 0.18 min(w, d) with corners of radius i;
+  /// - stove: the box and four burners of radius 0.17 min(w, d) at 0.27 / 0.73 of the width and
+  ///   0.30 / 0.70 of the depth from the back.
+  static func drawSheet(
+    category: ObjectCategory, h: Double, k: Double, frame f: DrawingFrame,
+    outline: inout PathBuilder, details d: inout PathBuilder
+  ) {
+    let w = 2 * h
+    let depth = 2 * k
+    let small = min(w, depth)
+    switch category {
+    case .toilet:
+      outline.rect(in: f, -h, k - 0.30 * depth, h, k)
+      outline.ellipse(in: f, cx: 0, cy: k - 0.64 * depth, rx: 0.46 * w, ry: 0.34 * depth)
+    case .sink:
+      outline.rect(in: f, -h, -k, h, k)
+      d.ellipse(in: f, cx: 0, cy: 0, rx: 0.34 * w, ry: 0.32 * depth)
+    case .bathtub:
+      outline.rect(in: f, -h, -k, h, k)
+      let i = 0.18 * small
+      d.rect(in: f, -h + i, -k + i, h - i, k - i, radius: i)
+    case .stove:
+      outline.rect(in: f, -h, -k, h, k)
+      let r = 0.17 * small
+      for (x, y) in [(0.27, 0.30), (0.73, 0.30), (0.27, 0.70), (0.73, 0.70)] {
+        d.circle(center: f.map(-h + x * w, k - y * depth), radius: r)
+      }
+    default:
+      outline.rect(in: f, -h, -k, h, k)
     }
   }
 

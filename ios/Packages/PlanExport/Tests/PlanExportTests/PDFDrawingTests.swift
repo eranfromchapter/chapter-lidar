@@ -124,23 +124,30 @@ final class PDFDrawingTests: XCTestCase {
     XCTAssertTrue(text.contains("(12' 6.6\") Tj ET"))
   }
 
-  func testPlanPDFDrawsInChapterTones() throws {
-    // The plan PDF's grays are drawn as Chapter tones: no gray operators, the brand black.
+  func testPlanSheetDrawsInTheSheetPalette() throws {
+    // RGB only (no gray operators, no clip on a sheet that fits), every colour a design token
+    // of the sheet or the logo's brand black.
     let capture = try XCTUnwrap(Fixtures.load("two-room-apartment").first)
     let context = try PlanExportContext(record: capture.record, captureId: capture.model.captureId)
-    let plan = PDFFile(try PlanPDFWriter.write(model: capture.model, context: context).file.data)
+    let plan = PDFFile(try PlanSheetWriter.write(model: capture.model, context: context).file.data)
     let stream = try XCTUnwrap(plan.contentStreams.first)
     for op in [" g\n", " G\n", " W n"] {
       XCTAssertFalse(stream.contains(op), "plan-sheet.pdf uses \(op)")
     }
-    // The only dashes are the north symbol's: this capture's reading is approximate, so its
-    // 28 pt ring is dashed 1.6 / 1.6 of 28/32 pt; the arrow is solid.
-    let dashes = Set(stream.split(separator: "\n").filter { $0.hasSuffix(" d") })
-    XCTAssertEqual(dashes, ["[1.400 1.400] 0.000 d", "[] 0.000 d"])
-    XCTAssertTrue(stream.contains("0.1373 0.1216 0.1255 rg"), "brand black")
+    let palette = ChapterBrand.Sheet.self
+    let allowed = Set(
+      [
+        palette.ink, palette.muted, palette.line, palette.nude, palette.wet, palette.ground,
+        palette.surface, ChapterBrand.ink,
+      ].map { color in
+        [color.red, color.green, color.blue].map { Format.fixed($0, 4) }.joined(separator: " ")
+      })
+    let used = Set(
+      stream.split(separator: "\n").filter { $0.hasSuffix(" rg") || $0.hasSuffix(" RG") }
+        .map { String($0.dropLast(3)) })
+    XCTAssertTrue(used.isSubset(of: allowed), "\(used.subtracting(allowed))")
+    XCTAssertTrue(used.contains(allowed.first { $0.hasPrefix("0.1216") }!), "ink #1F2429")
     XCTAssertEqual(ChapterBrand.tone(0), ChapterBrand.ink)
     XCTAssertEqual(ChapterBrand.tone(1), .white)
-    let mid = ChapterBrand.tone(0.5)
-    XCTAssertGreaterThan(mid.red, mid.blue, "warm")
   }
 }

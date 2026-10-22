@@ -27,7 +27,7 @@ extension FloorPlanDrawing {
     render(on: page, x: margin * mm, y: margin * mm)
     var document = PDFDocument(
       title: title, author: "Chapter", subject: "Floor plan",
-      creator: "\(PlanExportInfo.generator) \(PlanExportInfo.generatorVersion)",
+      creator: "\(PlanExportInfo.generator) \(PlanExportInfo.floorplanVersion)",
       creationDate: creationDate)
     document.pages = [page]
     return document.render()
@@ -114,9 +114,20 @@ enum DrawingSVG {
         let rotate =
           text.rotationDegrees == 0
           ? "" : " transform=\"rotate(\(n(-text.rotationDegrees)) \(x) \(y))\""
-        let family = text.serif ? ChapterBrand.serifFamily : ChapterBrand.sansFamily
-        let weight =
-          text.bold && !text.serif ? " font-weight=\"\(ChapterBrand.boldWeight)\"" : ""
+        let family: String
+        // Weight of SemiBold, or the italic of Times-Italic.
+        var weight = ""
+        switch text.font {
+        case .interRegular: family = ChapterBrand.sansFamily
+        case .interSemiBold:
+          family = ChapterBrand.sansFamily
+          weight = " font-weight=\"\(ChapterBrand.boldWeight)\""
+        case .timesRoman: family = ChapterBrand.serifFamily
+        case .timesItalic:
+          family = ChapterBrand.serifFamily
+          weight = " font-style=\"italic\""
+        case .courier: family = ChapterBrand.monoFamily
+        }
         let spacing = text.letterSpacing == 0 ? "" : " letter-spacing=\"\(n(text.letterSpacing))\""
         out +=
           "\(indent)  <text x=\"\(x)\" y=\"\(y)\" font-family=\"\(family)\" "
@@ -246,7 +257,7 @@ struct PDFDrawingRenderer {
         }
         page.text(
           text.string, x: x(text.position), y: y(text.position), size: text.size * scale,
-          bold: text.bold, anchor: anchor, rotation: text.rotationDegrees, serif: text.serif,
+          font: text.font, anchor: anchor, rotation: text.rotationDegrees,
           letterSpacing: text.letterSpacing * scale)
       case .clipped(let clip, let children):
         page.saveState()

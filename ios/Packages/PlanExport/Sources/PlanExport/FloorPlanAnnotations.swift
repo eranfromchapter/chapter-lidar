@@ -88,6 +88,9 @@ struct AnnotationLayout {
   /// Outside faces of the closed exterior wall loops; labels outside stay off the building.
   var building: [Obstacle]
   var wallPieces: [Obstacle]
+  /// Object outlines a room label must not cross (the plan sheet's labels, which have no patch
+  /// behind them); none for the colour Floorplan.
+  var outlines: [Obstacle] = []
   var items: [DrawingLayer: [DrawingItem]] = [:]
   var exteriorDimensions: [ExteriorDimension] = []
   /// The outside dimension lines and their witness lines placed so far.
@@ -112,7 +115,7 @@ struct AnnotationLayout {
     self.wallPieces = wallPieces.map(Obstacle.init)
   }
 
-  private mutating func add(_ item: DrawingItem, _ layer: DrawingLayer) {
+  mutating func add(_ item: DrawingItem, _ layer: DrawingLayer) {
     items[layer, default: []].append(item)
   }
 
@@ -415,9 +418,43 @@ struct AnnotationLayout {
     let lineGap = 0.15 * style.roomNameSize * k
     let height = AnnotationLayout.blockHeight(block, lineGap: lineGap)
     let halfWidth = AnnotationLayout.blockWidth(block) / 2
+    return roomLabelPlace(halfWidth: halfWidth, height: height, polygon: polygon)
+  }
+
+  /// The best place for the centre of a label box `2 halfWidth` by `height` inside the room
+  /// (see `placeRoomLabel`); nil when it fits nowhere.
+  func roomLabelPlace(halfWidth: Double, height: Double, polygon: [Point2]) -> Point2? {
+    roomLabelPlace(
+      parts: [LabelPart(dy: 0, halfWidth: halfWidth, halfHeight: height / 2)], polygon: polygon)
+  }
+
+  /// A rectangle a label covers, horizontal, `dy` above the label's centre (plan metres).
+  struct LabelPart: Sendable {
+    var dy: Double
+    var halfWidth: Double
+    var halfHeight: Double
+  }
+
+  /// The best place for the centre of a label made of `parts` (one box for the colour
+  /// Floorplan's labels; the outline of its lines for the plan sheet's), as for one box: every
+  /// part inside the room, the fewest labels, fixtures, swings and `outlines` crossed by any
+  /// part, then the most open floor round them all; nil when it fits nowhere. `grid` is the
+  /// number of steps across the room of the first search.
+  func roomLabelPlace(parts: [LabelPart], polygon: [Point2], grid: Int = 28) -> Point2? {
+    roomLabelSearch(parts: parts, polygon: polygon, grid: grid)?.point
+  }
+
+  /// `roomLabelPlace(parts:polygon:grid:)` with how much the place covers (0 when it is free).
+  func roomLabelSearch(parts: [LabelPart], polygon: [Point2], grid: Int = 28)
+    -> (point: Point2, hits: Int)?
+  {
     let u = Point2(x: 1, y: 0)
-    func box(at c: Point2) -> OrientedBox {
-      OrientedBox(center: c, u: u, halfWidth: halfWidth, halfHeight: height / 2)
+    func boxes(at c: Point2) -> [OrientedBox] {
+      parts.map {
+        OrientedBox(
+          center: $0.dy == 0 ? c : Point2(x: c.x, y: c.y + $0.dy), u: u,
+          halfWidth: $0.halfWidth, halfHeight: $0.halfHeight)
+      }
     }
     let padding = 0.6 * k
     let roomy = max(style.labelFurnitureClearance, padding)
@@ -427,58 +464,76 @@ struct AnnotationLayout {
       (polygon.map(\.y).max()! - polygon.map(\.y).min()!), 1e-6)
     struct Place {
       var point: Point2
-      /// How much of the box covers labels (100 each), fixtures and door swings (sampled).
+      /// How much of the box covers labels (100 each), fixtures and door swings (sampled), and
+      /// how many `outlines` it crosses.
       var hits: Int
       /// Open floor round it, weighed by the furniture near it and nudged to the centroid.
       var value: Double
     }
     let samples = (0..<5).flatMap { i in (0..<3).map { j in (Double(i) / 4, Double(j) / 2) } }
     func evaluate(_ c: Point2) -> Place? {
-      var b = box(at: c)
-      b.halfWidth += padding
-      b.halfHeight += padding
-      guard b.isInside(polygon) else { return nil }
-      let corners = b.corners
-      let extent = Extent(corners)
       var hits = 0
-      for label in labels where label.extent.overlaps(extent) && label.box.overlaps(b) {
-        hits += 100
-      }
-      for obstacle in fixtures + swings
-      where obstacle.extent.overlaps(extent) && Geo.convexOverlap(corners, obstacle.polygon) {
-        // Covering a corner of it is better than covering it all.
-        hits += 1
-        for (x, y) in samples {
-          let p = corners[0] + (corners[1] - corners[0]) * x + (corners[3] - corners[0]) * y
-          if PlanGeometry.contains(obstacle.polygon, p) { hits += 1 }
-        }
-      }
       var clearance = Double.infinity
-      for p in corners + [c] {
-        clearance = min(clearance, PlanGeometry.distanceToBoundary(of: polygon, from: p))
-      }
-      // On furniture: well within the pieces it covers, not across or along an edge of one.
-      let under = symbols.filter {
-        $0.extent.overlaps(extent) && Geo.convexOverlap(corners, $0.polygon)
-      }
-      var inset = box(at: c)
-      inset.halfWidth += roomy
-      inset.halfHeight += roomy
-      let insetCorners = inset.corners
-      let on =
-        !under.isEmpty
-        && under.allSatisfy { piece in
-          insetCorners.allSatisfy { PlanGeometry.contains(piece.polygon, $0) }
+      var covered = false
+      var on = true
+      var near = false
+      for part in boxes(at: c) {
+        var b = part
+        b.halfWidth += padding
+        b.halfHeight += padding
+        guard b.isInside(polygon) else { return nil }
+        let corners = b.corners
+        let extent = Extent(corners)
+        for label in labels where label.extent.overlaps(extent) && label.box.overlaps(b) {
+          hits += 100
         }
-      var wide = box(at: c)
-      wide.halfWidth += roomy
-      wide.halfHeight += roomy
-      let wideCorners = wide.corners
-      let wideExtent = Extent(wideCorners)
-      let near = symbols.contains {
-        $0.extent.overlaps(wideExtent) && Geo.convexOverlap(wideCorners, $0.polygon)
+        for obstacle in fixtures + swings
+        where obstacle.extent.overlaps(extent) && Geo.convexOverlap(corners, obstacle.polygon) {
+          // Covering a corner of it is better than covering it all.
+          hits += 1
+          for (x, y) in samples {
+            let p = corners[0] + (corners[1] - corners[0]) * x + (corners[3] - corners[0]) * y
+            if PlanGeometry.contains(obstacle.polygon, p) { hits += 1 }
+          }
+        }
+        // Object outlines the label must not cross (the plan sheet's, which has no patch);
+        // lying wholly inside one is fine.
+        for piece in outlines
+        where piece.extent.overlaps(extent) && Geo.convexOverlap(corners, piece.polygon)
+          && !corners.allSatisfy({ PlanGeometry.contains(piece.polygon, $0) })
+        {
+          hits += 1
+        }
+        for p in corners {
+          clearance = min(clearance, PlanGeometry.distanceToBoundary(of: polygon, from: p))
+        }
+        // On furniture: well within the pieces it covers, not across or along an edge of one.
+        let under = symbols.filter {
+          $0.extent.overlaps(extent) && Geo.convexOverlap(corners, $0.polygon)
+        }
+        var inset = part
+        inset.halfWidth += roomy
+        inset.halfHeight += roomy
+        let insetCorners = inset.corners
+        covered = covered || !under.isEmpty
+        on =
+          on
+          && under.allSatisfy { piece in
+            insetCorners.allSatisfy { PlanGeometry.contains(piece.polygon, $0) }
+          }
+        var wide = part
+        wide.halfWidth += roomy
+        wide.halfHeight += roomy
+        let wideCorners = wide.corners
+        let wideExtent = Extent(wideCorners)
+        near =
+          near
+          || symbols.contains {
+            $0.extent.overlaps(wideExtent) && Geo.convexOverlap(wideCorners, $0.polygon)
+          }
       }
-      let weight = !near ? 1 : (on ? 0.8 : 0.45)
+      clearance = min(clearance, PlanGeometry.distanceToBoundary(of: polygon, from: c))
+      let weight = !near ? 1 : (covered && on ? 0.8 : 0.45)
       let value = clearance * weight - 0.02 * c.distance(to: centroid) / size * k
       return Place(point: c, hits: hits, value: value)
     }
@@ -489,7 +544,7 @@ struct AnnotationLayout {
     var hi = Point2(x: xs.max()!, y: ys.max()!)
     var best: Place?
     for round in 0..<4 {
-      let n = round == 0 ? 28 : 10
+      let n = round == 0 ? grid : 10
       for i in 0...n {
         for j in 0...n {
           let p = Point2(
@@ -511,7 +566,7 @@ struct AnnotationLayout {
       lo = Point2(x: current.point.x - spanX, y: current.point.y - spanY)
       hi = Point2(x: current.point.x + spanX, y: current.point.y + spanY)
     }
-    return best?.point
+    return best.map { ($0.point, $0.hits) }
   }
 
   // MARK: Exterior dimensions

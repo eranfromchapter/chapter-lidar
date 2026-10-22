@@ -106,6 +106,35 @@ public struct UnitFormatter: Hashable, Sendable {
     }
   }
 
+  // MARK: Plan sheet and spatial report
+
+  /// A floor area in square feet to one decimal with thousands separators, the plan sheet's and
+  /// the spatial report's form: `2,196.3 sq ft`.
+  public static func sheetArea(_ squareMetres: Double) -> String {
+    grouped(squareMetres / squareMetresPerSquareFoot, places: 1).map { "\($0) sq ft" } ?? invalid
+  }
+
+  /// A floor area in square metres to one decimal with thousands separators: `75.0 m²`.
+  public static func sheetMetricArea(_ squareMetres: Double) -> String {
+    grouped(squareMetres, places: 1).map { "\($0) m\u{00B2}" } ?? invalid
+  }
+
+  /// `decimals` with a comma between each group of three whole digits.
+  static func grouped(_ value: Double, places: Int) -> String? {
+    guard let text = decimals(value, places: places) else { return nil }
+    let negative = text.hasPrefix("-")
+    let body = negative ? String(text.dropFirst()) : text
+    let parts = body.split(separator: ".", maxSplits: 1)
+    let whole = Array(parts[0])
+    var out = ""
+    for (index, digit) in whole.enumerated() {
+      if index > 0, (whole.count - index) % 3 == 0 { out.append(",") }
+      out.append(digit)
+    }
+    if parts.count > 1 { out += "." + parts[1] }
+    return (negative ? "-" : "") + out
+  }
+
   // MARK: Fixed formats
 
   public static func length(_ metres: Double, style: LengthStyle) -> String {

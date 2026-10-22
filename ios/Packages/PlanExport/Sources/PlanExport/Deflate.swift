@@ -195,7 +195,7 @@ enum CRC32 {
   }
 }
 
-/// PNG encoder (8-bit grayscale, or 8-bit RGB through a colour per gray level) with a `pHYs`
+/// PNG encoder (8-bit grayscale or 8-bit RGB) with a `pHYs`
 /// chunk for the resolution.
 public enum PNGEncoder {
   /// Encodes `pixels` (row-major, one byte per pixel, 0 black and 255 white).
@@ -213,28 +213,17 @@ public enum PNGEncoder {
     return file(width: width, height: height, colorType: 0, raw: raw, dpi: dpi)
   }
 
-  /// Encodes `pixels` (row-major gray levels, one byte per pixel) as 8-bit RGB, level `g` in
-  /// `colors[g]` (256 colours), so a gray raster prints in any palette. Rows are unfiltered:
-  /// on a large plan raster the Sub and Up filters, and a per-row choice, made larger files
-  /// with this Deflate and none was faster. `dpi` as for `encodeGrayscale`.
-  public static func encodeRGB(
-    width: Int, height: Int, pixels: [UInt8], colors: [DrawingColor], dpi: Int? = nil
-  ) -> Data {
-    precondition(width > 0 && height > 0 && pixels.count == width * height && colors.count == 256)
-    // R, G, B bytes of each level, rounded as `DrawingColor.hexString` rounds.
-    let table: [UInt8] = colors.flatMap { color in
-      [color.red, color.green, color.blue].map { UInt8((max(0, min(1, $0)) * 255).rounded()) }
-    }
-    // Each row is a 0 (no filter) byte and three bytes per pixel.
-    var raw = [UInt8](repeating: 0, count: (width * 3 + 1) * height)
-    var out = 0
-    for (index, level) in pixels.enumerated() {
-      if index % width == 0 { out += 1 }
-      let entry = Int(level) * 3
-      raw[out] = table[entry]
-      raw[out + 1] = table[entry + 1]
-      raw[out + 2] = table[entry + 2]
-      out += 3
+  /// Encodes `rgb` (row-major, interleaved R, G, B bytes) as 8-bit RGB (colour type 2). Rows
+  /// are unfiltered: on a large plan raster the Sub and Up filters, and a per-row choice, made
+  /// larger files with this Deflate and none was faster. `dpi` as for `encodeGrayscale`.
+  public static func encodeRGB(width: Int, height: Int, rgb: [UInt8], dpi: Int? = nil) -> Data {
+    precondition(width > 0 && height > 0 && rgb.count == width * height * 3)
+    let rowBytes = width * 3
+    var raw = [UInt8](repeating: 0, count: (rowBytes + 1) * height)
+    for row in 0..<height {
+      let start = row * (rowBytes + 1) + 1
+      let line = rgb[(row * rowBytes)..<((row + 1) * rowBytes)]
+      raw.replaceSubrange(start..<(start + rowBytes), with: line)
     }
     return file(width: width, height: height, colorType: 2, raw: raw, dpi: dpi)
   }

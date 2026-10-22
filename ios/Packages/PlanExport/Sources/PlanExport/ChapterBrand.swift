@@ -42,8 +42,32 @@ enum ChapterBrand {
   /// SVG font families: the brand fonts first, then close system fonts.
   static let sansFamily = "Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif"
   static let serifFamily = "Times, 'Times New Roman', serif"
+  /// SVG family of dimension strings and ids (Courier in the PDFs).
+  static let monoFamily = "'Courier New', Courier, monospace"
   /// SVG weight of bold sans text (Inter SemiBold, as the PDFs embed).
   static let boldWeight = "600"
+
+  /// Time zone of every printed date (the plan sheet's "Captured" row), the same as the
+  /// station's `REPORT_TIME_ZONE`, so the sheet and the spatial report print the same day.
+  static let printTimeZone = TimeZone(identifier: "America/New_York")!
+
+  /// The plan sheet's palette (Chapter Capture design tokens): the drawing ink #1F2429 (the
+  /// logo keeps the brand black), muted lines and captions, the table rule colour, the three
+  /// room fills, which print as three distinct greys (Rec. 709 luma 87.2, 90.6 and 94.0 %),
+  /// and the page colour.
+  enum Sheet {
+    static let ink = DrawingColor(hex: 0x1F2429)
+    static let muted = DrawingColor(hex: 0x6B6557)
+    static let line = DrawingColor(hex: 0xD9CCBC)
+    /// Habitable rooms.
+    static let nude = DrawingColor(hex: 0xE8DDD0)
+    /// Wet rooms.
+    static let wet = DrawingColor(hex: 0xEFE6DA)
+    /// Every other room.
+    static let ground = DrawingColor(hex: 0xF5EFE6)
+    /// The page, object boxes and window clears.
+    static let surface = DrawingColor(hex: 0xFAF5EE)
+  }
 }
 
 /// The Chapter logo, "chapter" over "RENOVATION", as filled vector paths.

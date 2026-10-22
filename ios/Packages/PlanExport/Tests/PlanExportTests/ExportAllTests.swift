@@ -37,7 +37,7 @@ final class ExportAllTests: XCTestCase {
       XCTAssertFalse(files.contains { $0.fileName == "spatial-report.pdf" }, capture.fixture)
       XCTAssertFalse(files.contains { $0.fileName == "plan.pdf" }, "renamed plan-sheet.pdf")
       let pdfs = files.filter { $0.mime == "application/pdf" }
-      XCTAssertEqual(pdfs.map(\.fileName), [PlanPDFWriter.fileName], capture.fixture)
+      XCTAssertEqual(pdfs.map(\.fileName), [PlanSheetWriter.fileName], capture.fixture)
     }
   }
 
@@ -79,42 +79,42 @@ final class ExportAllTests: XCTestCase {
       let png = try XCTUnwrap(files.first { $0.fileName == PNGWriter.fileName }, name)
       XCTAssertFalse(png.data.isEmpty, name)
     }
-    // The scene of plan.png and plan.svg is wide enough for the scale bar and its last label.
-    let geometry = try PlanGeometry(model: closet)
-    let scene = try PlanScene.build(
-      geometry: geometry, scaleDenominator: 50, units: .metric, includeScaleBar: true)
-    XCTAssertGreaterThanOrEqual(
-      scene.widthMM,
-      PlanScene.margin + PlanScene.scaleBarPaperLength + PlanScene.scaleBarEndClearance)
   }
 
   func testCanvasClipsStrokesAndTextWhollyOffIt() {
-    var canvas = GrayCanvas(width: 20, height: 10)
+    var canvas = RasterCanvas(width: 20, height: 10)
+    func line(_ a: (Double, Double), _ b: (Double, Double)) -> DrawingItem {
+      .shape(
+        DrawingShape(
+          path: DrawingPath(elements: [
+            .move(DrawingPoint(x: a.0, y: a.1)), .line(DrawingPoint(x: b.0, y: b.1)),
+          ]), stroke: DrawingStroke(color: DrawingColor(0, 0, 0), width: 1), layer: .wall))
+    }
+    func text(_ x: Double, _ y: Double, bold: Bool) -> DrawingItem {
+      .text(
+        DrawingText(
+          "2 M", position: DrawingPoint(x: x, y: y), size: 8, anchor: .center, bold: bold,
+          color: DrawingColor(0, 0, 0), layer: .roomLabel))
+    }
+    let identity: (DrawingPoint) -> Point2 = { Point2(x: $0.x, y: $0.y) }
     // Past the right, the bottom, the left and the top.
-    canvas.stroke(
-      from: Point2(x: 40, y: 2), to: Point2(x: 60, y: 2), width: 1, gray: 0)
-    canvas.stroke(
-      from: Point2(x: 2, y: 40), to: Point2(x: 8, y: 50), width: 1, gray: 0)
-    canvas.stroke(
-      from: Point2(x: -40, y: 2), to: Point2(x: -30, y: 2), width: 1, gray: 0)
-    canvas.stroke(
-      from: Point2(x: 2, y: -40), to: Point2(x: 8, y: -30), width: 1, gray: 0)
-    canvas.text(
-      "2 M", origin: Point2(x: 60, y: 5), emPixels: 8, rotation: 0, centered: true,
-      bold: false, gray: 0)
-    canvas.text(
-      "2 M", origin: Point2(x: 5, y: 60), emPixels: 8, rotation: 0, centered: false,
-      bold: true, gray: 0)
+    canvas.draw(
+      [
+        line((40, 2), (60, 2)), line((2, 40), (8, 50)), line((-40, 2), (-30, 2)),
+        line((2, -40), (8, -30)), text(60, 5, bold: false), text(5, 60, bold: true),
+      ], scale: 1, transform: identity)
     XCTAssertTrue(canvas.pixels.allSatisfy { $0 == 255 }, "nothing drawn")
     // A line that crosses the edge is drawn up to it.
-    canvas.stroke(from: Point2(x: 10, y: 5), to: Point2(x: 40, y: 5), width: 1, gray: 0)
-    XCTAssertTrue(canvas.pixels.contains { $0 < 128 })
+    canvas.draw([line((10, 5), (40, 5))], scale: 1, transform: identity)
+    XCTAssertTrue(canvas.grayPixels.contains { $0 < 128 })
   }
 
   func testGeneratorNamesFitTheManifestSchema() {
     XCTAssertEqual(PlanExportInfo.generator, "chapter-capture-ios/PlanExport")
+    // 2.0.0: the plan sheet, plan.png and plan.svg changed (plan-sheet §2); the web prints
+    // "Tabloid · 1 sheet" for a plan_pdf of 2.0.0 or later.
+    XCTAssertEqual(PlanExportInfo.generatorVersion, "2.0.0")
     XCTAssertLessThanOrEqual(PlanExportInfo.generator.count, 100)
-    XCTAssertFalse(PlanExportInfo.generatorVersion.isEmpty)
     XCTAssertLessThanOrEqual(PlanExportInfo.generatorVersion.count, 50)
   }
 }

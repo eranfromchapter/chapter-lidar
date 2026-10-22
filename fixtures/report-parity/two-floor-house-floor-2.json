@@ -1,0 +1,92 @@
+{
+  "areaKey" : "floor-2",
+  "captureId" : "e236b82f-337b-45f5-ab4b-6a8f3eb64ffc",
+  "fixture" : "two-floor-house",
+  "label" : "Floor 2",
+  "mode" : "floor",
+  "north" : {
+    "dominantAngleDeg" : 0,
+    "reason" : "not_calibrated",
+    "report" : {
+      "box" : "Orientation: not verified",
+      "caption" : "Compass not calibrated",
+      "kind" : "not_verified"
+    },
+    "state" : "not_verified",
+    "unturned" : {
+      "box" : "Orientation: not verified",
+      "caption" : "Compass not calibrated",
+      "kind" : "not_verified"
+    }
+  },
+  "rooms" : [
+    {
+      "bbox" : {
+        "acrossM" : 6,
+        "alongM" : 5,
+        "angleRadians" : 0
+      },
+      "ceiling" : {
+        "approximate" : false,
+        "heightM" : 2.5,
+        "reasons" : [
+
+        ]
+      },
+      "fillClass" : "other",
+      "floorAreaM2" : 27,
+      "formatted" : {
+        "acrossDimension" : "19' 8.2\"",
+        "alongDimension" : "16' 4.9\"",
+        "boundingBox" : "19' 8.2\" × 16' 4.9\"",
+        "ceiling" : "8' 2.4\"",
+        "floorArea" : "290.6 sq ft",
+        "floorAreaMetric" : "27.0 m²",
+        "inscribed" : "16' 4.9\" × 16' 4.9\"",
+        "perimeter" : "72' 2.1\""
+      },
+      "id" : "room-1",
+      "inscribed" : {
+        "acrossM" : 5,
+        "alongM" : 5
+      },
+      "label" : "Upper Hall",
+      "objects" : [
+
+      ],
+      "openings" : [
+        {
+          "areaM2" : 1.44,
+          "heightM" : 1.2,
+          "id" : "window-1",
+          "type" : "window",
+          "widthM" : 1.2
+        },
+        {
+          "areaM2" : 1.44,
+          "heightM" : 1.2,
+          "id" : "window-2",
+          "type" : "window",
+          "widthM" : 1.2
+        }
+      ],
+      "perimeterM" : 22,
+      "volumeM3" : 67.5,
+      "wallAreaExclM2" : 42.12,
+      "wallAreaInclM2" : 45
+    }
+  ],
+  "totals" : {
+    "bathrooms" : 0,
+    "bedrooms" : 0,
+    "floorArea" : "290.6 sq ft · 27.0 m²",
+    "livableAreaM2" : 27,
+    "perimeterM" : 22,
+    "roomCount" : 1,
+    "scannedRooms" : 1,
+    "volumeIsApproximate" : false,
+    "volumeM3" : 67.5,
+    "wallAreaM2" : 42.12,
+    "windowAreaM2" : 2.88
+  }
+}

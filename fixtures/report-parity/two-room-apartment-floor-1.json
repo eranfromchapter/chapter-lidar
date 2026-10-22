@@ -1,0 +1,177 @@
+{
+  "areaKey" : "floor-1",
+  "captureId" : "80d5ff80-5172-40f3-acc9-5cf59acdfd61",
+  "fixture" : "two-room-apartment",
+  "label" : "Floor 1",
+  "mode" : "floor",
+  "north" : {
+    "dominantAngleDeg" : 0,
+    "report" : {
+      "angleCcw" : 87.5,
+      "approximate" : true,
+      "kind" : "arrow",
+      "lines" : [
+        "Approx. north · compass",
+        "±12° · magnetic"
+      ]
+    },
+    "state" : "approximate",
+    "unturned" : {
+      "angleCcw" : 87.5,
+      "approximate" : true,
+      "kind" : "arrow",
+      "lines" : [
+        "Approx. north · compass",
+        "±12° · magnetic"
+      ]
+    }
+  },
+  "rooms" : [
+    {
+      "bbox" : {
+        "acrossM" : 4,
+        "alongM" : 5,
+        "angleRadians" : 0
+      },
+      "ceiling" : {
+        "approximate" : false,
+        "heightM" : 2.7,
+        "reasons" : [
+
+        ]
+      },
+      "fillClass" : "habitable",
+      "floorAreaM2" : 20,
+      "formatted" : {
+        "acrossDimension" : "13' 1.5\"",
+        "alongDimension" : "16' 4.9\"",
+        "boundingBox" : "16' 4.9\" × 13' 1.5\"",
+        "ceiling" : "8' 10.3\"",
+        "floorArea" : "215.3 sq ft",
+        "floorAreaMetric" : "20.0 m²",
+        "inscribed" : "16' 4.9\" × 13' 1.5\"",
+        "perimeter" : "59' 0.7\""
+      },
+      "id" : "room-1",
+      "inscribed" : {
+        "acrossM" : 4,
+        "alongM" : 5
+      },
+      "label" : "Living Room",
+      "objects" : [
+        {
+          "category" : "sofa",
+          "id" : "object-1",
+          "sizeM" : {
+            "depthM" : 0.9,
+            "heightM" : 0.8,
+            "widthM" : 2
+          }
+        }
+      ],
+      "openings" : [
+        {
+          "areaM2" : 1.8900000000000001,
+          "heightM" : 2.1,
+          "id" : "door-1",
+          "type" : "door",
+          "widthM" : 0.9
+        },
+        {
+          "areaM2" : 1.7999999999999998,
+          "heightM" : 1.2,
+          "id" : "window-1",
+          "type" : "window",
+          "widthM" : 1.5
+        },
+        {
+          "areaM2" : 2.1,
+          "heightM" : 2.1,
+          "id" : "opening-1",
+          "type" : "opening",
+          "widthM" : 1
+        }
+      ],
+      "perimeterM" : 18,
+      "volumeM3" : 54,
+      "wallAreaExclM2" : 42.81,
+      "wallAreaInclM2" : 48.6
+    },
+    {
+      "bbox" : {
+        "acrossM" : 4,
+        "alongM" : 3,
+        "angleRadians" : 0
+      },
+      "ceiling" : {
+        "approximate" : false,
+        "heightM" : 2.7,
+        "reasons" : [
+
+        ]
+      },
+      "fillClass" : "habitable",
+      "floorAreaM2" : 12,
+      "formatted" : {
+        "acrossDimension" : "13' 1.5\"",
+        "alongDimension" : "9' 10.1\"",
+        "boundingBox" : "13' 1.5\" × 9' 10.1\"",
+        "ceiling" : "8' 10.3\"",
+        "floorArea" : "129.2 sq ft",
+        "floorAreaMetric" : "12.0 m²",
+        "inscribed" : "13' 1.5\" × 9' 10.1\"",
+        "perimeter" : "45' 11.2\""
+      },
+      "id" : "room-2",
+      "inscribed" : {
+        "acrossM" : 4,
+        "alongM" : 3
+      },
+      "label" : "Bedroom",
+      "objects" : [
+        {
+          "category" : "bed",
+          "id" : "object-2",
+          "sizeM" : {
+            "depthM" : 2,
+            "heightM" : 0.5,
+            "widthM" : 1.6
+          }
+        }
+      ],
+      "openings" : [
+        {
+          "areaM2" : 1.8900000000000001,
+          "heightM" : 2.1,
+          "id" : "door-1",
+          "type" : "door",
+          "widthM" : 0.9
+        },
+        {
+          "areaM2" : 1.44,
+          "heightM" : 1.2,
+          "id" : "window-2",
+          "type" : "window",
+          "widthM" : 1.2
+        }
+      ],
+      "perimeterM" : 14,
+      "volumeM3" : 32.400000000000006,
+      "wallAreaExclM2" : 34.470000000000006,
+      "wallAreaInclM2" : 37.800000000000004
+    }
+  ],
+  "totals" : {
+    "bathrooms" : 0,
+    "bedrooms" : 0,
+    "floorArea" : "344.4 sq ft · 32.0 m²",
+    "livableAreaM2" : 32,
+    "perimeterM" : 32,
+    "roomCount" : 2,
+    "scannedRooms" : 2,
+    "volumeIsApproximate" : false,
+    "volumeM3" : 86.4,
+    "wallAreaM2" : 77.28,
+    "windowAreaM2" : 3.2399999999999998
+  }
+}

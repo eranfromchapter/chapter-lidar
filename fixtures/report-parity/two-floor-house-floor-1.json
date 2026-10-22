@@ -1,0 +1,107 @@
+{
+  "areaKey" : "floor-1",
+  "captureId" : "ba028a66-d76e-4616-b0d6-e3e04e5c9535",
+  "fixture" : "two-floor-house",
+  "label" : "Floor 1",
+  "mode" : "floor",
+  "north" : {
+    "dominantAngleDeg" : 0,
+    "report" : {
+      "angleCcw" : 212.4,
+      "approximate" : false,
+      "kind" : "arrow",
+      "lines" : [
+        "True north · compass",
+        "±8° · 212°"
+      ]
+    },
+    "state" : "verified",
+    "unturned" : {
+      "angleCcw" : 212.4,
+      "approximate" : false,
+      "kind" : "arrow",
+      "lines" : [
+        "True north · compass",
+        "±8° · 212°"
+      ]
+    }
+  },
+  "rooms" : [
+    {
+      "bbox" : {
+        "acrossM" : 5,
+        "alongM" : 6,
+        "angleRadians" : 0
+      },
+      "ceiling" : {
+        "approximate" : false,
+        "heightM" : 2.7,
+        "reasons" : [
+
+        ]
+      },
+      "fillClass" : "habitable",
+      "floorAreaM2" : 30,
+      "formatted" : {
+        "acrossDimension" : "16' 4.9\"",
+        "alongDimension" : "19' 8.2\"",
+        "boundingBox" : "19' 8.2\" × 16' 4.9\"",
+        "ceiling" : "8' 10.3\"",
+        "floorArea" : "322.9 sq ft",
+        "floorAreaMetric" : "30.0 m²",
+        "inscribed" : "19' 8.2\" × 16' 4.9\"",
+        "perimeter" : "72' 2.1\""
+      },
+      "id" : "room-1",
+      "inscribed" : {
+        "acrossM" : 5,
+        "alongM" : 6
+      },
+      "label" : "Living Room",
+      "objects" : [
+        {
+          "category" : "stairs",
+          "id" : "object-1",
+          "sizeM" : {
+            "depthM" : 3,
+            "heightM" : 2.7,
+            "widthM" : 1
+          }
+        }
+      ],
+      "openings" : [
+        {
+          "areaM2" : 1.8900000000000001,
+          "heightM" : 2.1,
+          "id" : "door-1",
+          "type" : "door",
+          "widthM" : 0.9
+        },
+        {
+          "areaM2" : 1.44,
+          "heightM" : 1.2,
+          "id" : "window-1",
+          "type" : "window",
+          "widthM" : 1.2
+        }
+      ],
+      "perimeterM" : 22,
+      "volumeM3" : 81,
+      "wallAreaExclM2" : 56.07000000000001,
+      "wallAreaInclM2" : 59.400000000000006
+    }
+  ],
+  "totals" : {
+    "bathrooms" : 0,
+    "bedrooms" : 0,
+    "floorArea" : "322.9 sq ft · 30.0 m²",
+    "livableAreaM2" : 30,
+    "perimeterM" : 22,
+    "roomCount" : 1,
+    "scannedRooms" : 1,
+    "volumeIsApproximate" : false,
+    "volumeM3" : 81,
+    "wallAreaM2" : 56.07000000000001,
+    "windowAreaM2" : 1.44
+  }
+}

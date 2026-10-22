@@ -5,8 +5,13 @@ import Foundation
 public enum PlanExportInfo {
   /// Manifest `generator` value.
   public static let generator = "chapter-capture-ios/PlanExport"
-  /// Manifest `generatorVersion` value.
-  public static let generatorVersion = "1.0.0"
+  /// Manifest `generatorVersion` value: 2.0.0 since the plan sheet, plan.png and plan.svg became
+  /// the Tabloid sheet and its drawing.
+  public static let generatorVersion = "2.0.0"
+  /// Version in the PDF Creator of the colour Floorplan (`FloorplanWriter`, `FloorPlanDrawing`
+  /// .pdf), which is not a package file and did not change with the plan sheet: its pages stay
+  /// byte for byte what `tools/plan-render` and the scan browser have always written.
+  static let floorplanVersion = "1.0.0"
 }
 
 /// One written file with what the package manifest needs to describe it.
@@ -42,8 +47,6 @@ public enum PlanExportError: Error, Equatable, CustomStringConvertible {
   case invalidGeometry(String)
   /// The model has no walls, rooms or objects to draw.
   case noPlanGeometry
-  /// The plan does not fit an A3 sheet even at the coarsest supported scale.
-  case planTooLarge
 
   public var description: String {
     switch self {
@@ -55,8 +58,6 @@ public enum PlanExportError: Error, Equatable, CustomStringConvertible {
       return "Invalid geometry: \(detail)"
     case .noPlanGeometry:
       return "The model has no walls, rooms or objects to draw."
-    case .planTooLarge:
-      return "The plan does not fit an A3 sheet at any supported scale."
     }
   }
 }

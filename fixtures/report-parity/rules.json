@@ -1,0 +1,319 @@
+{
+  "areas" : [
+    {
+      "area" : "0.0 sq ft",
+      "metric" : "0.0 m²",
+      "squareMetres" : 0
+    },
+    {
+      "area" : "13.9 sq ft",
+      "metric" : "1.3 m²",
+      "squareMetres" : 1.291
+    },
+    {
+      "area" : "129.2 sq ft",
+      "metric" : "12.0 m²",
+      "squareMetres" : 12
+    },
+    {
+      "area" : "187.4 sq ft",
+      "metric" : "17.4 m²",
+      "squareMetres" : 17.409293
+    },
+    {
+      "area" : "807.0 sq ft",
+      "metric" : "75.0 m²",
+      "squareMetres" : 74.97
+    },
+    {
+      "area" : "2,194.8 sq ft",
+      "metric" : "203.9 m²",
+      "squareMetres" : 203.9
+    },
+    {
+      "area" : "10,763.9 sq ft",
+      "metric" : "1,000.0 m²",
+      "squareMetres" : 1000
+    },
+    {
+      "area" : "0.1 sq ft",
+      "metric" : "0.0 m²",
+      "squareMetres" : 0.0046452
+    }
+  ],
+  "description" : "Room fill rule (plan-sheet 3.4.1 + exterior captures, critique R-35), with the 1.0.0 type taken from the label when the model has none (FloorPlanStyle.type(fromLabel:)); lengths UnitFormatter feet-inches to 0.1 in and the plan sheet dimension (inches alone under a foot); areas in sq ft and m2 to one decimal with thousands separators.",
+  "fill" : [
+    {
+      "fillClass" : "habitable",
+      "label" : "Bedroom 2",
+      "mode" : "floor",
+      "objects" : [
+
+      ],
+      "type" : "bedroom"
+    },
+    {
+      "fillClass" : "habitable",
+      "label" : "Living Room",
+      "mode" : "floor",
+      "objects" : [
+
+      ]
+    },
+    {
+      "fillClass" : "habitable",
+      "label" : "Study",
+      "mode" : "floor",
+      "objects" : [
+
+      ]
+    },
+    {
+      "fillClass" : "habitable",
+      "label" : "Lounge",
+      "mode" : "floor",
+      "objects" : [
+
+      ]
+    },
+    {
+      "fillClass" : "wet",
+      "label" : "Bathroom",
+      "mode" : "floor",
+      "objects" : [
+
+      ],
+      "type" : "bathroom"
+    },
+    {
+      "fillClass" : "wet",
+      "label" : "Kitchen",
+      "mode" : "floor",
+      "objects" : [
+
+      ]
+    },
+    {
+      "fillClass" : "wet",
+      "label" : "Laundry",
+      "mode" : "floor",
+      "objects" : [
+
+      ],
+      "type" : "laundry"
+    },
+    {
+      "fillClass" : "wet",
+      "label" : "WC",
+      "mode" : "floor",
+      "objects" : [
+
+      ]
+    },
+    {
+      "fillClass" : "wet",
+      "label" : "Shower",
+      "mode" : "floor",
+      "objects" : [
+
+      ]
+    },
+    {
+      "fillClass" : "wet",
+      "label" : "Shower",
+      "mode" : "floor",
+      "objects" : [
+
+      ],
+      "type" : "bathroom"
+    },
+    {
+      "fillClass" : "wet",
+      "label" : "Shower",
+      "mode" : "floor",
+      "objects" : [
+
+      ],
+      "type" : "closet"
+    },
+    {
+      "fillClass" : "other",
+      "label" : "Closet",
+      "mode" : "floor",
+      "objects" : [
+        "toilet"
+      ],
+      "type" : "closet"
+    },
+    {
+      "fillClass" : "other",
+      "label" : "Pantry",
+      "mode" : "floor",
+      "objects" : [
+        "stove"
+      ]
+    },
+    {
+      "fillClass" : "other",
+      "label" : "Hallway",
+      "mode" : "floor",
+      "objects" : [
+
+      ],
+      "type" : "hallway"
+    },
+    {
+      "fillClass" : "other",
+      "label" : "Room 3",
+      "mode" : "floor",
+      "objects" : [
+
+      ]
+    },
+    {
+      "fillClass" : "habitable",
+      "label" : "Room 3",
+      "mode" : "floor",
+      "objects" : [
+        "bed"
+      ]
+    },
+    {
+      "fillClass" : "wet",
+      "label" : "Room 3",
+      "mode" : "floor",
+      "objects" : [
+        "toilet"
+      ],
+      "type" : "other"
+    },
+    {
+      "fillClass" : "wet",
+      "label" : "Room 4",
+      "mode" : "floor",
+      "objects" : [
+        "washer_dryer",
+        "bed"
+      ]
+    },
+    {
+      "fillClass" : "other",
+      "label" : "Room 5",
+      "mode" : "floor",
+      "objects" : [
+        "storage",
+        "sofa"
+      ]
+    },
+    {
+      "fillClass" : "outdoor",
+      "label" : "Balcony",
+      "mode" : "floor",
+      "objects" : [
+
+      ]
+    },
+    {
+      "fillClass" : "outdoor",
+      "label" : "Roof terrace",
+      "mode" : "floor",
+      "objects" : [
+
+      ],
+      "type" : "living_room"
+    },
+    {
+      "fillClass" : "outdoor",
+      "label" : "Bedroom",
+      "mode" : "exterior",
+      "objects" : [
+
+      ],
+      "type" : "bedroom"
+    },
+    {
+      "fillClass" : "habitable",
+      "label" : "Room Mexico",
+      "mode" : "room",
+      "objects" : [
+        "bed"
+      ],
+      "type" : "bedroom"
+    },
+    {
+      "fillClass" : "habitable",
+      "label" : "Guest suite",
+      "mode" : "floor",
+      "objects" : [
+        "bed"
+      ]
+    }
+  ],
+  "lengths" : [
+    {
+      "dimension" : "0.0\"",
+      "length" : "0' 0.0\"",
+      "metres" : 0
+    },
+    {
+      "dimension" : "1.0\"",
+      "length" : "0' 1.0\"",
+      "metres" : 0.0254
+    },
+    {
+      "dimension" : "5.1\"",
+      "length" : "0' 5.1\"",
+      "metres" : 0.12954
+    },
+    {
+      "dimension" : "1' 0.0\"",
+      "length" : "1' 0.0\"",
+      "metres" : 0.303784
+    },
+    {
+      "dimension" : "1' 0.0\"",
+      "length" : "1' 0.0\"",
+      "metres" : 0.3048
+    },
+    {
+      "dimension" : "4' 0.0\"",
+      "length" : "4' 0.0\"",
+      "metres" : 1.2192
+    },
+    {
+      "dimension" : "10' 9.9\"",
+      "length" : "10' 9.9\"",
+      "metres" : 3.299
+    },
+    {
+      "dimension" : "13' 1.5\"",
+      "length" : "13' 1.5\"",
+      "metres" : 4
+    },
+    {
+      "dimension" : "14' 1.5\"",
+      "length" : "14' 1.5\"",
+      "metres" : 4.3048
+    },
+    {
+      "dimension" : "20' 5.6\"",
+      "length" : "20' 5.6\"",
+      "metres" : 6.237
+    },
+    {
+      "dimension" : "35' 1.3\"",
+      "length" : "35' 1.3\"",
+      "metres" : 10.7
+    },
+    {
+      "dimension" : "0.1\"",
+      "length" : "0' 0.1\"",
+      "metres" : 0.00127
+    },
+    {
+      "dimension" : "0.1\"",
+      "length" : "0' 0.1\"",
+      "metres" : 0.00127001
+    }
+  ]
+}

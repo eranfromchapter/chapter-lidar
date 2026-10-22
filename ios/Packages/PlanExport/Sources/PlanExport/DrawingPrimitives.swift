@@ -158,7 +158,26 @@ public enum DrawingTextAnchor: String, Hashable, Sendable {
   case trailing
 }
 
-/// One line of text in Inter (the Chapter sans), or in Times when `serif` is true (titles).
+/// The fonts of the plans: Inter (the Chapter sans, embedded in every PDF) in its two weights,
+/// Times for titles and the tagline, and Courier for ids, dimensions and scale labels (PDF
+/// base-14 fonts, WinAnsi).
+public enum DrawingFont: String, CaseIterable, Hashable, Sendable {
+  case interRegular
+  case interSemiBold
+  case timesRoman
+  case timesItalic
+  case courier
+
+  /// Inter SemiBold when `bold`, Times-Roman when `serif` (whatever `bold`), else Inter Regular.
+  init(bold: Bool, serif: Bool) {
+    self = serif ? .timesRoman : bold ? .interSemiBold : .interRegular
+  }
+
+  var isSerif: Bool { self == .timesRoman || self == .timesItalic }
+}
+
+/// One line of text in one of the plan fonts (`DrawingFont`): Inter by default, Times for
+/// titles, Courier for dimensions and ids.
 public struct DrawingText: Hashable, Sendable {
   public var string: String
   /// Baseline point at the anchor, plan millimetres.
@@ -168,26 +187,53 @@ public struct DrawingText: Hashable, Sendable {
   /// Counter-clockwise turn about `position`, degrees.
   public var rotationDegrees: Double
   public var anchor: DrawingTextAnchor
-  public var bold: Bool
-  /// Times instead of Inter; `bold` is ignored.
-  public var serif: Bool
+  public var font: DrawingFont
   /// Extra space after each character, plan millimetres.
   public var letterSpacing: Double
   public var color: DrawingColor
   public var layer: DrawingLayer
+
+  /// Inter SemiBold. Setting it switches between the two Inter weights; a Times or Courier
+  /// text keeps its font.
+  public var bold: Bool {
+    get { font == .interSemiBold }
+    set {
+      if newValue, font == .interRegular { font = .interSemiBold }
+      if !newValue, font == .interSemiBold { font = .interRegular }
+    }
+  }
+
+  /// Times (Roman or Italic). Setting it true sets Times-Roman; false sets Inter Regular.
+  public var serif: Bool {
+    get { font.isSerif }
+    set {
+      if newValue, !font.isSerif { font = .timesRoman }
+      if !newValue, font.isSerif { font = .interRegular }
+    }
+  }
 
   public init(
     _ string: String, position: DrawingPoint, size: Double, rotationDegrees: Double = 0,
     anchor: DrawingTextAnchor = .center, bold: Bool = false, serif: Bool = false,
     letterSpacing: Double = 0, color: DrawingColor, layer: DrawingLayer
   ) {
+    self.init(
+      string, position: position, size: size, rotationDegrees: rotationDegrees, anchor: anchor,
+      font: DrawingFont(bold: bold, serif: serif), letterSpacing: letterSpacing, color: color,
+      layer: layer)
+  }
+
+  public init(
+    _ string: String, position: DrawingPoint, size: Double, rotationDegrees: Double = 0,
+    anchor: DrawingTextAnchor = .center, font: DrawingFont, letterSpacing: Double = 0,
+    color: DrawingColor, layer: DrawingLayer
+  ) {
     self.string = string
     self.position = position
     self.size = size
     self.rotationDegrees = rotationDegrees
     self.anchor = anchor
-    self.bold = bold
-    self.serif = serif
+    self.font = font
     self.letterSpacing = letterSpacing
     self.color = color
     self.layer = layer
@@ -195,7 +241,7 @@ public struct DrawingText: Hashable, Sendable {
 
   /// Width from the first glyph's start to the last glyph's end, plan millimetres.
   var width: Double {
-    FontMetrics.width(string, size: size, bold: bold, serif: serif)
+    FontMetrics.width(string, size: size, font: font)
       + letterSpacing * Double(max(0, string.unicodeScalars.count - 1))
   }
 }
