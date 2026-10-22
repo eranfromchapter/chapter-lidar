@@ -3,7 +3,9 @@
 // 1. Opens the publication row (one per package revision). Already published for this verdict:
 //    nothing to do.
 // 2. Plans the files (plan.ts): uploads into Capture/... folders, station links for the rest.
-//    Links are recorded at once.
+//    Reads the report's sources (capture models, field controls, photos) and renders the
+//    spatial report (report/), hands it to onReportRendered (the worker stores it) and records
+//    the links.
 // 3. Up to maxAttempts attempts, with exponential backoff between them (429, 5xx, network
 //    errors and a failed verification are retried; any other HUB answer fails at once):
 //    - for every upload not yet recorded: look it up by document search first (an earlier
@@ -22,13 +24,18 @@ import {
   REPORT_CONTENT_TYPE,
   planPublication,
   type PlannedUpload,
+  type PublicationPlan,
   type PublishPackage,
 } from "./plan.js";
-import { renderVerdictReport, type ReportFile } from "./report.js";
+import { renderSpatialReport, type RenderedReport, type ReportFile } from "./report.js";
+import { DEFAULT_REPORT_TIME_ZONE } from "./report/format.js";
+import { loadReportSources } from "./report/sources.js";
 import { fileKey, type PublicationStore, type PublishedFile } from "./store.js";
 import type { HubApi, HubLogger } from "./types.js";
 
 export const DEFAULT_MAX_ATTEMPTS = 5;
+/** Role of the spatial report's entry in hub_publications.files (older rows: verdict_report). */
+export const SPATIAL_REPORT_ROLE = "spatial_report";
 export const DEFAULT_BASE_DELAY_MS = 2_000;
 export const DEFAULT_MAX_DELAY_MS = 30_000;
 
@@ -67,10 +74,40 @@ export interface HubPublisherOptions {
   readonly sleep?: (ms: number) => Promise<void>;
   readonly now?: () => Date;
   readonly logger?: HubLogger;
+  /** IANA zone of the spatial report's printed dates (REPORT_TIME_ZONE). */
+  readonly reportTimeZone?: string;
+  /**
+   * Called with the rendered spatial report before anything is uploaded (the worker stores it
+   * for the web review). A throw leaves publish() as it is, like a store failure.
+   */
+  readonly onReportRendered?: (report: RenderedReport, verdict: Verdict) => Promise<void>;
+  /** Budget of the report's reduced photos (tests lower it). */
+  readonly reportPhotoBudgetBytes?: number;
 }
 
 interface UploadItem extends PlannedUpload {
   readonly verdictId?: string;
+}
+
+/** Where each file of a publication plan is, for the report's package record. */
+export function reportFilesOf(plan: PublicationPlan): ReportFile[] {
+  return plan.files.map((file) =>
+    file.kind === "upload"
+      ? {
+          path: file.path ?? file.name,
+          role: file.role ?? "manifest",
+          bytes: file.bytes,
+          sha256: file.sha256,
+          location: { kind: "hub", folder: file.folder, name: file.name },
+        }
+      : {
+          path: file.path,
+          role: file.role,
+          bytes: file.bytes,
+          sha256: file.sha256,
+          location: { kind: "link", url: file.url, reason: file.reason },
+        },
+  );
 }
 
 function sha256Hex(data: Uint8Array): string {
@@ -122,6 +159,9 @@ export class HubPublisher {
   readonly #sleep: (ms: number) => Promise<void>;
   readonly #now: () => Date;
   readonly #logger: HubLogger | undefined;
+  readonly #reportTimeZone: string;
+  readonly #onReportRendered: HubPublisherOptions["onReportRendered"];
+  readonly #photoBudgetBytes: number | undefined;
 
   constructor(options: HubPublisherOptions) {
     this.#hub = options.hub;
@@ -135,6 +175,9 @@ export class HubPublisher {
     this.#sleep = options.sleep ?? defaultSleep;
     this.#now = options.now ?? (() => new Date());
     this.#logger = options.logger;
+    this.#reportTimeZone = options.reportTimeZone ?? DEFAULT_REPORT_TIME_ZONE;
+    this.#onReportRendered = options.onReportRendered;
+    this.#photoBudgetBytes = options.reportPhotoBudgetBytes;
     if (!Number.isSafeInteger(this.#maxAttempts) || this.#maxAttempts < 1) {
       throw new RangeError("maxAttempts must be a positive integer");
     }
@@ -175,40 +218,45 @@ export class HubPublisher {
 
     let uploads: UploadItem[];
     let report: Buffer;
+    let rendered: RenderedReport;
     const links: PublishedFile[] = [];
+    let plan: PublicationPlan;
     try {
-      const plan = planPublication(pkg, verdict.verdictId, {
+      plan = planPublication(pkg, verdict.verdictId, {
         reviewBaseUrl: this.#reviewBaseUrl,
         maxUploadBytes: this.#maxUploadBytes,
       });
-      const reportFiles: ReportFile[] = plan.files.map((file) =>
-        file.kind === "upload"
-          ? {
-              path: file.path ?? file.name,
-              role: file.role ?? "manifest",
-              bytes: file.bytes,
-              sha256: file.sha256,
-              location: { kind: "hub", folder: file.folder, name: file.name },
-            }
-          : {
-              path: file.path,
-              role: file.role,
-              bytes: file.bytes,
-              sha256: file.sha256,
-              location: { kind: "link", url: file.url, reason: file.reason },
-            },
-      );
-      report = await renderVerdictReport({
+    } catch (error) {
+      return this.#failAtOnce(pkg.packageId, error);
+    }
+    // The report's sources are read like any upload: a storage failure leaves publish() (the
+    // caller retries it), an integrity failure ends the caller's job.
+    const sources = await loadReportSources(
+      {
+        files: pkg.files,
+        ...(request.captureRecord === undefined ? {} : { captureRecord: request.captureRecord }),
+        readFile: (path) => request.readFile(path),
+      },
+      this.#photoBudgetBytes === undefined ? {} : { photoBudgetBytes: this.#photoBudgetBytes },
+    );
+    try {
+      rendered = await renderSpatialReport({
         verdict,
         packageId: pkg.packageId,
         dealId: pkg.dealId,
         ...(request.captureRecord === undefined ? {} : { captureRecord: request.captureRecord }),
         reportLocation: plan.report,
-        files: reportFiles,
+        files: reportFilesOf(plan),
         maxUploadBytes: this.#maxUploadBytes,
+        reviewBaseUrl: this.#reviewBaseUrl,
+        timeZone: this.#reportTimeZone,
+        ...(pkg.sealedAt === undefined ? {} : { sealedAt: pkg.sealedAt }),
+        manifestFileCount: pkg.manifestFileCount ?? pkg.files.length,
+        ...sources,
       });
+      report = rendered.bytes;
       if (report.byteLength > this.#maxUploadBytes) {
-        throw new HubError("conflict", "The verdict report is larger than the HUB upload limit");
+        throw new HubError("conflict", "The spatial report is larger than the HUB upload limit");
       }
       uploads = [
         {
@@ -217,7 +265,7 @@ export class HubPublisher {
           folder: plan.report.folder,
           name: plan.report.name,
           contentType: REPORT_CONTENT_TYPE,
-          sha256: sha256Hex(report),
+          sha256: rendered.sha256,
           bytes: report.byteLength,
           verdictId: verdict.verdictId,
         },
@@ -242,18 +290,11 @@ export class HubPublisher {
         links.push(entry);
       }
     } catch (error) {
-      // Planning or rendering failed: retrying the same input cannot help.
-      const stored = publicationErrorOf(error);
-      await this.#store.countAttempt(pkg.packageId);
-      await this.#store.markFailed(pkg.packageId, stored);
-      return {
-        status: "publish_failed",
-        attempts: 1,
-        alreadyPublished: false,
-        uploaded: 0,
-        linked: 0,
-        error: stored,
-      };
+      // Rendering failed: retrying the same input cannot help.
+      return this.#failAtOnce(pkg.packageId, error);
+    }
+    if (this.#onReportRendered !== undefined) {
+      await this.#onReportRendered(rendered, verdict);
     }
 
     for (const entry of links) {
@@ -326,6 +367,21 @@ export class HubPublisher {
     }
   }
 
+  /** Planning or rendering failed: publish_failed at once, after one counted attempt. */
+  async #failAtOnce(packageId: string, error: unknown): Promise<PublishResult> {
+    const stored = publicationErrorOf(error);
+    await this.#store.countAttempt(packageId);
+    await this.#store.markFailed(packageId, stored);
+    return {
+      status: "publish_failed",
+      attempts: 1,
+      alreadyPublished: false,
+      uploaded: 0,
+      linked: 0,
+      error: stored,
+    };
+  }
+
   async #uploadMissing(
     request: PublishRequest,
     uploads: readonly UploadItem[],
@@ -351,7 +407,7 @@ export class HubPublisher {
         name: item.name,
         folder: item.folder,
         path: item.path ?? null,
-        role: item.source === "report" ? "verdict_report" : (item.role ?? "manifest"),
+        role: item.source === "report" ? SPATIAL_REPORT_ROLE : (item.role ?? "manifest"),
         sha256: item.sha256,
         bytes: item.bytes,
         ...(item.verdictId === undefined ? {} : { verdictId: item.verdictId }),

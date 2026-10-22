@@ -42,7 +42,7 @@ describe("publication idempotency", () => {
     const recovered =
       store.get(test.pkg.packageId)?.files.filter((f) => f.foundBySearch === true) ?? [];
     assert.equal(recovered.length, 1);
-    assert.equal(hub.storedUploads().length, 12);
+    assert.equal(hub.storedUploads().length, 10);
   });
 
   it("a re-run after a failed publication uploads only what is missing", async () => {
@@ -80,8 +80,8 @@ describe("publication idempotency", () => {
     assert.equal(result.status, "published");
     assertNoDuplicates(hub);
     assert.deepEqual(sortPairs(storedPairs(hub)), sortPairs(test.expectedUploads()));
-    // 5 + 1 refused + 7 remaining upload requests.
-    assert.equal(hub.requestsOf("upload").length, 13);
+    // 5 + 1 refused + 5 remaining upload requests.
+    assert.equal(hub.requestsOf("upload").length, 11);
   });
 
   it("a new verdict for the same package uploads only its new report", async () => {
@@ -98,7 +98,7 @@ describe("publication idempotency", () => {
     const result = await publisher.publish(test.request({ verdict: newVerdict }));
     assert.equal(result.status, "published");
     assert.equal(hub.documents.length, before + 1);
-    assert.ok(hub.documents.some((d) => d.name === `verdict-report-${newVerdict.verdictId}.pdf`));
+    assert.ok(hub.documents.some((d) => d.name === `spatial-report-${newVerdict.verdictId}.pdf`));
     assertNoDuplicates(hub);
     assert.equal(store.get(test.pkg.packageId)?.verdictId, newVerdict.verdictId);
   });
@@ -120,7 +120,7 @@ describe("publication idempotency", () => {
         return new Response(JSON.stringify({ message: "busy" }), { status: 503 });
       }
       const response = await originalHandle(request);
-      if (request.method === "POST" && hub.documents.length === 12) {
+      if (request.method === "POST" && hub.documents.length === 10) {
         uploadsDone = true;
       }
       return response;
@@ -128,8 +128,8 @@ describe("publication idempotency", () => {
     const result = await publisher.publish(test.request());
     assert.equal(result.status, "published");
     assert.equal(result.attempts, 2);
-    assert.equal(test.reads.length, 10);
-    assert.equal(hub.requestsOf("upload").length, 12);
+    assert.equal(test.reads.length, 11);
+    assert.equal(hub.requestsOf("upload").length, 10);
     assertNoDuplicates(hub);
   });
 });

@@ -101,7 +101,7 @@ describe("publication failure", () => {
     const error = store.get(test.pkg.packageId)?.error;
     assert.equal(error?.status, null);
     assert.match(error?.message ?? "", /not found by the HUB document search/);
-    assert.equal(hub.requestsOf("upload").length, 12, "each file uploaded once");
+    assert.equal(hub.requestsOf("upload").length, 10, "each file uploaded once");
   });
 
   it("never stores the service credential in the error", async () => {

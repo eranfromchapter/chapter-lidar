@@ -43,7 +43,7 @@ describe("large files", () => {
     assert.ok(!url.includes("sig="), "not a SAS link");
 
     // The report lists it with that link and says sign-in is required.
-    const report = hub.documents.find((d) => d.name.startsWith("verdict-report-"));
+    const report = hub.documents.find((d) => d.name.startsWith("spatial-report-"));
     assert.ok(report);
     const text = squash(await pdfText(report.data));
     assert.ok(text.includes(squash(url)), "report holds the station link");
@@ -69,7 +69,7 @@ describe("large files", () => {
     const test = makeTestPackage();
     const { hub, publisher } = harness();
     await publisher.publish(test.request());
-    const report = hub.documents.find((d) => d.name.startsWith("verdict-report-"));
+    const report = hub.documents.find((d) => d.name.startsWith("spatial-report-"));
     assert.ok(report);
     const text = squash(await pdfText(report.data));
     for (const file of test.pkg.files.filter((f) =>
