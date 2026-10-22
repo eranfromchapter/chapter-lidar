@@ -324,8 +324,12 @@ public struct FloorPlanDrawing: Sendable {
           rooms: rooms.map(\.polygon), walls: geometry.walls.filter { $0.length > 0 },
           openings: geometry.openings, exterior: options.exteriorWallThicknessM,
           interior: options.interiorWallThicknessM)
+      // Doors are gaps without a swing on the sheet: each opening goes through every wall
+      // band it stands in (the dimensions keep measuring the bands as laid out).
+      var sheetWalls = walls
+      sheetWalls.cutOpeningsThrough()
       let parts = FloorPlanDrawing.sheetParts(
-        model: model, geometry: geometry, rooms: rooms, walls: walls,
+        model: model, geometry: geometry, rooms: rooms, walls: sheetWalls,
         assumedWalls: assumedWalls, symbols: symbols, options: options,
         metrics: try metrics ?? PlanMetrics(model), rotation: theta)
       self.options = options
@@ -334,7 +338,7 @@ public struct FloorPlanDrawing: Sendable {
       self.bounds = FloorPlanDrawing.extent(of: parts.items)
       self.rotationDegrees = theta * 180 / .pi
       self.rooms = rooms
-      self.walls = walls
+      self.walls = sheetWalls
       self.symbols = symbols
       self.labels = parts.labels
       self.exteriorDimensions = []

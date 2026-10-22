@@ -112,6 +112,98 @@ final class PlanSheetRenditionTests: XCTestCase {
     XCTAssertTrue(shapes(drawing, .scaleBar).isEmpty)
   }
 
+  private func covered(_ p: Point2, by pieces: [[Point2]]) -> Bool {
+    pieces.contains { PlanGeometry.contains($0, p) }
+  }
+
+  /// Points inside an opening's gap: along it between 5 % and 95 % of its span, across it
+  /// within its faces (inset by 5 mm).
+  private func doorway(_ gap: WallLayout.Gap) -> [Point2] {
+    let u = (gap.b - gap.a).unit
+    let width = gap.a.distance(to: gap.b)
+    var points: [Point2] = []
+    for i in 0...8 {
+      let along = gap.a + u * (width * (0.05 + 0.9 * Double(i) / 8))
+      for j in 0...6 {
+        let across = gap.lo + 0.005 + (gap.hi - gap.lo - 0.01) * Double(j) / 6
+        points.append(along + gap.normal * across)
+      }
+    }
+    return points
+  }
+
+  /// A bathroom with a door into the corner where two rooms meet, each room 0.11 m off its
+  /// neighbours, so every room draws its own outside walls and they overlap (as in the 424
+  /// sample): the door goes through all of them.
+  private static func doorBetweenRoomsAWallApart() -> CaptureModel {
+    var model = Synthetic.rooms([
+      ("Bathroom", .bathroom, [(0, 0), (0, -3), (2, -3), (2, 0)]),
+      ("Room 1", .other, [(2.11, -1.5), (2.11, -3), (5, -3), (5, -1.5)]),
+      ("Room 5", .other, [(2.11, 0), (2.11, -1.39), (5, -1.39), (5, 0)]),
+    ])
+    // On the bathroom's right wall (from z -3 to 0), centred where Room 1 and Room 5 meet.
+    model.doors = [
+      CaptureModel.WallOpening(
+        id: "door-1", wallId: "wall-3", offsetM: 1.555, bottomM: 0, widthM: 0.9, heightM: 2)
+    ]
+    return model
+  }
+
+  func testADoorGoesThroughEveryWallItStandsIn() throws {
+    let model = Self.doorBetweenRoomsAWallApart()
+    let sheet = try drawing(model)
+    let gap = try XCTUnwrap(sheet.walls.gaps.first { $0.opening.kind == .door })
+    XCTAssertNotNil(gap.segment)
+    // The doorway spans both rooms' outside walls: the bathroom's 6 in band (x 2.0 to 2.1524)
+    // and the 6 in bands of Room 1 and Room 5 0.11 m away (x 1.9576 to 2.11), 0.1948 m in all;
+    // nothing of any wall is left in it, neither the band beside the one the door was placed
+    // in nor the wall between Room 1 and Room 5 that runs into it.
+    XCTAssertEqual(gap.hi - gap.lo, 0.1948, accuracy: 1e-6)
+    let pieces = sheet.walls.pieces
+    for p in doorway(gap) {
+      XCTAssertFalse(covered(p, by: pieces), "wall in the doorway at \(p)")
+    }
+    // The wall between Room 1 and Room 5 still runs up to the doorway.
+    let middle = (gap.a + gap.b) * 0.5
+    XCTAssertTrue(
+      covered(middle + gap.normal * (gap.hi + 0.03), by: pieces)
+        != covered(middle + gap.normal * (gap.lo - 0.03), by: pieces),
+      "one side of the doorway is the wall between the rooms, the other the bathroom floor")
+    // The threshold runs along the middle of the whole wall.
+    let threshold = try XCTUnwrap(shapes(sheet, .door).first)
+    for element in threshold.path.elements {
+      switch element {
+      case .move(let p), .line(let p):
+        let q = Point2(x: p.x / 1000, y: p.y / 1000)
+        XCTAssertEqual((q - gap.a).dot(gap.normal), (gap.lo + gap.hi) / 2, accuracy: 1e-6)
+      default:
+        XCTFail("a threshold is straight lines")
+      }
+    }
+    // Sheet only: the colour Floorplan keeps its walls as laid out (its door swing shows the
+    // doorway), so the band beside the bathroom's still crosses it there.
+    let colour = try FloorPlanDrawing(model: model)
+    let colourGap = try XCTUnwrap(colour.walls.gaps.first { $0.opening.kind == .door })
+    XCTAssertEqual(colourGap.hi - colourGap.lo, 0.1524, accuracy: 1e-9)
+    XCTAssertTrue(
+      doorway(gap).contains { covered($0, by: colour.walls.pieces) },
+      "the colour Floorplan's walls are unchanged")
+  }
+
+  func testEveryDoorAndPassageOfThe424SampleIsOpen() throws {
+    // Artboard 1b: 8 doors and 4 open passages, all drawn as gaps in the wall.
+    let sample = try Fixtures.sample424()
+    let sheet = try drawing(sample.model)
+    let openings = sheet.walls.gaps.filter { $0.opening.kind != .window }
+    XCTAssertEqual(openings.filter { $0.opening.kind == .door }.count, 8)
+    XCTAssertEqual(openings.filter { $0.opening.kind == .opening }.count, 4)
+    let pieces = sheet.walls.pieces
+    for gap in openings {
+      let blocked = doorway(gap).filter { covered($0, by: pieces) }
+      XCTAssertTrue(blocked.isEmpty, "\(gap.opening.id): wall in the doorway at \(blocked)")
+    }
+  }
+
   func testObjectsAreBoxesWithFourFixtureSymbols() throws {
     let drawing = try drawing(WalkthroughFixture.model)
     let symbols = shapes(drawing, .symbol)
@@ -244,6 +336,89 @@ final class PlanSheetRenditionTests: XCTestCase {
     XCTAssertLessThanOrEqual(names.count, 2)
     for name in names { XCTAssertEqual(name.size, pt(7.5), accuracy: 1e-9) }
     XCTAssertTrue(names.last!.string.hasSuffix("..."), "\(names.map(\.string))")
+  }
+
+  func testACrowdedRoomLabelKeepsOffObjectOutlines() throws {
+    // A 4' 9" x 7' 5" bathroom laid out as the real apartment scan's (1158bece): a bath across
+    // the far end, a toilet and a vanity with its sink along the right wall, and a tall
+    // wall-hung cabinet over them. The label's bounding box finds no free place, but its lines
+    // do: the name between the toilet and the vanity, the shorter area line beside the vanity.
+    var model = Synthetic.rooms([
+      ("Bathroom", .bathroom, [(0, 0), (0, -2.249), (1.455, -2.249), (1.455, 0)])
+    ])
+    func object(
+      _ id: String, _ category: ObjectCategory, x: (Double, Double), y: (Double, Double),
+      floor: Double = 0, height: Double = 0.85, low: Bool = false
+    ) -> CaptureModel.DetectedObject {
+      CaptureModel.DetectedObject(
+        id: id, category: category, roomId: "room-1",
+        box: CaptureModel.OrientedBox(
+          center: Vec3(x: (x.0 + x.1) / 2, y: floor + height / 2, z: -(y.0 + y.1) / 2),
+          sizeM: Vec3(x: x.1 - x.0, y: height, z: y.1 - y.0)),
+        confidence: low ? .low : nil)
+    }
+    model.objects = [
+      object("sink", .sink, x: (0.938, 1.349), y: (0.074, 0.593), low: true),
+      object("vanity", .storage, x: (0.898, 1.404), y: (0.0, 0.658), low: true),
+      object("toilet", .toilet, x: (0.762, 1.416), y: (0.882, 1.325)),
+      object("bath", .bathtub, x: (0.0, 1.455), y: (1.575, 2.249), height: 0.55, low: true),
+      object("cabinet", .storage, x: (1.168, 1.455), y: (0.0, 1.409), floor: 1.3, height: 0.6),
+    ]
+    let sheet = try drawing(model)
+    let texts = sheet.items.compactMap { item -> DrawingText? in
+      if case .text(let text) = item, text.layer == .roomLabel { return text }
+      return nil
+    }
+    XCTAssertEqual(texts.map(\.string), ["BATHROOM", "35.2 sq ft"])
+    // Each line's glyph box (plan metres), and between them a box as wide as the shorter.
+    func box(_ text: DrawingText) -> [Point2] {
+      let size = text.size / 1000
+      let width =
+        (FontMetrics.width(text.string, size: text.size, font: text.font)
+          + text.letterSpacing * Double(max(0, text.string.count - 1))) / 1000
+      let x = text.position.x / 1000
+      let baseline = text.position.y / 1000
+      return [
+        Point2(x: x - width / 2, y: baseline - 0.22 * size),
+        Point2(x: x + width / 2, y: baseline - 0.22 * size),
+        Point2(x: x + width / 2, y: baseline + 0.727 * size),
+        Point2(x: x - width / 2, y: baseline + 0.727 * size),
+      ]
+    }
+    let lines = texts.map(box)
+    let shorter = lines.map { $0[1].x - $0[0].x }.min()!
+    let between = [
+      Point2(x: texts[0].position.x / 1000 - shorter / 2, y: lines[1][2].y),
+      Point2(x: texts[0].position.x / 1000 + shorter / 2, y: lines[1][2].y),
+      Point2(x: texts[0].position.x / 1000 + shorter / 2, y: lines[0][0].y),
+      Point2(x: texts[0].position.x / 1000 - shorter / 2, y: lines[0][0].y),
+    ]
+    XCTAssertEqual(sheet.symbols.count, 5)
+    for part in lines + [between] {
+      for symbol in sheet.symbols {
+        let inside = part.allSatisfy { PlanGeometry.contains(symbol.footprint, $0) }
+        XCTAssertFalse(
+          Geo.convexOverlap(part, symbol.footprint) && (symbol.isFixture || !inside),
+          "the label crosses the \(symbol.category) at \(part)")
+      }
+    }
+    // Its bounding box would have crossed one: no place in the room is free for it.
+    let n = 50.0
+    let pointM = 25.4 / 72 * n / 1000
+    var layout = AnnotationLayout(
+      style: FloorPlanStyle(), units: UnitFormatter(system: .imperial), scaleDenominator: n,
+      symbols: sheet.symbols.filter { !$0.overhead }.map(\.footprint),
+      fixtures: sheet.symbols.filter { !$0.overhead && $0.isFixture }.map(\.footprint),
+      building: [], wallPieces: sheet.walls.pieces)
+    layout.outlines = sheet.symbols.map { Obstacle($0.footprint) }
+    let room = try XCTUnwrap(sheet.rooms.first)
+    let height = (0.727 + 0.22) * 7.5 * pointM + 11.25 * pointM
+    let halfWidth = (lines[0][1].x - lines[0][0].x) / 2
+    let whole = try XCTUnwrap(
+      layout.roomLabelSearch(
+        parts: [AnnotationLayout.LabelPart(dy: 0, halfWidth: halfWidth, halfHeight: height / 2)],
+        polygon: room.clear, grid: 120))
+    XCTAssertGreaterThan(whole.hits, 0)
   }
 
   func testTheColourFloorplanIsUntouchedByTheRendition() throws {

@@ -12,10 +12,15 @@
 #   --record   write the renders as the new goldens (after an intended change; review them
 #              next to artboards 1b and 1ac first)
 #
-# Renders in the pinned Debian image (Docker, poppler-utils and the URW base 35 fonts that
-# stand in for the standard Courier and Times), or with a local pdftoppm when Docker is not
-# installed (it says so: a different poppler or font set can move glyph edges). The
-# comparison is Python 3 with the standard library only.
+# The reference render is the pinned Debian image (Docker, poppler-utils and the URW base 35
+# fonts that stand in for the standard Times-Roman, Times-Italic and Courier, which the sheets
+# name but do not embed). Without Docker it renders with the local pdftoppm and pins the
+# stand-ins itself (a fontconfig file of its own, so the machine's font settings do not
+# matter): the URW base 35 fonts when they are installed (or in $PLAN_SHEET_URW_FONTS), else
+# on macOS its Times and Courier, with Times New Roman Italic for the italic (poppler draws
+# only the first face of a .ttc collection, so Times.ttc has no italic for it). It prints the
+# font each one maps to; goldens recorded with stand-ins other than URW are to be recorded
+# again in the reference image. The comparison is Python 3 with the standard library only.
 set -euo pipefail
 
 DEBIAN_IMAGE="debian:bookworm-20261005-slim"
@@ -28,7 +33,7 @@ for arg in "$@"; do
   case "${arg}" in
     --record) record=1 ;;
     -h | --help)
-      sed -n '2,20p' "${BASH_SOURCE[0]}"
+      sed -n '2,25p' "${BASH_SOURCE[0]}"
       exit 0
       ;;
     *) output="$(cd "${arg}" && pwd)" ;;
@@ -84,6 +89,56 @@ if command -v docker >/dev/null 2>&1; then
     chmod a+rw /out/*"
 elif command -v pdftoppm >/dev/null 2>&1; then
   echo "plan-sheet-snapshot: Docker not installed; rendering with the local $(pdftoppm -v 2>&1 | head -1)"
+  # The stand-ins for the standard fonts, pinned in a fontconfig file of the script's own.
+  urw=""
+  for dir in "${PLAN_SHEET_URW_FONTS:-}" /usr/share/fonts/opentype/urw-base35 \
+    /usr/share/fonts/type1/urw-base35 /usr/share/fonts/urw-base35 \
+    /usr/local/share/fonts/urw-base35; do
+    if [[ -n "${dir}" ]] && compgen -G "${dir}/NimbusRoman-Italic.*" >/dev/null; then
+      urw="${dir}"
+      break
+    fi
+  done
+  conf="${work}/fonts.conf"
+  if [[ -n "${urw}" ]]; then
+    fonts="the URW base 35 fonts (as the reference image)"
+    cat >"${conf}" <<FONTS
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<fontconfig>
+  <dir>${urw}</dir>
+  <cachedir>${work}/fontconfig</cachedir>
+  <match target="pattern"><test name="family"><string>Times</string></test>
+    <edit name="family" mode="assign" binding="strong"><string>Nimbus Roman</string></edit></match>
+  <match target="pattern"><test name="family"><string>Courier</string></test>
+    <edit name="family" mode="assign" binding="strong"><string>Nimbus Mono PS</string></edit></match>
+</fontconfig>
+FONTS
+  elif [[ -f /System/Library/Fonts/Times.ttc && -f /System/Library/Fonts/Courier.ttc ]]; then
+    fonts="stand-ins for the URW base 35 fonts: record goldens again in the reference image"
+    cat >"${conf}" <<FONTS
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<fontconfig>
+  <dir>/System/Library/Fonts</dir>
+  <dir>/System/Library/Fonts/Supplemental</dir>
+  <cachedir>${work}/fontconfig</cachedir>
+  <match target="pattern"><test name="family"><string>Times</string></test>
+    <test name="slant" compare="more"><int>0</int></test>
+    <edit name="family" mode="assign" binding="strong"><string>Times New Roman</string></edit></match>
+</fontconfig>
+FONTS
+  else
+    fonts="the machine's own font settings: record goldens again in the reference image"
+    conf=""
+  fi
+  if [[ -n "${conf}" ]]; then export FONTCONFIG_FILE="${conf}"; fi
+  echo "plan-sheet-snapshot: standard fonts from ${fonts}"
+  if command -v fc-match >/dev/null 2>&1; then
+    for font in "Times-Roman=Times" "Times-Italic=Times:slant=100" "Courier=Courier"; do
+      echo "  ${font%%=*} -> $(fc-match -f '%{file} (%{family[0]} %{style[0]})' "${font#*=}")"
+    done
+  fi
   eval "$(render_commands "${output}" "${work}")"
 else
   echo "plan-sheet-snapshot: FAIL: needs Docker or a local poppler pdftoppm." >&2

@@ -281,14 +281,40 @@ struct PlanSheetLayout {
 
     // B: title group.
     let titleLines = SheetText.wrap(title, size: 25.5, font: .timesRoman, width: width)
-    let line1Text = "\(context.floorLabel) · \(context.projectTitle)"
-    var line1 = SheetText.fit(
-      line1Text, size: 11.25, font: .interRegular, width: width, maxLines: 2)
+    // Line 1: "{label} · {project name}". Without a project name it shows the address, as its
+    // own text run so text extraction finds it whole: after the label when both fit on one
+    // line, else on its own line under the label; an address wider than a line goes to line 2
+    // instead (smaller), and line 1 is the label alone.
+    let line1Whole = "\(context.floorLabel) · \(context.projectTitle)"
+    var line1: [[(text: String, x: Double)]]
+    var addressOnLine1 = false
+    if context.titleShowsAddress {
+      let prefix = "\(context.floorLabel) · "
+      let prefixWidth = SheetItems.width(prefix, size: 11.25, font: .interRegular)
+      let addressWidth = SheetItems.width(context.address, size: 11.25, font: .interRegular)
+      if prefixWidth + addressWidth <= width {
+        line1 = [[(prefix, x), (context.address, x + prefixWidth)]]
+        addressOnLine1 = true
+      } else if addressWidth <= width {
+        let label = SheetText.cut(
+          context.floorLabel, size: 11.25, font: .interRegular, width: width)
+        line1 = [[(label, x)], [(context.address, x)]]
+        addressOnLine1 = true
+      } else {
+        line1 = SheetText.fit(
+          context.floorLabel, size: 11.25, font: .interRegular, width: width, maxLines: 2
+        ).map { [($0, x)] }
+      }
+    } else {
+      line1 = SheetText.fit(
+        line1Whole, size: 11.25, font: .interRegular, width: width, maxLines: 2
+      ).map { [($0, x)] }
+    }
     let confirmed = context.addressConfirmedOnSite
     // Line 2: the address as its own text run, then the confirmation; broken before " · "
     // when it does not fit on one line.
     var line2: [[(text: String, x: Double)]]
-    if context.titleShowsAddress {
+    if addressOnLine1 {
       let words = confirmed ? "Address confirmed on site" : "Address not confirmed on site"
       line2 = SheetText.fit(words, size: 9, font: .interRegular, width: width, maxLines: 2)
         .map { [($0, x)] }
@@ -426,10 +452,10 @@ struct PlanSheetLayout {
       }
       if gapFor(heights()) < minimumGap {
         if line1.count > 1 {
+          let whole =
+            context.titleShowsAddress && !addressOnLine1 ? context.floorLabel : line1Whole
           line1 = [
-            SheetText.cut(
-              line1.joined(separator: " ") + " ...", size: 11.25, font: .interRegular,
-              width: width)
+            [(SheetText.cut(whole, size: 11.25, font: .interRegular, width: width), x)]
           ]
         }
         if line2.count > 1 {
@@ -483,8 +509,10 @@ struct PlanSheetLayout {
           lineTop += 28
         }
         lineTop += 4
-        for line in line1 {
-          page.text(line, x: x, lineTop: lineTop, lineHeight: 14, size: 11.25)
+        for runs in line1 {
+          for run in runs {
+            page.text(run.text, x: run.x, lineTop: lineTop, lineHeight: 14, size: 11.25)
+          }
           lineTop += 14
         }
         lineTop += 4

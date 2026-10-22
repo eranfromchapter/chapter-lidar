@@ -85,7 +85,8 @@ public struct PlanExportContext: Hashable, Sendable {
     return address
   }
 
-  /// True when the sheet's first title line shows the address (no project name).
+  /// True when there is no project name, so the sheet's title shows the address in its place
+  /// (on line 1 when it fits there, see `PlanSheetLayout`).
   var titleShowsAddress: Bool {
     projectName.map { $0.trimmingCharacters(in: .whitespaces).isEmpty } ?? true
   }

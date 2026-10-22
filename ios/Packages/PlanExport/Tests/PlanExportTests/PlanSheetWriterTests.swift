@@ -120,11 +120,60 @@ final class PlanSheetWriterTests: XCTestCase {
     capture.record.address.confirmedOnSite = false
     shown = self.shown(try Self.sheet(capture))
     XCTAssertTrue(shown.contains(" \u{B7} address not confirmed on site"))
-    // No project name: the address on line 1, the confirmation alone on line 2.
+    // No project name: the address on line 1 as its own text run after the label, the
+    // confirmation alone on line 2.
     capture.record.hub.projectName = nil
-    shown = self.shown(try Self.sheet(capture))
-    XCTAssertTrue(shown.contains("Floor 1 \u{B7} 1 Elm St, NY"), "\(shown)")
+    var output = try Self.sheet(capture)
+    shown = self.shown(output)
+    XCTAssertTrue(shown.contains("Floor 1 \u{B7} "), "\(shown)")
+    XCTAssertTrue(shown.contains("1 Elm St, NY"), "\(shown)")
     XCTAssertTrue(shown.contains("Address not confirmed on site"))
+    XCTAssertEqual(try text(output, "1 Elm St, NY").size, 11.25)
+    XCTAssertEqual(
+      try text(output, "1 Elm St, NY").x,
+      PlanSheetLayout.blockX
+        + SheetItems.width("Floor 1 \u{B7} ", size: 11.25, font: .interRegular), accuracy: 1e-9)
+    // An address too long to follow the label: on its own line under it, whole.
+    let medium = "100 Example Street, Testville, NY 00000"
+    capture.record.address.formatted = medium
+    output = try Self.sheet(capture)
+    shown = self.shown(output)
+    XCTAssertTrue(shown.contains("Floor 1"), "\(shown)")
+    XCTAssertTrue(shown.contains(medium), "\(shown)")
+    XCTAssertEqual(try text(output, medium).size, 11.25)
+    XCTAssertEqual(try text(output, medium).x, PlanSheetLayout.blockX, accuracy: 1e-9)
+    XCTAssertTrue(shown.contains("Address not confirmed on site"))
+    // An address wider than a line at 11.25 pt (258 pt; 207 pt at 9): on line 2 instead,
+    // whole, then the confirmation; line 1 is the label alone.
+    let long = "424 West End Ave, Apt 4K, New York, NY 10024"
+    capture.record.address.formatted = long
+    output = try Self.sheet(capture)
+    shown = self.shown(output)
+    XCTAssertTrue(shown.contains("Floor 1"), "\(shown)")
+    XCTAssertTrue(shown.contains(long), "\(shown)")
+    XCTAssertEqual(try text(output, long).size, 9)
+    XCTAssertTrue(shown.contains("address not confirmed on site"), "\(shown)")
+    // A 300-character address under a long label: its beginning is still on the sheet.
+    capture.record.captures[0].label =
+      "Floor 1 with a very long label " + String(repeating: "x", count: 70)
+    let street = String(repeating: "1234 Extraordinarily Long Boulevard Name, ", count: 8)
+    capture.record.address.formatted = String(street.prefix(300))
+    output = try Self.sheet(capture)
+    XCTAssertTrue(
+      self.shown(output).contains { $0.hasPrefix("1234 Extraordinarily Long Boulevard") },
+      "\(self.shown(output))")
+  }
+
+  /// The run showing `string` exactly, with its size and left edge (points).
+  private func text(_ output: PlanSheetOutput, _ string: String) throws
+    -> (size: Double, x: Double)
+  {
+    let text = try XCTUnwrap(
+      output.layout.items.compactMap { item -> DrawingText? in
+        if case .text(let text) = item, text.string == string { return text }
+        return nil
+      }.first, string)
+    return (text.size, text.position.x)
   }
 
   func testNoPlaceholdersOrForbiddenGlyphs() throws {
