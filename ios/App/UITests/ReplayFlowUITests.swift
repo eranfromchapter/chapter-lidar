@@ -1129,7 +1129,12 @@ final class ReplayFlowUITests: XCTestCase {
   }
 
   func testCompassNone() {
-    launch(compass: "none", ["-ChapterUITestScanStep", "2.5"])
+    // The chip reads "Compass reading" until the replay's first step. One step every 30 s keeps
+    // that state long enough to be seen on a slow machine: on the CI runner the first look at
+    // the chip came 17 s after Start scan (its accessibility queries take seconds there), so a
+    // 2.5 s step had already moved on to "Compass not verified". The first wall (Finish floor)
+    // comes at step 3, 90 s in.
+    launch(compass: "none", ["-ChapterUITestScanStep", "30"])
     openStepTwo()
     waitForLabel(
       element("compass.row"),
@@ -1138,12 +1143,12 @@ final class ReplayFlowUITests: XCTestCase {
     tap(app.buttons["capture.mode.floor"])
     tap(app.buttons["capture.startScan"])
     let chip = element("scan.compass")
-    waitForLabel(chip, "Compass reading", timeout: 10)
+    waitForLabel(chip, "Compass reading", timeout: 25)
     shot("56 Live scan, compass reading")
-    waitForLabel(chip, "Compass not verified", timeout: 15)
+    waitForLabel(chip, "Compass not verified", timeout: 60)
     shot("57 Live scan, compass not verified")
     let finish = app.buttons["scan.finish"]
-    waitFor("Finish floor enabled") { finish.isEnabled }
+    waitFor("Finish floor enabled", timeout: 120) { finish.isEnabled }
     finish.tap()
 
     // No camera heading: nothing pre-filled.

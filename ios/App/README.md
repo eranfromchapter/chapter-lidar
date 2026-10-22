@@ -145,7 +145,7 @@ Options (`UITestLaunchOptions`, `UITestStationOptions`):
 | `-ChapterUITestOffline [seconds]` | blob uploads fail as offline for that long (default 20 s), and the HUB project list is offline after its first answer |
 | `-ChapterUITestVisitsRoot <name>` | keep the visits in `UITestVisits-<name>`, so a relaunch finds them |
 | `-ChapterUITestTrackingLost <first> <last>` | the replay loses tracking between those steps |
-| `-ChapterUITestScanStep <seconds>` | one replay step every that many seconds (default 0.5) |
+| `-ChapterUITestScanStep <seconds>` | one replay step every that many seconds (default 0.5, at most 60) |
 | `-ChapterUITestV1Visits` | visit folders as the v1 app left them, made from the fixture |
 | `-ChapterUITestNotifyDuringScan` | a verdict notification is tapped during a live scan |
 
