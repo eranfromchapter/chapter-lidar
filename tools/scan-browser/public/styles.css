@@ -704,7 +704,7 @@ dialog#lightbox img {
   border-radius: 6px;
 }
 
-/* Floorplan: the page as the phone writes it, on white paper. */
+/* Plans: the plan sheet (Tabloid, landscape, full width) first, then the colour Floorplan. */
 .floorplan .segmented {
   display: flex;
   flex-wrap: wrap;
@@ -753,6 +753,19 @@ dialog#lightbox img {
 
 .floorplan-page:hover {
   border-color: var(--muted);
+}
+
+/* The colour Floorplan is a square or Letter page: narrower than the sheet. */
+.floorplan-page:not(.plan-sheet-page) {
+  max-width: 640px;
+}
+
+.floorplan-box .plan-title {
+  margin: 20px 0 8px;
+}
+
+.floorplan-box .plan-title:first-child {
+  margin-top: 4px;
 }
 
 .links {

@@ -1,7 +1,9 @@
 // swift-tools-version: 6.0
-// plan-render: writes the one-page Chapter Floorplan of a scan on the Mac with the current app
-// code (PlanExport's `FloorplanWriter`, the page the phone shows): floorplan.pdf, floorplan.svg
-// and floorplan.png. The scan browser (tools/scan-browser) builds and runs it.
+// plan-render: writes the plans of a scan on the Mac with the current app code: the plan sheet
+// (PlanExport's `PlanSheetWriter`, the Tabloid page the package carries and the phone shows
+// first): plan-sheet.pdf and plan-sheet.png; and the colour Floorplan (`FloorplanWriter`, the
+// phone's "Colour floorplan"): floorplan.pdf, floorplan.svg and floorplan.png. The scan browser
+// (tools/scan-browser) builds and runs it.
 //
 // Testing tool only, macOS only (the PNG is drawn with CoreGraphics). Not one of the packages
 // scripts/swift-test.sh runs.
