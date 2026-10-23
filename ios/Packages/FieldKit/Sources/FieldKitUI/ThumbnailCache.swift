@@ -38,6 +38,12 @@
       return image
     }
 
+    /// Forgets every thumbnail ("Delete all photos"): a photo saved later under the same path
+    /// never shows an erased one's.
+    func removeAll() {
+      cache.removeAllObjects()
+    }
+
     nonisolated static func decode(_ data: Data) -> UIImage? {
       guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
       let options: [CFString: Any] = [
@@ -48,6 +54,15 @@
       guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
       else { return nil }
       return UIImage(cgImage: image)
+    }
+  }
+
+  /// The photo strip's thumbnails, for the app.
+  public enum PhotoThumbnails {
+    /// Drops every thumbnail decoded so far ("Delete all photos").
+    @MainActor
+    public static func removeAll() {
+      ThumbnailCache.shared.removeAll()
     }
   }
 #endif

@@ -8,6 +8,9 @@
   import Foundation
   import StationClient
 
+  import FieldRules
+  import PhotoStore
+
   #if canImport(FoundationNetworking)
     import FoundationNetworking
   #endif
@@ -116,6 +119,44 @@
       lock.lock()
       defer { lock.unlock() }
       return blobs[location]
+    }
+
+    /// Every blob location stored.
+    public var locations: [String] {
+      lock.withLock { blobs.keys.sorted() }
+    }
+
+    /// Removes the blobs and staged blocks at `locations` ("Delete all photos"); returns how
+    /// many blobs and staged blocks were removed.
+    @discardableResult
+    public func remove(at locations: Set<String>) -> Int {
+      lock.withLock {
+        var removed = 0
+        for location in locations {
+          if blobs.removeValue(forKey: location) != nil { removed += 1 }
+          removed += blocks.removeValue(forKey: location)?.count ?? 0
+        }
+        return removed
+      }
+    }
+
+    /// Removes every blob and staged block whose bytes are a photograph (JPEG or HEIC by its
+    /// first bytes), wherever it is stored; returns how many were removed.
+    @discardableResult
+    public func removePhotos() -> Int {
+      lock.withLock {
+        var removed = 0
+        for (location, data) in blobs where PhotoFormat.detect(data) != nil {
+          blobs[location] = nil
+          removed += 1
+        }
+        for (location, staged) in blocks {
+          let kept = staged.filter { PhotoFormat.detect($0.value) == nil }
+          removed += staged.count - kept.count
+          blocks[location] = kept.isEmpty ? nil : kept
+        }
+        return removed
+      }
     }
   }
 
@@ -336,6 +377,24 @@
         updatedBy: UITestTokenProvider.operatorName, changes: input.changes)
       lock.withLock { notices[packageId] = notice }
       return try json(200, notice, url)
+    }
+
+    /// "Delete all photos": the photo blobs of every package this station holds (and their
+    /// staged blocks), then any other stored blob that is a photograph. The packages stay
+    /// registered; their photo files are no longer verified. Returns how many blobs and blocks
+    /// were removed.
+    @discardableResult
+    public func erasePhotoBlobs() -> Int {
+      let locations = lock.withLock { () -> Set<String> in
+        var locations: Set<String> = []
+        for (key, stored) in packages {
+          for (index, file) in stored.request.files.enumerated() where file.role == .photo {
+            locations.insert(blobLocation(packageId: key, index: index))
+          }
+        }
+        return locations
+      }
+      return storage.remove(at: locations) + storage.removePhotos()
     }
 
     // MARK: Helpers

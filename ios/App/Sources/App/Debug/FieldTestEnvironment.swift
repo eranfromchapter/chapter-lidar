@@ -25,12 +25,13 @@
     @MainActor
     static func services(cacheRoot: URL) -> AppServices {
       let storage = UITestBlobStorage()
+      let transport = UITestStationTransport(storage: storage)
       let station = StationAPI(
         configuration: try! StationClientConfiguration(stationURL: UITestStationTransport.stationURL),
         tokenProvider: UITestTokenProvider(),
-        transport: UITestStationTransport(storage: storage))
+        transport: transport)
       let compass = CompassService()
-      return AppServices(
+      var services = AppServices(
         station: station,
         projects: ProjectStore(
           source: station, cacheDirectory: cacheRoot.appendingPathComponent("StationCache")),
@@ -39,6 +40,9 @@
         makeSession: { _ in LiveCaptureSession(compass: compass) },
         photoSource: .camera(CameraEngine()), compass: compass,
         fixedOperator: SignedInOperator(name: operatorName, userId: nil))
+      // "Delete all photos" lets go of the photos the stub station holds in memory.
+      services.stationPhotoBlobs = { transport.erasePhotoBlobs() }
+      return services
     }
   }
 #endif

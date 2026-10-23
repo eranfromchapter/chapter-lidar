@@ -30,7 +30,8 @@ extension VisitPackageBuilder {
   ///    originals stay carried over. A base capture with the same model keeps every file, so a
   ///    newer PlanExport never silently redraws an old floor.
   /// 5. Photos not in the base are added with their recorded fingerprints; carried-over photos
-  ///    take the labels they have now (a renamed room).
+  ///    take the labels they have now (a renamed room). A base whose photos were erased on the
+  ///    phone (`PhotosErasedRecord`) carries none over.
   /// 6. `RevisionChanges` compares the draft with the base; `baseNextActions` (the base
   ///    verdict's) fill `answersNextAction`.
   public func revisionPlan(
@@ -44,6 +45,13 @@ extension VisitPackageBuilder {
     }
     let draftFolder = self.draftFolder(draftId)
     var draft = try PackageDraft.nextRevision(of: base, packageId: packageId)
+    if PhotosErasedRecord.isErased(packageAt: base.root) {
+      // "Delete all photos" erased the base's photos on this phone: none is carried over (only
+      // the photos taken since, below).
+      for entry in draft.entries where entry.input.role == .photo {
+        try draft.remove(path: entry.path)
+      }
+    }
     let baseBytes = { (role: FileRole, captureId: LowercaseUUID?) -> Data? in
       base.manifest.files.first { $0.role == role && $0.captureId == captureId }
         .flatMap { try? Data(contentsOf: base.url(for: $0.path)) }

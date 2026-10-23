@@ -26,9 +26,9 @@
       // -ChapterUITestVerdict, -ChapterUITestOffline, -ChapterUITestRefuse (phone-package §9.1).
       let stationOptions = UITestStationOptions(arguments: ProcessInfo.processInfo.arguments)
       let storage = UITestBlobStorage(offlineSeconds: stationOptions.offlineSeconds)
+      let stub = UITestStationTransport(storage: storage, options: stationOptions)
       // The probe notes each next-revision notice the station accepts (`UITestProbe`).
-      var transport: any HTTPTransport = ProbeStationTransport(
-        base: UITestStationTransport(storage: storage, options: stationOptions))
+      var transport: any HTTPTransport = ProbeStationTransport(base: stub)
       if options.projectsOffline {
         transport = OfflineProjectsTransport(base: transport)
       }
@@ -48,7 +48,7 @@
         precheckDuration: .milliseconds(1200))
       let version = ProcessInfo.processInfo.operatingSystemVersion
       let osVersion = "\(version.majorVersion).\(version.minorVersion).\(version.patchVersion)"
-      return AppServices(
+      var services = AppServices(
         station: station, projects: projects,
         blobTransport: ProbeBlobTransport(base: UITestBlobTransport(storage: storage)), signIn: nil,
         // The simulator has no LiDAR; the replay stands in for the scanner.
@@ -74,6 +74,8 @@
         asksForNotifications: false,
         // Short, so a test sees the notice of a change without waiting 10 s.
         revisionNoticeDelay: 1.5)
+      services.stationPhotoBlobs = { stub.erasePhotoBlobs() }
+      return services
     }
 
     private static func firstDirectory(containing name: String, under root: URL) -> URL? {

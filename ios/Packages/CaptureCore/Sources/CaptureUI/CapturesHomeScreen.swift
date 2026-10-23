@@ -14,15 +14,21 @@
     /// Re-reads the disk and asks the station about packages waiting for a verdict: on appear,
     /// when the app becomes active and on pull to refresh.
     public var refresh: @MainActor () async -> Void
+    /// "Delete all photos" in the account dialog, after the in-page confirmation: erases every
+    /// site photo on the phone and returns the line to show ("Deleted 3 photos"). Only the
+    /// field-test and UI-test modes of a Debug build pass it; nil: the dialog has no such button.
+    public var deletePhotos: (@MainActor () async -> String)?
 
     public init(
       newCapture: @escaping @MainActor () -> Void, open: @escaping @MainActor (CapturesHomeState.Row) -> Void,
-      signOut: @escaping @MainActor () -> Void, refresh: @escaping @MainActor () async -> Void = {}
+      signOut: @escaping @MainActor () -> Void, refresh: @escaping @MainActor () async -> Void = {},
+      deletePhotos: (@MainActor () async -> String)? = nil
     ) {
       self.newCapture = newCapture
       self.open = open
       self.signOut = signOut
       self.refresh = refresh
+      self.deletePhotos = deletePhotos
     }
 
     /// Does nothing (previews and snapshots).
@@ -36,6 +42,11 @@
     let state: CapturesHomeState
     let actions: CapturesHomeActions
     @State private var showsAccount = false
+    /// The in-page "Delete all photos?" confirmation is shown.
+    @State private var confirmsDeletePhotos = false
+    @State private var isDeletingPhotos = false
+    /// "Deleted 3 photos" / "No photos to delete", after a deletion.
+    @State private var photosMessage: String?
     @Environment(\.scenePhase) private var scenePhase
 
     public init(state: CapturesHomeState, actions: CapturesHomeActions) {
@@ -45,7 +56,17 @@
 
     public var body: some View {
       ScrollView {
-        content.captureContent(top: ChapterTheme.Metric.contentTop)
+        if let photosMessage {
+          VStack(alignment: .leading, spacing: ChapterTheme.Metric.sectionGap) {
+            Banner(icon: .systemImage("checkmark.circle"), text: photosMessage)
+              .accessibilityElement(children: .combine)
+              .accessibilityIdentifier("captures.photosMessage")
+            content
+          }
+          .captureContent(top: ChapterTheme.Metric.contentTop)
+        } else {
+          content.captureContent(top: ChapterTheme.Metric.contentTop)
+        }
       }
       .refreshable { await actions.refresh() }
       .navigationTitle("Captures")
@@ -60,6 +81,13 @@
       .confirmationDialog(state.accountTitle, isPresented: $showsAccount, titleVisibility: .visible) {
         Button("Sign out") { actions.signOut() }
           .accessibilityIdentifier("account.signOut")
+        if actions.deletePhotos != nil {
+          Button(DeletePhotosText.button, role: .destructive) {
+            photosMessage = nil
+            confirmsDeletePhotos = true
+          }
+          .accessibilityIdentifier("account.deletePhotos")
+        }
         Button("Cancel", role: .cancel) {}
       } message: {
         if let message = state.accountMessage { Text(message) }
@@ -70,9 +98,30 @@
           .buttonStyle(.chapter(.primary))
           .accessibilityIdentifier("captures.newCapture")
       }
+      .overlay {
+        if confirmsDeletePhotos {
+          DeletePhotosConfirmation(
+            isDeleting: isDeletingPhotos, delete: deletePhotos,
+            cancel: { confirmsDeletePhotos = false })
+        }
+      }
       .task { await actions.refresh() }
       .onChange(of: scenePhase) { _, phase in
         if phase == .active { Task { await actions.refresh() } }
+      }
+    }
+
+    /// "Delete all photos" in the confirmation: erases, then says what was deleted.
+    private func deletePhotos() {
+      guard let action = actions.deletePhotos, !isDeletingPhotos else { return }
+      isDeletingPhotos = true
+      Task { @MainActor in
+        let message = await action()
+        isDeletingPhotos = false
+        confirmsDeletePhotos = false
+        photosMessage = message
+        AccessibilityNotification.Announcement(message).post()
+        await actions.refresh()
       }
     }
 
@@ -119,6 +168,51 @@
         }
       }
       .accessibilityIdentifier("captures.row.\(row.id)")
+    }
+  }
+
+  /// The in-page confirmation of "Delete all photos" over the dimmed Captures home: the
+  /// alert-card fill, radius 16, padding 16; the title (bodyEmphasis), the text (subhead), then
+  /// "Delete all photos" (`.destructive`) and "Cancel" (`.tinted`) stacked 10 pt apart.
+  private struct DeletePhotosConfirmation: View {
+    let isDeleting: Bool
+    let delete: () -> Void
+    let cancel: () -> Void
+
+    var body: some View {
+      ZStack {
+        ChapterTheme.Color.ink.opacity(0.35)
+          .ignoresSafeArea()
+          .accessibilityHidden(true)
+        VStack(alignment: .leading, spacing: 10) {
+          Text(DeletePhotosText.title)
+            .chapterTextStyle(.bodyEmphasis)
+            .foregroundStyle(ChapterTheme.Color.ink)
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityIdentifier("deletePhotos.title")
+          Text(DeletePhotosText.message)
+            .chapterTextStyle(.subhead)
+            .foregroundStyle(ChapterTheme.Color.ink)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("deletePhotos.message")
+            .padding(.bottom, 6)
+          Button(isDeleting ? DeletePhotosText.deleting : DeletePhotosText.button, action: delete)
+            .buttonStyle(.chapter(.destructive))
+            .disabled(isDeleting)
+            .accessibilityIdentifier("deletePhotos.confirm")
+          Button(DeletePhotosText.cancel, action: cancel)
+            .buttonStyle(.chapter(.tinted))
+            .disabled(isDeleting)
+            .accessibilityIdentifier("deletePhotos.cancel")
+        }
+        .padding(16)
+        .frame(maxWidth: 340)
+        .background(ChapterTheme.Color.alertCard, in: RoundedRectangle(cornerRadius: 16))
+        .padding(.horizontal, ChapterTheme.Metric.screenPadding)
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.isModal)
+        .accessibilityIdentifier("deletePhotos.card")
+      }
     }
   }
 #endif

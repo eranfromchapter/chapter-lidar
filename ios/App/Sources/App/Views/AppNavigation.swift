@@ -18,11 +18,7 @@ struct AppNavigation: View {
 
   var body: some View {
     NavigationStack(path: Binding(get: { home.path }, set: { home.setPath($0) })) {
-      CapturesHomeScreen(
-        state: home.state,
-        actions: CapturesHomeActions(
-          newCapture: { home.newCapture() }, open: { home.open($0) },
-          signOut: { home.signOut() }, refresh: { await home.refresh() }))
+      CapturesHomeScreen(state: home.state, actions: homeActions)
         .navigationDestination(for: AppRoute.self) { route in
           destination(route)
         }
@@ -62,6 +58,20 @@ struct AppNavigation: View {
         MessageToast(text: message)
       }
     }
+  }
+
+  /// The Captures home's actions. "Delete all photos" only in the field-test and UI-test modes
+  /// of a Debug build.
+  private var homeActions: CapturesHomeActions {
+    var actions = CapturesHomeActions(
+      newCapture: { home.newCapture() }, open: { home.open($0) },
+      signOut: { home.signOut() }, refresh: { await home.refresh() })
+    #if DEBUG
+      if home.offersPhotoDeletion {
+        actions.deletePhotos = { await home.deleteAllPhotos() }
+      }
+    #endif
+    return actions
   }
 
   /// The capture and field screens show their errors at the bottom; the package screens show
@@ -225,7 +235,9 @@ private struct PackageRoute: View {
       options: owned?.packageOptions(for: packageId, notificationsAllowed: home.notificationsAllowed)
         ?? standaloneOptions,
       actions: PackageStatusActions(
-        retry: { home.runningCoordinator(for: packageId)?.retry() },
+        // A package whose photos were erased cannot be uploaded again: no "Try again".
+        retry: home.snapshot(for: packageId)?.photosErased == true
+          ? nil : { home.runningCoordinator(for: packageId)?.retry() },
         reseal: inFlow.map { visit in { visit.resealAfterFailure() } },
         addToCapture: owned.map { visit -> () -> Void in
           guard inFlow != nil else { return { home.closePackageOnTop(packageId) } }

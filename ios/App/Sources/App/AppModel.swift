@@ -36,6 +36,9 @@ struct AppServices {
   /// Seconds without a change before revision n's notice is rebuilt and sent (phone-package
   /// §10.4: 10 s; shorter in UI tests).
   var revisionNoticeDelay: TimeInterval = 10
+  /// Erases the photo blobs the in-process stub station holds ("Delete all photos"); set by the
+  /// field-test and UI-test environments only. Returns how many were removed.
+  var stationPhotoBlobs: (@Sendable () -> Int)? = nil
 
   /// The photo step's heading provider over `compass`.
   @MainActor var photoHeading: PhotoHeadingProviding? {
@@ -74,6 +77,11 @@ final class AppModel {
   /// whatever visit was open.
   @ObservationIgnored private var suspendedHome: HomeModel? = nil
   @ObservationIgnored let visitsRoot: URL
+  #if DEBUG
+    /// "Delete all photos": where the photos are. Set in the field-test and UI-test modes only,
+    /// so a live (and every Release) build never offers it.
+    @ObservationIgnored private(set) var photoDeletion: PhotoDeletion? = nil
+  #endif
 
   private init(screen: Screen, services: AppServices?, visitsRoot: URL) {
     self.screen = screen
@@ -97,7 +105,12 @@ final class AppModel {
         // them (VisitStore migrates each to visit.json on the first read).
         let root = support.appendingPathComponent("FieldTestVisits", isDirectory: true)
         let services = FieldTestEnvironment.services(cacheRoot: root)
-        return signedInModel(services: services, visitsRoot: root)
+        let model = signedInModel(services: services, visitsRoot: root)
+        // The visits of a live build on this phone, if any, hold photos too.
+        model.photoDeletion = PhotoDeletion(
+          visitsRoots: [root, support.appendingPathComponent("Visits", isDirectory: true)],
+          stationPhotoBlobs: services.stationPhotoBlobs)
+        return model
       #else
         break
       #endif
@@ -111,7 +124,10 @@ final class AppModel {
         }
         let services = UITestEnvironment.services(
           fixture: fixture, cacheRoot: root, options: options)
-        return signedInModel(services: services, visitsRoot: root)
+        let model = signedInModel(services: services, visitsRoot: root)
+        model.photoDeletion = PhotoDeletion(
+          visitsRoots: [root], stationPhotoBlobs: services.stationPhotoBlobs)
+        return model
       #else
         // Unreachable: LaunchModeResolver returns .live for Release builds.
         break
@@ -250,6 +266,54 @@ final class AppModel {
     PackageRouter.shared.onOpenPackage = { [weak home] id in home?.openPackage(id: id) }
   }
 
+  // MARK: Delete all photos
+
+  #if DEBUG
+    /// Where "Delete all photos" erases (field-test and UI-test modes).
+    struct PhotoDeletion {
+      var visitsRoots: [URL]
+      var stationPhotoBlobs: (@Sendable () -> Int)?
+
+      /// Every place on the phone that can hold photo bytes (`PhotoEraser`): the visits, the
+      /// background uploads' scratch copies and the app switcher's snapshots, the temporary
+      /// folder and the caches.
+      var eraser: PhotoEraser {
+        let fileManager = FileManager.default
+        let library = fileManager.urls(for: .libraryDirectory, in: .userDomainMask)[0]
+        let caches = fileManager.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        return PhotoEraser(
+          visitsRoots: visitsRoots,
+          scratchFolders: [
+            caches.appendingPathComponent("upload-scratch", isDirectory: true),
+            library.appendingPathComponent("SplashBoard/Snapshots", isDirectory: true),
+            caches.appendingPathComponent("Snapshots", isDirectory: true),
+          ],
+          sweptFolders: [fileManager.temporaryDirectory, caches])
+      }
+    }
+
+    /// "Delete all photos" (field-test and UI-test modes): every site photo the app holds goes,
+    /// on disk, in the stub station and in memory; scans, plans, field controls, room names and
+    /// capture records stay. The open visit is closed first (its photo store and a photo being
+    /// labeled go with it) and no upload runs while the files go; afterwards the uploads go on
+    /// (a package the station had not confirmed stops: "Photos erased on this phone").
+    /// Returns the line the home shows ("Deleted 3 photos").
+    func deleteAllPhotos() async -> String {
+      guard let photoDeletion else { return DeletePhotosText.result(deleted: 0) }
+      if case .home(let home) = screen { home.closeVisit() }
+      suspendedHome?.closeVisit()
+      PhotoThumbnails.removeAll()
+      let running = Array(uploads.values)
+      for upload in running { await upload.cancelAndWait() }
+      let eraser = photoDeletion.eraser
+      var result = await Task.detached(priority: .userInitiated) { eraser.eraseAll() }.value
+      result.stationBlobs = photoDeletion.stationPhotoBlobs?() ?? 0
+      for upload in running { upload.retry() }
+      countPendingUploads()
+      return result.message
+    }
+  #endif
+
   // MARK: Uploads
 
   /// One coordinator per sealed package for the app's lifetime; started at once (a package the
@@ -285,8 +349,9 @@ final class AppModel {
   }
 
   private func countPendingUploads() {
+    // A package whose photos were erased before the station confirmed it never uploads.
     pendingUploadCount = uploads.values.filter {
-      !$0.snapshot.isConfirmedByStation && !$0.snapshot.isSuperseded
+      !$0.snapshot.isConfirmedByStation && !$0.snapshot.isSuperseded && !$0.snapshot.photosErased
     }.count
   }
 
