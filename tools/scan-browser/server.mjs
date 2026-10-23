@@ -2,8 +2,9 @@
 // Scan browser: a small local web app for field testing. It lists the visits the Chapter Capture
 // field-test build wrote on the iPhone and shows every file of every scan: raw originals, the
 // latest "Package ready" exports, photos, field controls, the source register, sealed packages
-// and their upload state, and each scan's Chapter Floorplan rendered now with the current app code
-// (tools/plan-render, a Swift tool it builds on first need). "Sync from iPhone" copies the visits
+// and their upload state, and each scan's plans rendered now with the current app code: the plan
+// sheet (the Tabloid page the package carries) and the colour Floorplan (tools/plan-render, a
+// Swift tool it builds on first need). "Sync from iPhone" copies the visits
 // off a connected phone.
 //
 // Testing tool only. Node built-ins only, no build step for the page. It binds 127.0.0.1, answers
@@ -28,7 +29,7 @@ const PUBLIC_DIR = path.join(TOOL_DIR, "public");
 const REPO_ROOT = path.resolve(TOOL_DIR, "..", "..");
 /** Chapter logo and Inter fonts, shared with the web app. */
 const BRAND_DIR = path.join(REPO_ROOT, "web", "public", "brand");
-/** The Floorplan renderer (a SwiftPM package) and the binary `swift build` makes. */
+/** The plans renderer (a SwiftPM package) and the binary `swift build` makes. */
 const PLAN_RENDER_DIR = path.join(REPO_ROOT, "tools", "plan-render");
 const PLAN_RENDER_BIN = path.join(PLAN_RENDER_DIR, ".build", "release", "plan-render");
 /** What plan-render is built from: a file newer than the binary means a rebuild. */
@@ -47,7 +48,16 @@ const RENDER_TIMEOUT_MS = 2 * 60 * 1000;
 const FLOORPLAN_INPUT_MAX_BYTES = 64 * 1024 * 1024;
 /** Cached floor plans older than this are removed when a new one is written. */
 const FLOORPLAN_CACHE_DAYS = 30;
-const FLOORPLAN_FILES = ["floorplan.png", "floorplan.pdf", "floorplan.svg"];
+/** What plan-render writes: the plan sheet (PlanSheetWriter) and the colour Floorplan. */
+const FLOORPLAN_FILES = [
+  "plan-sheet.png",
+  "plan-sheet.pdf",
+  "floorplan.png",
+  "floorplan.pdf",
+  "floorplan.svg",
+];
+/** The capture record, at most this large, is handed to plan-render for the sheet's title block. */
+const RECORD_MAX_BYTES = 16 * 1024 * 1024;
 /** The app's per-visit room names (AppCore VisitRoomNames), at the visit folder's root. */
 const ROOM_NAMES_FILE = "room-names.json";
 
@@ -1657,13 +1667,15 @@ async function photoJpeg(rel, widthParam) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Floorplan: the one-page Chapter Floorplan of a capture (PlanExport's FloorplanWriter, the page
-// the phone shows), rendered now with the current app code by tools/plan-render. The renderer is
+// Plans: the plan sheet of a capture (PlanExport's PlanSheetWriter, the Tabloid page the package
+// carries and the phone shows first, with its title block from the capture record) and its colour
+// Floorplan (FloorplanWriter, the phone's "Colour floorplan"), rendered now with the current app
+// code by tools/plan-render. One render writes both. The renderer is
 // built with `swift build` on first need, and again when its Swift sources are newer than the
 // binary (a build that leaves the binary as it was dates it after them): one build at a time,
 // never while a render runs. Pages are cached in <cache>/floorplans/<key>/ (owner-only folders),
-// keyed by the SHA-256 of the input bytes, the options and the renderer version (the binary's
-// mtime and size), so a new build draws afresh.
+// keyed by the SHA-256 of the input bytes, the capture record's bytes, the options and the
+// renderer version (the binary's mtime and size), so a new build draws afresh.
 
 /** Folder of cached floor plans. Set by main(). */
 let FLOORPLANS = "";
@@ -1801,8 +1813,8 @@ export function roomNamesForCapture(value, captureId) {
 }
 
 /**
- * Address and units as the capture record gives them (imperial when it does not say), and what
- * the raw scan is mapped with, as the phone's scan viewer maps it: the capture's label (from the
+ * Address and units as the capture record gives them (imperial when it does not say), whether
+ * the plan sheet's title block comes from the capture record, and what the raw scan is mapped with, as the phone's scan viewer maps it: the capture's label (from the
  * capture record, else the area key as the phone titles it) and the operator's room names.
  */
 function floorplanOptions(a, c) {
@@ -1816,6 +1828,12 @@ function floorplanOptions(a, c) {
     units: rec?.units?.display === "metric" ? "metric" : "imperial",
     label: recorded || areaTitle(c.areaKey) || "Scan",
     roomNames: roomNamesForCapture(a.roomNames, c.captureId),
+    // The plan sheet's title block: from the capture record when it has this capture, else
+    // "not recorded" (plan-render), dated by the scan file's modified time (capturedAt, set
+    // by floorplanStatus).
+    capturedFromRecord: Boolean(rec && a.recordPath),
+    captureId: rec ? String(c.captureId) : null,
+    capturedAt: null,
   };
 }
 
@@ -1840,6 +1858,10 @@ async function newestMtime(p, depth = 0) {
 async function newestRendererSource() {
   return Math.max(0, ...(await Promise.all(PLAN_RENDER_SOURCES.map((p) => newestMtime(p)))));
 }
+
+/** A time as ISO 8601 in whole seconds, UTC ("2026-10-18T16:49:16Z"), as the record writes them. */
+const isoSeconds = (ms) =>
+  new Date(Math.floor(ms / 1000) * 1000).toISOString().replace(".000Z", "Z");
 
 /** The renderer version in cache keys: the binary's modified time and size. */
 const rendererVersion = (bin) => `${Math.round(bin.mtimeMs)}-${bin.size}`;
@@ -1954,16 +1976,18 @@ async function rendererState(check) {
   return r;
 }
 
-function floorplanKey(bytes, source, options, version) {
+function floorplanKey(bytes, recordBytes, source, options, version) {
   return createHash("sha256")
     .update(
-      `scan-browser floorplan 1\0${path.basename(source.path)}\0${JSON.stringify(options)}\0${version}\0`,
+      `scan-browser plans 2\0${path.basename(source.path)}\0${JSON.stringify(options)}\0${version}\0`,
     )
     .update(bytes)
+    .update(`\0record ${recordBytes ? recordBytes.length : -1}\0`)
+    .update(recordBytes ?? "")
     .digest("hex");
 }
 
-/** A complete cache entry (result.json and the three files, no symlinks), or null. */
+/** A complete cache entry (result.json and the five files, no symlinks), or null. */
 async function cachedFloorplan(key) {
   if (!FLOORPLAN_KEY_RE.test(key)) return null;
   const dir = path.join(FLOORPLANS, key);
@@ -1995,7 +2019,15 @@ function renderError(r) {
   return (line ?? `plan-render failed (exit code ${r.code}).`).replace(/^plan-render: /, "");
 }
 
-async function renderFloorplan({ key, bytes, source, options, version, downloadName }) {
+async function renderFloorplan({
+  key,
+  bytes,
+  recordBytes,
+  source,
+  options,
+  version,
+  downloadName,
+}) {
   const tmp = path.join(FLOORPLANS, `.${key}.${randomBytes(4).toString("hex")}`);
   await fsp.mkdir(tmp, { mode: 0o700 });
   try {
@@ -2013,6 +2045,12 @@ async function renderFloorplan({ key, bytes, source, options, version, downloadN
       await fsp.writeFile(names, JSON.stringify(options.roomNames), { mode: 0o600 });
       args.push("--room-names", names);
     }
+    if (recordBytes && options.captureId) {
+      const record = path.join(inputDir, "capture-record.json");
+      await fsp.writeFile(record, recordBytes, { mode: 0o600 });
+      args.push("--record", record, "--capture-id", options.captureId);
+    }
+    if (options.capturedAt) args.push("--captured-at", options.capturedAt);
     const r = await withRenderSlot(() =>
       run(PLAN_RENDER_BIN, args, { timeoutMs: RENDER_TIMEOUT_MS }),
     );
@@ -2096,7 +2134,24 @@ async function floorplanStatus(url) {
     });
   }
   const bytes = await fsp.readFile(abs);
-  const key = floorplanKey(bytes, source, options, r.version);
+  // The scan's own date for a sheet without a capture record (the render reads a copy).
+  if (!options.capturedFromRecord) options.capturedAt = isoSeconds(stat.mtimeMs);
+  // The capture record the visit page shows, for the plan sheet's title block.
+  let recordBytes = null;
+  if (options.capturedFromRecord) {
+    try {
+      const record = await resolveDataPath(a.recordPath, "file");
+      if (record.stat.size <= RECORD_MAX_BYTES) recordBytes = await fsp.readFile(record.abs);
+    } catch {
+      // Gone since the visit was read: the sheet then says "not recorded".
+    }
+    if (!recordBytes) {
+      options.capturedFromRecord = false;
+      options.captureId = null;
+      options.capturedAt = isoSeconds(stat.mtimeMs);
+    }
+  }
+  const key = floorplanKey(bytes, recordBytes, source, options, r.version);
   const cached = await cachedFloorplan(key);
   if (cached) {
     // Used again: kept from pruning for another FLOORPLAN_CACHE_DAYS.
@@ -2116,7 +2171,15 @@ async function floorplanStatus(url) {
     const downloadName = `floorplan-${c.areaKey}-${shortId(c.captureId)}`
       .replace(/[^\w.-]+/g, "_")
       .slice(0, 100);
-    const job = renderFloorplan({ key, bytes, source, options, version: r.version, downloadName })
+    const job = renderFloorplan({
+      key,
+      bytes,
+      recordBytes,
+      source,
+      options,
+      version: r.version,
+      downloadName,
+    })
       .then(() => pruneFloorplans())
       .catch((err) => {
         floorplanErrors.set(key, err.message);
@@ -2128,7 +2191,10 @@ async function floorplanStatus(url) {
   return reply("rendering", { message: "Rendering floor plan…" });
 }
 
-/** GET /api/floorplan-file?key=<sha256>&name=floorplan.png|pdf|svg[&download=1]. */
+/**
+ * GET /api/floorplan-file?key=<sha256>&name=<one of FLOORPLAN_FILES>[&download=1]: the plan
+ * sheet (plan-sheet.pdf, plan-sheet.png) or the colour Floorplan (floorplan.pdf, .svg, .png).
+ */
 async function serveFloorplanFile(req, res, url) {
   const key = url.searchParams.get("key") ?? "";
   const name = url.searchParams.get("name") ?? "";
@@ -2156,7 +2222,8 @@ async function serveFloorplanFile(req, res, url) {
     "Content-Security-Policy": type === "application/pdf" && !download ? PDF_CSP : FILE_CSP,
     "Content-Disposition": contentDisposition(
       download ? "attachment" : "inline",
-      `${knownFloorplans.get(key)}${path.extname(name)}`,
+      // "floorplan-floor-1-22bfb513.pdf", "plan-sheet-floor-1-22bfb513.pdf".
+      `${name.startsWith("plan-sheet") ? knownFloorplans.get(key).replace(/^floorplan/, "plan-sheet") : knownFloorplans.get(key)}${path.extname(name)}`,
     ),
     // A key names one page for good.
     "Cache-Control": "private, max-age=86400",

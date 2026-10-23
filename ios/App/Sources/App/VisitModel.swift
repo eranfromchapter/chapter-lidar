@@ -9,6 +9,7 @@ import Foundation
 import Observation
 import PackageCore
 import PhotoStore
+import PlanExport
 import UIKit
 
 /// One visit on screen: a new capture, or one reopened from the Captures home. All rules live
@@ -887,6 +888,8 @@ final class VisitModel {
       var item = $0
       // The Floorplan's north symbol from the floor's own compass reading (compass §6.3).
       item.north = CompassState(capture)
+      // The plan sheet's title block, as the package's plan-sheet.pdf has it.
+      item.planContext = try? PlanExportContext(record: record, captureId: capture.captureId)
       return item
     }
   }

@@ -38,6 +38,9 @@ struct ScanItem: Identifiable, Hashable {
   /// The capture's compass, for the Floorplan's north symbol (compass §6.3); nil for a scan
   /// without a capture record (nothing is drawn).
   var north: CompassState? = nil
+  /// The plan sheet's title block, from the capture record as the package's `plan-sheet.pdf`
+  /// has it; nil for a scan without a capture record (the sheet then says "not recorded").
+  var planContext: PlanExportContext? = nil
   var id: String { folder.path }
 
   /// When the scan was made: the capture record's time, else the file's.
@@ -70,11 +73,14 @@ enum ScanLibrary {
   }
 }
 
-/// Loads one scan for viewing: the Floorplan and the measurements from our own mapping, and
-/// (on request) a USDZ model from Apple's RoomPlan export for the 3D view.
+/// Loads one scan for viewing: the plan sheet, the colour Floorplan and the measurements from our
+/// own mapping, and (on request) a USDZ model from Apple's RoomPlan export for the 3D view.
 @MainActor @Observable
 final class ScanViewerModel {
   let item: ScanItem
+  /// The plan sheet (`PlanSheetWriter`), the screen's main view.
+  private(set) var planSheet: PlanSheetModel?
+  /// The colour Floorplan (`FloorplanWriter`), written when its screen opens.
   private(set) var floorplan: FloorplanModel?
   private(set) var measurements: ScanMeasurements?
   private(set) var counts: String?
@@ -92,27 +98,35 @@ final class ScanViewerModel {
     let file = item.folder.appendingPathComponent(ScanLibrary.roomPlanFile)
     let label = item.captureLabel ?? item.title
     let names = item.roomNames
+    let planContext = item.planContext
+    // With the capture record's ids, as the package maps it, so the sheet shows the same rooms.
+    let mapping = MappingContext(
+      visitId: planContext.flatMap { LowercaseUUID(rawValue: $0.visitId) } ?? LowercaseUUID(),
+      captureId: planContext.flatMap { LowercaseUUID(rawValue: $0.captureId) } ?? LowercaseUUID(),
+      areaKey: planContext?.areaKey ?? "scan", label: label)
     do {
       let result = try await Task.detached(priority: .userInitiated) {
         let data = try Data(contentsOf: file)
         let document = try RoomPlanDocument.decode(from: data)
         // With the operator's room names, as the package's capture model has them.
-        let model = try RoomNaming.map(
-          document,
-          context: MappingContext(
-            visitId: LowercaseUUID(), captureId: LowercaseUUID(), areaKey: "scan", label: label),
-          names: names
-        ).model
+        let model = try RoomNaming.map(document, context: mapping, names: names).model
         return (model, ScanMeasurements(model: model), model.walls.count, model.rooms.count)
       }.value
       measurements = result.1
       counts = "\(result.3) \(result.3 == 1 ? "room" : "rooms") \u{00B7} \(result.2) walls"
-      let floorplan = FloorplanModel(
+      self.floorplan = FloorplanModel(
         model: result.0, address: item.address, units: item.displayUnits ?? .imperial,
         capturedAt: item.scanDate, north: item.north, exportName: item.folder.lastPathComponent)
-      self.floorplan = floorplan
+      let context =
+        planContext
+        ?? PlanExportContext(
+          unrecordedScan: item.title, capturedAt: UTCTimestamp(item.scanDate),
+          address: item.address, compass: item.north)
+      let sheet = PlanSheetModel(
+        model: result.0, context: context, exportName: item.folder.lastPathComponent)
+      planSheet = sheet
       isLoading = false
-      await floorplan.write()
+      await sheet.write()
     } catch {
       errorMessage = "This scan could not be drawn: \(error.localizedDescription)"
     }
@@ -151,67 +165,95 @@ final class ScanViewerModel {
   }
 }
 
-/// One scan, pushed from its floor row on the Capture overview (or from a v1 visit's scans):
-/// the Floorplan (pinch to zoom, units, download), the measurements and a 3D view of the model.
-/// Inline title = the floor's label; the system back chevron returns (no "Done").
+/// One scan, pushed from its floor row on the Capture overview (or from a v1 visit's scans): the
+/// plan sheet (the package's `plan-sheet.pdf`, pinch to zoom, full screen, download), "Colour
+/// floorplan" (the colour Floorplan with its units and download), the measurements and a 3D view
+/// of the model. Inline title = the floor's label; the system back chevron returns (no "Done").
 struct ScanViewer: View {
   @State private var model: ScanViewerModel
+  @State private var showsColourFloorplan = false
 
   init(item: ScanItem) {
     _model = State(initialValue: ScanViewerModel(item: item))
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Text(subtitle)
-        .chapterTextStyle(.subhead)
-        .foregroundStyle(ChapterTheme.Color.muted)
-        .lineLimit(2)
+    ScrollView {
+      VStack(alignment: .leading, spacing: 12) {
+        Text(subtitle)
+          .chapterTextStyle(.subhead)
+          .foregroundStyle(ChapterTheme.Color.muted)
+          .lineLimit(2)
 
-      if let floorplan = model.floorplan {
-        FloorplanView(floorplan: floorplan)
-      } else {
-        ZStack {
-          ChapterTheme.Color.surface
-          if model.isLoading {
-            ProgressView("Drawing the floor plan…")
-          } else {
-            Text(model.errorMessage ?? "No floor plan")
-              .chapterTextStyle(.footnote)
-              .foregroundStyle(ChapterTheme.Color.blocked).padding()
+        if let sheet = model.planSheet {
+          PlanSheetView(sheet: sheet)
+        } else {
+          ZStack {
+            ChapterTheme.Color.surface
+            if model.isLoading {
+              VStack(spacing: 8) {
+                ProgressView().tint(ChapterTheme.Color.muted)
+                Text("Drawing the plan sheet\u{2026}")
+                  .chapterTextStyle(.footnote)
+                  .foregroundStyle(ChapterTheme.Color.muted)
+              }
+            } else {
+              Text(model.errorMessage ?? "No plan sheet")
+                .chapterTextStyle(.footnote)
+                .foregroundStyle(ChapterTheme.Color.blocked).padding()
+            }
+          }
+          .aspectRatio(PlanSheetFiles.aspect, contentMode: .fit)
+          .clipShape(RoundedRectangle(cornerRadius: ChapterTheme.Metric.cardRadius))
+          .overlay(
+            RoundedRectangle(cornerRadius: ChapterTheme.Metric.cardRadius)
+              .strokeBorder(ChapterTheme.Color.line, lineWidth: ChapterTheme.Metric.cardBorder))
+        }
+
+        Button {
+          showsColourFloorplan = true
+        } label: {
+          HStack(spacing: 8) {
+            Image(systemName: "square.grid.3x3.square")
+            Text("Colour floorplan")
           }
         }
-        .clipShape(RoundedRectangle(cornerRadius: ChapterTheme.Metric.cardRadius))
-        .overlay(
-          RoundedRectangle(cornerRadius: ChapterTheme.Metric.cardRadius)
-            .strokeBorder(ChapterTheme.Color.line, lineWidth: ChapterTheme.Metric.cardBorder))
-      }
+        .buttonStyle(.chapter(.tinted))
+        .disabled(model.floorplan == nil)
+        .accessibilityHint("The plan alone in colour, with its units and download.")
+        .accessibilityIdentifier("scan.colourFloorplan")
 
-      if let scan = model.measurements {
-        measurements(scan, units: model.floorplan?.units ?? .imperial)
-      }
-
-      Button {
-        Task { await model.open3D() }
-      } label: {
-        HStack(spacing: 8) {
-          if model.isExporting { ProgressView().tint(ChapterTheme.Color.surface) }
-          Image(systemName: "cube")
-          Text(model.isExporting ? "Making the 3D model…" : "View in 3D")
+        if let scan = model.measurements {
+          measurements(scan, units: model.floorplan?.units ?? .imperial)
         }
+
+        Button {
+          Task { await model.open3D() }
+        } label: {
+          HStack(spacing: 8) {
+            if model.isExporting { ProgressView().tint(ChapterTheme.Color.surface) }
+            Image(systemName: "cube")
+            Text(model.isExporting ? "Making the 3D model\u{2026}" : "View in 3D")
+          }
+        }
+        .buttonStyle(.chapter(.primary))
+        .disabled(model.isExporting)
+        .accessibilityIdentifier("scan.view3D")
       }
-      .buttonStyle(.chapter(.primary))
-      .disabled(model.isExporting)
-      .accessibilityIdentifier("scan.view3D")
+      .padding(.horizontal, ChapterTheme.Metric.screenPadding)
+      .padding(.top, 8)
+      .padding(.bottom, ChapterTheme.Metric.actionBarBottom)
+      .chapterContentWidth()
     }
-    .padding(.horizontal, ChapterTheme.Metric.screenPadding)
-    .padding(.top, 8)
-    .padding(.bottom, ChapterTheme.Metric.actionBarBottom)
-    .chapterContentWidth()
     .navigationTitle(model.item.title)
     .navigationBarTitleDisplayMode(.inline)
     .chapterBackChevronOnly()
     .chapterScreenBackground()
+    .navigationDestination(isPresented: $showsColourFloorplan) {
+      if let floorplan = model.floorplan {
+        ColourFloorplanScreen(floorplan: floorplan)
+      }
+    }
     .fullScreenCover(item: $model.modelURL) { url in
       ModelViewer(url: url, title: model.item.title)
     }

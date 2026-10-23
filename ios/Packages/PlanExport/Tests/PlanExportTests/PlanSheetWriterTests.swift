@@ -164,6 +164,41 @@ final class PlanSheetWriterTests: XCTestCase {
       "\(self.shown(output))")
   }
 
+  /// A scan without a capture record (a v1 scan, a raw scan in tools/plan-render): the drawing
+  /// and the model's own numbers, "not recorded" for what only the record knows, no id or
+  /// address made up, and no compass reading.
+  func testUnrecordedScan() throws {
+    let capture = try Self.boxRoom()
+    let capturedAt = try XCTUnwrap(UTCTimestamp(rawValue: "2026-10-17T15:00:00Z"))
+    let context = PlanExportContext(unrecordedScan: "Scan", capturedAt: capturedAt)
+    XCTAssertFalse(context.isRecorded)
+    let output = try PlanSheetWriter.write(model: capture.model, context: context)
+    let shown = shown(output)
+    for text in [
+      "SHEET 1 \u{B7} SCAN", "Scan \u{B7} ", "Address not recorded", "HUB deal", "Capture id",
+      "Oct 17, 2026 \u{B7} operator not recorded", "Device", "Mode", "not recorded",
+      "129.2 sq ft \u{B7} 12.0 m\u{B2}", "1 scanned", "Orientation: not verified",
+      "No compass reading", "TEST ROOM",
+    ] {
+      XCTAssertTrue(shown.contains(text), "\(text) in \(shown)")
+    }
+    // Deal, capture id, device and mode: four rows say "not recorded", in Inter.
+    XCTAssertEqual(shown.filter { $0 == "not recorded" }.count, 4)
+    XCTAssertFalse(runs(output).contains { $0.text == "not recorded" && $0.font != "/F1" })
+    for text in shown {
+      XCTAssertFalse(text.contains("fixture-deal"), text)
+      XCTAssertFalse(text.contains(capture.model.captureId.rawValue), text)
+      XCTAssertFalse(text.contains("["), text)
+    }
+    // With a known address and compass state: those are printed.
+    let known = PlanExportContext(
+      unrecordedScan: "Floor 1", capturedAt: capturedAt, address: "1 Elm St, NY",
+      compass: CompassState(capture.record.captures[0]))
+    let withAddress = self.shown(try PlanSheetWriter.write(model: capture.model, context: known))
+    XCTAssertTrue(withAddress.contains("1 Elm St, NY"), "\(withAddress)")
+    XCTAssertTrue(withAddress.contains("SHEET 1 \u{B7} FLOOR 1"), "\(withAddress)")
+  }
+
   /// The run showing `string` exactly, with its size and left edge (points).
   private func text(_ output: PlanSheetOutput, _ string: String) throws
     -> (size: Double, x: Double)

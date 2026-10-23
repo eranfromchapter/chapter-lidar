@@ -516,7 +516,7 @@ function captureSection(c, id, visitId) {
     h(
       "h3",
       {},
-      "Floorplan ",
+      "Plans ",
       h("span", { class: "h-note" }, "(rendered now with the current app code)"),
     ),
     floorplanBlock(visitId, c),
@@ -1192,9 +1192,10 @@ lightbox.addEventListener("click", (event) => {
 });
 
 // ---------------------------------------------------------------------------------------------
-// Floorplan: the page the phone shows, rendered by the server with the current app code
-// (tools/plan-render). The server builds the renderer on first need, so the page asks once with
-// start=1 and then polls until the page is ready or has failed.
+// Plans: the plan sheet (the Tabloid page the package carries and the phone shows first) and the
+// colour Floorplan (the phone's "Colour floorplan"), rendered by the server with the current app
+// code (tools/plan-render, one render for both). The server builds the renderer on first need, so
+// the page asks once with start=1 and then polls until the plans are ready or have failed.
 
 const FLOORPLAN_POLL_MS = 1000;
 const PAGE_NAMES = { letterLandscape: "Letter landscape page", square: "10 in square page" };
@@ -1203,7 +1204,7 @@ function floorplanBlock(visitId, c) {
   const sources = c.floorplan?.sources ?? [];
   if (!sources.length) {
     return muted(
-      "No roomplan.json or capture-model.json for this capture, so there is no Floorplan to draw.",
+      "No roomplan.json or capture-model.json for this capture, so there are no plans to draw.",
     );
   }
   let current = sources[0].id;
@@ -1235,7 +1236,7 @@ function floorplanBlock(visitId, c) {
     sources.length > 1
       ? h(
           "div",
-          { class: "segmented", role: "group", "aria-label": "Draw the Floorplan from" },
+          { class: "segmented", role: "group", "aria-label": "Draw the plans from" },
           h("span", { class: "muted small" }, "Draw from"),
           buttons,
         )
@@ -1258,7 +1259,7 @@ function floorplanBlock(visitId, c) {
         h(
           "div",
           {},
-          h("strong", {}, "Rendering floor plan…"),
+          h("strong", {}, "Rendering the plans…"),
           st?.status === "building" ? h("p", { class: "muted small" }, st.message) : null,
         ),
       ),
@@ -1300,22 +1301,64 @@ function floorplanPage(st, c) {
   const url = (name, download) =>
     `/api/floorplan-file?key=${enc(st.key)}&name=${name}${download ? "&download=1" : ""}`;
   const s = st.summary ?? {};
+  const name = c.label ?? c.areaKey;
+  const rendered = st.renderedAt ? `rendered ${fmtDate(st.renderedAt)}` : null;
+
+  // The plan sheet: Tabloid 11 x 17 in, always imperial, its title block from the capture
+  // record (or "not recorded" where there is none).
+  const sheet = s.planSheet ?? {};
+  const sheetScale = Number.isFinite(sheet.scaleDenominator)
+    ? `1:${Math.round(sheet.scaleDenominator)} at 11 x 17 in`
+    : null;
+  const titleBlock =
+    sheet.titleBlock === "capture record"
+      ? "title block from the capture record"
+      : sheet.titleBlock
+        ? `title block "not recorded" (${sheet.note ?? "no capture record"})`
+        : null;
+  const sheetFacts = [
+    sheetScale,
+    sheet.isClipped ? "cut at the frame (larger than the sheet)" : null,
+    titleBlock,
+    rendered,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  // The colour Floorplan.
   const rooms = Number.isFinite(s.rooms) ? `${s.rooms} room${s.rooms === 1 ? "" : "s"}` : null;
   const scale = Number.isFinite(s.scaleDenominator)
     ? `1:${Math.round(s.scaleDenominator)} on a ${PAGE_NAMES[s.page] ?? "page"}`
     : null;
   const units = st.options?.units === "metric" ? "metres" : "feet and inches";
-  const facts = [
-    s.totalText,
-    rooms,
-    scale,
-    units,
-    st.renderedAt ? `rendered ${fmtDate(st.renderedAt)}` : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-  const name = c.label ?? c.areaKey;
+  const facts = [s.totalText, rooms, scale, units].filter(Boolean).join(" · ");
+
+  const open = (file, label) =>
+    h("a", { href: url(file), target: "_blank", rel: "noopener" }, label);
+  const save = (file, label) => h("a", { href: url(file, true), download: "" }, label);
   return [
+    h("h4", { class: "plan-title" }, "Plan sheet"),
+    h(
+      "a",
+      {
+        href: url("plan-sheet.pdf"),
+        target: "_blank",
+        rel: "noopener",
+        class: "floorplan-page plan-sheet-page",
+        title: "Open the PDF",
+      },
+      h("img", { src: url("plan-sheet.png"), alt: `Plan sheet of ${name}` }),
+    ),
+    h("p", { class: "small" }, sheetFacts),
+    h(
+      "p",
+      { class: "links small" },
+      open("plan-sheet.pdf", "Open PDF"),
+      save("plan-sheet.pdf", "Download plan-sheet.pdf"),
+      open("plan-sheet.png", "Open PNG"),
+      save("plan-sheet.png", "Download PNG (200 dpi)"),
+    ),
+    h("h4", { class: "plan-title" }, "Colour floorplan"),
     h(
       "a",
       {
@@ -1325,17 +1368,17 @@ function floorplanPage(st, c) {
         class: "floorplan-page",
         title: "Open the PDF",
       },
-      h("img", { src: url("floorplan.png"), alt: `Floorplan of ${name}` }),
+      h("img", { src: url("floorplan.png"), alt: `Colour floorplan of ${name}` }),
     ),
     h("p", { class: "small" }, facts),
     h(
       "p",
       { class: "links small" },
-      h("a", { href: url("floorplan.pdf"), target: "_blank", rel: "noopener" }, "Open PDF"),
-      h("a", { href: url("floorplan.pdf", true), download: "" }, "Download PDF"),
-      h("a", { href: url("floorplan.svg"), target: "_blank", rel: "noopener" }, "Open SVG"),
-      h("a", { href: url("floorplan.svg", true), download: "" }, "Download SVG"),
-      h("a", { href: url("floorplan.png", true), download: "" }, "Download PNG (200 dpi)"),
+      open("floorplan.pdf", "Open PDF"),
+      save("floorplan.pdf", "Download PDF"),
+      open("floorplan.svg", "Open SVG"),
+      save("floorplan.svg", "Download SVG"),
+      save("floorplan.png", "Download PNG (200 dpi)"),
     ),
   ];
 }
@@ -1383,7 +1426,7 @@ function sketchBlock(c) {
   if (!c.sketchPath) {
     const fromRaw = c.floorplan?.sources?.some((x) => x.id === "roomplan");
     return muted(
-      `No capture-model.json yet (no export), so there is no sketch.${fromRaw ? " The Floorplan above is drawn from the raw scan." : ""}`,
+      `No capture-model.json yet (no export), so there is no sketch.${fromRaw ? " The plans above are drawn from the raw scan." : ""}`,
     );
   }
   const box = h("div", { class: "sketch-box" }, muted("Drawing…"));

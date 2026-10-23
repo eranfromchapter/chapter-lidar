@@ -273,10 +273,16 @@ struct FloorplanView: View {
   }
 }
 
-/// One PDF page in PDFKit's view, fitted to the view: pinch to zoom up to 8x, never smaller
-/// than the whole page.
-private struct PDFPageView: UIViewRepresentable {
+/// One PDF page in PDFKit's view, fitted to the view: pinch to zoom up to `maxZoom` times the
+/// whole page, never smaller than it. `rotation` turns the page clockwise by a multiple of 90°
+/// (the plan sheet turned to fill a portrait screen). `background`: around the page;
+/// `edgeToEdge` draws the page without PDFKit's margin around it.
+struct PDFPageView: UIViewRepresentable {
   let data: Data
+  var rotation = 0
+  var maxZoom: CGFloat = 8
+  var background: UIColor = .white
+  var edgeToEdge = false
 
   func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -285,34 +291,47 @@ private struct PDFPageView: UIViewRepresentable {
     view.displayMode = .singlePage
     view.displayDirection = .vertical
     view.pageShadowsEnabled = false
-    view.backgroundColor = .white
+    view.backgroundColor = background
+    if edgeToEdge { view.pageBreakMargins = .zero }
     view.autoScales = true
+    view.maxZoom = maxZoom
     load(view, context: context)
     return view
   }
 
   func updateUIView(_ view: FittedPDFView, context: Context) {
-    if context.coordinator.data != data { load(view, context: context) }
+    view.maxZoom = maxZoom
+    if context.coordinator.data != data || context.coordinator.rotation != rotation {
+      load(view, context: context)
+    }
   }
 
   private func load(_ view: FittedPDFView, context: Context) {
     context.coordinator.data = data
-    view.document = PDFDocument(data: data)
+    context.coordinator.rotation = rotation
+    let document = PDFDocument(data: data)
+    if rotation != 0, let page = document?.page(at: 0) {
+      page.rotation = (page.rotation + rotation) % 360
+    }
+    view.document = document
     view.autoScales = true
   }
 
   final class Coordinator {
     var data: Data?
+    var rotation = 0
   }
 }
 
-/// PDFView that keeps its zoom between the whole page and 8x the whole page.
+/// PDFView that keeps its zoom between the whole page and `maxZoom` times the whole page.
 final class FittedPDFView: PDFView {
+  var maxZoom: CGFloat = 8
+
   override func layoutSubviews() {
     super.layoutSubviews()
     let fit = scaleFactorForSizeToFit
     guard fit > 0 else { return }
     if minScaleFactor != fit { minScaleFactor = fit }
-    if maxScaleFactor != fit * 8 { maxScaleFactor = fit * 8 }
+    if maxScaleFactor != fit * maxZoom { maxScaleFactor = fit * maxZoom }
   }
 }

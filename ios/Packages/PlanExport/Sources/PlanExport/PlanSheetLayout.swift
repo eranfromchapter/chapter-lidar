@@ -344,7 +344,12 @@ struct PlanSheetLayout {
       width - SheetItems.width(label, size: 9, font: .interRegular) - 8
     }
     var rows: [Row] = []
-    do {
+    // A scan without a capture record: "not recorded" in Inter, never shown as an id.
+    let notRecorded = "not recorded"
+    if !context.isRecorded {
+      rows.append(Row(label: "HUB deal", value: notRecorded, font: .interRegular, size: 9))
+      rows.append(Row(label: "Capture id", value: notRecorded, font: .interRegular, size: 9))
+    } else {
       let label = "HUB deal"
       let available = valueWidth(label)
       let size = SheetItems.width(context.dealId, size: 9, font: .courier) <= available ? 9 : 7.5
@@ -353,8 +358,8 @@ struct PlanSheetLayout {
           label: label,
           value: SheetText.cut(context.dealId, size: size, font: .courier, width: available),
           font: .courier, size: size))
+      rows.append(Row(label: "Capture id", value: context.captureId, font: .courier, size: 7.5))
     }
-    rows.append(Row(label: "Capture id", value: context.captureId, font: .courier, size: 7.5))
     do {
       let label = "Captured"
       let date = "\(context.capturedDateText) · "
@@ -366,7 +371,9 @@ struct PlanSheetLayout {
     do {
       let label = "Device"
       let lidar = context.hasLidar ? " · LiDAR" : ""
-      let text = "\(context.deviceName)\(lidar) · app \(context.appShortVersion)"
+      let text =
+        context.isRecorded
+        ? "\(context.deviceName)\(lidar) · app \(context.appShortVersion)" : notRecorded
       rows.append(
         Row(
           label: label,
@@ -379,7 +386,10 @@ struct PlanSheetLayout {
     case .floor: mode = "Whole floor"
     case .exterior: mode = "Exterior"
     }
-    rows.append(Row(label: "Mode", value: mode, font: .interRegular, size: 9))
+    rows.append(
+      Row(
+        label: "Mode", value: context.isRecorded ? mode : notRecorded, font: .interRegular,
+        size: 9))
     let area =
       summary.floorAreaM2.map {
         "\(UnitFormatter.sheetArea($0)) · \(UnitFormatter.sheetMetricArea($0))"
