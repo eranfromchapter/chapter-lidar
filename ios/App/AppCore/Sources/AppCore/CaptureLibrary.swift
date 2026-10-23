@@ -201,6 +201,9 @@ public struct PackageProgress: Sendable {
       ?? nil
     if state?.isConfirmedByStation == true {
       progress = .checking
+    } else if PhotosErasedRecord.isErased(packageAt: package.root) {
+      // Its photos were erased before the station confirmed it: it is never uploaded.
+      progress = .uploadStopped
     } else {
       let dealId = state?.dealId ?? SealedPackageSummary.captureRecord(of: package)?.hub.dealId ?? ""
       let summary = UploadProgressSummary.make(

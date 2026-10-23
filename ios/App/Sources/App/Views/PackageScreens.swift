@@ -502,6 +502,9 @@ struct PackageStatusView: View {
             canRetry: actions.retry != nil, canReseal: canReseal,
             scansOnPhone: options.canReseal),
           resealError: options.resealError)
+        if snapshot.photosErased {
+          PhotosErasedNote()
+        }
         ChapterSection(header: "Files") {
           ForEach(snapshot.progress.rows, id: \.category) { row in
             CategoryRow(row: row)
@@ -557,6 +560,15 @@ struct PackageStatusView: View {
 
   /// Re-seal needs the visit's originals on the phone and an action that does it.
   private var canReseal: Bool { options.canReseal && actions.reseal != nil }
+}
+
+/// "Photos erased on this phone": "Delete all photos" (field-test and UI-test modes) erased the
+/// package's site photos; its manifest still lists them.
+private struct PhotosErasedNote: View {
+  var body: some View {
+    InfoNote(PhotosErasedText.note)
+      .accessibilityIdentifier("package.photosErased")
+  }
 }
 
 /// The progress card: bytes and percent, the 8 pt bar and the state's caption.
@@ -724,6 +736,9 @@ struct VerdictView: View {
               }
             }
           }
+        }
+        if snapshot.photosErased {
+          PhotosErasedNote()
         }
         ChapterSection(header: "Station", footer: supersededText) {
           ForEach(snapshot.timeline(now: options.now, timeZone: options.timeZone).rows, id: \.id) {

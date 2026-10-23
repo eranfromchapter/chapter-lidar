@@ -19,7 +19,8 @@ import Foundation
 ///   names.
 ///
 /// The folder is created by the first Start scan of a new capture (an abandoned New capture
-/// leaves nothing on disk). Nothing in the app deletes any of these folders.
+/// leaves nothing on disk). Nothing in the app deletes any of these folders; "Delete all photos"
+/// (field-test and UI-test modes, `PhotoEraser`) deletes only photo files in them.
 public struct VisitWorkspace: Equatable, Sendable {
   public let root: URL
 

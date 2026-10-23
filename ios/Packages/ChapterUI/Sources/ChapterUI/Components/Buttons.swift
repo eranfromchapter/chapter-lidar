@@ -11,6 +11,8 @@
   /// - `.cardAction`: 44 pt, padding 0 × 16, radius 10, nude fill, subhead ink.
   /// - `.outlineOnDark`: 52 pt, full width, radius 12, 1 pt surface border, body surface.
   /// - `.filledOnDark`: 52 pt, full width, radius 12, surface fill, bodyEmphasis ink.
+  /// - `.destructive`: as `.primary` on the blocked red (#8B2E2E), for an action that cannot be
+  ///   undone ("Delete all photos"). Disabled: as primary.
   ///
   /// The last four are drawn at opacity 0.4 when disabled.
   /// A disabled primary button is never drawn with opacity: its label is different text that says
@@ -27,6 +29,7 @@
       case cardAction
       case outlineOnDark
       case filledOnDark
+      case destructive
     }
 
     public let kind: Kind
@@ -68,7 +71,7 @@
       guard !isEnabled else { return false }
       switch kind {
       case .rowAction, .cardAction, .outlineOnDark, .filledOnDark: return true
-      case .primary, .tinted, .text: return false
+      case .primary, .tinted, .text, .destructive: return false
       }
     }
 
@@ -89,6 +92,14 @@
             !isEnabled
               ? ChapterTheme.Color.line
               : primary ? ChapterTheme.Color.ink : ChapterTheme.Color.nude,
+            in: RoundedRectangle(cornerRadius: Metric.buttonRadius))
+      case .destructive:
+        label
+          .chapterTextStyle(.bodyEmphasis)
+          .foregroundStyle(isEnabled ? ChapterTheme.Color.surface : ChapterTheme.Color.disabledText)
+          .fullWidth(minHeight: Metric.primaryButtonHeight)
+          .background(
+            isEnabled ? ChapterTheme.Color.blocked : ChapterTheme.Color.line,
             in: RoundedRectangle(cornerRadius: Metric.buttonRadius))
       case .text:
         label

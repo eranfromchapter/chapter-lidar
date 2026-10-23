@@ -126,6 +126,17 @@ xcodebuild build -project ios/ChapterCapture.xcodeproj -scheme App -configuratio
 Then install `build/dd-v2/Build/Products/Debug-iphoneos/ChapterCapture.app` with Xcode or `xcrun devicectl
 device install app`. Release ignores the flag and excludes the `FieldTest*` sources.
 
+**Delete all photos** (field-test and UI-test modes only, `#if DEBUG`): the avatar's account dialog
+on the Captures home erases every site photo the app holds after an in-page confirmation, and
+says "Deleted N photos" (distinct photos) or "No photos to delete". `PhotoEraser` (AppCore) deletes
+the visits' `photos/` files (`photo-records.json` becomes `[]`), the photo files of sealed packages
+(recorded in `<packageId>.photos-erased.json`: a package the station had not confirmed is never
+uploaded again, and its screens say "Photos erased on this phone"), `Site Photos` folders and
+JPEG/HEIC files in drafts and failed assembly folders, the upload scratch and app-switcher
+snapshots, photo files in `tmp/` and `Caches/`, the stub station's photo blobs, and the
+thumbnails in memory. Scans (`originals/`, `Original Exports`), plans, field controls, room names,
+capture records, manifests and `visit.json` stay byte for byte. Running it again deletes nothing.
+
 ## Debug-only UI-test mode
 
 Launching with `-ChapterUITestReplay box-room` selects `LaunchMode.uiTestReplay`: the scan replays

@@ -794,6 +794,122 @@ final class ReplayFlowUITests: XCTestCase {
     shot("38 Capture overview, two floors")
   }
 
+  // MARK: Delete all photos (field-test and UI-test modes)
+
+  /// The account dialog's "Delete all photos": opened and confirmed on the Captures home, it
+  /// says what it deleted, and the checklist then asks for the photos again.
+  private func deleteAllPhotos(expecting message: String) {
+    XCTAssertTrue(app.staticTexts["Captures"].waitForExistence(timeout: 15))
+    tap(app.buttons["account.avatar"])
+    tap(app.buttons["account.deletePhotos"].firstMatch, timeout: 5)
+    let card = element("deletePhotos.card")
+    XCTAssertTrue(card.waitForExistence(timeout: 5), "the in-page confirmation")
+    XCTAssertEqual(element("deletePhotos.title").label, "Delete all photos?")
+    XCTAssertEqual(
+      element("deletePhotos.message").label,
+      "This erases every site photo Space Capture holds on this phone, including the copies in "
+        + "drafts and sealed packages. Scans, plans and field controls stay. This cannot be "
+        + "undone.")
+    XCTAssertEqual(app.buttons["deletePhotos.confirm"].label, "Delete all photos")
+    XCTAssertEqual(app.buttons["deletePhotos.cancel"].label, "Cancel")
+    tap(app.buttons["deletePhotos.confirm"])
+    let said = element("captures.photosMessage")
+    XCTAssertTrue(said.waitForExistence(timeout: 30), "the line after deleting")
+    waitForLabel(said, message)
+    XCTAssertFalse(card.exists)
+  }
+
+  func testDeleteAllPhotosThenTheChecklistAsksForThem() {
+    launch()
+    openStepTwo()
+    scanFloor()
+    // One labeled photo of Room 1.
+    tap(app.buttons["photo.shutter"], timeout: 20)
+    tap(app.buttons["photo.room.Room 1"])
+    tap(app.buttons["photo.direction.N"])
+    tap(app.buttons["photo.subject.general"])
+    tap(app.buttons["photo.doneWithPhotos"])
+    let photos = app.buttons["overview.photos"]
+    XCTAssertTrue(photos.waitForExistence(timeout: 15))
+    XCTAssertTrue(photos.label.contains("Every room has a photo"), photos.label)
+    goBack()
+
+    // Cancel leaves everything as it was.
+    XCTAssertTrue(app.staticTexts["Captures"].waitForExistence(timeout: 15))
+    tap(app.buttons["account.avatar"])
+    tap(app.buttons["account.deletePhotos"].firstMatch, timeout: 5)
+    let card = element("deletePhotos.card")
+    XCTAssertTrue(card.waitForExistence(timeout: 5))
+    assertFonts("Delete all photos?")
+    shot("50 Delete all photos?")
+    tap(app.buttons["deletePhotos.cancel"])
+    waitFor("the confirmation closes") { !card.exists }
+    XCTAssertFalse(element("captures.photosMessage").exists)
+
+    deleteAllPhotos(expecting: "Deleted 1 photo")
+    shot("51 Deleted 1 photo")
+
+    // The visit is still there, with its scan; its photo is gone.
+    let row = app.buttons.matching(
+      NSPredicate(format: "identifier BEGINSWITH 'captures.row.' AND label CONTAINS 'UI test visit'")
+    ).firstMatch
+    XCTAssertTrue(row.waitForExistence(timeout: 10))
+    row.tap()
+    XCTAssertTrue(photos.waitForExistence(timeout: 15))
+    let floor = app.buttons["overview.floor.floor-1"]
+    waitFor("the floor is mapped again") { floor.label.contains("Whole floor \u{00B7} 1 room") }
+    XCTAssertFalse(floor.label.contains("1 photo"), floor.label)
+    waitFor("the overview asks for a photo") { photos.label.contains("Room 1 has no photo") }
+    XCTAssertTrue(photos.label.contains("Missing"), photos.label)
+
+    // Before you leave asks for the photo again.
+    tap(app.buttons["overview.skippedRooms"])
+    XCTAssertTrue(app.staticTexts["Before you leave"].waitForExistence(timeout: 15))
+    let photoRow = element("checklist.detail.photoPerRoom")
+    XCTAssertTrue(photoRow.waitForExistence(timeout: 10))
+    XCTAssertTrue(photoRow.label.contains("Room 1"), photoRow.label)
+    XCTAssertTrue(app.buttons["checklist.takePhoto"].waitForExistence(timeout: 10))
+    shot("52 Before you leave, photos deleted")
+    goBack()
+    XCTAssertTrue(photos.waitForExistence(timeout: 10))
+    goBack()
+
+    // A second time there is nothing left to delete.
+    deleteAllPhotos(expecting: "No photos to delete")
+  }
+
+  func testDeleteAllPhotosOfASealedPackage() {
+    launch()
+    reachPackageReady()
+    tap(app.buttons["package.seal"])
+    let checks = element("station.checks")
+    XCTAssertTrue(checks.waitForExistence(timeout: 30))
+    waitForLabel(checks, "Checks, not yet, queued", timeout: 60)
+    XCTAssertFalse(element("package.photosErased").exists)
+    goBack()
+    let review = app.buttons["overview.review"]
+    waitForLabel(review, "Upload status")
+    goBack()
+
+    // The photo is in the visit and in the sealed package: one photo, both copies deleted.
+    deleteAllPhotos(expecting: "Deleted 1 photo")
+
+    let row = app.buttons.matching(
+      NSPredicate(format: "identifier BEGINSWITH 'captures.row.' AND label CONTAINS 'UI test visit'")
+    ).firstMatch
+    XCTAssertTrue(row.waitForExistence(timeout: 10))
+    waitFor("the row still says checks running") { row.label.contains("checks running") }
+    row.tap()
+    waitForLabel(review, "Upload status")
+    review.tap()
+    let note = element("package.photosErased")
+    XCTAssertTrue(note.waitForExistence(timeout: 15), "the package says its photos were erased")
+    XCTAssertEqual(note.label, "Photos erased on this phone")
+    XCTAssertTrue(app.staticTexts["Uploaded"].exists, "the station's copy is not undone")
+    assertFonts("Package status, photos erased")
+    shot("53 Package status, photos erased")
+  }
+
   // MARK: U7 Resume after a relaunch
 
   func testResumeAfterRelaunch() {

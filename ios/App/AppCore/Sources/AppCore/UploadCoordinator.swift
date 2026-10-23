@@ -54,13 +54,17 @@ public struct UploadSnapshot: Equatable, Sendable {
   public var verdict: VerdictStatus?
   /// The file the upload stopped on, when the fatal error names one.
   public var stoppedPath: String?
+  /// The package's site photos were erased on this phone ("Delete all photos",
+  /// `PhotosErasedRecord`): its screens say so, and a package the station had not confirmed is
+  /// not uploaded.
+  public var photosErased: Bool
 
   public var progress: UploadProgressSummary
 
   public init(
     packageId: LowercaseUUID, package: SealedPackageSummary, state: UploadState,
     activity: UploadActivity, station: StationPackageInfo? = nil, verdict: VerdictStatus? = nil,
-    stoppedPath: String? = nil, manifest: PackageManifest
+    stoppedPath: String? = nil, photosErased: Bool = false, manifest: PackageManifest
   ) {
     self.packageId = packageId
     self.package = package
@@ -69,6 +73,7 @@ public struct UploadSnapshot: Equatable, Sendable {
     self.station = station
     self.verdict = verdict
     self.stoppedPath = stoppedPath
+    self.photosErased = photosErased
     var stopped = false
     if case .failed = activity { stopped = true }
     progress = UploadProgressSummary.make(
@@ -188,6 +193,16 @@ public struct UploadSnapshot: Equatable, Sendable {
     let upload =
       "to upload the files as they are on this phone now as revision \(package.revision + 1)."
     let reseals = canReseal && scansOnPhone
+    if photosErased {
+      // Its photos are gone: trying again cannot help, and "Nothing was deleted" is not true.
+      var note = "Its scans, plans and field controls stay on this phone."
+      if reseals {
+        note += " Re-seal \(upload)"
+      } else if !scansOnPhone {
+        note += " This phone no longer has the scans to re-seal; start a new capture."
+      }
+      return note
+    }
     var note = "Nothing was deleted."
     switch (canRetry, reseals) {
     case (true, true): note += " Try again, or re-seal \(upload)"
@@ -374,6 +389,7 @@ public final class UploadCoordinator: @unchecked Sendable {
     snapshotValue = UploadSnapshot(
       packageId: package.packageId, package: SealedPackageSummary.make(package), state: state,
       activity: .starting, station: cached?.station, verdict: cached?.verdict,
+      photosErased: PhotosErasedRecord.isErased(packageAt: package.root),
       manifest: package.manifest)
   }
 
@@ -398,6 +414,18 @@ public final class UploadCoordinator: @unchecked Sendable {
   /// Same as `start()`: call after sign-in, for "Try again", or when the app comes back to the
   /// foreground.
   public func retry() { start() }
+
+  /// `cancel()`, then waits until the run has stopped: after it returns no package file is read
+  /// until `start()` ("Delete all photos" erases the photos meanwhile).
+  public func cancelAndWait() async {
+    let running = lock.withLock { () -> Task<Void, Never>? in
+      let running = task
+      task = nil
+      return running
+    }
+    running?.cancel()
+    await running?.value
+  }
 
   /// Stops the run (the state is saved; `start()` resumes).
   public func cancel() {
@@ -446,6 +474,18 @@ public final class UploadCoordinator: @unchecked Sendable {
   private func upload() async -> Bool {
     var attempt = 0
     while !Task.isCancelled {
+      // "Delete all photos" erased the package's photos: a package the station had not
+      // confirmed cannot be uploaded any more (its photo files are gone); one it confirmed only
+      // follows the station.
+      let erased = PhotosErasedRecord.isErased(packageAt: package.root)
+      if erased != snapshot.photosErased { update { $0.photosErased = erased } }
+      if erased, ((try? store.load()) ?? nil)?.isConfirmedByStation != true {
+        update {
+          $0.activity = .failed(PhotosErasedText.stopped)
+          $0.stoppedPath = nil
+        }
+        return false
+      }
       do {
         let uploader = try PackageUploader(
           package: package, dealId: dealId, service: service, transport: transport, store: store,
@@ -546,7 +586,7 @@ public final class UploadCoordinator: @unchecked Sendable {
     next = UploadSnapshot(
       packageId: next.packageId, package: next.package, state: next.state,
       activity: next.activity, station: next.station, verdict: next.verdict,
-      stoppedPath: next.stoppedPath, manifest: package.manifest)
+      stoppedPath: next.stoppedPath, photosErased: next.photosErased, manifest: package.manifest)
     snapshotValue = next
     lock.unlock()
     onChange(next)
@@ -554,7 +594,8 @@ public final class UploadCoordinator: @unchecked Sendable {
 }
 
 /// Sealed packages on the phone whose upload the station has not confirmed yet, newest first,
-/// without the packages re-sealed as a later revision. The HUB deal id is read from each
+/// without the packages re-sealed as a later revision and those whose photos were erased on the
+/// phone (they can no longer be uploaded). The HUB deal id is read from each
 /// package's own capture record. Packages sealed by app builds before v2 (manifest 1.0.0) are
 /// found too, so their uploads resume after the app update.
 public enum PendingUploads {
@@ -570,6 +611,7 @@ public enum PendingUploads {
       let state = try? UploadStateStore(url: UploadStateStore.defaultURL(forPackageAt: folder))
         .load()
       if state?.isConfirmedByStation == true || state?.supersededBy != nil { continue }
+      if PhotosErasedRecord.isErased(packageAt: folder) { continue }
       guard let dealId = state?.dealId ?? dealId(of: package) else { continue }
       items.append(
         (package.manifest.sealedAt.date, Item(package: package, dealId: dealId, state: state)))

@@ -328,4 +328,19 @@ final class HomeModel {
     guard let app else { return }
     Task { await app.signOut() }
   }
+
+  #if DEBUG
+    /// The account dialog offers "Delete all photos" (field-test and UI-test modes only).
+    var offersPhotoDeletion: Bool { app?.photoDeletion != nil }
+
+    /// "Delete all photos", confirmed: erases them (`AppModel.deleteAllPhotos`) and lists the
+    /// captures again. Returns the line to show.
+    func deleteAllPhotos() async -> String {
+      guard let app else { return DeletePhotosText.result(deleted: 0) }
+      let message = await app.deleteAllPhotos()
+      snapshots = app.liveSnapshots
+      reload()
+      return message
+    }
+  #endif
 }
