@@ -551,7 +551,7 @@ final class ReplayFlowUITests: XCTestCase {
       stored.hasSuffix("\u{00B7} accuracy 8 \u{00B7} source true \u{00B7} recorded"), stored)
 
     // Back on the overview of the sealed visit: "Upload status", no new floor; the floor row
-    // opens the scan's Floorplan (with its north symbol).
+    // opens the scan's plan sheet, and from it the colour Floorplan (with its north symbol).
     goBack()
     waitForLabel(review, "Upload status")
     XCTAssertFalse(app.buttons["overview.addFloor"].exists, "nothing is added after sealing")
@@ -559,20 +559,26 @@ final class ReplayFlowUITests: XCTestCase {
       app.staticTexts["Captured today by UI Test Operator \u{00B7} revision 1 sealed"].exists)
     shot("18 Capture overview, sealed")
     tap(app.buttons["overview.floor.floor-1"])
+    XCTAssertTrue(element("plansheet.page").waitForExistence(timeout: 30), "plan sheet")
+    waitForLabel(element("plansheet.download"), "Download plan sheet, PDF")
+    assertFonts("Floor scan")
+    shot("19 Plan sheet")
+    tap(app.buttons["scan.colourFloorplan"])
     let page = element("floorplan.page")
     XCTAssertTrue(page.waitForExistence(timeout: 30), "floor plan page")
     let download = element("floorplan.download")
     waitForLabel(download, "Download floor plan, PDF and PNG")
-    assertFonts("Floor scan")
-    shot("19 Floorplan")
+    assertFonts("Colour floorplan")
+    shot("19b Colour floorplan")
     let units = app.buttons["floorplan.units"]
     XCTAssertEqual(units.label, "Units, feet and inches")
     units.tap()
     tap(app.buttons["Metric (m)"].firstMatch)
     waitForLabel(units, "Units, metres")
     waitForLabel(download, "Download floor plan, PDF and PNG")
-    shot("20 Floorplan, metric")
-    XCTAssertTrue(app.buttons["scan.view3D"].exists)
+    shot("20 Colour floorplan, metric")
+    goBack()
+    XCTAssertTrue(app.buttons["scan.view3D"].waitForExistence(timeout: 10))
     goBack()
     XCTAssertTrue(review.waitForExistence(timeout: 10))
 
@@ -794,6 +800,53 @@ final class ReplayFlowUITests: XCTestCase {
     shot("38 Capture overview, two floors")
   }
 
+  // MARK: The plan sheet of a floor
+
+  /// A floor's row opens its plan sheet (the package's plan-sheet.pdf, PlanSheetWriter): the
+  /// sheet, its download, the full-screen view turned to fill the portrait screen and back
+  /// upright, and "Colour floorplan", the colour Floorplan with its units and download.
+  func testPlanSheetOfAFloor() {
+    launch(["-ChapterUITestVisitsRoot", "plansheet-\(UUID().uuidString.prefix(8))"])
+    openStepTwo()
+    scanFloor()
+    leavePhotosForTheOverview()
+    tap(app.buttons["overview.floor.floor-1"])
+
+    let page = element("plansheet.page")
+    XCTAssertTrue(page.waitForExistence(timeout: 30), "plan sheet")
+    // The card has the sheet's shape: Tabloid landscape, 1224 x 792.
+    let ratio = page.frame.width / max(1, page.frame.height)
+    XCTAssertEqual(ratio, 1224.0 / 792.0, accuracy: 0.05, "\(page.frame)")
+    waitForLabel(element("plansheet.download"), "Download plan sheet, PDF")
+    XCTAssertTrue(app.buttons["scan.colourFloorplan"].exists)
+    XCTAssertTrue(app.buttons["scan.view3D"].exists)
+    assertFonts("Plan sheet")
+    shot("80 Plan sheet")
+
+    // Full screen: turned a quarter to fill the portrait screen, then upright.
+    tap(app.buttons["plansheet.fullScreen"])
+    let full = element("plansheet.fullScreen.page")
+    XCTAssertTrue(full.waitForExistence(timeout: 10), "full-screen plan sheet")
+    let rotate = app.buttons["plansheet.fullScreen.rotate"]
+    XCTAssertEqual(rotate.label, "Upright")
+    XCTAssertTrue(anyText(containing: "Turn the phone to read the sheet").exists)
+    shot("81 Plan sheet, full screen")
+    rotate.tap()
+    waitForLabel(rotate, "Turn to fill the screen", timeout: 10)
+    shot("82 Plan sheet, full screen, upright")
+    tap(app.buttons["plansheet.fullScreen.close"])
+    XCTAssertTrue(page.waitForExistence(timeout: 10))
+
+    // Colour floorplan: the colour Floorplan, its units and its own download.
+    tap(app.buttons["scan.colourFloorplan"])
+    XCTAssertTrue(element("floorplan.page").waitForExistence(timeout: 30), "colour floorplan")
+    waitForLabel(element("floorplan.download"), "Download floor plan, PDF and PNG")
+    XCTAssertTrue(app.staticTexts["Colour floorplan"].exists)
+    shot("83 Colour floorplan")
+    goBack()
+    XCTAssertTrue(page.waitForExistence(timeout: 10))
+  }
+
   // MARK: U7 Resume after a relaunch
 
   func testResumeAfterRelaunch() {
@@ -846,12 +899,18 @@ final class ReplayFlowUITests: XCTestCase {
     XCTAssertTrue(scans.label.contains("1 scan \u{00B7} no HUB project recorded"), scans.label)
     shot("26 Captures, v1 visits")
 
-    // The scans-only visit: its scan's Floorplan is still there.
+    // The scans-only visit: its scan's plan sheet ("not recorded" where the record would be)
+    // and its colour Floorplan are still there.
     scans.tap()
     XCTAssertTrue(app.staticTexts["Scans"].waitForExistence(timeout: 10))
     shot("27 v1 scans")
     tap(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'legacy.scan.'")).firstMatch)
+    XCTAssertTrue(element("plansheet.page").waitForExistence(timeout: 30))
+    waitForLabel(element("plansheet.download"), "Download plan sheet, PDF")
+    shot("27b v1 scan, plan sheet")
+    tap(app.buttons["scan.colourFloorplan"])
     XCTAssertTrue(element("floorplan.page").waitForExistence(timeout: 30))
+    goBack()
     goBack()
     goBack()
 
