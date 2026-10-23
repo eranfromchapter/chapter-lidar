@@ -33,6 +33,9 @@ public struct PlanExportContext: Hashable, Sendable {
   public var hasLidar: Bool
   /// The app's version without the build, for example `1.0.0`.
   public var appShortVersion: String
+  /// False for a scan kept without a capture record (`init(unrecordedScan:capturedAt:)`): the
+  /// plan sheet then prints "not recorded" for what only the record knows.
+  public private(set) var isRecorded = true
 
   public init(record: CaptureRecord, captureId: LowercaseUUID) throws {
     guard let index = record.captures.firstIndex(where: { $0.captureId == captureId }) else {
@@ -65,6 +68,46 @@ public struct PlanExportContext: Hashable, Sendable {
     omittedRooms = capture.omittedRooms
     inaccessibleRooms = capture.inaccessibleRooms
     compass = CompassState(capture)
+  }
+
+  /// The context of a scan kept without a capture record: a v1 scan on the phone, or a raw scan
+  /// drawn alone by tools/plan-render. Nothing the record would give is made up: the sheet
+  /// prints "not recorded" for the HUB deal, the capture id, the operator, the device and the
+  /// mode, "Address not recorded" unless an `address` is known, "No compass reading" unless a
+  /// `compass` state is known, and no rooms not scanned. `label` is the scan's title (the
+  /// sheet's "SHEET 1 · LABEL"); `capturedAt` is when the scan was made as far as it is known
+  /// (its file's date). The plan is drawn on the room and floor ladder (1:50 to 1:200).
+  public init(
+    unrecordedScan label: String, capturedAt: UTCTimestamp, address: String? = nil,
+    compass: CompassState? = nil
+  ) {
+    let notRecorded = "not recorded"
+    isRecorded = false
+    sheetNumber = 1
+    deviceName = notRecorded
+    hasLidar = false
+    appShortVersion = notRecorded
+    let known = address?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    self.address = known.isEmpty ? "Address not recorded" : known
+    addressConfirmedOnSite = false
+    addressConfirmedAt = nil
+    dealId = notRecorded
+    projectName = nil
+    visitId = notRecorded
+    captureId = notRecorded
+    areaKey = "scan"
+    floorLabel = label
+    mode = .floor
+    self.capturedAt = capturedAt
+    finishedAt = nil
+    operatorName = "operator \(notRecorded)"
+    deviceDescription = notRecorded
+    appVersion = notRecorded
+    displayUnits = .imperial
+    coverageNotes = ""
+    omittedRooms = []
+    inaccessibleRooms = []
+    self.compass = compass ?? .notVerified(.noReading, accuracy: nil)
   }
 
   /// Title-block project line: the project name when there is one, with the HUB deal id.

@@ -119,7 +119,7 @@ public enum PlanSheetWriter {
     renderer.draw(items)
     var document = PDFDocument(
       title: "Existing-condition plan - \(context.floorLabel) - \(context.projectTitle)",
-      author: context.operatorName,
+      author: context.isRecorded ? context.operatorName : "Chapter",
       subject: "Plan sheet 1:\(n) at 11 x 17 in, capture \(context.captureId)",
       creator: "\(PlanExportInfo.generator) \(PlanExportInfo.generatorVersion)",
       creationDate: context.pdfDate)
