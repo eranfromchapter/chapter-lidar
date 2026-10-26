@@ -56,6 +56,12 @@ Source of truth: `docs/waves/design/DESIGN.md` section "Design v2 (Oct 21, 2026)
 - **Package, upload, app shell (F6):** one `NavigationStack`; Package ready, Package status,
   Verdict received, Revision n; revision n+1 uploads only added and changed files; field-test mode
   (`F6.md:37-49`).
+- **After the kit (Oct 23-24, 2026, merged as `e114967` and `dfbb450`):** the floor screen and
+  the scan browser show the v2 plan sheet (Chapter logo, Inter, title block) as the main plan,
+  with the colour Floorplan one tap away (`ios/App/Sources/App/Views/PlanSheetView.swift`,
+  `tools/plan-render` writes `plan-sheet.pdf`/`.png`); field-test and UI-test builds have a
+  "Delete all photos" button (`PhotoEraser` in AppCore, `#if DEBUG`) that erases the app's photos
+  and keeps the scans. Neither is in the App Store build path yet; the button must stay out of it.
 - **Checks (F8):** 13 rules including `orientation.compass`, evaluator 1.1.0.
 - **Worker and HUB publish (F9):** spatial report on US Letter landscape (cover, plan per floor,
   room schedule, checks, room pages, photo pages with EXIF/GPS stripped, package record pages),
