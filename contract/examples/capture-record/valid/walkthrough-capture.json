@@ -76,7 +76,7 @@
       },
       "walkthrough": {
         "scaleSource": "tape",
-        "scaleFactor": 0.99725,
+        "scaleFactor": 0.99998,
         "loopClosureMm": 38.3,
         "trackingLimitedSeconds": 0.5,
         "recorded": true

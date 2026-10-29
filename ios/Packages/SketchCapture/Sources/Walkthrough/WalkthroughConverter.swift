@@ -73,12 +73,31 @@ public enum WalkthroughConverter {
   public static func convert(
     _ log: WalkthroughLog, displayUnits: DisplayUnitSystem, sourcePath: String, recorded: Bool
   ) throws -> WalkthroughConversion {
-    throw WalkthroughError.notImplemented
+    try WalkthroughConversionRun(
+      log: log, displayUnits: displayUnits, sourcePath: sourcePath, recorded: recorded
+    ).run()
   }
 
   /// The corners of one room while it is being walked (no drift distribution, no closing tap
   /// needed): for the live outline. Nil when the room has too few taps to have corners yet.
+  ///
+  /// The points are in the walkthrough's own AR frame on the floor plane (y = `floorY`), so the
+  /// AR overlay can put them where they were tapped. A `corners` room gives its corner taps; a
+  /// `walls` room gives the intersections of consecutive walls with at least two taps each (the
+  /// corner between the last and the first wall is left out while walking, since the last wall
+  /// is not known to be the last). Fewer than two corners: nil.
   public static func liveCorners(_ room: WalkthroughLog.Room, floorY: Double) -> [Vec3]? {
-    nil
+    let points: [FloorPoint]
+    switch room.method {
+    case .corners:
+      points = (room.corners ?? []).map { FloorPoint($0.p) }
+    case .walls:
+      let lines = (room.walls ?? []).filter { $0.count >= 2 }.compactMap {
+        FloorLine.fit($0.map { FloorPoint($0.p) })
+      }
+      points = zip(lines, lines.dropFirst()).compactMap { $0.intersection($1) }
+    }
+    guard points.count >= 2 else { return nil }
+    return points.map { $0.vec3(floorY: floorY) }
   }
 }

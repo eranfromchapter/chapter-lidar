@@ -176,11 +176,13 @@ struct SketchSolveRun {
     return thickness
   }
 
-  /// World corners of every room. The first room keeps its own frame. A room that shares a wall
-  /// is turned so that wall runs opposite to the earlier room's wall (both rooms are
-  /// counter-clockwise) and moved so its inside face lies one thickness outside the earlier
-  /// room's, centred along it. A room that shares nothing goes to the +x side of everything so
-  /// far with a 1 m gap.
+  /// World corners of every room. A room with a `placement` (measured where it stands, an AR
+  /// walkthrough, spec F15) is turned so wall 0 leaves at `angleDeg` and moved so corner 0 is at
+  /// (`x`, `z`); `sharedWith` does not move it. Otherwise the first room keeps its own frame. A
+  /// room that shares a wall is turned so that wall runs opposite to the earlier room's wall
+  /// (both rooms are counter-clockwise) and moved so its inside face lies one thickness outside
+  /// the earlier room's, centred along it. A room that shares nothing goes to the +x side of
+  /// everything so far with a 1 m gap.
   private func place(_ rooms: [Room], solved: [SolvedRoom], thickness: [[Double]]) throws
     -> [[Plan2]]
   {
@@ -190,7 +192,14 @@ struct SketchSolveRun {
       let n = local.count
       var angle = 0.0
       var translation = Plan2.zero
-      if roomIndex > 0 {
+      if let placement = room.placement {
+        // The placement angle is counter-clockwise from +x seen from +Y, which is the plan's
+        // own angle (plan y is model −z); the corner is in metres, the plan in millimetres.
+        let localDirection = (local[1 % n] - local[0]).normalized ?? Plan2(1, 0)
+        angle = placement.angleDeg * Double.pi / 180 - localDirection.angle
+        let target = Plan2(placement.x * 1000, -placement.z * 1000)
+        translation = target - local[0].rotated(by: angle)
+      } else if roomIndex > 0 {
         if let wallIndex = room.walls.firstIndex(where: { $0.sharedWith != nil }),
           let shared = room.walls[wallIndex].sharedWith
         {

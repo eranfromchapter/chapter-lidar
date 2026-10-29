@@ -98,7 +98,7 @@ station rule:
    is the phone's own (recorded as `scaleSource: ar`).
 6. Rooms that share a wall: two rooms are placed in one AR frame, so shared walls need no
    `sharedWith`; the converter writes each room's corners in the common frame and the solver
-   keeps each room where it was walked (`SketchSolveContext.keepPlacement`, new).
+   keeps each room where it was walked (the room's `placement` in the sketch measurements).
 
 Accuracy notes for the dev team: world tracking without LiDAR drifts about 1 % of the distance
 walked; the closing tap and the scale check are what keep it at plan quality. Large open floors
