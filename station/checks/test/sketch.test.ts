@@ -203,7 +203,7 @@ describe("AC6 (b): a limited sketch", () => {
       assert.equal(item.filePath, MODEL_PATH);
       assert.equal(item.captureId, CAPTURE_ID);
       assert.equal(item.areaKey, AREA_KEY);
-      assert.ok(item.measured.length > 0);
+      assert.ok((item.measured ?? "").length > 0);
     }
   });
 

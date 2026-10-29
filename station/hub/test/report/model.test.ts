@@ -218,14 +218,14 @@ describe("rule results and the cover sentence", () => {
     const counts = await Promise.all(
       (["ready", "limited", "blocked"] as const).map(async (outcome) => {
         const model = buildModel(await input424(outcome));
-        assert.equal(model.checkRows.length, 13);
+        assert.equal(model.checkRows.length, 14);
         return model.counts;
       }),
     );
     assert.deepEqual(counts, [
-      { blockers: 0, limitations: 0, passed: 12, notApplicable: 1 },
-      { blockers: 0, limitations: 1, passed: 11, notApplicable: 1 },
-      { blockers: 2, limitations: 1, passed: 9, notApplicable: 1 },
+      { blockers: 0, limitations: 0, passed: 12, notApplicable: 2 },
+      { blockers: 0, limitations: 1, passed: 11, notApplicable: 2 },
+      { blockers: 2, limitations: 1, passed: 9, notApplicable: 2 },
     ]);
   });
 

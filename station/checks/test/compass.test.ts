@@ -277,14 +277,12 @@ describe("compass findings of the generated fixtures", () => {
     const pkg = loadGenerated("sample-424");
     const verdict = runChecks(pkg, pkg.captureRecord?.address.formatted ?? "");
     const reportDir = resolve(generatedDir, "..", "report", "424-west-end");
-    // The recorded verdicts are the 1.1.0 station's output (13 rules): 1.2.0 appends
-    // sketch.measurements, not applicable to a scan, and changes nothing else for one.
     for (const outcome of ["ready", "limited", "blocked"]) {
       const recorded = readJson<Verdict>(join(reportDir, `verdict-${outcome}.json`));
-      assert.deepEqual(recorded.evaluator, { ...verdict.evaluator, version: "1.1.0" }, outcome);
+      assert.deepEqual(recorded.evaluator, verdict.evaluator, outcome);
       assert.deepEqual(
         verdict.checks.map((check) => check.ruleId),
-        [...recorded.checks.map((check) => check.ruleId), "sketch.measurements"],
+        recorded.checks.map((check) => check.ruleId),
         outcome,
       );
       // Same fields in the same order: the recorded files are the station's output.

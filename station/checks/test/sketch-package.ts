@@ -41,7 +41,10 @@ export const COMPLETE: Sketch = {
 };
 
 /** A length as the operator entered it, in millimetres. */
-function length(valueMm: number, measured = true): SketchMeasurements["ceilingHeight"] {
+function length(
+  valueMm: number,
+  measured = true,
+): NonNullable<SketchMeasurements["ceilingHeight"]> {
   return { valueMm, enteredUnit: "mm", enteredText: String(valueMm), measured };
 }
 

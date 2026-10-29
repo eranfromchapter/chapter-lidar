@@ -10,7 +10,7 @@
   "evaluatedAt": "2026-10-17T15:20:44Z",
   "evaluator": {
     "name": "chapter-capture-station/checks",
-    "version": "1.1.0"
+    "version": "1.2.0"
   },
   "checks": [
     {
@@ -77,6 +77,11 @@
       "ruleId": "evidence.independence",
       "title": "Independence of evidence",
       "status": "passed"
+    },
+    {
+      "ruleId": "sketch.measurements",
+      "title": "Sketch measurements",
+      "status": "not_applicable"
     }
   ],
   "findings": [

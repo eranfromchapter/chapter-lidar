@@ -41,13 +41,13 @@ final class RetiredRoleTests: XCTestCase {
       "role spatial_report_pdf is retired; a new package never holds it")
   }
 
-  func testTheAssemblerWritesManifest1_1_0() throws {
+  func testTheAssemblerWritesTheCurrentManifestVersion() throws {
     let fixture = try FixturePackage("two-floor-house")
     let sealed = try PackageAssembler().assemble(
       try FixtureDraft.make(fixture), at: folder.url.appendingPathComponent("package"))
     let json = try JSON.parse(sealed.manifestData)
-    XCTAssertEqual(json["schemaVersion"]?.string, "1.1.0")
-    XCTAssertEqual(sealed.manifest.schemaVersion, .v1_1)
+    XCTAssertEqual(json["schemaVersion"]?.string, ManifestSchemaVersion.current.rawValue)
+    XCTAssertEqual(sealed.manifest.schemaVersion, .current)
     XCTAssertFalse(sealed.manifest.files.contains { $0.role.isRetired })
     XCTAssertEqual(try Fixtures.manifestValidator().validate(jsonData: sealed.manifestData), [])
   }
@@ -72,7 +72,7 @@ final class RetiredRoleTests: XCTestCase {
 
     let second = try PackageAssembler().assemble(
       draft, at: folder.url.appendingPathComponent("revision-2"))
-    XCTAssertEqual(second.manifest.schemaVersion, .v1_1)
+    XCTAssertEqual(second.manifest.schemaVersion, .current)
     XCTAssertEqual(second.manifest.revision, 2)
     XCTAssertEqual(second.manifest.supersedesPackageId, legacy.packageId)
     XCTAssertEqual(try Fixtures.manifestValidator().validate(jsonData: second.manifestData), [])

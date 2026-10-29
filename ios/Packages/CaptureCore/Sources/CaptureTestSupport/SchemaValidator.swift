@@ -5,7 +5,7 @@ import Foundation
 /// `#/...` pointers), `type`, `const`, `enum`, `required`, `dependentRequired`, `properties`,
 /// `additionalProperties` (false or a schema), `items`, `minItems`, `maxItems`, `minLength`,
 /// `maxLength`, `pattern`, `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`,
-/// `if`/`then`/`else`, `not`,
+/// `if`/`then`/`else`, `not`, `allOf`, `anyOf`,
 /// and the boolean schemas `true` and `false`. Any other keyword that would change
 /// validation fails loudly (`unsupported keyword`), so a schema change cannot pass silently.
 /// `format` and the annotation keywords (`description`, `title`, `$schema`, `$id`, `$defs`) are ignored.
@@ -23,6 +23,7 @@ public struct SchemaValidator {
     "$ref", "type", "const", "enum", "required", "dependentRequired", "properties",
     "additionalProperties", "items", "minItems", "maxItems", "minLength", "maxLength", "pattern",
     "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "if", "then", "else", "not",
+    "allOf", "anyOf",
   ]
 
   /// Problems found in `instance`, as `<json pointer>: <problem>`. Empty when the instance is valid.
@@ -82,6 +83,12 @@ public struct SchemaValidator {
     }
     if let not = keywords["not"], isValid(instance, against: not) {
       fail("must not match \(not)")
+    }
+    if case .array(let all)? = keywords["allOf"] {
+      for member in all { check(instance, against: member, at: path, into: &errors) }
+    }
+    if case .array(let any)? = keywords["anyOf"], !any.contains(where: { isValid(instance, against: $0) }) {
+      fail("matches none of \(JSON.array(any))")
     }
     if let condition = keywords["if"] {
       if isValid(instance, against: condition) {

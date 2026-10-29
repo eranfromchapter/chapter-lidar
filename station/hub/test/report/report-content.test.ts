@@ -187,13 +187,13 @@ describe("fixed strings of each page", () => {
       assert.ok(has(checks[1] as string, `${WORDS.captureChecks} (continued)`));
       assert.ok(has(all, WORDS.checksFootnote));
       assert.ok(has(all, WORDS.tolerance));
-      assert.ok(has(all, "rules station-checks v1.1.0"));
+      assert.ok(has(all, "rules station-checks v1.2.0"));
       assert.ok(has(all, "FIELD CONTROLS RECORDED ON SITE"));
     }
     assert.ok(
       has(
         pagesOf("ready", "checks").join(""),
-        "0 blockers · 0 limitations · 12 passed · 1 not applicable",
+        "0 blockers · 0 limitations · 12 passed · 2 not applicable",
       ),
     );
     assert.ok(
@@ -202,7 +202,7 @@ describe("fixed strings of each page", () => {
     assert.ok(
       has(
         pagesOf("blocked", "checks").join(""),
-        "2 blockers · 1 limitation · 9 passed · 1 not applicable",
+        "2 blockers · 1 limitation · 9 passed · 2 not applicable",
       ),
     );
   });

@@ -1,5 +1,5 @@
 // fixtures/report/424-west-end (critique R-19): one station verdict per outcome for the
-// sample-424 package, valid, about that package, with the 13 rules of the v2 rule set, and
+// sample-424 package, valid, about that package, with the 14 rules of the v2 rule set, and
 // exactly what `npm run record-report` records from the station checks.
 
 import assert from "node:assert/strict";
@@ -48,6 +48,7 @@ const RULE_IDS = [
   "geometry.plausibility",
   "floors.registration",
   "evidence.independence",
+  "sketch.measurements",
 ];
 
 function verdict(outcome: (typeof OUTCOMES)[number]): Verdict {
@@ -88,16 +89,16 @@ describe("report fixtures for sample-424", () => {
         }
       });
 
-      it("lists the 13 rules of evaluator 1.1.0, compass passed with its verified reading", () => {
+      it("lists the 14 rules of evaluator 1.2.0, compass passed with its verified reading", () => {
         assert.deepEqual(
           value.checks.map((check) => check.ruleId),
           RULE_IDS,
         );
         assert.deepEqual(value.evaluator, {
           name: "chapter-capture-station/checks",
-          version: "1.1.0",
+          version: "1.2.0",
         });
-        assert.equal(ruleSetLabel(value.evaluator), "station-checks v1.1.0");
+        assert.equal(ruleSetLabel(value.evaluator), "station-checks v1.2.0");
         const compass = value.checks.find((check) => check.ruleId === "orientation.compass");
         assert.deepEqual(compass, {
           ruleId: "orientation.compass",
@@ -125,9 +126,9 @@ describe("report fixtures for sample-424", () => {
   it("reads in the shared words as the design draws them", () => {
     const counts = (outcome: (typeof OUTCOMES)[number]) =>
       countsLine(checkCounts(checkRows(verdict(outcome), sample.record)));
-    assert.equal(counts("ready"), "0 blockers · 0 limitations · 12 passed · 1 not applicable");
-    assert.equal(counts("limited"), "0 blockers · 1 limitation · 11 passed · 1 not applicable");
-    assert.equal(counts("blocked"), "2 blockers · 1 limitation · 9 passed · 1 not applicable");
+    assert.equal(counts("ready"), "0 blockers · 0 limitations · 12 passed · 2 not applicable");
+    assert.equal(counts("limited"), "0 blockers · 1 limitation · 11 passed · 2 not applicable");
+    assert.equal(counts("blocked"), "2 blockers · 1 limitation · 9 passed · 2 not applicable");
     assert.deepEqual(verdict("limited").limitations, [
       "Floor 1: Primary closet not captured (omitted by the operator: locked).",
       "Floor 1: Storage room not captured (inaccessible).",
@@ -163,7 +164,7 @@ describe("withCompassRule (the v2 compass rule until the station runs it)", () =
     return { record: { ...sample.record, captures: [capture, ...rest] }, capture };
   }
 
-  it("adds the row after orientation.up, the finding in check order and evaluator 1.1.0", () => {
+  it("adds the row after orientation.up, the finding in check order and evaluator 1.2.0", () => {
     assert.deepEqual(withCompassRule(withoutRule, sample.record, recordPath), limited);
   });
 
