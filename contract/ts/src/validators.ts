@@ -17,8 +17,10 @@ import {
   manifestSchema,
   sketchMeasurementsSchema,
   verdictSchema,
+  walkthroughLogSchema,
 } from "./generated/schemas.js";
 import type { SketchMeasurements } from "./generated/sketch-measurements.js";
+import type { WalkthroughLog } from "./generated/walkthrough-log.js";
 import type { Verdict } from "./generated/verdict.js";
 
 /** Short schema names: the schema file name without `.schema.json`. */
@@ -28,6 +30,7 @@ export const SCHEMA_NAMES = [
   "field-controls",
   "manifest",
   "sketch-measurements",
+  "walkthrough-log",
   "verdict",
 ] as const;
 
@@ -40,6 +43,7 @@ export interface SchemaTypes {
   "field-controls": FieldControls;
   manifest: PackageManifest;
   "sketch-measurements": SketchMeasurements;
+  "walkthrough-log": WalkthroughLog;
   verdict: Verdict;
 }
 
@@ -50,6 +54,7 @@ export const SCHEMAS: Readonly<Record<SchemaName, Record<string, unknown>>> = {
   "field-controls": fieldControlsSchema,
   manifest: manifestSchema,
   "sketch-measurements": sketchMeasurementsSchema,
+  "walkthrough-log": walkthroughLogSchema,
   verdict: verdictSchema,
 };
 
@@ -136,6 +141,10 @@ export function validateVerdict(data: unknown): ValidationResult<Verdict> {
 
 export function validateSketchMeasurements(data: unknown): ValidationResult<SketchMeasurements> {
   return validate("sketch-measurements", data);
+}
+
+export function validateWalkthroughLog(data: unknown): ValidationResult<WalkthroughLog> {
+  return validate("walkthrough-log", data);
 }
 
 /** Formats errors as one line each: "<instancePath or /> <message>". */

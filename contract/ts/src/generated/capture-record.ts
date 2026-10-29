@@ -25,7 +25,7 @@ export type CaptureMode = "room" | "floor" | "exterior";
  */
 export interface CaptureRecord {
   /**
-   * 1.1.0 adds the optional compass reading of each capture (heading, headingAccuracy, headingSource, headingRecordedAt) and headingIssue; 1.2.0 adds captureSource and sketch. An older document does not carry the later fields. Readers accept every version; writers write 1.2.0.
+   * 1.1.0 adds the optional compass reading of each capture (heading, headingAccuracy, headingSource, headingRecordedAt) and headingIssue; 1.2.0 adds captureSource, sketch and walkthrough. An older document does not carry the later fields. Readers accept every version; writers write 1.2.0.
    */
   schemaVersion: "1.0.0" | "1.1.0" | "1.2.0";
   visitId: Uuid;
@@ -141,11 +141,11 @@ export interface Capture {
    */
   headingIssue?: "rejected" | "not_calibrated" | "unavailable";
   /**
-   * How the capture was made (1.2.0): lidar, a RoomPlan scan; sketch, a hand sketch or existing plan with measurements entered by the operator (spec F14). Absent in older documents, which means lidar. A sketch capture carries no compass field: there is no scan frame to read a heading into.
+   * How the capture was made (1.2.0): lidar, a RoomPlan scan; sketch, a hand sketch or existing plan with measurements entered by the operator (spec F14); walkthrough, an AR walkthrough on any iPhone, the operator tapping the corners, openings and ceiling line with the camera (spec F15). Absent in older documents, which means lidar. A sketch or walkthrough capture carries no compass field.
    */
-  captureSource?: "lidar" | "sketch";
+  captureSource?: "lidar" | "sketch" | "walkthrough";
   /**
-   * What the sketch solver had (1.2.0). Present exactly when captureSource is sketch.
+   * What the solver had (1.2.0). Present exactly when captureSource is sketch or walkthrough (a walkthrough is converted into sketch measurements and solved the same way).
    */
   sketch?: {
     /**
@@ -168,6 +168,31 @@ export interface Capture {
      * The largest closure residual of the capture's rooms in millimetres (the lengths going one way along an axis against the lengths coming back), after the residual was distributed. Omitted when no room had every wall measured.
      */
     closureResidualMm?: number;
+  };
+  /**
+   * How the AR walkthrough was measured (1.2.0, spec F15). Present exactly when captureSource is walkthrough.
+   */
+  walkthrough?: {
+    /**
+     * tape: one wall was taped and every length scaled by scaleFactor; ar: the phone's motion tracking only (about 1 to 3 %).
+     */
+    scaleSource: "tape" | "ar";
+    /**
+     * tape length / AR length of the taped wall. Present exactly when scaleSource is tape.
+     */
+    scaleFactor?: number;
+    /**
+     * The largest gap, over the capture's rooms, between the first corner tap and the closing tap, before it was distributed.
+     */
+    loopClosureMm: number;
+    /**
+     * Seconds of the walk during which tracking was limited.
+     */
+    trackingLimitedSeconds: number;
+    /**
+     * True when the walkthrough video is in the package.
+     */
+    recorded: boolean;
   };
 }
 export interface RoomNote {

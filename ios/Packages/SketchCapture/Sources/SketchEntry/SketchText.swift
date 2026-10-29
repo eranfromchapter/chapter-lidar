@@ -65,6 +65,7 @@ public enum SketchText {
     switch kind {
     case .handSketch: return "Hand sketch"
     case .existingPlan: return "Existing plan"
+    case .arWalkthrough: return "Walked with the camera"
     case .none: return "No sketch"
     }
   }

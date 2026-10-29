@@ -17,6 +17,7 @@ final class RoundTripTests: XCTestCase {
     "field-controls": { try roundTrip(FieldControls.self, $0) },
     "manifest": { try roundTrip(PackageManifest.self, $0) },
     "sketch-measurements": { try roundTrip(SketchMeasurements.self, $0) },
+    "walkthrough-log": { try roundTrip(WalkthroughLog.self, $0) },
     "verdict": { try roundTrip(Verdict.self, $0) },
   ]
 

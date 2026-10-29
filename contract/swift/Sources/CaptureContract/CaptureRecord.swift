@@ -164,8 +164,11 @@ public struct CaptureRecord: Hashable, Sendable, Codable {
     /// How the capture was made (1.2.0). Nil in an older record, which means lidar
     /// (`source`). A sketch capture carries no compass field.
     public var captureSource: CaptureSource?
-    /// What the sketch solver had (1.2.0). Set exactly when `captureSource` is `sketch`.
+    /// What the solver had (1.2.0). Set exactly when `captureSource` is `sketch` or `walkthrough`.
     public var sketch: SketchSummary?
+    /// How the AR walkthrough was measured (1.2.0). Set exactly when `captureSource` is
+    /// `walkthrough`.
+    public var walkthrough: WalkthroughSummary?
 
     /// `captureSource`, with lidar for a record written before 1.2.0.
     public var source: CaptureSource { captureSource ?? .lidar }
@@ -187,7 +190,8 @@ public struct CaptureRecord: Hashable, Sendable, Codable {
       headingRecordedAt: UTCTimestamp? = nil,
       headingIssue: HeadingIssue? = nil,
       captureSource: CaptureSource? = nil,
-      sketch: SketchSummary? = nil
+      sketch: SketchSummary? = nil,
+      walkthrough: WalkthroughSummary? = nil
     ) {
       self.captureId = captureId
       self.areaKey = areaKey
@@ -206,6 +210,30 @@ public struct CaptureRecord: Hashable, Sendable, Codable {
       self.headingIssue = headingIssue
       self.captureSource = captureSource
       self.sketch = sketch
+      self.walkthrough = walkthrough
+    }
+
+    /// How an AR walkthrough was measured (1.2.0, spec F15).
+    public struct WalkthroughSummary: Hashable, Sendable, Codable {
+      public var scaleSource: WalkthroughScaleSource
+      /// tape length / AR length of the taped wall. Set exactly when `scaleSource` is `tape`.
+      public var scaleFactor: Double?
+      /// The largest room loop gap before it was distributed, in millimetres.
+      public var loopClosureMm: Double
+      public var trackingLimitedSeconds: Double
+      /// True when the walkthrough video is in the package.
+      public var recorded: Bool
+
+      public init(
+        scaleSource: WalkthroughScaleSource, scaleFactor: Double? = nil, loopClosureMm: Double,
+        trackingLimitedSeconds: Double, recorded: Bool
+      ) {
+        self.scaleSource = scaleSource
+        self.scaleFactor = scaleFactor
+        self.loopClosureMm = loopClosureMm
+        self.trackingLimitedSeconds = trackingLimitedSeconds
+        self.recorded = recorded
+      }
     }
 
     /// What the sketch solver had for a sketch capture (1.2.0, spec F14).

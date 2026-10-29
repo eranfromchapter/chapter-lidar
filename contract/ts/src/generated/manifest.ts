@@ -16,7 +16,7 @@ export type DateTime = string;
  */
 export type RelativePath = string;
 /**
- * Closed set of file roles from the intake guide, plus capture_model (the normalized CaptureModel JSON of one capture) and, since 1.2.0, sketch_image (the photo, image or PDF of the hand sketch or existing plan a sketch capture was measured from) and sketch_measurements (the measurements the operator entered, sketch-measurements.schema.json). Each role belongs to exactly one folder in layout.json. spatial_report_pdf is retired: written only in manifest 1.0.0 by app builds before v2; never in 1.1.0 or later. The spatial report is a station output, not a package file.
+ * Closed set of file roles from the intake guide, plus capture_model (the normalized CaptureModel JSON of one capture) and, since 1.2.0, sketch_image (the photo, image or PDF of the hand sketch or existing plan a sketch capture was measured from) and sketch_measurements (the measurements the operator entered, sketch-measurements.schema.json), walkthrough_video (the camera video of an AR walkthrough) and walkthrough_log (its taps and camera poses, walkthrough-log.schema.json). Each role belongs to exactly one folder in layout.json. spatial_report_pdf is retired: written only in manifest 1.0.0 by app builds before v2; never in 1.1.0 or later. The spatial report is a station output, not a package file.
  */
 export type Role =
   | "capture_record"
@@ -37,7 +37,9 @@ export type Role =
   | "photo"
   | "field_controls"
   | "sketch_image"
-  | "sketch_measurements";
+  | "sketch_measurements"
+  | "walkthrough_video"
+  | "walkthrough_log";
 /**
  * Key of the floor or area in the capture record, for example floor-1.
  */
@@ -54,7 +56,7 @@ export type PhotoSubject =
  */
 export interface PackageManifest {
   /**
-   * 1.1.0 adds the optional photo.directionSource and retires the role spatial_report_pdf; 1.2.0 adds the roles sketch_image and sketch_measurements (spec F14). A 1.0.0 document does not carry directionSource; a 1.1.0 or 1.2.0 document lists no spatial_report_pdf file; only a 1.2.0 document lists a sketch role. Readers accept every version; writers write 1.2.0.
+   * 1.1.0 adds the optional photo.directionSource and retires the role spatial_report_pdf; 1.2.0 adds the roles sketch_image and sketch_measurements (spec F14) and walkthrough_video and walkthrough_log (spec F15). A 1.0.0 document does not carry directionSource; a 1.1.0 or 1.2.0 document lists no spatial_report_pdf file; only a 1.2.0 document lists a sketch or walkthrough role. Readers accept every version; writers write 1.2.0.
    */
   schemaVersion: "1.0.0" | "1.1.0" | "1.2.0";
   /**

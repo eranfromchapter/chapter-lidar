@@ -108,6 +108,10 @@ targets:
         product: SketchEntry
       - package: SketchCapture
         product: SketchUI
+      - package: SketchCapture
+        product: Walkthrough
+      - package: SketchCapture
+        product: WalkthroughUI
       - package: MSAL
         product: MSAL
 

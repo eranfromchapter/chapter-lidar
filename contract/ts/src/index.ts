@@ -28,6 +28,14 @@ export type {
   SketchWall,
 } from "./generated/sketch-measurements.js";
 export type {
+  WalkthroughFrame,
+  WalkthroughLength,
+  WalkthroughLog,
+  WalkthroughOpening,
+  WalkthroughRoom,
+  WalkthroughTap,
+} from "./generated/walkthrough-log.js";
+export type {
   CaptureRef,
   CeilingHeight,
   Distance,
@@ -54,6 +62,7 @@ export type * as CaptureRecordTypes from "./generated/capture-record.js";
 export type * as FieldControlsTypes from "./generated/field-controls.js";
 export type * as ManifestTypes from "./generated/manifest.js";
 export type * as SketchMeasurementsTypes from "./generated/sketch-measurements.js";
+export type * as WalkthroughLogTypes from "./generated/walkthrough-log.js";
 export type * as VerdictTypes from "./generated/verdict.js";
 
 export {
@@ -68,6 +77,7 @@ export {
   validateManifest,
   validateSketchMeasurements,
   validateVerdict,
+  validateWalkthroughLog,
 } from "./validators.js";
 export type { ContractError, SchemaName, SchemaTypes, ValidationResult } from "./validators.js";
 
@@ -142,9 +152,27 @@ export const SKETCH_ROLES = [
 
 export type SketchRole = (typeof SKETCH_ROLES)[number];
 
-/** True for a role only a 1.2.0 manifest lists. */
+/** True for a sketch role (manifest 1.2.0 only). */
 export function isSketchRole(role: Role): role is SketchRole {
   return (SKETCH_ROLES as readonly Role[]).includes(role);
+}
+
+/** Roles added in manifest 1.2.0 (spec F15): the originals of an AR walkthrough. */
+export const WALKTHROUGH_ROLES = [
+  "walkthrough_video",
+  "walkthrough_log",
+] as const satisfies readonly Role[];
+
+export type WalkthroughRole = (typeof WALKTHROUGH_ROLES)[number];
+
+/** True for a walkthrough role (manifest 1.2.0 only). */
+export function isWalkthroughRole(role: Role): role is WalkthroughRole {
+  return (WALKTHROUGH_ROLES as readonly Role[]).includes(role);
+}
+
+/** True for the sources whose model the sketch solver builds (sketch and walkthrough). */
+export function isMeasuredPlanSource(source: CaptureSource): boolean {
+  return source !== "lidar";
 }
 
 /** How a capture was made: `captureSource`, with lidar for a record written before 1.2.0. */

@@ -38,11 +38,11 @@
       "required": ["kind"],
       "properties": {
         "kind": {
-          "description": "hand_sketch: a sketch drawn on site; existing_plan: a printed or drawn plan of the property; none: measurements only, no drawing.",
-          "enum": ["hand_sketch", "existing_plan", "none"]
+          "description": "hand_sketch: a sketch drawn on site; existing_plan: a printed or drawn plan of the property; ar_walkthrough: converted from an AR walkthrough (spec F15), every length measured by the phone; none: measurements only, no drawing.",
+          "enum": ["hand_sketch", "existing_plan", "ar_walkthrough", "none"]
         },
         "path": {
-          "description": "Package path of the sketch image (role sketch_image). Present exactly when kind is not none.",
+          "description": "Package path of the sketch image (role sketch_image), or of the walkthrough log (role walkthrough_log) for ar_walkthrough. Present exactly when kind is not none.",
           "$ref": "#/$defs/relativePath"
         }
       },
@@ -198,6 +198,25 @@
         "ceilingHeight": {
           "description": "This room's ceiling height when it differs from the floor's.",
           "$ref": "#/$defs/length"
+        },
+        "placement": {
+          "description": "Where the room sits in the capture frame, when it was measured there (an AR walkthrough, spec F15): corner 0 at (x, z) in metres and wall 0 leaving it at angleDeg, counter-clockwise from +x seen from +Y. The solver keeps the room there and does not place it by sharedWith. Omitted for a typed sketch.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["x", "z", "angleDeg"],
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "z": {
+              "type": "number"
+            },
+            "angleDeg": {
+              "type": "number",
+              "minimum": -360,
+              "maximum": 360
+            }
+          }
         }
       }
     },

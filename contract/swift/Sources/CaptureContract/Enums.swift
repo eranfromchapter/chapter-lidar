@@ -42,6 +42,13 @@ public enum SketchMeasurementsSchemaVersion: String, CaseIterable, Codable, Send
   public static let current: SketchMeasurementsSchemaVersion = .v1
 }
 
+/// `schemaVersion` of the walkthrough log (spec F15).
+public enum WalkthroughLogSchemaVersion: String, CaseIterable, Codable, Sendable {
+  case v1 = "1.0.0"
+
+  public static let current: WalkthroughLogSchemaVersion = .v1
+}
+
 /// `schemaVersion` of the capture model. 1.1.0 adds optional fields (room type and its source,
 /// door `isOpen`, object attributes and parent), so every 1.0.0 document is also a valid 1.1.0
 /// document. Both are read; `CaptureModel` always writes `current`.
@@ -68,11 +75,36 @@ public enum CaptureMode: String, CaseIterable, Codable, Sendable {
   case exterior
 }
 
-/// How a capture was made (capture record 1.2.0): a RoomPlan scan, or a hand sketch or existing
-/// plan with measurements entered by the operator (spec F14). Absent in older records: lidar.
+/// How a capture was made (capture record 1.2.0): a RoomPlan scan; a hand sketch or existing
+/// plan with measurements entered by the operator (spec F14); or an AR walkthrough on any
+/// iPhone, the operator tapping corners, openings and the ceiling line (spec F15). Absent in
+/// older records: lidar.
 public enum CaptureSource: String, CaseIterable, Codable, Sendable {
   case lidar
   case sketch
+  case walkthrough
+
+  /// True for the sources whose model the sketch solver builds (sketch and walkthrough).
+  public var isMeasuredPlan: Bool { self != .lidar }
+}
+
+/// Where an AR walkthrough's scale came from (capture record 1.2.0 `walkthrough.scaleSource`).
+public enum WalkthroughScaleSource: String, CaseIterable, Codable, Sendable {
+  case tape
+  case ar
+}
+
+/// ARKit tracking state of a walkthrough frame or tap.
+public enum WalkthroughTracking: String, CaseIterable, Codable, Sendable {
+  case normal
+  case limited
+  case notAvailable = "not_available"
+}
+
+/// How a walkthrough room was tapped: one tap per corner, or two or more taps along each wall.
+public enum WalkthroughMethod: String, CaseIterable, Codable, Sendable {
+  case corners
+  case walls
 }
 
 /// Whether the sketch solver had every measurement (capture record 1.2.0 `sketch.measurements`).
@@ -93,6 +125,7 @@ public enum CeilingHeightSource: String, CaseIterable, Codable, Sendable {
 public enum SketchSourceKind: String, CaseIterable, Codable, Sendable {
   case handSketch = "hand_sketch"
   case existingPlan = "existing_plan"
+  case arWalkthrough = "ar_walkthrough"
   case none
 }
 

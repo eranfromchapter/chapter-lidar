@@ -57,9 +57,9 @@ export interface SketchMeasurements {
    */
   source: {
     /**
-     * hand_sketch: a sketch drawn on site; existing_plan: a printed or drawn plan of the property; none: measurements only, no drawing.
+     * hand_sketch: a sketch drawn on site; existing_plan: a printed or drawn plan of the property; ar_walkthrough: converted from an AR walkthrough (spec F15), every length measured by the phone; none: measurements only, no drawing.
      */
-    kind: "hand_sketch" | "existing_plan" | "none";
+    kind: "hand_sketch" | "existing_plan" | "ar_walkthrough" | "none";
     path?: RelativePath;
   };
   ceilingHeight?: SketchLength;
@@ -105,6 +105,14 @@ export interface SketchRoom {
    */
   openings: SketchOpening[];
   ceilingHeight?: SketchLength;
+  /**
+   * Where the room sits in the capture frame, when it was measured there (an AR walkthrough, spec F15): corner 0 at (x, z) in metres and wall 0 leaving it at angleDeg, counter-clockwise from +x seen from +Y. The solver keeps the room there and does not place it by sharedWith. Omitted for a typed sketch.
+   */
+  placement?: {
+    x: number;
+    z: number;
+    angleDeg: number;
+  };
 }
 export interface SketchWall {
   id: Id;

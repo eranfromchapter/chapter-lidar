@@ -25,6 +25,7 @@ export const SCHEMA_FILES = {
   "field-controls": "field-controls.schema.json",
   manifest: "manifest.schema.json",
   "sketch-measurements": "sketch-measurements.schema.json",
+  "walkthrough-log": "walkthrough-log.schema.json",
   verdict: "verdict.schema.json",
 } as const;
 
@@ -54,6 +55,13 @@ const TYPE_NAMES: Partial<Record<SchemaName, Record<string, string>>> = {
     opening: "SketchOpening",
     diagonal: "SketchDiagonal",
     length: "SketchLength",
+  },
+  "walkthrough-log": {
+    room: "WalkthroughRoom",
+    opening: "WalkthroughOpening",
+    tap: "WalkthroughTap",
+    frame: "WalkthroughFrame",
+    length: "WalkthroughLength",
   },
 };
 

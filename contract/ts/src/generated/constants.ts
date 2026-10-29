@@ -7,7 +7,7 @@
 export const LAYOUT = {
   layoutVersion: "1.0.0",
   description:
-    "Intake package folder layout from the Chapter intake guide. One package is one site visit; each floor or area scan in it is a separate capture. Every manifest path starts with one folder name below. pathTemplate is the folder for a file of that folder's roles; the file name (which may contain subfolders, for mesh companions) follows it. {areaKey} and {captureId} identify one capture from the capture record; {visitId} is the visit. Per-capture folders group by areaKey then captureId; visit-wide folders group by visitId. Each manifest role belongs to exactly one folder. Folders produced downstream are never written by the capture app. spatial_report_pdf: legacy, manifest 1.0.0 only. sketch_image and sketch_measurements (manifest 1.2.0, spec F14): the originals of a sketch capture, next to its capture model.",
+    "Intake package folder layout from the Chapter intake guide. One package is one site visit; each floor or area scan in it is a separate capture. Every manifest path starts with one folder name below. pathTemplate is the folder for a file of that folder's roles; the file name (which may contain subfolders, for mesh companions) follows it. {areaKey} and {captureId} identify one capture from the capture record; {visitId} is the visit. Per-capture folders group by areaKey then captureId; visit-wide folders group by visitId. Each manifest role belongs to exactly one folder. Folders produced downstream are never written by the capture app. spatial_report_pdf: legacy, manifest 1.0.0 only. sketch_image and sketch_measurements (manifest 1.2.0, spec F14): the originals of a sketch capture, next to its capture model; walkthrough_video and walkthrough_log (spec F15) the originals of an AR walkthrough.",
   manifestPath: "Source Register/{visitId}/manifest.json",
   fileNames: {
     capture_record: "capture-record.json",
@@ -15,6 +15,7 @@ export const LAYOUT = {
     field_controls: "field-controls.json",
     manifest: "manifest.json",
     sketch_measurements: "sketch-measurements.json",
+    walkthrough_log: "walkthrough-log.json",
   },
   folders: [
     {
@@ -40,6 +41,8 @@ export const LAYOUT = {
         "point_cloud_las",
         "sketch_image",
         "sketch_measurements",
+        "walkthrough_video",
+        "walkthrough_log",
       ],
       scope: "capture",
     },
@@ -112,6 +115,8 @@ export const ROLES = [
   "field_controls",
   "sketch_image",
   "sketch_measurements",
+  "walkthrough_video",
+  "walkthrough_log",
 ] as const;
 
 /** Roles of visit-wide files (manifest.schema.json $defs/visitRole). Every other role belongs to one capture. */

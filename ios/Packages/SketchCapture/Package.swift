@@ -11,6 +11,10 @@
 //   SketchEntry    Foundation only. The guided measurement entry: what is asked, in what order,
 //                  and the SketchMeasurements it builds. Tested on Linux.
 //   SketchUI       APPLE ONLY (SwiftUI, on ChapterUI). The sketch screens. Carries `.apple-only`.
+//   Walkthrough    Foundation only. AR walkthrough taps -> SketchMeasurements (spec F15): drift,
+//                  wall lines, square corners, openings, scale check. Tested on Linux.
+//   WalkthroughUI  APPLE ONLY (ARKit, SwiftUI). The AR walkthrough screen, its session (live and
+//                  replay) and the recording. Carries `.apple-only`.
 //
 // No `.apple-only` marker at the package root: scripts/swift-test.sh runs the solver, mesh and
 // entry tests on Linux.
@@ -27,6 +31,8 @@ let package = Package(
     .library(name: "SketchMesh", targets: ["SketchMesh"]),
     .library(name: "SketchEntry", targets: ["SketchEntry"]),
     .library(name: "SketchUI", targets: ["SketchUI"]),
+    .library(name: "Walkthrough", targets: ["Walkthrough"]),
+    .library(name: "WalkthroughUI", targets: ["WalkthroughUI"]),
   ],
   dependencies: [
     // Package identity of a path dependency is the directory name, here "swift".
@@ -69,6 +75,29 @@ let package = Package(
       ],
       exclude: [".apple-only"],
       swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    .target(
+      name: "Walkthrough",
+      dependencies: ["SketchSolver", .product(name: "CaptureContract", package: "swift")]
+    ),
+    .target(
+      name: "WalkthroughUI",
+      dependencies: [
+        "Walkthrough", "SketchEntry", "SketchSolver", "SketchUI",
+        .product(name: "CaptureContract", package: "swift"),
+        .product(name: "ChapterUI", package: "ChapterUI"),
+        .product(name: "FieldKit", package: "FieldKit"),
+      ],
+      exclude: [".apple-only"],
+      swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    .testTarget(
+      name: "WalkthroughTests",
+      dependencies: [
+        "Walkthrough", "SketchSolver",
+        .product(name: "CaptureContract", package: "swift"),
+        .product(name: "CaptureTestSupport", package: "CaptureCore"),
+      ]
     ),
     .testTarget(
       name: "SketchSolverTests",

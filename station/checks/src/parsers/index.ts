@@ -6,6 +6,7 @@ import {
   validateCaptureRecord,
   validateFieldControls,
   validateSketchMeasurements,
+  validateWalkthroughLog,
   type CaptureModel,
   type Role,
   type ValidationResult,
@@ -62,6 +63,8 @@ export const ROLE_FORMAT: Readonly<Record<Role, string>> = {
   field_controls: "field controls JSON",
   sketch_image: "JPEG/HEIC/PNG image or PDF",
   sketch_measurements: "sketch measurements JSON",
+  walkthrough_video: "MP4/QuickTime video",
+  walkthrough_log: "walkthrough log JSON",
 };
 
 function schemaChecked(
@@ -83,6 +86,14 @@ function schemaChecked(
 
 function wrap<T>(result: ParseResult<T>, make: (value: T) => ParsedFile): ParseResult<ParsedFile> {
   return result.ok ? ok(make(result.value)) : result;
+}
+
+/** True for MP4 or QuickTime: an ISO base media file starts with a box whose type is ftyp. */
+function isIsoMedia(bytes: Uint8Array): boolean {
+  return (
+    bytes.length >= 12 &&
+    String.fromCharCode(bytes[4] ?? 0, bytes[5] ?? 0, bytes[6] ?? 0, bytes[7] ?? 0) === "ftyp"
+  );
 }
 
 /** Parses a nonempty file by role. */
@@ -150,6 +161,13 @@ export function parseByRole(role: Role, bytes: Uint8Array): ParseResult<ParsedFi
     }
     case "sketch_measurements":
       return wrap(schemaChecked(bytes, validateSketchMeasurements), (value) => ({
+        kind: "json",
+        value,
+      }));
+    case "walkthrough_video":
+      return isIsoMedia(bytes) ? ok({ kind: "binary" }) : fail("no ISO base media ftyp box");
+    case "walkthrough_log":
+      return wrap(schemaChecked(bytes, validateWalkthroughLog), (value) => ({
         kind: "json",
         value,
       }));

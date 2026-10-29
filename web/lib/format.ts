@@ -246,6 +246,8 @@ export const ROLE_LABEL: Record<Role, string> = {
   spatial_report_pdf: "Spatial report · phone (retired)",
   sketch_image: "Sketch image",
   sketch_measurements: "Sketch measurements",
+  walkthrough_video: "Walkthrough video",
+  walkthrough_log: "Walkthrough log",
 };
 
 /** Files card role filter group of each role. */
@@ -269,6 +271,8 @@ export const ROLE_FILTER_GROUP: Record<Role, string> = {
   spatial_report_pdf: "Spatial report",
   sketch_image: "Sketch",
   sketch_measurements: "Sketch",
+  walkthrough_video: "Walkthrough",
+  walkthrough_log: "Walkthrough",
 };
 
 /**

@@ -46,6 +46,10 @@ const DEFECT_AT: Record<string, string> = {
   "manifest/sketch-role-in-1.1.0.json": "",
   "sketch-measurements/door-with-sill.json": "/rooms/0/openings/0",
   "sketch-measurements/source-without-path.json": "/source",
+  "capture-record/walkthrough-without-summary.json": "/captures/1",
+  "capture-record/scale-factor-without-tape.json": "/captures/1",
+  "walkthrough-log/corners-with-walls.json": "/rooms/0",
+  "walkthrough-log/door-with-sill.json": "/rooms/0/openings/0",
   // outcome (root) contradicts findings, so Ajv reports at the root and /findings.
   "verdict/ready-with-blocker.json": "",
 };

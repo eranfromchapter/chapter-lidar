@@ -82,10 +82,13 @@ public struct SketchMeasurements: Hashable, Sendable, Codable {
     public var openings: [Opening]
     /// This room's ceiling height when it differs from the floor's.
     public var ceilingHeight: Length?
+    /// Where the room sits in the capture frame when it was measured there (an AR walkthrough):
+    /// the solver keeps it there instead of placing it by `sharedWith`.
+    public var placement: Placement?
 
     public init(
       id: String, label: String, type: RoomType? = nil, walls: [Wall], diagonals: [Diagonal] = [],
-      openings: [Opening] = [], ceilingHeight: Length? = nil
+      openings: [Opening] = [], ceilingHeight: Length? = nil, placement: Placement? = nil
     ) {
       self.id = id
       self.label = label
@@ -94,6 +97,21 @@ public struct SketchMeasurements: Hashable, Sendable, Codable {
       self.diagonals = diagonals
       self.openings = openings
       self.ceilingHeight = ceilingHeight
+      self.placement = placement
+    }
+  }
+
+  /// Corner 0 at (`x`, `z`) metres in the capture frame and wall 0 leaving it at `angleDeg`,
+  /// counter-clockwise from +x seen from +Y.
+  public struct Placement: Hashable, Sendable, Codable {
+    public var x: Double
+    public var z: Double
+    public var angleDeg: Double
+
+    public init(x: Double, z: Double, angleDeg: Double) {
+      self.x = x
+      self.z = z
+      self.angleDeg = angleDeg
     }
   }
 

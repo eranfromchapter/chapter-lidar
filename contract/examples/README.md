@@ -34,6 +34,14 @@ Older documents stay valid, so each schema with a 1.1.0 keeps its 1.0.0 example:
 | capture-record | `sketch-capture.json`              | 1.2.0   | Floor 1 `captureSource` `lidar` with its compass reading; Floor 2 `sketch` with a limited `sketch` summary and no compass field (spec F14)             |
 | manifest       | `sketch-capture.json`              | 1.2.0   | Floor 2's originals are `sketch.jpg` (`sketch_image`) and `sketch-measurements.json` (`sketch_measurements`); its capture model is derived from both   |
 
+`capture-record/valid/walkthrough-capture.json` and `manifest/valid/walkthrough-capture.json`
+(1.2.0, spec F15) are the same visit with Floor 2 walked with the camera instead: its originals
+are `walkthrough.mp4` and `walkthrough-log.json`, and `sketch-measurements.json` is derived from
+the log. `walkthrough-log/valid/two-rooms.json` is that log: a bedroom tapped corner by corner
+with the closing tap, a door, a window and two ceiling taps, a closet tapped wall by wall, and a
+tape check of the bedroom's first wall. Its invalid examples: `corners-with-walls.json` (a
+corners room that also lists wall taps) and `door-with-sill.json` (a door with a sill).
+
 `sketch-measurements/valid/two-rooms.json` (1.0.0, one version) is Floor 2's entered
 measurements: a measured bedroom with a door, a window and a squareness diagonal, and a closet
 that shares the bedroom's wall-4, with an unmeasured wall and two "about" walls.

@@ -25,7 +25,7 @@ export const captureRecordSchema: Record<string, unknown> = {
   properties: {
     schemaVersion: {
       description:
-        "1.1.0 adds the optional compass reading of each capture (heading, headingAccuracy, headingSource, headingRecordedAt) and headingIssue; 1.2.0 adds captureSource and sketch. An older document does not carry the later fields. Readers accept every version; writers write 1.2.0.",
+        "1.1.0 adds the optional compass reading of each capture (heading, headingAccuracy, headingSource, headingRecordedAt) and headingIssue; 1.2.0 adds captureSource, sketch and walkthrough. An older document does not carry the later fields. Readers accept every version; writers write 1.2.0.",
       enum: ["1.0.0", "1.1.0", "1.2.0"],
     },
     visitId: { $ref: "#/$defs/uuid" },
@@ -155,6 +155,7 @@ export const captureRecordSchema: Record<string, unknown> = {
                 headingIssue: false,
                 captureSource: false,
                 sketch: false,
+                walkthrough: false,
               },
             },
           },
@@ -168,7 +169,10 @@ export const captureRecordSchema: Record<string, unknown> = {
         properties: {
           captures: {
             type: "array",
-            items: { type: "object", properties: { captureSource: false, sketch: false } },
+            items: {
+              type: "object",
+              properties: { captureSource: false, sketch: false, walkthrough: false },
+            },
           },
         },
       },
@@ -291,12 +295,12 @@ export const captureRecordSchema: Record<string, unknown> = {
         },
         captureSource: {
           description:
-            "How the capture was made (1.2.0): lidar, a RoomPlan scan; sketch, a hand sketch or existing plan with measurements entered by the operator (spec F14). Absent in older documents, which means lidar. A sketch capture carries no compass field: there is no scan frame to read a heading into.",
-          enum: ["lidar", "sketch"],
+            "How the capture was made (1.2.0): lidar, a RoomPlan scan; sketch, a hand sketch or existing plan with measurements entered by the operator (spec F14); walkthrough, an AR walkthrough on any iPhone, the operator tapping the corners, openings and ceiling line with the camera (spec F15). Absent in older documents, which means lidar. A sketch or walkthrough capture carries no compass field.",
+          enum: ["lidar", "sketch", "walkthrough"],
         },
         sketch: {
           description:
-            "What the sketch solver had (1.2.0). Present exactly when captureSource is sketch.",
+            "What the solver had (1.2.0). Present exactly when captureSource is sketch or walkthrough (a walkthrough is converted into sketch measurements and solved the same way).",
           type: "object",
           additionalProperties: false,
           required: ["measurements", "wallsMeasured", "wallsEstimated", "ceilingHeightSource"],
@@ -329,6 +333,44 @@ export const captureRecordSchema: Record<string, unknown> = {
             },
           },
         },
+        walkthrough: {
+          description:
+            "How the AR walkthrough was measured (1.2.0, spec F15). Present exactly when captureSource is walkthrough.",
+          type: "object",
+          additionalProperties: false,
+          required: ["scaleSource", "loopClosureMm", "trackingLimitedSeconds", "recorded"],
+          properties: {
+            scaleSource: {
+              description:
+                "tape: one wall was taped and every length scaled by scaleFactor; ar: the phone's motion tracking only (about 1 to 3 %).",
+              enum: ["tape", "ar"],
+            },
+            scaleFactor: {
+              description:
+                "tape length / AR length of the taped wall. Present exactly when scaleSource is tape.",
+              type: "number",
+              exclusiveMinimum: 0,
+            },
+            loopClosureMm: {
+              description:
+                "The largest gap, over the capture's rooms, between the first corner tap and the closing tap, before it was distributed.",
+              type: "number",
+              minimum: 0,
+            },
+            trackingLimitedSeconds: {
+              description: "Seconds of the walk during which tracking was limited.",
+              type: "number",
+              minimum: 0,
+            },
+            recorded: {
+              description: "True when the walkthrough video is in the package.",
+              type: "boolean",
+            },
+          },
+          if: { properties: { scaleSource: { const: "tape" } } },
+          then: { properties: { scaleFactor: true }, required: ["scaleFactor"] },
+          else: { not: { properties: { scaleFactor: true }, required: ["scaleFactor"] } },
+        },
       },
       dependentRequired: {
         heading: ["headingAccuracy", "headingSource", "headingRecordedAt"],
@@ -336,6 +378,7 @@ export const captureRecordSchema: Record<string, unknown> = {
         headingSource: ["heading"],
         headingRecordedAt: ["heading"],
         sketch: ["captureSource"],
+        walkthrough: ["captureSource"],
       },
       not: {
         properties: {
@@ -346,7 +389,10 @@ export const captureRecordSchema: Record<string, unknown> = {
       },
       allOf: [
         {
-          if: { properties: { captureSource: { const: "sketch" } }, required: ["captureSource"] },
+          if: {
+            properties: { captureSource: { enum: ["sketch", "walkthrough"] } },
+            required: ["captureSource"],
+          },
           then: {
             properties: { sketch: { $ref: "#/$defs/capture/properties/sketch" } },
             required: ["sketch"],
@@ -361,6 +407,17 @@ export const captureRecordSchema: Record<string, unknown> = {
             },
           },
           else: { not: { properties: { sketch: true }, required: ["sketch"] } },
+        },
+        {
+          if: {
+            properties: { captureSource: { const: "walkthrough" } },
+            required: ["captureSource"],
+          },
+          then: {
+            properties: { walkthrough: { $ref: "#/$defs/capture/properties/walkthrough" } },
+            required: ["walkthrough"],
+          },
+          else: { not: { properties: { walkthrough: true }, required: ["walkthrough"] } },
         },
       ],
     },
@@ -900,7 +957,7 @@ export const manifestSchema: Record<string, unknown> = {
   properties: {
     schemaVersion: {
       description:
-        "1.1.0 adds the optional photo.directionSource and retires the role spatial_report_pdf; 1.2.0 adds the roles sketch_image and sketch_measurements (spec F14). A 1.0.0 document does not carry directionSource; a 1.1.0 or 1.2.0 document lists no spatial_report_pdf file; only a 1.2.0 document lists a sketch role. Readers accept every version; writers write 1.2.0.",
+        "1.1.0 adds the optional photo.directionSource and retires the role spatial_report_pdf; 1.2.0 adds the roles sketch_image and sketch_measurements (spec F14) and walkthrough_video and walkthrough_log (spec F15). A 1.0.0 document does not carry directionSource; a 1.1.0 or 1.2.0 document lists no spatial_report_pdf file; only a 1.2.0 document lists a sketch or walkthrough role. Readers accept every version; writers write 1.2.0.",
       enum: ["1.0.0", "1.1.0", "1.2.0"],
     },
     layoutVersion: {
@@ -946,7 +1003,16 @@ export const manifestSchema: Record<string, unknown> = {
               type: "object",
               properties: {
                 photo: { type: "object", properties: { directionSource: false } },
-                role: { not: { enum: ["sketch_image", "sketch_measurements"] } },
+                role: {
+                  not: {
+                    enum: [
+                      "sketch_image",
+                      "sketch_measurements",
+                      "walkthrough_video",
+                      "walkthrough_log",
+                    ],
+                  },
+                },
               },
             },
           },
@@ -965,7 +1031,15 @@ export const manifestSchema: Record<string, unknown> = {
               type: "object",
               properties: {
                 role: {
-                  not: { enum: ["spatial_report_pdf", "sketch_image", "sketch_measurements"] },
+                  not: {
+                    enum: [
+                      "spatial_report_pdf",
+                      "sketch_image",
+                      "sketch_measurements",
+                      "walkthrough_video",
+                      "walkthrough_log",
+                    ],
+                  },
                 },
               },
             },
@@ -1017,7 +1091,7 @@ export const manifestSchema: Record<string, unknown> = {
     },
     role: {
       description:
-        "Closed set of file roles from the intake guide, plus capture_model (the normalized CaptureModel JSON of one capture) and, since 1.2.0, sketch_image (the photo, image or PDF of the hand sketch or existing plan a sketch capture was measured from) and sketch_measurements (the measurements the operator entered, sketch-measurements.schema.json). Each role belongs to exactly one folder in layout.json. spatial_report_pdf is retired: written only in manifest 1.0.0 by app builds before v2; never in 1.1.0 or later. The spatial report is a station output, not a package file.",
+        "Closed set of file roles from the intake guide, plus capture_model (the normalized CaptureModel JSON of one capture) and, since 1.2.0, sketch_image (the photo, image or PDF of the hand sketch or existing plan a sketch capture was measured from) and sketch_measurements (the measurements the operator entered, sketch-measurements.schema.json), walkthrough_video (the camera video of an AR walkthrough) and walkthrough_log (its taps and camera poses, walkthrough-log.schema.json). Each role belongs to exactly one folder in layout.json. spatial_report_pdf is retired: written only in manifest 1.0.0 by app builds before v2; never in 1.1.0 or later. The spatial report is a station output, not a package file.",
       enum: [
         "capture_record",
         "raw_roomplan_json",
@@ -1038,6 +1112,8 @@ export const manifestSchema: Record<string, unknown> = {
         "field_controls",
         "sketch_image",
         "sketch_measurements",
+        "walkthrough_video",
+        "walkthrough_log",
       ],
     },
     visitRole: {
@@ -1180,12 +1256,12 @@ export const sketchMeasurementsSchema: Record<string, unknown> = {
       properties: {
         kind: {
           description:
-            "hand_sketch: a sketch drawn on site; existing_plan: a printed or drawn plan of the property; none: measurements only, no drawing.",
-          enum: ["hand_sketch", "existing_plan", "none"],
+            "hand_sketch: a sketch drawn on site; existing_plan: a printed or drawn plan of the property; ar_walkthrough: converted from an AR walkthrough (spec F15), every length measured by the phone; none: measurements only, no drawing.",
+          enum: ["hand_sketch", "existing_plan", "ar_walkthrough", "none"],
         },
         path: {
           description:
-            "Package path of the sketch image (role sketch_image). Present exactly when kind is not none.",
+            "Package path of the sketch image (role sketch_image), or of the walkthrough log (role walkthrough_log) for ar_walkthrough. Present exactly when kind is not none.",
           $ref: "#/$defs/relativePath",
         },
       },
@@ -1312,6 +1388,18 @@ export const sketchMeasurementsSchema: Record<string, unknown> = {
           description: "This room's ceiling height when it differs from the floor's.",
           $ref: "#/$defs/length",
         },
+        placement: {
+          description:
+            "Where the room sits in the capture frame, when it was measured there (an AR walkthrough, spec F15): corner 0 at (x, z) in metres and wall 0 leaving it at angleDeg, counter-clockwise from +x seen from +Y. The solver keeps the room there and does not place it by sharedWith. Omitted for a typed sketch.",
+          type: "object",
+          additionalProperties: false,
+          required: ["x", "z", "angleDeg"],
+          properties: {
+            x: { type: "number" },
+            z: { type: "number" },
+            angleDeg: { type: "number", minimum: -360, maximum: 360 },
+          },
+        },
       },
     },
     wall: {
@@ -1395,6 +1483,253 @@ export const sketchMeasurementsSchema: Record<string, unknown> = {
           description:
             "Distance from that corner to the nearest jamb of the opening. Omitted: the opening is placed by the order of the openings on the wall, estimated.",
           $ref: "#/$defs/length",
+        },
+      },
+      if: { properties: { kind: { const: "window" } } },
+      else: { not: { properties: { sill: true }, required: ["sill"] } },
+    },
+  },
+};
+
+export const walkthroughLogSchema: Record<string, unknown> = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  $id: "https://hellochapter.com/schemas/chapter-capture/v1/walkthrough-log.schema.json",
+  title: "WalkthroughLog",
+  description:
+    "The raw record of one AR walkthrough capture (spec F15): when it ran, the camera intrinsics, the camera pose of each recorded video frame, the floor height, and every tap the operator made, room by room, with the scale check. Written by the app as Original Exports/{areaKey}/{captureId}/walkthrough-log.json with role walkthrough_log, next to walkthrough.mp4 (role walkthrough_video). Every point and transform is in the walkthrough's own AR frame: metres, right-handed, +Y up (ARKit world frame with gravity alignment). Times are seconds since startedAt. Optional fields are omitted, never null.",
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "schemaVersion",
+    "visitId",
+    "captureId",
+    "areaKey",
+    "startedAt",
+    "finishedAt",
+    "floorY",
+    "frames",
+    "rooms",
+  ],
+  properties: {
+    schemaVersion: { const: "1.0.0" },
+    visitId: { $ref: "#/$defs/uuid" },
+    captureId: { $ref: "#/$defs/uuid" },
+    areaKey: { $ref: "#/$defs/areaKey" },
+    startedAt: { $ref: "#/$defs/dateTime" },
+    finishedAt: { $ref: "#/$defs/dateTime" },
+    video: {
+      description: "The recorded video. Omitted when nothing was recorded.",
+      type: "object",
+      additionalProperties: false,
+      required: ["path", "width", "height", "framesPerSecond"],
+      properties: {
+        path: {
+          description: "Package path of the video (role walkthrough_video).",
+          $ref: "#/$defs/relativePath",
+        },
+        width: { type: "integer", minimum: 1 },
+        height: { type: "integer", minimum: 1 },
+        framesPerSecond: { type: "number", exclusiveMinimum: 0 },
+      },
+    },
+    intrinsics: {
+      description: "Camera intrinsics of the recorded frames, in pixels of the video.",
+      type: "object",
+      additionalProperties: false,
+      required: ["fx", "fy", "cx", "cy", "width", "height"],
+      properties: {
+        fx: { type: "number" },
+        fy: { type: "number" },
+        cx: { type: "number" },
+        cy: { type: "number" },
+        width: { type: "integer", minimum: 1 },
+        height: { type: "integer", minimum: 1 },
+      },
+    },
+    floorY: { description: "Height of the floor plane the corner taps lie on.", type: "number" },
+    frames: {
+      description:
+        "The camera pose of each recorded video frame, in time order. Empty when nothing was recorded.",
+      type: "array",
+      items: { $ref: "#/$defs/frame" },
+    },
+    rooms: { type: "array", minItems: 1, items: { $ref: "#/$defs/room" } },
+    scaleCheck: {
+      description:
+        "The tape length of one walked wall. Every length of the capture is scaled by tape / AR length.",
+      type: "object",
+      additionalProperties: false,
+      required: ["roomId", "wallIndex", "tape"],
+      properties: {
+        roomId: { $ref: "#/$defs/id" },
+        wallIndex: {
+          description: "Index of the wall in the room: wall i runs from corner i to corner i + 1.",
+          type: "integer",
+          minimum: 0,
+        },
+        tape: { $ref: "#/$defs/length" },
+      },
+    },
+  },
+  $defs: {
+    uuid: {
+      description: "Lowercase RFC 9562 UUID.",
+      type: "string",
+      format: "uuid",
+      pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    },
+    dateTime: {
+      description: "UTC timestamp, whole seconds, RFC 3339 with Z.",
+      type: "string",
+      format: "date-time",
+      pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+    },
+    areaKey: { type: "string", pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", maxLength: 64 },
+    id: { type: "string", minLength: 1, maxLength: 128 },
+    relativePath: {
+      description: "Path relative to the package root, forward slashes, no '.' or '..' segments.",
+      type: "string",
+      minLength: 1,
+      maxLength: 1024,
+      pattern: "^(?!/)(?!.*//)(?!.*/$)(?!(.*/)?\\.{1,2}(/|$))[^\\\\\\x00-\\x1f]+$",
+    },
+    vec3: { type: "array", items: { type: "number" }, minItems: 3, maxItems: 3 },
+    tracking: {
+      description: "ARKit tracking state when the frame or tap was taken.",
+      enum: ["normal", "limited", "not_available"],
+    },
+    frame: {
+      type: "object",
+      additionalProperties: false,
+      required: ["t", "transform", "tracking"],
+      properties: {
+        t: { description: "Seconds since startedAt.", type: "number", minimum: 0 },
+        transform: {
+          description:
+            "Camera-to-world transform, 16 numbers column-major (four columns of four, like simd_float4x4).",
+          type: "array",
+          items: { type: "number" },
+          minItems: 16,
+          maxItems: 16,
+        },
+        tracking: { $ref: "#/$defs/tracking" },
+      },
+    },
+    tap: {
+      type: "object",
+      additionalProperties: false,
+      required: ["p", "t", "tracking"],
+      properties: {
+        p: { description: "The tapped point.", $ref: "#/$defs/vec3" },
+        t: { description: "Seconds since startedAt.", type: "number", minimum: 0 },
+        tracking: { $ref: "#/$defs/tracking" },
+      },
+    },
+    length: {
+      type: "object",
+      additionalProperties: false,
+      required: ["valueMm", "enteredUnit", "enteredText"],
+      properties: {
+        valueMm: { type: "number", exclusiveMinimum: 0, maximum: 200000 },
+        enteredUnit: { enum: ["mm", "cm", "m", "in", "ft", "ft_in"] },
+        enteredText: { type: "string", minLength: 1, maxLength: 40 },
+      },
+    },
+    room: {
+      type: "object",
+      additionalProperties: false,
+      required: ["id", "label", "method", "ceiling", "openings"],
+      properties: {
+        id: { $ref: "#/$defs/id" },
+        label: { type: "string", minLength: 1, maxLength: 100 },
+        type: {
+          enum: [
+            "living_room",
+            "dining_room",
+            "kitchen",
+            "bedroom",
+            "bathroom",
+            "closet",
+            "hallway",
+            "laundry",
+            "office",
+            "utility",
+            "other",
+          ],
+        },
+        method: {
+          description:
+            "corners: one tap per floor corner in order, then the closing tap on the first corner; walls: two or more floor taps along the base of each wall in order (corners are the intersections of consecutive wall lines).",
+          enum: ["corners", "walls"],
+        },
+        corners: {
+          description:
+            "method corners: the corner taps in walking order (at least three). Present exactly with method corners.",
+          type: "array",
+          minItems: 3,
+          items: { $ref: "#/$defs/tap" },
+        },
+        closingTap: {
+          description:
+            "method corners: the tap back on the first corner that closed the room. Omitted when the operator closed the room without it (no drift measure).",
+          $ref: "#/$defs/tap",
+        },
+        walls: {
+          description:
+            "method walls: per wall, in walking order, two or more taps along its base. Present exactly with method walls.",
+          type: "array",
+          minItems: 3,
+          items: { type: "array", minItems: 2, items: { $ref: "#/$defs/tap" } },
+        },
+        ceiling: {
+          description:
+            "Taps where a wall meets the ceiling. Empty: the room uses the floor's last ceiling height, or the default.",
+          type: "array",
+          items: { $ref: "#/$defs/tap" },
+        },
+        openings: { type: "array", items: { $ref: "#/$defs/opening" } },
+      },
+      if: { properties: { method: { const: "corners" } } },
+      then: {
+        properties: { corners: true },
+        required: ["corners"],
+        not: { properties: { walls: true }, required: ["walls"] },
+      },
+      else: {
+        required: ["walls"],
+        allOf: [
+          { not: { properties: { corners: true }, required: ["corners"] } },
+          { not: { properties: { closingTap: true }, required: ["closingTap"] } },
+        ],
+        properties: { walls: true },
+      },
+    },
+    opening: {
+      type: "object",
+      additionalProperties: false,
+      required: ["id", "kind", "wallIndex", "leftJamb", "rightJamb"],
+      properties: {
+        id: { $ref: "#/$defs/id" },
+        kind: { enum: ["door", "window", "opening"] },
+        wallIndex: {
+          description:
+            "The wall of the room the opening is in: wall i runs from corner i to corner i + 1.",
+          type: "integer",
+          minimum: 0,
+        },
+        leftJamb: {
+          description:
+            "One jamb: at the floor for a door or opening, on the wall plane at any height for a window.",
+          $ref: "#/$defs/tap",
+        },
+        rightJamb: { $ref: "#/$defs/tap" },
+        head: {
+          description: "The top of the opening, on the wall plane. Omitted: the default height.",
+          $ref: "#/$defs/tap",
+        },
+        sill: {
+          description: "Windows: the sill, on the wall plane. Omitted: the default sill.",
+          $ref: "#/$defs/tap",
         },
       },
       if: { properties: { kind: { const: "window" } } },

@@ -53,6 +53,7 @@ final class SchemaParityTests: XCTestCase {
         "field_controls": PackageLayout.fieldControlsFileName,
         "manifest": PackageLayout.manifestFileName,
         "sketch_measurements": PackageLayout.sketchMeasurementsFileName,
+        "walkthrough_log": PackageLayout.walkthroughLogFileName,
       ],
       "PackageLayout file names vs layout.json fileNames")
 
@@ -136,6 +137,7 @@ final class SchemaParityTests: XCTestCase {
       "field-controls": SchemaVersion.allCases.map(\.rawValue),
       "manifest": ManifestSchemaVersion.allCases.map(\.rawValue),
       "sketch-measurements": SketchMeasurementsSchemaVersion.allCases.map(\.rawValue),
+      "walkthrough-log": WalkthroughLogSchemaVersion.allCases.map(\.rawValue),
       "verdict": SchemaVersion.allCases.map(\.rawValue),
     ]
     XCTAssertEqual(
@@ -188,7 +190,7 @@ final class SchemaParityTests: XCTestCase {
       return Array(properties.keys)
     }
     let compass = ["heading", "headingAccuracy", "headingSource", "headingRecordedAt", "headingIssue"]
-    let sketch = ["captureSource", "sketch"]
+    let sketch = ["captureSource", "sketch", "walkthrough"]
     try assertSameValues(
       try refused(in: .v1), compass + sketch, "fields refused in a 1.0.0 capture record")
     try assertSameValues(try refused(in: .v1_1), sketch, "fields refused in a 1.1.0 capture record")
@@ -245,6 +247,9 @@ final class SchemaParityTests: XCTestCase {
     try assertEnum(
       CeilingHeightSource.self, schema,
       ["$defs", "capture", "properties", "sketch", "properties", "ceilingHeightSource", "enum"])
+    try assertEnum(
+      WalkthroughScaleSource.self, schema,
+      ["$defs", "capture", "properties", "walkthrough", "properties", "scaleSource", "enum"])
     try assertEnum(
       DisplayUnitSystem.self, schema,
       ["$defs", "capture", "properties", "units", "properties", "display", "enum"])
