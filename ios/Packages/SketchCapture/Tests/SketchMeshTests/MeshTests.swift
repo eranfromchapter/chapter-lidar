@@ -130,7 +130,15 @@ final class MeshTests: XCTestCase {
     XCTAssertTrue(outer.allSatisfy { $0.normal.z > 0 }, "outside face of wall 1 faces away")
     // Wall tops face up, wall undersides face down.
     let tops = all.filter { t in [t.a, t.b, t.c].allSatisfy { abs($0.y - 2.7) < 1e-5 } && t.normal.y > 0 }
-    XCTAssertEqual(tops.reduce(0) { $0 + $1.area }, 4 * 0.1143 * 2 + 3 * 0.1143 * 2 + 4 * 0.1143 * 0.1143, accuracy: 1e-3)
+    // Typed steps (Xcode 26.3 cannot type-check the one-line sum in time): two 4 m walls, two
+    // 3 m walls, four corner squares, all of thickness 0.1143 m.
+    let thickness: Double = 0.1143
+    let longWalls: Double = 4 * thickness * 2
+    let shortWalls: Double = 3 * thickness * 2
+    let corners: Double = 4 * thickness * thickness
+    let expectedTops: Double = longWalls + shortWalls + corners
+    let topArea: Double = tops.reduce(0.0) { $0 + $1.area }
+    XCTAssertEqual(topArea, expectedTops, accuracy: 1e-3)
   }
 
   func testOpeningsAreCutThroughBothWallFaces() throws {
