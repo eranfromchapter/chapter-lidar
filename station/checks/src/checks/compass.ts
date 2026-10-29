@@ -14,9 +14,14 @@
 // graded, so older packages and their revisions keep their verdict; true grades it as above (no
 // compass reading). Without a capture record the check is not applicable and says nothing (checks
 // 2 and 3 report it).
+// A sketch capture (capture record 1.2.0, `captureSource: sketch`; spec F14 1.7) is not graded
+// under either policy: it has no scan frame to read a heading into, so it gets one info finding,
+// "Sketch capture: the plan is oriented as drawn; north is not shown.", and does not count as a
+// graded capture.
 
 import {
   COMPASS_VERIFIED_MAX,
+  captureSourceOf,
   compassDetail,
   compassState,
   type Capture,
@@ -36,6 +41,10 @@ export const COMPASS_LIMITATION_FOR_LEGACY_RECORDS = false;
 
 /** The limitation of a not-verified orientation, as the verdict lists it (compass spec 1.4). */
 export const ORIENTATION_NOT_VERIFIED = "Plan orientation is not verified; north is not shown.";
+
+/** The info finding of a sketch capture (spec F14 1.7): the plan is drawn as sketched. */
+export const SKETCH_ORIENTATION =
+  "Sketch capture: the plan is oriented as drawn; north is not shown.";
 
 /** What the rule expects of every capture. */
 export const COMPASS_EXPECTED = `a compass reading at scan start, true north, accuracy ±${COMPASS_VERIFIED_MAX}° or better`;
@@ -148,6 +157,24 @@ function legacyCaptureFinding(
   });
 }
 
+/** True for a sketch capture: not graded, there is no scan frame to read a heading into. */
+function isSketch(capture: Capture): boolean {
+  return captureSourceOf(capture) === "sketch";
+}
+
+/** The info finding of a sketch capture. Nothing is expected of it. */
+function sketchCaptureFinding(capture: Capture, filePath: string): StationFinding {
+  return finding({
+    ruleId: "orientation.compass",
+    severity: "info",
+    message: SKETCH_ORIENTATION,
+    filePath,
+    measured: "sketch capture (no scan frame)",
+    nextAction: NO_ACTION,
+    ...scopeOf(capture),
+  });
+}
+
 /** The compass check under a Q-B policy. The station runs `checkCompass` (the constant). */
 export function compassCheck(policy: CompassPolicy): (ctx: CheckContext) => CheckOutput {
   return (ctx) => {
@@ -157,7 +184,12 @@ export function compassCheck(policy: CompassPolicy): (ctx: CheckContext) => Chec
     }
     const filePath = ctx.recordPath();
     if (policy.limitationForLegacyRecords) {
-      return { findings: record.captures.map((capture) => captureFinding(capture, filePath)) };
+      const findings = record.captures.map((capture) =>
+        isSketch(capture)
+          ? sketchCaptureFinding(capture, filePath)
+          : captureFinding(capture, filePath),
+      );
+      return record.captures.every(isSketch) ? { findings, notApplicable: true } : { findings };
     }
     if (record.schemaVersion === LEGACY_RECORD_VERSION) {
       const labels = record.captures.map((capture) => capture.label).join(", ");
@@ -175,14 +207,15 @@ export function compassCheck(policy: CompassPolicy): (ctx: CheckContext) => Chec
         notApplicable: true,
       };
     }
+    const notGraded = (capture: Capture) => isSketch(capture) || scannedBeforeCompass(capture);
     const findings = record.captures.map((capture) =>
-      scannedBeforeCompass(capture)
-        ? legacyCaptureFinding(capture, record, filePath)
-        : captureFinding(capture, filePath),
+      isSketch(capture)
+        ? sketchCaptureFinding(capture, filePath)
+        : scannedBeforeCompass(capture)
+          ? legacyCaptureFinding(capture, record, filePath)
+          : captureFinding(capture, filePath),
     );
-    return record.captures.every(scannedBeforeCompass)
-      ? { findings, notApplicable: true }
-      : { findings };
+    return record.captures.every(notGraded) ? { findings, notApplicable: true } : { findings };
   };
 }
 

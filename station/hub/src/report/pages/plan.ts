@@ -2,6 +2,7 @@
 // 5.2.3): the contents (or the floor's note) and the legend on the left, the floor with its
 // outer dimension strings, north and scale on the right.
 
+import { captureSourceOf } from "@chapter/capture-contract";
 import type { Canvas } from "../layout/canvas.js";
 import type { Model, ModelFloor } from "../model.js";
 import { floorNorthSymbol, NO_SCAN_MODEL_SYMBOL, skippedEntries } from "../model.js";
@@ -189,6 +190,8 @@ export function drawPlanPage(
 ): void {
   const { canvas, model, index } = ctx;
   const floor = model.floors[floorIndex] as ModelFloor;
+  /** A sketch capture (spec F14 1.7): the page says so under the floor title and in the notes. */
+  const sketch = floor.capture !== undefined && captureSourceOf(floor.capture) === "sketch";
   drawFrame(ctx, {
     kicker: ["Floor plan", floorKicker(model, floorIndex)],
     statement: "short",
@@ -210,6 +213,11 @@ export function drawPlanPage(
     canvas.block(contentsNote(model), TYPE.footnote, LEFT_X, bottom + 4, LEFT_WIDTH);
   } else {
     canvas.line(floor.label, TYPE.section, LEFT_X, 102, { maxWidth: LEFT_WIDTH });
+    let noteTop = 102 + 19 + 6;
+    if (sketch) {
+      canvas.line(WORDS.sketchCapture, { ...TYPE.table, color: COLOR.muted }, LEFT_X, noteTop);
+      noteTop += TYPE.table.line + 2;
+    }
     const text =
       index.contents > 0 && floorIndex === 0
         ? WORDS.otherFloorNote.replace(
@@ -221,7 +229,7 @@ export function drawPlanPage(
       text,
       { ...TYPE.table, line: 12, color: COLOR.muted },
       LEFT_X,
-      102 + 19 + 6,
+      noteTop,
       LEFT_WIDTH,
     );
   }
@@ -232,6 +240,9 @@ export function drawPlanPage(
   const drawable =
     floor.metrics !== undefined &&
     !(floor.rooms.length === 0 && floor.metrics.geometry.walls.length === 0);
+  if (sketch) {
+    notes.push(WORDS.sketchPlanNote);
+  }
   if (drawable) {
     notes.push(WORDS.planNote);
   }

@@ -1,4 +1,4 @@
-// Check 5b, orientation.compass (compass spec 8.2): the rule set (13 rules, evaluator 1.1.0),
+// Check 5b, orientation.compass (compass spec 8.2): the rule set (14 rules, evaluator 1.2.0),
 // the compass findings of every generated fixture, every compass test vector of the contract run
 // through the station, and owner question Q-B (captures scanned before the app read the compass:
 // capture records 1.0.0, and captures without compass fields in a 1.1.0 record, carried over from
@@ -100,20 +100,20 @@ function withReadings(
 }
 
 describe("the rule set", () => {
-  it("has 13 rules, orientation.compass right after orientation.up", () => {
-    assert.equal(RULES.length, 13);
+  it("has 14 rules, orientation.compass right after orientation.up", () => {
+    assert.equal(RULES.length, 14);
     const ids = RULES.map((rule) => rule.id);
     assert.equal(ids.indexOf(RULE), ids.indexOf("orientation.up") + 1);
     assert.deepEqual(RULES[ids.indexOf(RULE)], { id: RULE, title: "Orientation (compass)" });
     assert.equal(CHECKS.find((check) => check.ruleId === RULE)?.run, checkCompass);
   });
 
-  it("is evaluator 1.1.0, read as station-checks v1.1.0", () => {
-    assert.deepEqual(EVALUATOR, { name: "chapter-capture-station/checks", version: "1.1.0" });
-    assert.equal(ruleSetLabel(EVALUATOR), "station-checks v1.1.0");
+  it("is evaluator 1.2.0, read as station-checks v1.2.0", () => {
+    assert.deepEqual(EVALUATOR, { name: "chapter-capture-station/checks", version: "1.2.0" });
+    assert.equal(ruleSetLabel(EVALUATOR), "station-checks v1.2.0");
     const verdict = runChecks(loadGood("box-room"), HUB_ADDRESS);
     assert.deepEqual(verdict.evaluator, EVALUATOR);
-    assert.equal(verdict.checks.length, 13);
+    assert.equal(verdict.checks.length, 14);
   });
 });
 
@@ -277,12 +277,14 @@ describe("compass findings of the generated fixtures", () => {
     const pkg = loadGenerated("sample-424");
     const verdict = runChecks(pkg, pkg.captureRecord?.address.formatted ?? "");
     const reportDir = resolve(generatedDir, "..", "report", "424-west-end");
+    // The recorded verdicts are the 1.1.0 station's output (13 rules): 1.2.0 appends
+    // sketch.measurements, not applicable to a scan, and changes nothing else for one.
     for (const outcome of ["ready", "limited", "blocked"]) {
       const recorded = readJson<Verdict>(join(reportDir, `verdict-${outcome}.json`));
-      assert.deepEqual(recorded.evaluator, verdict.evaluator, outcome);
+      assert.deepEqual(recorded.evaluator, { ...verdict.evaluator, version: "1.1.0" }, outcome);
       assert.deepEqual(
-        recorded.checks.map((check) => check.ruleId),
         verdict.checks.map((check) => check.ruleId),
+        [...recorded.checks.map((check) => check.ruleId), "sketch.measurements"],
         outcome,
       );
       // Same fields in the same order: the recorded files are the station's output.

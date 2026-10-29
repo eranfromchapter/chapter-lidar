@@ -60,6 +60,12 @@ const EXPECTED: Record<string, Array<[string, "blocker" | "limitation"]>> = {
     ["floors.registration", "limitation"],
   ],
   "field controls derived from the scan": [["evidence.independence", "limitation"]],
+  // Two estimated walls, the assumed ceiling and one estimated door.
+  "limited sketch capture": [
+    ["sketch.measurements", "limitation"],
+    ["sketch.measurements", "limitation"],
+    ["sketch.measurements", "limitation"],
+  ],
 };
 
 const sortPairs = (pairs: Array<[string, string]>) =>
