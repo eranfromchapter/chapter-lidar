@@ -6,6 +6,8 @@ import CaptureUI
 import ChapterUI
 import FieldKitUI
 import FieldRules
+import SketchEntry
+import SketchUI
 import SwiftUI
 import UIKit
 
@@ -38,6 +40,9 @@ struct AppNavigation: View {
         UITestHooks.captureStepChanged(step, home: home)
       #endif
     }
+    .onChange(of: home.visit?.sketchModel?.step) { _, step in
+      home.visit?.sketchStepChanged(step)
+    }
     .sheet(
       item: Binding(
         get: { home.visit?.renaming }, set: { draft in home.visit?.renaming = draft })
@@ -64,8 +69,8 @@ struct AppNavigation: View {
   /// of a Debug build.
   private var homeActions: CapturesHomeActions {
     var actions = CapturesHomeActions(
-      newCapture: { home.newCapture() }, open: { home.open($0) },
-      signOut: { home.signOut() }, refresh: { await home.refresh() })
+      newCapture: { home.newCapture() }, sketchCapture: { home.sketchCapture() },
+      open: { home.open($0) }, signOut: { home.signOut() }, refresh: { await home.refresh() })
     #if DEBUG
       if home.offersPhotoDeletion {
         actions.deletePhotos = { await home.deleteAllPhotos() }
@@ -94,6 +99,22 @@ struct AppNavigation: View {
     case .scanSetup:
       if let model = visit?.captureModel {
         ScanSetupScreen(model: model)
+      }
+    case .sketchSource:
+      if let visit, let model = visit.sketchModel {
+        SketchSourceScreen(
+          model: model,
+          options: SketchSourceOptions(fixedPhoto: visit.fixedPhoto, caption: visit.sketchCaption(step: 2)))
+      }
+    case .sketchRooms:
+      if let visit, let model = visit.sketchModel {
+        SketchRoomsScreen(model: model, caption: visit.sketchCaption(step: 3))
+      }
+    case .sketchCheck:
+      if let visit, let model = visit.sketchModel {
+        SketchCheckScreen(model: model, caption: visit.sketchCaption(step: 4)) {
+          visit.finishSketchFloor()
+        }
       }
     case .overview:
       if let visit {

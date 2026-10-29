@@ -6,6 +6,8 @@ import Foundation
 import MeshExport
 import PackageCore
 import PlanExport
+import SketchMesh
+import SketchSolver
 
 /// Why "Package ready" could not be built. The originals stay where they are.
 public enum VisitPackageError: Error, Equatable, Sendable, CustomStringConvertible {
@@ -35,6 +37,8 @@ public enum AppGenerators {
   public static let captureCore = "chapter-capture-ios/CaptureCore"
   public static let meshExport = "chapter-capture-ios/MeshExport"
   public static let fieldKit = "chapter-capture-ios/FieldKit"
+  /// The originals of a sketch capture (spec F14): the sketch image and the measurements.
+  public static let sketchCapture = "chapter-capture-ios/SketchCapture"
 }
 
 /// One planned package: the draft (not yet sealed) and what the "Package ready" screen shows.
@@ -52,9 +56,13 @@ public struct VisitPackagePlan: Sendable {
 /// exactly as the scan wrote them; `capture-model.json` mapped from `roomplan.json` with the
 /// visit's ids; the PlanExport files (DXF, CSV, the plan sheet PDF, PNG, SVG) derived from the
 /// capture model; and, when the scan recorded them, the MeshExport files (`mesh.glb`, `mesh.obj` +
-/// `mesh.mtl` from the scene mesh, `points.las` derived from `depth-samples.bin`). Visit-wide:
-/// `capture-record.json` and `field-controls.json`. Then every saved photo, with its recorded
-/// SHA-256 and size as the expected fingerprint (assembly fails if a photo changed).
+/// `mesh.mtl` from the scene mesh, `points.las` derived from `depth-samples.bin`). A sketch
+/// capture (spec F14, `captureSource == .sketch`) has the sketch image and
+/// `sketch-measurements.json` as its originals, its model solved from the measurements with
+/// both in `derivedFrom`, the same plan files, and the mesh extruded from the model (no point
+/// cloud). Visit-wide: `capture-record.json` and `field-controls.json`. Then every saved photo,
+/// with its recorded SHA-256 and size as the expected fingerprint (assembly fails if a photo
+/// changed).
 ///
 /// No Spatial Report PDF: the spatial report is made by the station after its checks, and a
 /// manifest 1.1.0 package never holds the retired role (a PlanExport that still writes the phone
@@ -84,8 +92,17 @@ public struct VisitPackageBuilder: Sendable {
       .appendingPathComponent(capture.captureId.rawValue, isDirectory: true)
   }
 
+  /// The sketch measurements of a sketch capture, read from its originals folder.
+  public func sketchMeasurements(of capture: CaptureRecord.Capture) throws -> SketchMeasurements {
+    let url = originalsDirectory(of: capture)
+      .appendingPathComponent(PackageLayout.sketchMeasurementsFileName)
+    return try CaptureContractJSON.makeDecoder().decode(
+      SketchMeasurements.self, from: try Data(contentsOf: url))
+  }
+
   /// The capture model of one capture, mapped from its RoomPlan original with the visit's ids
-  /// and the operator's room `names` (`RoomNaming`).
+  /// and the operator's room `names` (`RoomNaming`); a sketch capture's is solved again from
+  /// its measurements.
   public func captureModel(
     of capture: CaptureRecord.Capture, visitId: LowercaseUUID, names: [RoomName] = []
   ) throws -> CaptureModel {
@@ -96,6 +113,9 @@ public struct VisitPackageBuilder: Sendable {
   public func namedCaptureModel(
     of capture: CaptureRecord.Capture, visitId: LowercaseUUID, names: [RoomName]
   ) throws -> NamedCaptureModel {
+    if capture.source == .sketch {
+      return try namedSketchModel(of: capture, names: names)
+    }
     let directory = originalsDirectory(of: capture)
     let roomPlanURL = directory.appendingPathComponent(RawOriginalsNaming.originals.roomPlanFileName)
     do {
@@ -117,6 +137,30 @@ public struct VisitPackageBuilder: Sendable {
     } catch {
       throw VisitPackageError.captureModel(label: capture.label, reason: String(describing: error))
     }
+  }
+
+  /// A sketch capture's model, solved from `sketch-measurements.json` (spec F14 2.1). The
+  /// operator's room names are the solver's labels already; a later rename (`VisitRoomNames`)
+  /// applies by room id and footprint as it does to a scan, so the rooms are relabelled here
+  /// without mapping anything.
+  func namedSketchModel(of capture: CaptureRecord.Capture, names: [RoomName]) throws
+    -> NamedCaptureModel
+  {
+    let solved: CaptureModel
+    do {
+      let measurements = try sketchMeasurements(of: capture)
+      solved = try SketchSolver.solve(measurements, context: SketchSolveContext(label: capture.label))
+        .model
+    } catch {
+      throw VisitPackageError.captureModel(label: capture.label, reason: String(describing: error))
+    }
+    let scanned = RoomNaming.scannedRooms(of: solved)
+    var model = solved
+    for (index, room) in scanned.enumerated() {
+      guard let name = names.first(where: { RoomNaming.applies($0, to: room) }) else { continue }
+      model.rooms[index].label = name.name
+    }
+    return NamedCaptureModel(model: model, scannedRooms: scanned)
   }
 
   /// Builds the draft. `photosRoot` is the root of the photo store (record paths are relative).
@@ -211,6 +255,10 @@ public struct VisitPackageBuilder: Sendable {
     _ capture: CaptureRecord.Capture, record: CaptureRecord, names: [RoomName], draftFolder: URL,
     to draft: inout PackageDraft
   ) throws {
+    if capture.source == .sketch {
+      try addSketchCapture(capture, record: record, names: names, draftFolder: draftFolder, to: &draft)
+      return
+    }
     let ref = CaptureRef(captureId: capture.captureId, areaKey: capture.areaKey)
     let originals = originalsDirectory(of: capture)
     let exports = exportsFolder(of: capture, in: draftFolder)
@@ -230,7 +278,7 @@ public struct VisitPackageBuilder: Sendable {
 
     let model = try captureModel(of: capture, visitId: record.visitId, names: names)
     let modelPath = try draft.add(
-      try modelInput(model, capture: capture, exports: exports, roomPlanPath: roomPlanPath))
+      try modelInput(model, capture: capture, exports: exports, derivedFrom: [roomPlanPath]))
     for input in try planInputs(
       model, capture: capture, record: record, exports: exports, modelPath: modelPath)
     {
@@ -242,6 +290,96 @@ public struct VisitPackageBuilder: Sendable {
       exports: exports, to: &draft)
   }
 
+  /// A sketch capture (spec F14 2.1): the sketch image (when there is one) and the measurements
+  /// as originals, the model solved from the measurements (`derivedFrom` both), the plan files,
+  /// and `mesh.glb`, `mesh.obj` + `mesh.mtl` extruded from the model. No point cloud.
+  func addSketchCapture(
+    _ capture: CaptureRecord.Capture, record: CaptureRecord, names: [RoomName], draftFolder: URL,
+    to draft: inout PackageDraft
+  ) throws {
+    let ref = CaptureRef(captureId: capture.captureId, areaKey: capture.areaKey)
+    let originals = originalsDirectory(of: capture)
+    let exports = exportsFolder(of: capture, in: draftFolder)
+
+    var originalPaths: [String] = []
+    if let image = Self.sketchImage(in: originals) {
+      originalPaths.append(
+        try draft.add(
+          PackageFileInput(
+            source: image.url, role: .sketchImage, fileName: image.url.lastPathComponent,
+            capture: ref, mime: image.mime, generator: AppGenerators.sketchCapture,
+            generatorVersion: appVersion)))
+    }
+    originalPaths.append(
+      try draft.add(
+        PackageFileInput(
+          source: originals.appendingPathComponent(PackageLayout.sketchMeasurementsFileName),
+          role: .sketchMeasurements, fileName: PackageLayout.sketchMeasurementsFileName,
+          capture: ref, mime: "application/json", generator: AppGenerators.sketchCapture,
+          generatorVersion: appVersion)))
+
+    let model = try captureModel(of: capture, visitId: record.visitId, names: names)
+    let modelPath = try draft.add(
+      try modelInput(model, capture: capture, exports: exports, derivedFrom: originalPaths))
+    for input in try planInputs(
+      model, capture: capture, record: record, exports: exports, modelPath: modelPath)
+    {
+      try draft.add(input)
+    }
+
+    let created = capture.finishedAt?.date ?? capture.capturedAt.date
+    let version = ExportInfo.version
+    let report: ExportReport
+    do {
+      let mesh = try SketchMesh.extrude(model)
+      report = try CaptureExporter.export(
+        floors: [FloorMesh(areaKey: capture.areaKey, label: capture.label, mesh: mesh)],
+        depthSamples: nil, to: exports,
+        options: ExportOptions(generatorVersion: version, creationDate: created))
+    } catch {
+      throw VisitPackageError.meshExport(label: capture.label, reason: String(describing: error))
+    }
+    for (url, role, mime) in [
+      (report.glbURL, FileRole.meshGLB, "model/gltf-binary"), (report.objURL, .meshOBJ, "model/obj"),
+      (report.mtlURL, .meshMTL, "model/mtl"),
+    ] {
+      try draft.add(
+        PackageFileInput(
+          source: url, role: role, fileName: url.lastPathComponent, capture: ref, mime: mime,
+          generator: AppGenerators.meshExport, generatorVersion: version, derivedFrom: [modelPath]))
+    }
+  }
+
+  /// The sketch image of a sketch capture's originals folder: `sketch.jpg`, `.png`, `.heic` or
+  /// `.pdf`, whichever exists (one per capture); nil for a capture without a sketch.
+  static func sketchImage(in originals: URL) -> (url: URL, mime: String)? {
+    let kinds = [
+      ("jpg", "image/jpeg"), ("png", "image/png"), ("heic", "image/heic"), ("pdf", "application/pdf"),
+    ]
+    for (ext, mime) in kinds {
+      let url = originals.appendingPathComponent("sketch.\(ext)")
+      if FileManager.default.fileExists(atPath: url.path) { return (url, mime) }
+    }
+    return nil
+  }
+
+  /// The package paths of a capture's originals as the draft holds them: the raw RoomPlan file
+  /// of a scan; the sketch image (when listed) and the measurements of a sketch capture.
+  func originalPaths(of capture: CaptureRecord.Capture, in draft: PackageDraft) throws -> [String] {
+    let ref = CaptureRef(captureId: capture.captureId, areaKey: capture.areaKey)
+    guard capture.source == .sketch else {
+      return [
+        try draft.path(
+          role: .rawRoomplanJSON, fileName: RawOriginalsNaming.originals.roomPlanFileName,
+          capture: ref)
+      ]
+    }
+    return draft.entries
+      .filter { $0.input.capture == ref && $0.input.role.isSketchRole }
+      .sorted { $0.input.role == .sketchImage && $1.input.role != .sketchImage }
+      .map(\.path)
+  }
+
   /// Folder of one capture's generated files in a draft folder.
   func exportsFolder(of capture: CaptureRecord.Capture, in draftFolder: URL) -> URL {
     draftFolder.appendingPathComponent(
@@ -249,9 +387,10 @@ public struct VisitPackageBuilder: Sendable {
       isDirectory: true)
   }
 
-  /// `capture-model.json` of one capture, written into `exports`.
+  /// `capture-model.json` of one capture, written into `exports`; `derivedFrom` lists the
+  /// originals it was mapped or solved from.
   func modelInput(
-    _ model: CaptureModel, capture: CaptureRecord.Capture, exports: URL, roomPlanPath: String
+    _ model: CaptureModel, capture: CaptureRecord.Capture, exports: URL, derivedFrom: [String]
   ) throws -> PackageFileInput {
     let modelURL = try write(
       try encode(model), to: exports.appendingPathComponent(PackageLayout.captureModelFileName))
@@ -259,7 +398,7 @@ public struct VisitPackageBuilder: Sendable {
       source: modelURL, role: .captureModel, fileName: PackageLayout.captureModelFileName,
       capture: CaptureRef(captureId: capture.captureId, areaKey: capture.areaKey),
       mime: "application/json", generator: AppGenerators.captureCore,
-      generatorVersion: appVersion, derivedFrom: [roomPlanPath])
+      generatorVersion: appVersion, derivedFrom: derivedFrom)
   }
 
   /// The PlanExport files of one capture model, written into `exports`. The retired phone report

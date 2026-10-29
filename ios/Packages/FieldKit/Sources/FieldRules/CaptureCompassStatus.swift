@@ -82,12 +82,17 @@ public enum CompassSummary {
     public var isVerified: Bool { self == .verified }
   }
 
-  /// Every capture of the record (exterior included), in record order, with its status:
-  /// `overrides[captureId]` when given, else the capture's stored reading.
+  /// The compass detail of a visit whose captures are all sketches (spec F14 1.7): nothing is
+  /// read, nothing is asked.
+  public static let sketchOnlyDetail = "Sketch capture: the plan is oriented as drawn"
+
+  /// Every scanned capture of the record (exterior included), in record order, with its
+  /// status: `overrides[captureId]` when given, else the capture's stored reading. A sketch
+  /// capture has no scan frame to read a heading into (spec F14 1.7) and is left out.
   public static func entries(
     record: CaptureRecord, overrides: [LowercaseUUID: CaptureCompassStatus] = [:]
   ) -> [Entry] {
-    record.captures.map { capture in
+    record.captures.filter { $0.source != .sketch }.map { capture in
       Entry(
         captureId: capture.captureId,
         label: capture.label.trimmingCharacters(in: .whitespaces),

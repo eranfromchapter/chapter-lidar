@@ -121,14 +121,18 @@ extension VisitPackageBuilder {
       record: record, photos: photos, controls: controls, roomNames: roomNames, draftId: draftId)
   }
 
-  /// The scan originals of every capture are still in the workspace: a revision or a re-seal can
-  /// be built. False when the visit's folder no longer holds them (moved or removed).
+  /// The originals of every capture are still in the workspace (the scan's RoomPlan file, a
+  /// sketch capture's measurements): a revision or a re-seal can be built. False when the
+  /// visit's folder no longer holds them (moved or removed).
   public func hasOriginals(of record: CaptureRecord) -> Bool {
     !record.captures.isEmpty
       && record.captures.allSatisfy { capture in
-        FileManager.default.fileExists(
-          atPath: originalsDirectory(of: capture)
-            .appendingPathComponent(RawOriginalsNaming.originals.roomPlanFileName).path)
+        let name =
+          capture.source == .sketch
+          ? PackageLayout.sketchMeasurementsFileName
+          : RawOriginalsNaming.originals.roomPlanFileName
+        return FileManager.default.fileExists(
+          atPath: originalsDirectory(of: capture).appendingPathComponent(name).path)
       }
   }
 
@@ -140,10 +144,9 @@ extension VisitPackageBuilder {
   ) throws {
     let ref = CaptureRef(captureId: capture.captureId, areaKey: capture.areaKey)
     let exports = exportsFolder(of: capture, in: draftFolder)
-    let roomPlanPath = try draft.path(
-      role: .rawRoomplanJSON, fileName: RawOriginalsNaming.originals.roomPlanFileName, capture: ref)
     let modelInput = try modelInput(
-      model, capture: capture, exports: exports, roomPlanPath: roomPlanPath)
+      model, capture: capture, exports: exports,
+      derivedFrom: try originalPaths(of: capture, in: draft))
     try draft.replace(modelInput)
     let modelPath = try draft.path(
       role: .captureModel, fileName: modelInput.fileName, capture: ref)

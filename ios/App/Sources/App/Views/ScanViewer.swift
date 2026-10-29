@@ -9,6 +9,7 @@ import Observation
 import PlanExport
 import RoomPlan
 import SceneKit
+import SketchSolver
 import SwiftUI
 import UIKit
 
@@ -45,19 +46,30 @@ struct ScanItem: Identifiable, Hashable {
 
   /// When the scan was made: the capture record's time, else the file's.
   var scanDate: Date { capturedAt ?? date }
+
+  /// A sketch capture (spec F14): the folder holds `sketch-measurements.json`, not
+  /// `roomplan.json`; its plan is solved from the measurements and it has no RoomPlan 3D model.
+  var isSketch: Bool {
+    FileManager.default.fileExists(
+      atPath: folder.appendingPathComponent(ScanLibrary.sketchFile).path)
+  }
 }
 
 /// One scan's folder as the viewer needs it (the Capture overview's floor rows, a v1 visit's
 /// scans). Reads; changes nothing.
 enum ScanLibrary {
   static let roomPlanFile = "roomplan.json"
+  static let sketchFile = PackageLayout.sketchMeasurementsFileName
 
   static func item(
     folder: URL, title: String, address: String? = nil, displayUnits: DisplayUnitSystem? = nil,
     capturedAt: Date? = nil, captureLabel: String? = nil, roomNames: [RoomName] = []
   ) -> ScanItem? {
-    let file = folder.appendingPathComponent(roomPlanFile)
-    guard
+    // The scan's RoomPlan file, or a sketch capture's measurements (spec F14).
+    let file = [roomPlanFile, sketchFile].map(folder.appendingPathComponent).first {
+      FileManager.default.fileExists(atPath: $0.path)
+    }
+    guard let file,
       let values = try? file.resourceValues(forKeys: [.contentModificationDateKey]),
       let date = values.contentModificationDate
     else { return nil }
@@ -104,12 +116,31 @@ final class ScanViewerModel {
       visitId: planContext.flatMap { LowercaseUUID(rawValue: $0.visitId) } ?? LowercaseUUID(),
       captureId: planContext.flatMap { LowercaseUUID(rawValue: $0.captureId) } ?? LowercaseUUID(),
       areaKey: planContext?.areaKey ?? "scan", label: label)
+    let sketchFile = item.folder.appendingPathComponent(ScanLibrary.sketchFile)
+    let isSketch = item.isSketch
     do {
       let result = try await Task.detached(priority: .userInitiated) {
-        let data = try Data(contentsOf: file)
-        let document = try RoomPlanDocument.decode(from: data)
-        // With the operator's room names, as the package's capture model has them.
-        let model = try RoomNaming.map(document, context: mapping, names: names).model
+        let model: CaptureModel
+        if isSketch {
+          // A sketch capture: solved again from the measurements, with the operator's names
+          // applied by room id as the package's capture model has them (VisitPackageBuilder).
+          let measurements = try CaptureContractJSON.makeDecoder().decode(
+            SketchMeasurements.self, from: try Data(contentsOf: sketchFile))
+          var solved = try SketchSolver.solve(
+            measurements, context: SketchSolveContext(label: mapping.label)
+          ).model
+          for (index, room) in RoomNaming.scannedRooms(of: solved).enumerated() {
+            if let name = names.first(where: { RoomNaming.applies($0, to: room) }) {
+              solved.rooms[index].label = name.name
+            }
+          }
+          model = solved
+        } else {
+          let data = try Data(contentsOf: file)
+          let document = try RoomPlanDocument.decode(from: data)
+          // With the operator's room names, as the package's capture model has them.
+          model = try RoomNaming.map(document, context: mapping, names: names).model
+        }
         return (model, ScanMeasurements(model: model), model.walls.count, model.rooms.count)
       }.value
       measurements = result.1
@@ -227,18 +258,21 @@ struct ScanViewer: View {
           measurements(scan, units: model.floorplan?.units ?? .imperial)
         }
 
-        Button {
-          Task { await model.open3D() }
-        } label: {
-          HStack(spacing: 8) {
-            if model.isExporting { ProgressView().tint(ChapterTheme.Color.surface) }
-            Image(systemName: "cube")
-            Text(model.isExporting ? "Making the 3D model\u{2026}" : "View in 3D")
+        // A sketch capture has no RoomPlan model to show in 3D; its mesh is in the package.
+        if !model.item.isSketch {
+          Button {
+            Task { await model.open3D() }
+          } label: {
+            HStack(spacing: 8) {
+              if model.isExporting { ProgressView().tint(ChapterTheme.Color.surface) }
+              Image(systemName: "cube")
+              Text(model.isExporting ? "Making the 3D model\u{2026}" : "View in 3D")
+            }
           }
+          .buttonStyle(.chapter(.primary))
+          .disabled(model.isExporting)
+          .accessibilityIdentifier("scan.view3D")
         }
-        .buttonStyle(.chapter(.primary))
-        .disabled(model.isExporting)
-        .accessibilityIdentifier("scan.view3D")
       }
       .padding(.horizontal, ChapterTheme.Metric.screenPadding)
       .padding(.top, 8)

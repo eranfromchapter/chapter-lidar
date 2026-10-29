@@ -376,13 +376,22 @@ public struct PackageReview: Equatable, Sendable {
       rows.append(ExportRow(kind: .meshes, label: joined(meshes), count: count(meshRoles)))
     }
 
-    let rawRoles: Set<FileRole> = [.pointCloudLAS, .rawRoomplanJSON, .rawDepth, .captureModel]
+    let rawRoles: Set<FileRole> = [
+      .pointCloudLAS, .rawRoomplanJSON, .rawDepth, .captureModel, .sketchImage, .sketchMeasurements,
+    ]
     var raw: [String] = []
     if present.contains(.pointCloudLAS) { raw.append("Point cloud LAS") }
     switch (present.contains(.rawRoomplanJSON), present.contains(.rawDepth)) {
     case (true, true): raw.append("raw RoomPlan + depth")
     case (true, false): raw.append("raw RoomPlan")
     case (false, true): raw.append("raw depth")
+    case (false, false): break
+    }
+    // A sketch capture's originals (spec F14): the sketch image and the measurements.
+    switch (present.contains(.sketchImage), present.contains(.sketchMeasurements)) {
+    case (true, true): raw.append("sketch image + measurements")
+    case (true, false): raw.append("sketch image")
+    case (false, true): raw.append("sketch measurements")
     case (false, false): break
     }
     if present.contains(.captureModel) { raw.append("capture model") }
@@ -397,6 +406,10 @@ public struct PackageReview: Equatable, Sendable {
   /// "compass: not recorded" (none). A capture has a reading when its state is verified or
   /// approximate (`CompassState.isUsable`).
   public static func compassText(_ captures: [CaptureRecord.Capture]) -> String {
+    // Sketch captures carry no compass (spec F14 1.7): none is expected of them.
+    let scanned = captures.filter { $0.source != .sketch }
+    if scanned.isEmpty, !captures.isEmpty { return "compass: not needed for a sketch" }
+    let captures = scanned
     let read = captures.filter { CompassState($0).isUsable }
     if read.isEmpty { return "compass: not recorded" }
     if read.count == captures.count {

@@ -107,14 +107,40 @@ public enum OverviewBuilder {
           default: return false
           }
         }
-        return .scanned(
+        let rooms = input.rooms[capture.captureId]?.count ?? 0
+        let photos = input.photos.filter { $0.captureId == capture.captureId }.count
+        // Exterior captures need no field controls (ControlsList leaves them out).
+        let controls = word ?? "not needed"
+        guard capture.source == .sketch else {
+          return .scanned(
+            areaKey: capture.areaKey, label: label, mode: capture.mode, rooms: rooms,
+            photos: photos, controls: controls, isDone: !hasPhotoGap && !hasControlGap)
+        }
+        return sketchRow(
           areaKey: capture.areaKey, label: label, mode: capture.mode,
-          rooms: input.rooms[capture.captureId]?.count ?? 0,
-          photos: input.photos.filter { $0.captureId == capture.captureId }.count,
-          // Exterior captures need no field controls (ControlsList leaves them out).
-          controls: word ?? "not needed", isDone: !hasPhotoGap && !hasControlGap)
+          isLimited: capture.sketch?.measurements == .limited, rooms: rooms, photos: photos,
+          controls: controls, isDone: !hasPhotoGap && !hasControlGap)
       }
     }
+  }
+
+  /// A sketch capture's floor row (spec F14 1.5, 2.4): "[Mode] · sketch[ · limited] · [R] rooms
+  /// · [P] photos · controls [STATE]", the scanned row's words with the source after the mode
+  /// and "limited" when the solver estimated something. The controls word says "from the
+  /// sketch" where a scan says "from the scan".
+  static func sketchRow(
+    areaKey: String, label: String, mode: CaptureMode, isLimited: Bool, rooms: Int, photos: Int,
+    controls: String, isDone: Bool
+  ) -> CaptureOverviewState.FloorRow {
+    let scanned = CaptureOverviewState.FloorRow.scanned(
+      areaKey: areaKey, label: label, mode: mode, rooms: rooms, photos: photos,
+      controls: controls == FloorControlsState.fromScan.rawValue ? "from the sketch" : controls,
+      isDone: isDone)
+    var parts = scanned.subtitle.components(separatedBy: " · ")
+    parts.insert(isLimited ? "sketch · limited" : "sketch", at: 1)
+    return CaptureOverviewState.FloorRow(
+      id: scanned.id, title: scanned.title, subtitle: parts.joined(separator: " · "),
+      status: scanned.status)
   }
 
   /// The captures as the controls list sees them, with each one's rooms and scan.
@@ -233,6 +259,12 @@ public enum OverviewBuilder {
   static func compassRow(_ input: Input) -> CaptureOverviewState.CheckRow {
     let entries = input.checklist.compass.isEmpty
       ? CompassSummary.entries(record: input.record) : input.checklist.compass
+    // Sketch captures only (spec F14 1.7): no scan frame to read a heading into; the plan is
+    // oriented as drawn and no compass is asked for.
+    if entries.isEmpty, !input.record.captures.isEmpty {
+      return .init(
+        .compass, subtitle: CompassSummary.sketchOnlyDetail, status: .init(.waiting, "Not needed"))
+    }
     let overview = CompassSummary.overview(entries)
     if overview == .verified {
       return .init(.compass, subtitle: "Every floor verified", status: .init(.done, "Verified"))

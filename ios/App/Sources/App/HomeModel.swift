@@ -14,6 +14,12 @@ enum AppRoute: Hashable {
   case newCapture
   /// What are you scanning?, step 2 (a new visit's, or a further floor's).
   case scanSetup
+  /// What are you drawing from?, step 2 of a sketch capture (spec F14).
+  case sketchSource
+  /// Rooms and measurements, step 3 of a sketch capture.
+  case sketchRooms
+  /// Check, step 4 of a sketch capture.
+  case sketchCheck
   /// The Capture overview.
   case overview
   /// The photo step (viewfinder, then Label a photo).
@@ -69,7 +75,9 @@ final class HomeModel {
     revisionNotices = RevisionNoticeSchedule(
       sender: StationNextRevisionNotices(client: services.station),
       delay: services.revisionNoticeDelay)
-    state = CapturesHomeState(rows: [], operatorName: operatorInfo.name, isLoading: true)
+    state = CapturesHomeState(
+      rows: [], operatorName: operatorInfo.name, isLoading: true,
+      canScan: DeviceGate.evaluate(services.capabilities).isSupported)
     snapshots = app.liveSnapshots
     reload()
   }
@@ -103,15 +111,29 @@ final class HomeModel {
 
   /// "New capture": step 1 of a new visit. Nothing is written until its first Start scan.
   func newCapture() {
+    openNewVisit(sketch: false)
+  }
+
+  /// "Sketch capture" (spec F14): step 1 of a new visit drawn from a sketch, no LiDAR needed.
+  /// Nothing is written until the rooms screen opens.
+  func sketchCapture() {
+    openNewVisit(sketch: true)
+  }
+
+  private func openNewVisit(sketch: Bool) {
     extra = []
     visit?.close()
     do {
       visit = try VisitModel(
-        newIn: visitsRoot, services: services, operatorInfo: operatorInfo, home: self)
+        newIn: visitsRoot, services: services, operatorInfo: operatorInfo, home: self,
+        sketch: sketch)
     } catch {
       alertMessage = "A new capture could not be started: \(error)"
     }
   }
+
+  /// The device gate passes: the home's primary button is "New capture" (spec F14 2.1).
+  var canScan: Bool { DeviceGate.evaluate(services.capabilities).isSupported }
 
   /// A Captures home row: the Capture overview (in progress), Verdict received (sealed), or the
   /// scans of a v1 visit that kept no capture record.
@@ -240,7 +262,7 @@ final class HomeModel {
     let rows = visits.compactMap { CaptureLibrary.row(for: $0, live: snapshots) }
     state = CapturesHomeState(
       rows: rows, operatorName: operatorInfo.name,
-      hasPendingUploads: (app?.pendingUploadCount ?? 0) > 0)
+      hasPendingUploads: (app?.pendingUploadCount ?? 0) > 0, canScan: canScan)
   }
 
   /// On appear, when the app becomes active and on pull to refresh: the disk, then the station

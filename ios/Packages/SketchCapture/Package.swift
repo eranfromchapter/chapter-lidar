@@ -88,7 +88,10 @@ let package = Package(
     ),
     .testTarget(
       name: "SketchEntryTests",
-      dependencies: ["SketchEntry", "SketchSolver", .product(name: "CaptureContract", package: "swift")]
+      dependencies: [
+        "SketchEntry", "SketchSolver", .product(name: "CaptureContract", package: "swift"),
+        .product(name: "CaptureTestSupport", package: "CaptureCore"),
+      ]
     ),
   ]
 )

@@ -7,6 +7,8 @@
   public struct CapturesHomeActions {
     /// "New capture": step 1 of a new visit.
     public var newCapture: @MainActor () -> Void
+    /// "Sketch capture": step 1 of a new visit drawn from a sketch (spec F14), no LiDAR needed.
+    public var sketchCapture: @MainActor () -> Void
     /// A row: the Capture overview (in progress) or Verdict received (sealed).
     public var open: @MainActor (CapturesHomeState.Row) -> Void
     /// "Sign out" in the account dialog.
@@ -20,11 +22,13 @@
     public var deletePhotos: (@MainActor () async -> String)?
 
     public init(
-      newCapture: @escaping @MainActor () -> Void, open: @escaping @MainActor (CapturesHomeState.Row) -> Void,
+      newCapture: @escaping @MainActor () -> Void, sketchCapture: @escaping @MainActor () -> Void = {},
+      open: @escaping @MainActor (CapturesHomeState.Row) -> Void,
       signOut: @escaping @MainActor () -> Void, refresh: @escaping @MainActor () async -> Void = {},
       deletePhotos: (@MainActor () async -> String)? = nil
     ) {
       self.newCapture = newCapture
+      self.sketchCapture = sketchCapture
       self.open = open
       self.signOut = signOut
       self.refresh = refresh
@@ -94,9 +98,30 @@
       }
       .chapterScreenBackground()
       .chapterActionBar {
-        Button("New capture") { actions.newCapture() }
-          .buttonStyle(.chapter(.primary))
-          .accessibilityIdentifier("captures.newCapture")
+        // The primary button is the way in this phone can take: the scan with LiDAR, else the
+        // sketch (spec F14 2.1). The other stays as the tinted second button.
+        if state.canScan {
+          Button("New capture") { actions.newCapture() }
+            .buttonStyle(.chapter(.primary))
+            .accessibilityIdentifier("captures.newCapture")
+          Button("Sketch capture") { actions.sketchCapture() }
+            .buttonStyle(.chapter(.tinted))
+            .accessibilityIdentifier("captures.sketchCapture")
+        } else {
+          Button("Sketch capture") { actions.sketchCapture() }
+            .buttonStyle(.chapter(.primary))
+            .accessibilityIdentifier("captures.sketchCapture")
+          Button("New capture") { actions.newCapture() }
+            .buttonStyle(.chapter(.tinted))
+            .accessibilityIdentifier("captures.newCapture")
+        }
+        Text(CapturesHomeState.sketchFootnote)
+          .chapterTextStyle(.footnote)
+          .foregroundStyle(ChapterTheme.Color.muted)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .fixedSize(horizontal: false, vertical: true)
+          .padding(.horizontal, ChapterTheme.Metric.sectionInset)
+          .accessibilityIdentifier("captures.sketchFootnote")
       }
       .overlay {
         if confirmsDeletePhotos {

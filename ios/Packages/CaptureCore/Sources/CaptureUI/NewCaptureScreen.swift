@@ -43,7 +43,7 @@
       }
       .navigationTitle("New capture")
       .navigationBarTitleDisplayMode(.large)
-      .chapterNavigationCaption("Step 1 of 3")
+      .chapterNavigationCaption(model.newCaptureCaption)
       .chapterBackChevronOnly()
       .chapterScreenBackground()
       .chapterActionBar {
@@ -77,7 +77,7 @@
 
     @ViewBuilder
     private var banners: some View {
-      if let message = model.gate.message {
+      if let message = model.gateMessage {
         Banner(icon: .blocked, text: message)
       }
       if let offline = model.offlineBanner {

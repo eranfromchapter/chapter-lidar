@@ -32,6 +32,8 @@ let package = Package(
     .package(path: "../../Packages/FieldKit"),
     .package(path: "../../Packages/PackageKit"),
     .package(path: "../../Packages/StationClient"),
+    // The sketch solver and mesh (spec F14): a sketch capture's model and 3D files.
+    .package(path: "../../Packages/SketchCapture"),
   ],
   targets: [
     .target(
@@ -45,6 +47,8 @@ let package = Package(
         .product(name: "FieldKit", package: "FieldKit"),
         .product(name: "PackageKit", package: "PackageKit"),
         .product(name: "StationClient", package: "StationClient"),
+        .product(name: "SketchSolver", package: "SketchCapture"),
+        .product(name: "SketchMesh", package: "SketchCapture"),
       ]
     ),
     .testTarget(
@@ -57,6 +61,7 @@ let package = Package(
         .product(name: "FieldKit", package: "FieldKit"),
         .product(name: "PackageKit", package: "PackageKit"),
         .product(name: "StationClient", package: "StationClient"),
+        .product(name: "SketchSolver", package: "SketchCapture"),
       ],
       // Visit folders of the v1 app, read in place (`Fixtures.v1Visits`).
       exclude: ["Fixtures"]

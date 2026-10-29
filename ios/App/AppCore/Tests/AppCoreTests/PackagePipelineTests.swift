@@ -118,8 +118,8 @@ final class PackagePipelineTests: XCTestCase {
     let sealed = try PackageAssembler().assemble(
       plan.draft, at: visit.workspace.packageURL(packageId: plan.draft.packageId.rawValue))
 
-    XCTAssertEqual(sealed.manifest.schemaVersion, .v1_1)
-    XCTAssertEqual(try JSON.parse(sealed.manifestData)["schemaVersion"]?.string, "1.1.0")
+    XCTAssertEqual(sealed.manifest.schemaVersion, .v1_2)
+    XCTAssertEqual(try JSON.parse(sealed.manifestData)["schemaVersion"]?.string, "1.2.0")
     XCTAssertEqual(try Fixtures.manifestValidator().validate(jsonData: sealed.manifestData), [])
     XCTAssertFalse(sealed.manifest.files.contains { $0.role.isRetired })
     let photos = sealed.manifest.files.filter { $0.role == .photo }

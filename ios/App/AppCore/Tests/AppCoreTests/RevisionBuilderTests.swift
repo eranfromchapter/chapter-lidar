@@ -202,7 +202,7 @@ final class RevisionBuilderTests: XCTestCase {
     XCTAssertEqual(row.subject, .retiredFile)
     let sealed = try PackageAssembler().assemble(
       plan.draft, at: visit.workspace.packageURL(packageId: plan.draft.packageId.rawValue))
-    XCTAssertEqual(sealed.manifest.schemaVersion, .v1_1)
+    XCTAssertEqual(sealed.manifest.schemaVersion, .v1_2)
     XCTAssertEqual(try Fixtures.manifestValidator().validate(jsonData: sealed.manifestData), [])
   }
 
