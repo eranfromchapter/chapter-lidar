@@ -112,6 +112,31 @@ adjacent walls, the ceiling height and each opening's width and distance from a 
   the 14th rule changes `Checks run · 14 rules` in the web and the report for every new
   verdict; sketch screens have no snapshot tests (the UI test's screenshots cover them).
 
+### 2.2 AR walkthrough, any iPhone (F15, Oct 29, 2026, same branch)
+
+The owner tried the typed sketch flow on the phone and rejected it: every user should get the
+quality of a scan. Spec `docs/waves/specs/F15-ar-walkthrough.md` (section 1 says plainly what a
+phone without LiDAR can and cannot match).
+
+- **Flow:** "Capture without LiDAR" → How to measure: **Walk the rooms with the camera**
+  (recommended) or Enter from a sketch (F14). The walk (ARKit world tracking, floor reticle, tap
+  button) records floor corners (or two points per wall behind furniture), the closing tap,
+  door and window jambs, sills and heads, and the ceiling line; the camera video and its poses
+  are recorded. A tape check of one wall scales the floor. The taps become the F14 sketch
+  measurements (`WalkthroughConverter`) and the F14 solver builds the model.
+- **Contract (1.2, extended):** `captureSource: walkthrough` with a `walkthrough` summary,
+  roles `walkthrough_video` and `walkthrough_log`, schema `walkthrough-log` 1.0.0, source kind
+  `ar_walkthrough` and room `placement` in sketch measurements.
+- **Station:** rule 14 also grades walkthroughs (scale from the phone only, loop drift,
+  tracking, missing originals); the compass rule does not grade them; the report prints
+  "AR walkthrough".
+- **Tests:** converter 25, placement 4, walkthrough model 10, AppCore `WalkthroughCaptureTests`,
+  station `walkthrough.test.ts` 29, App UI test `WalkthroughFlowUITests` (replay session).
+- **Not verified on a real phone:** the live ARKit session (floor raycast, wall-plane taps,
+  tracking messages), the SceneKit overlay, the video recorder (HEVC, orientation, intrinsics),
+  real drift and accuracy. Known limit: a re-entrant corner more than 5° off square may solve
+  mirrored (the solver starts unsquare corners convex).
+
 ## 3. Test results (last known)
 
 ### 3.1 GitHub Actions
