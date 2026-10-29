@@ -5,8 +5,10 @@ import Foundation
 // `CaptureModel`, with the closure rule (1.4), the estimates (1.5) and the confidences, and the
 // `sketch` summary of the capture record. Pure functions; nothing here touches Apple frameworks.
 //
-// This file is the public API the app and the entry model build against. F14.2 fills in the
-// implementation (and may add files next to this one); the public names below stay.
+// This file is the public API the app and the entry model build against. The implementation is
+// in the files next to it: `RoomSolver` (one room: turns, closure, estimates, diagonals),
+// `LeastSquares` (the corner fit for unsquare corners), `SketchSolveRun` (rooms placed by their
+// shared walls, walls as centrelines, openings, the summary) and `Plan2` (the plan maths).
 
 /// Defaults the solver uses for what was not measured (spec F14 1.3 and 1.5). Millimetres.
 public enum SketchDefaults {
@@ -134,6 +136,6 @@ public enum SketchSolver {
   public static func solve(_ measurements: SketchMeasurements, context: SketchSolveContext) throws
     -> SketchSolveResult
   {
-    throw SketchSolverError.notImplemented
+    try SketchSolveRun(measurements: measurements, context: context).run()
   }
 }
