@@ -85,10 +85,11 @@
     struct Frame {
       let scale: Double
       let offset: CGPoint
-      let maxZ: Double
+      /// The smallest z of the drawing: plan up is −Z (as on the plan sheet), so it sits at the top.
+      let minZ: Double
 
       func point(_ v: Vec3) -> CGPoint {
-        CGPoint(x: offset.x + v.x * scale, y: offset.y + (maxZ - v.z) * scale)
+        CGPoint(x: offset.x + v.x * scale, y: offset.y + (v.z - minZ) * scale)
       }
     }
 
@@ -109,7 +110,7 @@
       let offset = CGPoint(
         x: (Double(size.width) - width * scale) / 2 - minX * scale,
         y: (Double(size.height) - depth * scale) / 2)
-      return Frame(scale: scale, offset: offset, maxZ: maxZ)
+      return Frame(scale: scale, offset: offset, minZ: minZ)
     }
 
     static func length(_ wall: CaptureModel.Wall) -> Double {
