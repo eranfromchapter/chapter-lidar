@@ -28,7 +28,14 @@
       // -ChapterUITestVerdict, -ChapterUITestOffline, -ChapterUITestRefuse (phone-package §9.1).
       let stationOptions = UITestStationOptions(arguments: ProcessInfo.processInfo.arguments)
       let storage = UITestBlobStorage(offlineSeconds: stationOptions.offlineSeconds)
-      let stub = UITestStationTransport(storage: storage, options: stationOptions)
+      // The sketch photo's reading (spec F16): the bundled 4 x 3 m bedroom without written
+      // dimensions, answered after a moment so "Reading your sketch…" can be seen.
+      let sketchFixture = Bundle.main.url(
+        forResource: "UITestSketchInterpretation", withExtension: "json"
+      ).flatMap { try? Data(contentsOf: $0) }
+      let stub = UITestStationTransport(
+        storage: storage, options: stationOptions,
+        sketchReader: sketchFixture.map { .fixture($0, delay: 3) })
       // The probe notes each next-revision notice the station accepts (`UITestProbe`).
       var transport: any HTTPTransport = ProbeStationTransport(base: stub)
       if options.projectsOffline {
@@ -77,6 +84,7 @@
         // Short, so a test sees the notice of a change without waiting 10 s.
         revisionNoticeDelay: 1.5)
       services.stationPhotoBlobs = { stub.erasePhotoBlobs() }
+      services.sketchInterpreter = StationSketchInterpreter(station: station)
       // The AR walkthrough (spec F15): ARKit does not run on the simulator, so a scripted walk
       // of a 4 × 3 m bedroom stands in, one point per tap of + (UITestWalkthroughBedroom.json).
       services.canWalk = true

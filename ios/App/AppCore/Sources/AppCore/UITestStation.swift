@@ -160,6 +160,16 @@
     }
   }
 
+  /// How the in-process station answers `POST /v1/sketch-interpretations` (spec F16): the
+  /// bundled fixture interpretation (UI tests; a field-test build without an API key), or the
+  /// field-test build's direct Claude call (`FieldTestSketchReader`).
+  public enum UITestSketchReader: Sendable {
+    /// The fixture's bytes (a `SketchInterpretation`), answered after `delay` seconds with the
+    /// photo's pixel size and the time of the answer.
+    case fixture(Data, delay: TimeInterval)
+    case claude(FieldTestSketchReader)
+  }
+
   /// A fixed token. Never a real credential.
   public struct UITestTokenProvider: AccessTokenProvider {
     /// The signed-in name of the UI-test mode (operator, "Signed in as" on New capture).
@@ -195,6 +205,7 @@
     private var notices: [String: NextRevisionNotice] = [:]
     private var refusedFirstSession = false
     private let now: @Sendable () -> Date
+    private let sketchReader: UITestSketchReader?
 
     private struct StoredPackage {
       var request: UploadSessionRequest
@@ -209,12 +220,15 @@
       var verdictId = LowercaseUUID()
     }
 
+    /// `sketchReader`: how sketch photos are read; nil answers 503 (no reader), as a station
+    /// without an API key does.
     public init(
       storage: UITestBlobStorage, options: UITestStationOptions = UITestStationOptions(),
-      now: @escaping @Sendable () -> Date = { Date() }
+      sketchReader: UITestSketchReader? = nil, now: @escaping @Sendable () -> Date = { Date() }
     ) {
       self.storage = storage
       self.options = options
+      self.sketchReader = sketchReader
       self.now = now
     }
 
@@ -242,6 +256,8 @@
         return try verdict(route[1], url)
       case ("PUT", 3, "packages") where route[2] == "next-revision":
         return try nextRevision(route[1], body: body, url)
+      case ("POST", 1, "sketch-interpretations"):
+        return try await interpretSketch(body, url)
       default:
         return problem(404, "not_found", url)
       }
@@ -377,6 +393,58 @@
         updatedBy: UITestTokenProvider.operatorName, changes: input.changes)
       lock.withLock { notices[packageId] = notice }
       return try json(200, notice, url)
+    }
+
+    /// `POST /v1/sketch-interpretations` as the station answers it: 200 with the reading, 422
+    /// `sketch_not_a_plan` (with the interpretation) when the reading is not a floor plan, 502
+    /// when Claude failed, 503 without a reader.
+    private func interpretSketch(_ body: Data, _ url: URL) async throws -> (Data, HTTPURLResponse) {
+      struct Request: Decodable {
+        var mediaType: String
+        var data: String
+      }
+      guard let request = try? JSONDecoder().decode(Request.self, from: body),
+        let image = Data(base64Encoded: request.data)
+      else { return problem(400, "sketch_image_invalid", url) }
+      let interpretation: SketchInterpretation
+      switch sketchReader {
+      case nil:
+        return problem(503, "sketch_unavailable", url)
+      case .fixture(let fixture, let delay):
+        if delay > 0 { try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000)) }
+        var read = try CaptureContractJSON.makeDecoder().decode(
+          SketchInterpretation.self, from: fixture)
+        read.interpretedAt = UTCTimestamp(now())
+        if let size = ImageHeader.size(of: image) { read.image = size }
+        interpretation = read
+      case .claude(let reader):
+        do {
+          interpretation = try await reader.read(imageData: image, mediaType: request.mediaType)
+        } catch let error as FieldTestSketchReaderError {
+          // The station's codes (F16.2): 422 refused; 502 truncated, unreadable or rejected.
+          let (status, code): (Int, String)
+          switch error {
+          case .refused: (status, code) = (422, "sketch_refused")
+          case .truncated: (status, code) = (502, "sketch_truncated")
+          case .unreadableAnswer: (status, code) = (502, "sketch_unreadable_response")
+          case .api, .missingResource: (status, code) = (502, "sketch_request_rejected")
+          }
+          return problem(status, code, url, title: error.description)
+        }
+      }
+      guard interpretation.reading.isFloorPlan else {
+        var object: [String: Any] = [
+          "type": "about:blank", "title": "Not a floor plan", "status": 422,
+          "code": "sketch_not_a_plan",
+        ]
+        object["interpretation"] = try JSONSerialization.jsonObject(
+          with: try CaptureContractJSON.makeEncoder().encode(interpretation))
+        return (
+          try JSONSerialization.data(withJSONObject: object),
+          response(422, url, "application/problem+json")
+        )
+      }
+      return try json(200, interpretation, url)
     }
 
     /// "Delete all photos": the photo blobs of every package this station holds (and their
@@ -558,9 +626,13 @@
       return (data, response(status, url, "application/json"))
     }
 
-    private func problem(_ status: Int, _ code: String, _ url: URL) -> (Data, HTTPURLResponse) {
-      let body = Data(
-        #"{"type":"about:blank","title":"\#(code)","status":\#(status),"code":"\#(code)"}"#.utf8)
+    private func problem(_ status: Int, _ code: String, _ url: URL, title: String? = nil) -> (
+      Data, HTTPURLResponse
+    ) {
+      let object: [String: Any] = [
+        "type": "about:blank", "title": title ?? code, "status": status, "code": code,
+      ]
+      let body = (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data()
       return (body, response(status, url, "application/problem+json"))
     }
 

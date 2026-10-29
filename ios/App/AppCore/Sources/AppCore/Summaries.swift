@@ -378,7 +378,7 @@ public struct PackageReview: Equatable, Sendable {
 
     let rawRoles: Set<FileRole> = [
       .pointCloudLAS, .rawRoomplanJSON, .rawDepth, .captureModel, .sketchImage, .sketchMeasurements,
-      .walkthroughVideo, .walkthroughLog,
+      .sketchInterpretation, .walkthroughVideo, .walkthroughLog,
     ]
     var raw: [String] = []
     if present.contains(.pointCloudLAS) { raw.append("Point cloud LAS") }
@@ -398,12 +398,20 @@ public struct PackageReview: Equatable, Sendable {
       raw.append("walkthrough " + walk.joined(separator: " + "))
     }
     // A sketch capture's originals (spec F14): the sketch image and the measurements.
+    // A sketch photo read by Claude (spec F16): the photo, what Claude read and the
+    // measurements converted from it ("sketch read by Claude + measurements").
     let walked = present.contains(.walkthroughLog) && !present.contains(.sketchImage)
-    switch (present.contains(.sketchImage), present.contains(.sketchMeasurements) && !walked) {
-    case (true, true): raw.append("sketch image + measurements")
-    case (true, false): raw.append("sketch image")
-    case (false, true): raw.append("sketch measurements")
-    case (false, false): break
+    if present.contains(.sketchInterpretation) {
+      raw.append(
+        present.contains(.sketchMeasurements)
+          ? "sketch read by Claude + measurements" : "sketch read by Claude")
+    } else {
+      switch (present.contains(.sketchImage), present.contains(.sketchMeasurements) && !walked) {
+      case (true, true): raw.append("sketch image + measurements")
+      case (true, false): raw.append("sketch image")
+      case (false, true): raw.append("sketch measurements")
+      case (false, false): break
+      }
     }
     if present.contains(.captureModel) { raw.append("capture model") }
     if !raw.isEmpty {

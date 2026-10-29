@@ -131,6 +131,28 @@ struct AppNavigation: View {
           visit.finishSketchFloor()
         }
       }
+    case .photoSource:
+      if let visit, let model = visit.sketchPhotoModel {
+        SketchPhotoSourceScreen(
+          model: model,
+          options: SketchSourceOptions(fixedPhoto: visit.fixedPhoto, caption: visit.sketchCaption(step: 3)))
+      }
+    case .photoReading:
+      if let visit, let model = visit.sketchPhotoModel {
+        SketchPhotoReadingScreen(model: model, caption: visit.sketchCaption(step: 4)) {
+          visit.enterSketchByHand()
+        }
+      }
+    case .photoLength:
+      if let visit, let model = visit.sketchPhotoModel {
+        SketchPhotoLengthScreen(model: model, caption: visit.sketchCaption(step: 4))
+      }
+    case .photoCheck:
+      if let visit, let model = visit.sketchPhotoModel {
+        SketchPhotoCheckScreen(model: model, caption: visit.sketchCaption(step: 5)) {
+          visit.finishSketchPhotoFloor()
+        }
+      }
     case .walkthroughScale:
       if let visit, let model = visit.walkthroughModel {
         WalkthroughScaleScreen(model: model, caption: visit.sketchCaption(step: 4))

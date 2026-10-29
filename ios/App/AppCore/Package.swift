@@ -49,6 +49,8 @@ let package = Package(
         .product(name: "StationClient", package: "StationClient"),
         .product(name: "SketchSolver", package: "SketchCapture"),
         .product(name: "SketchMesh", package: "SketchCapture"),
+        // The sketch photo reader's API (spec F16): `SketchInterpreting`, the converter.
+        .product(name: "SketchReading", package: "SketchCapture"),
       ]
     ),
     .testTarget(
@@ -62,6 +64,7 @@ let package = Package(
         .product(name: "PackageKit", package: "PackageKit"),
         .product(name: "StationClient", package: "StationClient"),
         .product(name: "SketchSolver", package: "SketchCapture"),
+        .product(name: "SketchReading", package: "SketchCapture"),
       ],
       // Visit folders of the v1 app, read in place (`Fixtures.v1Visits`).
       exclude: ["Fixtures"]

@@ -175,6 +175,37 @@ public struct StationClient: Sendable {
       as: NextRevisionNotice.self)
   }
 
+  // MARK: - sketch interpretations
+
+  /// `POST /sketch-interpretations` (createSketchInterpretation, spec F16): the station has Claude
+  /// read a photo of a floor-plan sketch and answers what it read. A photo that is not a plan
+  /// or cannot be read (422) throws `SketchInterpretationRejected` with the station's problem
+  /// and, when it sent one, its interpretation (the reading's `problem` says why). Any other
+  /// error status throws `StationError` as usual (503: the station cannot read sketches now).
+  /// Reading takes 10 to 40 s; give this client a transport with a long timeout (150 s).
+  public func createSketchInterpretation(_ request: SketchInterpretationRequest) async throws
+    -> SketchInterpretation
+  {
+    let operation = StationOperation.createSketchInterpretation
+    let (data, status) = try await sendRaw(
+      operation, path: [:], query: [], body: try encode(request))
+    if operation.successStatuses.contains(status) {
+      do {
+        return try CaptureContractJSON.makeDecoder().decode(SketchInterpretation.self, from: data)
+      } catch let error as DecodingError {
+        throw StationError.invalidResponse(
+          "\(operation.operationId): \(Self.describe(error)) (SketchInterpretation)")
+      }
+    }
+    if status == 422 {
+      let rejection = try? CaptureContractJSON.makeDecoder().decode(
+        SketchInterpretationRejectionBody.self, from: data)
+      throw SketchInterpretationRejected(
+        problem: Self.problem(from: data), interpretation: rejection?.interpretation)
+    }
+    throw StationError.from(status: status, problem: Self.problem(from: data))
+  }
+
   // MARK: - plumbing
 
   private func packagePath(_ packageId: UUID) -> [String: String] {
@@ -209,6 +240,21 @@ public struct StationClient: Sendable {
     query: [(String, String)],
     body: Data?
   ) async throws -> Data {
+    let (data, status) = try await sendRaw(operation, path: path, query: query, body: body)
+    if operation.successStatuses.contains(status) {
+      return data
+    }
+    throw StationError.from(status: status, problem: Self.problem(from: data))
+  }
+
+  /// Sends the request (with the bearer token when the operation needs one, retried once with a
+  /// fresh token on 401) and returns the body and status, whatever the status.
+  private func sendRaw(
+    _ operation: StationOperation,
+    path: [String: String],
+    query: [(String, String)],
+    body: Data?
+  ) async throws -> (Data, Int) {
     var request = URLRequest(url: try url(for: operation, path: path, query: query))
     request.httpMethod = operation.method
     request.setValue("application/json, application/problem+json", forHTTPHeaderField: "Accept")
@@ -222,11 +268,7 @@ public struct StationClient: Sendable {
       (data, response) = try await attempt(request, operation: operation, forceRefresh: true)
     }
 
-    let status = response.statusCode
-    if operation.successStatuses.contains(status) {
-      return data
-    }
-    throw StationError.from(status: status, problem: Self.problem(from: data))
+    return (data, response.statusCode)
   }
 
   private func attempt(

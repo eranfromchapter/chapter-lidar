@@ -25,12 +25,17 @@ public enum SketchFloorWriterError: Error, Equatable, CustomStringConvertible {
 }
 
 /// Writes the originals of a sketch capture (spec F14 2.4): `sketch.<ext>` (the bytes as
-/// chosen, unchanged) and `sketch-measurements.json` (what the operator entered, pretty printed
+/// chosen, unchanged), `sketch-interpretation.json` for a photo read by Claude (spec F16) and
+/// `sketch-measurements.json` (what the operator entered, pretty printed
 /// with sorted keys) into `<originals root>/Original Exports/{areaKey}/{captureId}/`. Originals
 /// are never overwritten, as the scan's raw originals are not.
 public enum SketchFloorWriter {
+  ///
+  /// A sketch photo read by Claude (spec F16) also writes `sketch-interpretation.json` (what
+  /// was read, pretty printed with sorted keys) between the image and the measurements.
   public static func write(
-    measurements: SketchMeasurements, image: SketchImageSelection?, to directory: URL
+    measurements: SketchMeasurements, image: SketchImageSelection?,
+    interpretation: SketchInterpretation? = nil, to directory: URL
   ) throws -> [SketchWrittenFile] {
     var files: [(name: String, data: Data)] = []
     if let image {
@@ -38,7 +43,11 @@ public enum SketchFloorWriter {
     }
     let encoded: Data
     do {
-      encoded = try CaptureContractJSON.makeEncoder(prettyPrinted: true).encode(measurements)
+      let encoder = CaptureContractJSON.makeEncoder(prettyPrinted: true)
+      if let interpretation {
+        files.append((PackageLayout.sketchInterpretationFileName, try encoder.encode(interpretation)))
+      }
+      encoded = try encoder.encode(measurements)
     } catch {
       throw SketchFloorWriterError.writeFailed(String(describing: error))
     }

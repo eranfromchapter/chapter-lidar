@@ -75,6 +75,8 @@
 	<string>$(CHAPTER_STATION_URL)</string>
 	<key>ChapterFieldTest</key>
 	<string>$(CHAPTER_FIELD_TEST)</string>
+	<key>ChapterAnthropicAPIKey</key>
+	<string>$(CHAPTER_ANTHROPIC_API_KEY)</string>
 	<key>UIUserInterfaceStyle</key>
 	<string>Light</string>
 </dict>

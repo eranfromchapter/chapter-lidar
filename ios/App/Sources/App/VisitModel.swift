@@ -11,6 +11,7 @@ import PackageCore
 import PhotoStore
 import PlanExport
 import SketchEntry
+import SketchReading
 import SketchSolver
 import UIKit
 import WalkthroughUI
@@ -32,6 +33,10 @@ final class VisitModel {
   /// Rooms and measurements, Check. Set when How do you want to measure? continues with
   /// "Enter from a sketch", nil again at Finish floor.
   private(set) var sketchModel: SketchEntryModel?
+  /// "Photograph a sketch" of the floor being captured (spec F16): the photo, Claude's reading,
+  /// the one length and Check. Set when How do you want to measure? continues with the photo,
+  /// nil again at Finish floor, Back to How to measure, or "Enter it by hand".
+  private(set) var sketchPhotoModel: SketchPhotoModel?
   /// The AR walkthrough of the floor being walked (spec F15): the walk (a full-screen cover),
   /// Check the scale and Check. Set when How do you want to measure? continues with the walk,
   /// nil again at Finish floor or when the walk is left.
@@ -149,7 +154,7 @@ final class VisitModel {
   /// control or room names being typed.
   var hasWorkToLose: Bool {
     if captureModel != nil || methodModel != nil || sketchModel != nil || walkthroughModel != nil
-      || renaming != nil
+      || sketchPhotoModel != nil || renaming != nil
     {
       return true
     }
@@ -178,6 +183,15 @@ final class VisitModel {
           case .source: return base + [.sketchSource]
           case .rooms: return base + [.sketchSource, .sketchRooms]
           case .check, .finished: return base + [.sketchSource, .sketchRooms, .sketchCheck]
+          }
+        }
+        if let photo = sketchPhotoModel {
+          switch photo.phase {
+          case .source: return base + [.photoSource]
+          case .reading, .problem: return base + [.photoSource, .photoReading]
+          case .oneLength: return base + [.photoSource, .photoLength]
+          case .check, .finished:
+            return base + [.photoSource] + (photo.needsOneLength ? [.photoLength] : []) + [.photoCheck]
           }
         }
         if let walkthroughModel {
@@ -223,6 +237,8 @@ final class VisitModel {
         if flow.step == .scan { try? flow.scanCancelled() }
         methodModel = nil
         sketchModel = nil
+        sketchPhotoModel?.cancelReading()
+        sketchPhotoModel = nil
         walkthroughModel = nil
         if flow.captures.isEmpty && !flow.isRevisionMode {
           captureModel?.back()
@@ -234,6 +250,20 @@ final class VisitModel {
         // Back to How do you want to measure?.
         if flow.step == .scan { try? flow.scanCancelled() }
         sketchModel = nil
+      case .photoSource:
+        // Back to How do you want to measure?.
+        sketchPhotoModel?.cancelReading()
+        sketchPhotoModel = nil
+      case .photoReading:
+        if sketchPhotoModel?.phase == .reading {
+          sketchPhotoModel?.cancelReading()
+        } else {
+          sketchPhotoModel?.retake()
+        }
+      case .photoLength:
+        sketchPhotoModel?.retake()
+      case .photoCheck:
+        sketchPhotoModel?.backFromCheck()
       case .sketchRooms:
         sketchModel?.backToSource()
       case .sketchCheck:
@@ -336,6 +366,14 @@ final class VisitModel {
   func continueFromMethod() {
     guard let method = methodModel, method.canContinue else { return }
     switch method.method {
+    case .photo:
+      guard sketchPhotoModel == nil, let areaKey = method.areaKey,
+        let interpreter = services.sketchInterpreter
+      else { return }
+      sketchPhotoModel = SketchPhotoModel(
+        visitId: flow.record?.visitId ?? LowercaseUUID(), floorLabel: method.cleanedLabel,
+        areaKey: areaKey, mode: method.mode ?? .floor, displayUnits: method.displayUnits,
+        notice: services.sketchReaderNotice, interpreter: interpreter)
     case .sketch:
       makeSketchModel()
     case .walk:
@@ -406,6 +444,60 @@ final class VisitModel {
       } catch {
         message = String(describing: error)
       }
+    }
+  }
+
+  /// "Enter it by hand" after a photo that could not be read (spec F16 2): the F14 screens with
+  /// the photo as the sketch and the floor, mode and units chosen for the photo.
+  func enterSketchByHand() {
+    guard let photo = sketchPhotoModel else { return }
+    photo.cancelReading()
+    methodModel?.choose(.sketch)
+    sketchPhotoModel = nil
+    makeSketchModel()
+    guard let sketch = sketchModel else { return }
+    sketch.floorLabel = photo.floorLabel
+    sketch.mode = photo.mode
+    sketch.setDisplayUnits(photo.displayUnits)
+    if let image = photo.image { sketch.setImage(image, kind: photo.sourceKind) }
+  }
+
+  /// "Finish floor" on the sketch photo's Check (spec F16 2): the capture record of the floor
+  /// with `captureSource: sketch` and the solver's summary; `sketch.<ext>` (the photo as
+  /// taken), `sketch-interpretation.json` (what Claude read) and `sketch-measurements.json`
+  /// (converted from it) written into the capture's folder; then the visit goes on as after a
+  /// scanned floor.
+  func finishSketchPhotoFloor() {
+    guard let photo = sketchPhotoModel, let capture = captureModel, !photo.isFinishing else { return }
+    guard let result = photo.result ?? photo.solve(), let measurements = photo.measurements,
+      let interpretation = photo.interpretation
+    else {
+      message = photo.solveError ?? "The sketch has no model to finish."
+      return
+    }
+    photo.isFinishing = true
+    defer { photo.isFinishing = false }
+    var draft = capture.draft
+    draft.floorLabel = photo.floorLabel
+    draft.mode = photo.mode
+    draft.displayUnits = photo.displayUnits
+    do {
+      let now = UTCTimestamp.now()
+      var record = try draft.build(
+        visitId: photo.visitId, captureId: photo.captureId, visitedAt: now, capturedAt: now)
+      record.captures[0].finishedAt = now
+      record.captures[0].captureSource = .sketch
+      record.captures[0].sketch = result.summary
+      try workspace.createFolder()
+      _ = try SketchFloorWriter.write(
+        measurements: measurements, image: photo.image, interpretation: interpretation,
+        to: builder.originalsDirectory(of: record.captures[0]))
+      photo.markFinished()
+      floorRecordFinished(record)
+      sketchPhotoModel = nil
+      methodModel = nil
+    } catch {
+      message = String(describing: error)
     }
   }
 

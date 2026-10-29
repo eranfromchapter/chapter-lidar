@@ -2,6 +2,7 @@
   import CaptureContract
   import ChapterUI
   import FieldRules
+  import MeshExport
   import SketchEntry
   import SketchSolver
   import SwiftUI
@@ -38,9 +39,12 @@
   /// solver's model, the status, the notes (`leadingNotes` first: an AR walkthrough's
   /// converter notes and scale, then the solver's), what is still to measure, and Finish floor.
   /// The sketch flow and the walkthrough show the same screen with the same identifiers
-  /// (`sketch.plan`, `sketch.status`, `sketch.note.N`, `sketch.finish`).
+  /// (`sketch.plan`, `sketch.status`, `sketch.note.N`, `sketch.finish`). A sketch photo read by
+  /// Claude (spec F16) puts the 3D preview (`mesh3D`, `sketchPhoto.model3D`) on top, the plan
+  /// under it.
   public struct SketchCheckView: View {
     let result: SketchSolveResult?
+    let mesh3D: TriangleMesh?
     let solveError: String?
     let leadingNotes: [String]
     let missing: [String]
@@ -53,9 +57,10 @@
     public init(
       result: SketchSolveResult?, solveError: String?, leadingNotes: [String] = [],
       missing: [String] = [], completenessWord: String, caption: String, isFinishing: Bool,
-      canFinish: Bool, onFinish: @escaping @MainActor () -> Void
+      canFinish: Bool, mesh3D: TriangleMesh? = nil, onFinish: @escaping @MainActor () -> Void
     ) {
       self.result = result
+      self.mesh3D = mesh3D
       self.solveError = solveError
       self.leadingNotes = leadingNotes
       self.missing = missing
@@ -72,6 +77,11 @@
           if let error = solveError {
             Banner(icon: .blocked, text: error)
               .accessibilityIdentifier("sketch.solveError")
+          }
+          if let mesh3D {
+            SketchModel3DCard(
+              mesh: mesh3D,
+              accessibilityText: "3D model: \(SketchText.plural(result?.model.rooms.count ?? 0, "room", "rooms"))")
           }
           plan
           status

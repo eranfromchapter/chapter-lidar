@@ -708,3 +708,50 @@ public struct ModelingDecisionListResponse: Hashable, Sendable, Codable {
     self.decisions = decisions
   }
 }
+
+// MARK: - Sketch interpretations
+
+/// components.schemas.SketchInterpretationRequest (spec F16): a photo of a floor-plan sketch for
+/// Claude to read. `data` is the image, base64; `mediaType` one the Claude API accepts
+/// (`image/jpeg`, `image/png`, `image/webp`, `image/gif`; the app converts HEIC and PDF to JPEG).
+/// At most 10 MB of image.
+public struct SketchInterpretationRequest: Hashable, Sendable, Codable {
+  public var mediaType: String
+  /// The image bytes, standard base64 with padding.
+  public var data: String
+  /// A note for the reader ("the plan is in metres"), when the operator gave one.
+  public var hint: String?
+
+  public init(mediaType: String, imageData: Data, hint: String? = nil) {
+    self.mediaType = mediaType
+    self.data = imageData.base64EncodedString()
+    self.hint = hint
+  }
+}
+
+/// The 422 answer of `POST /sketch-interpretations`: problem details, `sketch_not_a_plan` with,
+/// as an RFC 9457 extension member, what Claude read (`interpretation`), or `sketch_refused`
+/// (Claude declined to read the photo; no interpretation).
+struct SketchInterpretationRejectionBody: Decodable {
+  var interpretation: SketchInterpretation?
+}
+
+/// The station read the photo and found no floor plan in it (`sketch_not_a_plan`), or Claude
+/// declined to read it (`sketch_refused`): 422. The interpretation's `reading.problem` says why,
+/// in Claude's words, when the station sent it.
+public struct SketchInterpretationRejected: Error, Hashable, Sendable {
+  public var problem: Problem?
+  public var interpretation: SketchInterpretation?
+
+  public init(problem: Problem?, interpretation: SketchInterpretation?) {
+    self.problem = problem
+    self.interpretation = interpretation
+  }
+
+  /// Why, in words: the reading's problem, else the problem's detail or title.
+  public var reason: String {
+    if let why = interpretation?.reading.problem, !why.isEmpty { return why }
+    if let detail = problem?.detail, !detail.isEmpty { return detail }
+    return problem?.title ?? "The photo could not be read as a floor plan."
+  }
+}

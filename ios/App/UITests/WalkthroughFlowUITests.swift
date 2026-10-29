@@ -132,12 +132,14 @@ final class WalkthroughFlowUITests: XCTestCase {
     waitForLabel(app.buttons["capture.continue"], "Continue")
     tap(app.buttons["capture.continue"])
 
-    // How do you want to measure? Walk the rooms (recommended, the default).
+    // How do you want to measure? Walk the rooms (the second option; the sketch photo is the
+    // default, spec F16 2).
     XCTAssertTrue(app.staticTexts["How to measure"].waitForExistence(timeout: 10))
     XCTAssertTrue(app.staticTexts["Step 2 of 5"].exists)
     let walk = app.buttons["walkthrough.method.walk"]
     XCTAssertTrue(walk.exists)
-    XCTAssertTrue(walk.label.contains("Chosen"), walk.label)
+    walk.tap()
+    waitFor("the walk is chosen") { walk.label.contains("Chosen") }
     XCTAssertEqual(app.textFields["walkthrough.floorName"].value as? String, "Floor 1")
     waitForLabel(app.buttons["walkthrough.method.continue"], "Walk the rooms")
     shot("W02 How do you want to measure")

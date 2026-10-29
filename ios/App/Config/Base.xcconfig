@@ -12,6 +12,11 @@ CHAPTER_STATION_URL = __SET_STATION_URL__
 // stub station, nothing leaves the phone). Set it in Local.xcconfig. Release ignores it.
 CHAPTER_FIELD_TEST = NO
 
+// Debug field-test builds only: an Anthropic API key, so the field test reads sketch photos with
+// Claude directly (spec F16; in production the station holds the key). A secret: set it ONLY in
+// Local.xcconfig (never committed). Empty here; Release.xcconfig empties it again.
+CHAPTER_ANTHROPIC_API_KEY =
+
 MARKETING_VERSION = 1.0.0
 CURRENT_PROJECT_VERSION = 1
 

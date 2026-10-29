@@ -62,6 +62,26 @@ overview** (floors, photos, field controls, compass, rooms not scanned; the gate
   `captureSource: walkthrough` with the `sketch` and `walkthrough` summaries and no compass. The
   package lists the log and video as originals, the measurements derived from the log, the model
   from both, the plans and the extruded mesh; the overview's floor row says "walked".
+- **Sketch photo (spec F16).** How to measure offers **Photograph a sketch** first (recommended,
+  the default; `walkthrough.method.photo`), then the walk and the typed sketch. It asks the floor,
+  what the sketch shows and the units on the same screen, then `SketchUI`'s **Photograph the
+  sketch** (camera, Photos or a file; the F14 pickers) → **Reading your sketch…** (the photo, a
+  spinner, Cancel; `SketchPhotoModel` sends it through `StationSketchInterpreter`, `POST
+  /v1/sketch-interpretations`, 150 s timeout; HEIC and PDF are sent as JPEG and anything over
+  2048 px is redrawn upright at 2048 px, JPEG 0.85, the original bytes are kept) → **One length**
+  when the sketch has no written dimensions (tap a wall on the drawn plan or its chip, type its
+  length) → **Check** (a SceneKit 3D preview of `SketchMesh.extrude` with vertex colours on top,
+  the plan, the converter's notes, Complete or Limited). A photo that is not a plan (422
+  `sketch_not_a_plan`) shows Claude's reason with **Retake the photo** and **Enter it by hand**
+  (the F14 screens with the photo as the sketch); 503 says the station cannot read sketches
+  now. Finish floor writes `sketch.<ext>` (as taken), `sketch-interpretation.json` and
+  `sketch-measurements.json`; the record says `captureSource: sketch`. The package lists the
+  interpretation (role `sketch_interpretation`, derived from the image), the measurements
+  (derived from the interpretation and the image), the model (from all three) and the mesh;
+  Package ready says "sketch read by Claude + measurements". The floor's viewer (`ScanViewer`)
+  offers **View in 3D** for every sketch and walkthrough floor with the same preview. In UI tests
+  the in-process station answers `Debug/UITestSketchInterpretation.json` (a 4 × 3 m bedroom with
+  a door, a window, a bed and a wardrobe, no dimensions).
 - **Rooms not scanned.** On Before you leave the skipped-rooms row fails until a room note exists
   or the operator taps **All rooms scanned**. The tap is kept in `VisitFlow`
   (`confirmNoRoomsSkipped()`, FieldRules' `NoRoomsSkippedConfirmation`) and covers only the
@@ -74,7 +94,7 @@ overview** (floors, photos, field controls, compass, rooms not scanned; the gate
 | `Sources/App/` | SwiftUI app: `AppModel`, `HomeModel`, `VisitModel`, `CompassPhotoHeading`, MSAL sign-in (`Auth/`), background upload hook (`AppDelegate`) (`.apple-only`) |
 | `Sources/App/Views/` | `AppNavigation` (the one stack), `RootView`, `PackageScreens`, `FloorplanView`, `ScanViewer` |
 | `Sources/App/Debug/` | UI-test and field-test modes (`UITest*`, `FieldTest*`), Debug only |
-| `UITests/` | `ReplayFlowUITests`: replays the box-room fixture through every screen to the verdict; `SketchFlowUITests`: the sketch capture (spec F14) from the Captures home to Package ready; `WalkthroughFlowUITests`: the AR walkthrough (spec F15) in the replay mode, from the Captures home to Package ready |
+| `UITests/` | `ReplayFlowUITests`: replays the box-room fixture through every screen to the verdict; `SketchFlowUITests`: the sketch capture (spec F14) from the Captures home to Package ready; `WalkthroughFlowUITests`: the AR walkthrough (spec F15) in the replay mode, from the Captures home to Package ready; `SketchPhotoFlowUITests`: the sketch photo (spec F16), reading, one length, the 3D preview, Package ready |
 | `Config/*.xcconfig` | Configuration (placeholders committed, no secrets; `Local.xcconfig` is not committed) |
 | `Resources/` | `Info.plist`, `App.entitlements` (MSAL Keychain group) |
 
@@ -115,6 +135,7 @@ Info.plist keys, filled from build settings in `Config/Base.xcconfig`:
 | `ChapterStationAPIScope` | `CHAPTER_STATION_API_SCOPE` | `api://<station app id>/<scope>` |
 | `ChapterStationURL` | `CHAPTER_STATION_URL` | `https:/$()/station.host` (`//` is a comment in xcconfig) |
 | `ChapterFieldTest` | `CHAPTER_FIELD_TEST` | `YES` selects the field-test mode in a Debug build; `NO` otherwise (Release always `NO`) |
+| `ChapterAnthropicAPIKey` | `CHAPTER_ANTHROPIC_API_KEY` | Field test only: an Anthropic API key so the field-test build reads sketch photos with Claude directly. Empty in the committed files and always empty in Release; set it only in `Local.xcconfig` |
 
 The committed values are `__SET_…__` placeholders. Put real values in `Config/Local.xcconfig`
 (included with `#include?`, keep it out of git) or pass them as `xcodebuild` settings. A missing,
@@ -157,6 +178,24 @@ xcodebuild build -project ios/ChapterCapture.xcodeproj -scheme App -configuratio
 Then install `build/dd-v2/Build/Products/Debug-iphoneos/ChapterCapture.app` with Xcode or `xcrun devicectl
 device install app`. Release ignores the flag and excludes the `FieldTest*` sources.
 
+**Sketch photos in the field test (spec F16).** In production the station holds the Anthropic API
+key and the phone never does. The field-test build has no station, so "Photograph a sketch" is
+answered in process: with an API key in `Local.xcconfig` the app calls the Claude API itself
+(`FieldTestSketchReader` in AppCore, `#if DEBUG`; the contract prompt
+`contract/prompts/sketch-interpretation.md` and `contract/schema/sketch-interpretation.schema.json`
+are bundled in Debug only); without one it answers the UI tests' fixture reading and says
+"Demo reading: add an API key to read real sketches". With a key, the sketch photo (and only it)
+leaves the phone, to `api.anthropic.com`.
+
+```
+// Local.xcconfig only. NEVER commit a key, never put one in Base/Debug/Release.xcconfig.
+CHAPTER_ANTHROPIC_API_KEY = sk-ant-…
+```
+
+The key ends up in the Debug app's Info.plist (`ChapterAnthropicAPIKey`): install such a build
+only on your own phone. `Release.xcconfig` sets the setting empty after its includes, the Release
+target excludes the prompt and schema resources, and the reader exists only in Debug.
+
 **Delete all photos** (field-test and UI-test modes only, `#if DEBUG`): the avatar's account dialog
 on the Captures home erases every site photo the app holds after an in-page confirmation, and
 says "Deleted N photos" (distinct photos) or "No photos to delete". `PhotoEraser` (AppCore) deletes
@@ -198,8 +237,10 @@ Why a Release build cannot select the UI-test or field-test mode:
 2. The stubs in AppCore and the app's `UITest*` / `FieldTest*` files are wrapped in `#if DEBUG`,
    so they do not exist in a Release build (`swift build -c release` of AppCore compiles without
    them).
-3. `project.yml` sets `EXCLUDED_SOURCE_FILE_NAMES = "UITest* FieldTest* package"` for Release, so
-   the stub sources and the fixture folder are not even in the Release target.
+3. `project.yml` sets `EXCLUDED_SOURCE_FILE_NAMES = "UITest* FieldTest* package
+   sketch-interpretation.md sketch-interpretation.schema.json"` for Release, so the stub sources,
+   the fixture folder and the sketch reader's prompt and schema are not even in the Release
+   target; `Release.xcconfig` empties `CHAPTER_ANTHROPIC_API_KEY`.
 
 ## Data rules
 

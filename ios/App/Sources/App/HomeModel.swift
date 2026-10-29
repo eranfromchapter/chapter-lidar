@@ -22,6 +22,14 @@ enum AppRoute: Hashable {
   case sketchRooms
   /// Check, step 5 of a sketch capture.
   case sketchCheck
+  /// Photograph the sketch, step 3 of a sketch photo (spec F16).
+  case photoSource
+  /// Reading your sketch… (or why it could not be read), step 4 of a sketch photo.
+  case photoReading
+  /// One length, step 4 of a sketch photo without written dimensions.
+  case photoLength
+  /// Check with the 3D preview, step 5 of a sketch photo.
+  case photoCheck
   /// Check the scale, step 4 of an AR walkthrough (spec F15; the walk itself, step 3, is a
   /// full-screen cover).
   case walkthroughScale

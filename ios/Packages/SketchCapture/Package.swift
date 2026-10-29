@@ -64,7 +64,7 @@ let package = Package(
     .target(
       name: "SketchEntry",
       dependencies: [
-        "SketchSolver",
+        "SketchSolver", "SketchReading",
         .product(name: "CaptureContract", package: "swift"),
         .product(name: "FieldKit", package: "FieldKit"),
       ]
@@ -72,8 +72,9 @@ let package = Package(
     .target(
       name: "SketchUI",
       dependencies: [
-        "SketchEntry", "SketchSolver",
+        "SketchEntry", "SketchSolver", "SketchReading", "SketchMesh",
         .product(name: "CaptureContract", package: "swift"),
+        .product(name: "MeshExport", package: "MeshExport"),
         .product(name: "ChapterUI", package: "ChapterUI"),
         .product(name: "FieldKit", package: "FieldKit"),
       ],
@@ -136,7 +137,7 @@ let package = Package(
     .testTarget(
       name: "SketchEntryTests",
       dependencies: [
-        "SketchEntry", "SketchSolver", "Walkthrough", "WalkthroughUI",
+        "SketchEntry", "SketchSolver", "Walkthrough", "WalkthroughUI", "SketchReading",
         .product(name: "CaptureContract", package: "swift"),
         .product(name: "CaptureTestSupport", package: "CaptureCore"),
       ]

@@ -134,10 +134,11 @@ final class SketchFlowUITests: XCTestCase {
     shot("S02 New capture (sketch)")
     tap(app.buttons["capture.continue"])
 
-    // How do you want to measure? (spec F15 2): the walk is the default; enter from a sketch.
+    // How do you want to measure? (spec F16 2): the sketch photo is the default; enter from a
+    // sketch.
     XCTAssertTrue(app.staticTexts["How to measure"].waitForExistence(timeout: 10))
     XCTAssertTrue(app.staticTexts["Step 2 of 5"].exists)
-    waitForLabel(app.buttons["walkthrough.method.continue"], "Walk the rooms")
+    waitForLabel(app.buttons["walkthrough.method.continue"], "Photograph the sketch")
     tap(app.buttons["walkthrough.method.sketch"])
     waitForLabel(app.buttons["walkthrough.method.continue"], "Continue")
     shot("S02b How do you want to measure, sketch")

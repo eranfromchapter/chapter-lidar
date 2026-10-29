@@ -317,26 +317,34 @@ import XCTest
     }
   }
 
-  /// How do you want to measure? (spec F15 2).
+  /// How do you want to measure? (spec F15 2, F16 2).
   @MainActor
   final class MeasureMethodTests: XCTestCase {
-    func testTheWalkIsTheDefaultWhenThePhoneTracks() {
+    func testPhotographingASketchIsTheDefault() {
       let model = MeasureMethodModel(canWalk: true)
-      XCTAssertEqual(model.method, .walk)
+      XCTAssertEqual(model.method, .photo)
+      XCTAssertEqual(MeasureMethod.allCases, [.photo, .walk, .sketch], "the screen's order")
+      XCTAssertEqual(model.continueTitle, "Photograph the sketch")
+      XCTAssertTrue(model.asksFloor)
+      model.choose(.walk)
       XCTAssertEqual(model.continueTitle, "Walk the rooms")
       model.choose(.sketch)
       XCTAssertEqual(model.continueTitle, "Continue")
+      XCTAssertFalse(model.asksFloor)
     }
 
-    func testAPhoneThatCannotTrackEntersFromASketch() {
+    func testAPhoneThatCannotTrackPhotographsOrEntersASketch() {
       let model = MeasureMethodModel(canWalk: false)
-      XCTAssertEqual(model.method, .sketch)
+      XCTAssertEqual(model.method, .photo)
+      XCTAssertTrue(model.canContinue)
       model.choose(.walk)
+      XCTAssertEqual(model.method, .photo)
+      model.choose(.sketch)
       XCTAssertEqual(model.method, .sketch)
       XCTAssertTrue(model.canContinue)
     }
 
-    func testTheWalkNeedsAFreeFloorName() {
+    func testThePhotoAndTheWalkNeedAFreeFloorName() {
       let model = MeasureMethodModel(canWalk: true, existingAreaKeys: ["floor-1"])
       XCTAssertEqual(model.continueTitle, "Floor 1 is already captured. Use another name")
       model.floorLabel = "Floor 2"
@@ -345,6 +353,8 @@ import XCTest
       XCTAssertEqual(model.continueTitle, "Enter the floor or area")
       model.floorLabel = "Basement"
       model.mode = nil
+      XCTAssertEqual(model.continueTitle, "Choose what the sketch shows")
+      model.choose(.walk)
       XCTAssertEqual(model.continueTitle, "Choose what you are walking")
     }
   }

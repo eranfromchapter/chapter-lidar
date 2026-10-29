@@ -8,6 +8,7 @@ import Foundation
 import Observation
 import PackageCore
 import PackageTransport
+import SketchReading
 import StationClient
 import WalkthroughUI
 
@@ -46,6 +47,12 @@ struct AppServices {
   /// The phone runs ARKit world tracking (every iPhone with iOS 17): "Walk the rooms with the
   /// camera" can be chosen. The LiDAR gate (`DeviceGate`) is for scans only.
   var canWalk: Bool = LiveWalkthroughSession.isSupported
+  /// Reads a sketch photo (spec F16): the station's `POST /v1/sketch-interpretations` with a
+  /// long timeout (`StationSketchInterpreter`); in the UI-test and field-test modes the same
+  /// client over the in-process station. Nil only before the services are made.
+  var sketchInterpreter: (any SketchInterpreting)? = nil
+  /// Shown on the sketch photo screens: the field-test build's demo reading without an API key.
+  var sketchReaderNotice: String? = nil
 
   /// The photo step's heading provider over `compass`.
   @MainActor var photoHeading: PhotoHeadingProviding? {
@@ -162,7 +169,7 @@ final class AppModel {
     let station = StationAPI(
       configuration: configuration.station, tokenProvider: EntraTokenProvider(signIn: signIn))
     let compass = CompassService()
-    let services = AppServices(
+    var services = AppServices(
       station: station,
       projects: ProjectStore(
         source: station,
@@ -171,6 +178,12 @@ final class AppModel {
       capabilities: DeviceCapabilities.current(), device: DeviceInfo.current(),
       makeSession: { _ in LiveCaptureSession(compass: compass) },
       photoSource: .camera(CameraEngine()), compass: compass, fixedOperator: nil)
+    // Reading a sketch photo takes 10 to 40 s (the station waits up to 120 s for Claude): its
+    // own client with a long timeout.
+    services.sketchInterpreter = StationSketchInterpreter(
+      station: StationAPI(
+        configuration: configuration.station, tokenProvider: EntraTokenProvider(signIn: signIn),
+        transport: URLSessionTransport(timeout: StationSketchInterpreter.timeout)))
     let model = AppModel(screen: .signIn, services: services, visitsRoot: visitsRoot)
     model.configureBackgroundRefresh()
     if let current = signIn.currentOperator() {

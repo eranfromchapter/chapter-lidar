@@ -4,11 +4,11 @@
   import SketchEntry
   import SwiftUI
 
-  /// Step 2 of 5, How do you want to measure? (spec F15 2): walk the rooms with the camera
-  /// (recommended, the default on every phone that tracks the camera) or enter the
-  /// measurements from a sketch (the F14 screens follow, unchanged). For the walk it also asks
-  /// the floor or area name, what is walked and the units, as step 2 of a scan does. Continue
-  /// hands the choice to the host (`onContinue`).
+  /// Step 2 of 5, How do you want to measure? (spec F16 2): photograph a sketch (recommended,
+  /// the default: Claude reads it), walk the rooms with the camera (spec F15) or enter the
+  /// measurements from a sketch (the F14 screens follow, unchanged). For the photo and the walk
+  /// it also asks the floor or area name, what is captured and the units, as step 2 of a scan
+  /// does. Continue hands the choice to the host (`onContinue`).
   public struct MeasureMethodScreen: View {
     @Bindable var model: MeasureMethodModel
     let caption: String
@@ -27,7 +27,7 @@
       ScrollView {
         VStack(alignment: .leading, spacing: ChapterTheme.Metric.sectionGapCompact) {
           methodSection
-          if model.method == .walk {
+          if model.asksFloor {
             floorSection
           }
         }
@@ -48,12 +48,14 @@
     }
 
     private var methodSection: some View {
-      ChapterSection(
-        header: MeasureMethodText.question,
-        footer:
-          "Walking gives every capture the same plans and 3D model: each tap is measured by the "
-          + "phone's motion tracking. Tape one long wall on the next screen to check the scale."
-      ) {
+      ChapterSection(header: MeasureMethodText.question, footer: methodFooter) {
+        NavigationRow(
+          title: MeasureMethodText.photoTitle, subtitle: MeasureMethodText.photoSubtitle,
+          status: model.method == .photo ? RowStatus(.done, "Chosen") : nil
+        ) {
+          model.choose(.photo)
+        }
+        .accessibilityIdentifier("walkthrough.method.photo")
         NavigationRow(
           title: MeasureMethodText.walkTitle,
           subtitle: model.canWalk ? MeasureMethodText.walkSubtitle : MeasureMethodText.walkUnsupported,
@@ -73,10 +75,26 @@
       }
     }
 
+    private var methodFooter: String {
+      switch model.method {
+      case .photo:
+        return "The photo goes to the station, where Claude reads the rooms and any written "
+          + "dimensions. Without dimensions you type one wall's length; the rest follows the "
+          + "drawing and is marked estimated."
+      case .walk:
+        return "Walking gives every capture the same plans and 3D model: each tap is measured by "
+          + "the phone's motion tracking. Tape one long wall on the next screen to check the scale."
+      case .sketch:
+        return "Type every length from the sketch or plan; the solver estimates what is missing."
+      }
+    }
+
     private var floorSection: some View {
       ChapterSection(
         header: "Floor or area",
-        footer: "Walk one room at a time and close each room on its first corner."
+        footer: model.method == .walk
+          ? "Walk one room at a time and close each room on its first corner."
+          : "One photo per floor or area. Lengths are typed in the units chosen here."
       ) {
         TextFieldRow(
           label: "Name", text: $model.floorLabel, prompt: "Floor 1",
@@ -85,7 +103,8 @@
         .submitLabel(.done)
         .accessibilityIdentifier("walkthrough.floorName")
         SketchSegmentedRow(
-          label: "What you are walking", selection: $model.mode,
+          label: model.method == .walk ? "What you are walking" : "What the sketch shows",
+          selection: $model.mode,
           options: [
             .init(CaptureMode.room, SketchText.modeTitle(.room), accessibilityIdentifier: "walkthrough.mode.room"),
             .init(.floor, SketchText.modeTitle(.floor), accessibilityIdentifier: "walkthrough.mode.floor"),
