@@ -85,6 +85,8 @@ jobs:
             path: ios/Packages/PackageKit
           - package: StationClient
             path: ios/Packages/StationClient
+          - package: SketchCapture
+            path: ios/Packages/SketchCapture
     env:
       PACKAGE_NAME: ${{ matrix.package }}
       PACKAGE_DIR: ${{ matrix.path }}

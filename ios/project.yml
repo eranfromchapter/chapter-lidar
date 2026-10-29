@@ -38,6 +38,8 @@ packages:
     path: Packages/PackageKit
   StationClient:
     path: Packages/StationClient
+  SketchCapture:
+    path: Packages/SketchCapture
   AppCore:
     path: App/AppCore
   MSAL:
@@ -98,6 +100,14 @@ targets:
         product: PackageKit
       - package: StationClient
         product: StationClient
+      - package: SketchCapture
+        product: SketchSolver
+      - package: SketchCapture
+        product: SketchMesh
+      - package: SketchCapture
+        product: SketchEntry
+      - package: SketchCapture
+        product: SketchUI
       - package: MSAL
         product: MSAL
 
