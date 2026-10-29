@@ -98,14 +98,17 @@
       guard let minX = points.map(\.x).min(), let maxX = points.map(\.x).max(),
         let minZ = points.map(\.z).min(), let maxZ = points.map(\.z).max()
       else { return nil }
+      // Explicit Doubles: `size` is CGFloat and Xcode 26.3 finds `/` ambiguous when mixed.
       let margin = 12.0
-      let width = max(maxX - minX, 0.1)
-      let depth = max(maxZ - minZ, 0.1)
-      let scale = min((size.width - 2 * margin) / width, (size.height - 2 * margin) / depth)
+      let width: Double = max(maxX - minX, 0.1)
+      let depth: Double = max(maxZ - minZ, 0.1)
+      let availableWidth = Double(size.width) - 2 * margin
+      let availableHeight = Double(size.height) - 2 * margin
+      let scale: Double = min(availableWidth / width, availableHeight / depth)
       guard scale.isFinite, scale > 0 else { return nil }
       let offset = CGPoint(
-        x: (size.width - width * scale) / 2 - minX * scale,
-        y: (size.height - depth * scale) / 2)
+        x: (Double(size.width) - width * scale) / 2 - minX * scale,
+        y: (Double(size.height) - depth * scale) / 2)
       return Frame(scale: scale, offset: offset, maxZ: maxZ)
     }
 
