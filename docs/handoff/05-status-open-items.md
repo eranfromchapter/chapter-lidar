@@ -137,6 +137,33 @@ phone without LiDAR can and cannot match).
   real drift and accuracy. Known limit: a re-entrant corner more than 5° off square may solve
   mirrored (the solver starts unsquare corners convex).
 
+### 2.3 Sketch photo to 3D (F16, Oct 29, 2026, same branch)
+
+The owner's target: photograph a sketch, get the 3D model. Spec
+`docs/waves/specs/F16-sketch-photo-to-3d.md`.
+
+- **Flow:** "Capture without LiDAR" → How to measure: **Photograph a sketch** (first) → camera,
+  Photos or file → Reading your sketch → one length (only when no dimension is written) → Check
+  with a 3D preview (rotate with a finger) and the plan → Finish floor. "View in 3D" for every
+  sketch and walkthrough floor.
+- **Claude reads the sketch** through the station: `POST /v1/sketch-interpretations` sends the
+  photo to `claude-opus-5-5` (adaptive thinking, structured output on the reading schema,
+  server-side refusal fallback) with the shared prompt `contract/prompts/sketch-interpretation.md`.
+  The station does not store the image; one audit row per call. Key: Key Vault secret
+  `anthropic-api-key` → `ANTHROPIC_API_KEY`, behind `anthropicApiKeyInVault` (off until the secret
+  exists); without a key the route answers 503 and the app offers the manual sketch.
+- **Plan and 3D:** `SketchReadingConverter` scales from the written dimensions (median, outliers
+  dropped) or the one length; walls not written on the sketch are estimated and the station says
+  Limited. The 3D model is coloured, with the drawn furniture as blocks.
+- **Contract:** schema `sketch-interpretation` 1.0.0 (its `reading` keeps nulls: Claude's
+  structured output), role `sketch_interpretation`, furniture in sketch measurements.
+- **Field test:** a Debug field-test build with `CHAPTER_ANTHROPIC_API_KEY` in the untracked
+  `ios/App/Config/Local.xcconfig` reads real sketches directly; without it, a demo reading.
+  Release builds never read the key.
+- **Not verified:** a real Claude call (no key was available while building), the pickers and
+  HEIC/EXIF handling on a phone, the 3D view's look and speed on a phone, the real station with
+  Entra, Azure ingress for a ~14 MB body, the Bicep (no compiler here).
+
 ## 3. Test results (last known)
 
 ### 3.1 GitHub Actions
