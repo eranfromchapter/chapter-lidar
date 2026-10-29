@@ -26,6 +26,7 @@ export const SCHEMA_FILES = {
   manifest: "manifest.schema.json",
   "sketch-measurements": "sketch-measurements.schema.json",
   "walkthrough-log": "walkthrough-log.schema.json",
+  "sketch-interpretation": "sketch-interpretation.schema.json",
   verdict: "verdict.schema.json",
 } as const;
 
@@ -50,11 +51,20 @@ function isObject(value: Json | undefined): value is { [key: string]: Json } {
 const TYPE_NAMES: Partial<Record<SchemaName, Record<string, string>>> = {
   "capture-model": { object: "CaptureObject" },
   "sketch-measurements": {
+    furniture: "SketchFurniture",
     room: "SketchRoom",
     wall: "SketchWall",
     opening: "SketchOpening",
     diagonal: "SketchDiagonal",
     length: "SketchLength",
+  },
+  "sketch-interpretation": {
+    reading: "SketchReading",
+    room: "SketchReadingRoom",
+    opening: "SketchReadingOpening",
+    furniture: "SketchReadingFurniture",
+    dimension: "SketchReadingDimension",
+    point: "SketchReadingPoint",
   },
   "walkthrough-log": {
     room: "WalkthroughRoom",

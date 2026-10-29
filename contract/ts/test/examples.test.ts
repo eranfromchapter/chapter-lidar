@@ -50,6 +50,8 @@ const DEFECT_AT: Record<string, string> = {
   "capture-record/scale-factor-without-tape.json": "/captures/1",
   "walkthrough-log/corners-with-walls.json": "/rooms/0",
   "walkthrough-log/door-with-sill.json": "/rooms/0/openings/0",
+  "sketch-interpretation/reading-without-problem.json": "/reading",
+  "sketch-interpretation/unknown-furniture.json": "/reading/rooms/0/furniture/0/category",
   // outcome (root) contradicts findings, so Ajv reports at the root and /findings.
   "verdict/ready-with-blocker.json": "",
 };

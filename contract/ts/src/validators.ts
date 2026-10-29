@@ -18,7 +18,9 @@ import {
   sketchMeasurementsSchema,
   verdictSchema,
   walkthroughLogSchema,
+  sketchInterpretationSchema,
 } from "./generated/schemas.js";
+import type { SketchInterpretation } from "./generated/sketch-interpretation.js";
 import type { SketchMeasurements } from "./generated/sketch-measurements.js";
 import type { WalkthroughLog } from "./generated/walkthrough-log.js";
 import type { Verdict } from "./generated/verdict.js";
@@ -31,6 +33,7 @@ export const SCHEMA_NAMES = [
   "manifest",
   "sketch-measurements",
   "walkthrough-log",
+  "sketch-interpretation",
   "verdict",
 ] as const;
 
@@ -44,6 +47,7 @@ export interface SchemaTypes {
   manifest: PackageManifest;
   "sketch-measurements": SketchMeasurements;
   "walkthrough-log": WalkthroughLog;
+  "sketch-interpretation": SketchInterpretation;
   verdict: Verdict;
 }
 
@@ -55,6 +59,7 @@ export const SCHEMAS: Readonly<Record<SchemaName, Record<string, unknown>>> = {
   manifest: manifestSchema,
   "sketch-measurements": sketchMeasurementsSchema,
   "walkthrough-log": walkthroughLogSchema,
+  "sketch-interpretation": sketchInterpretationSchema,
   verdict: verdictSchema,
 };
 
@@ -145,6 +150,12 @@ export function validateSketchMeasurements(data: unknown): ValidationResult<Sket
 
 export function validateWalkthroughLog(data: unknown): ValidationResult<WalkthroughLog> {
   return validate("walkthrough-log", data);
+}
+
+export function validateSketchInterpretation(
+  data: unknown,
+): ValidationResult<SketchInterpretation> {
+  return validate("sketch-interpretation", data);
 }
 
 /** Formats errors as one line each: "<instancePath or /> <message>". */

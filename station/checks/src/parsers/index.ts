@@ -7,6 +7,7 @@ import {
   validateFieldControls,
   validateSketchMeasurements,
   validateWalkthroughLog,
+  validateSketchInterpretation,
   type CaptureModel,
   type Role,
   type ValidationResult,
@@ -65,6 +66,7 @@ export const ROLE_FORMAT: Readonly<Record<Role, string>> = {
   sketch_measurements: "sketch measurements JSON",
   walkthrough_video: "MP4/QuickTime video",
   walkthrough_log: "walkthrough log JSON",
+  sketch_interpretation: "sketch interpretation JSON",
 };
 
 function schemaChecked(
@@ -168,6 +170,11 @@ export function parseByRole(role: Role, bytes: Uint8Array): ParseResult<ParsedFi
       return isIsoMedia(bytes) ? ok({ kind: "binary" }) : fail("no ISO base media ftyp box");
     case "walkthrough_log":
       return wrap(schemaChecked(bytes, validateWalkthroughLog), (value) => ({
+        kind: "json",
+        value,
+      }));
+    case "sketch_interpretation":
+      return wrap(schemaChecked(bytes, validateSketchInterpretation), (value) => ({
         kind: "json",
         value,
       }));

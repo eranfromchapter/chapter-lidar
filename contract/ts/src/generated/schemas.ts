@@ -1010,6 +1010,7 @@ export const manifestSchema: Record<string, unknown> = {
                       "sketch_measurements",
                       "walkthrough_video",
                       "walkthrough_log",
+                      "sketch_interpretation",
                     ],
                   },
                 },
@@ -1038,6 +1039,7 @@ export const manifestSchema: Record<string, unknown> = {
                       "sketch_measurements",
                       "walkthrough_video",
                       "walkthrough_log",
+                      "sketch_interpretation",
                     ],
                   },
                 },
@@ -1091,7 +1093,7 @@ export const manifestSchema: Record<string, unknown> = {
     },
     role: {
       description:
-        "Closed set of file roles from the intake guide, plus capture_model (the normalized CaptureModel JSON of one capture) and, since 1.2.0, sketch_image (the photo, image or PDF of the hand sketch or existing plan a sketch capture was measured from) and sketch_measurements (the measurements the operator entered, sketch-measurements.schema.json), walkthrough_video (the camera video of an AR walkthrough) and walkthrough_log (its taps and camera poses, walkthrough-log.schema.json). Each role belongs to exactly one folder in layout.json. spatial_report_pdf is retired: written only in manifest 1.0.0 by app builds before v2; never in 1.1.0 or later. The spatial report is a station output, not a package file.",
+        "Closed set of file roles from the intake guide, plus capture_model (the normalized CaptureModel JSON of one capture) and, since 1.2.0, sketch_image (the photo, image or PDF of the hand sketch or existing plan a sketch capture was measured from) and sketch_measurements (the measurements the operator entered, sketch-measurements.schema.json), walkthrough_video (the camera video of an AR walkthrough) and walkthrough_log (its taps and camera poses, walkthrough-log.schema.json) and sketch_interpretation (what Claude read from a sketch photo, sketch-interpretation.schema.json, spec F16). Each role belongs to exactly one folder in layout.json. spatial_report_pdf is retired: written only in manifest 1.0.0 by app builds before v2; never in 1.1.0 or later. The spatial report is a station output, not a package file.",
       enum: [
         "capture_record",
         "raw_roomplan_json",
@@ -1114,6 +1116,7 @@ export const manifestSchema: Record<string, unknown> = {
         "sketch_measurements",
         "walkthrough_video",
         "walkthrough_log",
+        "sketch_interpretation",
       ],
     },
     visitRole: {
@@ -1264,6 +1267,11 @@ export const sketchMeasurementsSchema: Record<string, unknown> = {
             "Package path of the sketch image (role sketch_image), or of the walkthrough log (role walkthrough_log) for ar_walkthrough. Present exactly when kind is not none.",
           $ref: "#/$defs/relativePath",
         },
+        interpretation: {
+          description:
+            "Package path of the sketch interpretation (role sketch_interpretation) when Claude read the sketch (spec F16). Only with hand_sketch or existing_plan.",
+          $ref: "#/$defs/relativePath",
+        },
       },
       if: { properties: { kind: { const: "none" } } },
       then: { not: { properties: { path: true }, required: ["path"] } },
@@ -1400,6 +1408,12 @@ export const sketchMeasurementsSchema: Record<string, unknown> = {
             angleDeg: { type: "number", minimum: -360, maximum: 360 },
           },
         },
+        furniture: {
+          description:
+            "Furniture drawn in the room (spec F16), in the capture frame. Reference geometry only.",
+          type: "array",
+          items: { $ref: "#/$defs/furniture" },
+        },
       },
     },
     wall: {
@@ -1487,6 +1501,48 @@ export const sketchMeasurementsSchema: Record<string, unknown> = {
       },
       if: { properties: { kind: { const: "window" } } },
       else: { not: { properties: { sill: true }, required: ["sill"] } },
+    },
+    furniture: {
+      type: "object",
+      additionalProperties: false,
+      required: ["id", "category", "x", "z", "widthM", "depthM", "angleDeg"],
+      properties: {
+        id: { $ref: "#/$defs/id" },
+        category: {
+          enum: [
+            "bathtub",
+            "bed",
+            "chair",
+            "dishwasher",
+            "fireplace",
+            "oven",
+            "refrigerator",
+            "sink",
+            "sofa",
+            "stairs",
+            "storage",
+            "stove",
+            "table",
+            "television",
+            "toilet",
+            "washer_dryer",
+            "other",
+          ],
+        },
+        x: { description: "Centre x in the capture frame, metres.", type: "number" },
+        z: { description: "Centre z in the capture frame, metres.", type: "number" },
+        widthM: { type: "number", exclusiveMinimum: 0 },
+        depthM: { type: "number", exclusiveMinimum: 0 },
+        heightM: {
+          description: "Omitted: a height by category.",
+          type: "number",
+          exclusiveMinimum: 0,
+        },
+        angleDeg: {
+          description: "Rotation about +Y, counter-clockwise seen from +Y, degrees.",
+          type: "number",
+        },
+      },
     },
   },
 };
@@ -1734,6 +1790,241 @@ export const walkthroughLogSchema: Record<string, unknown> = {
       },
       if: { properties: { kind: { const: "window" } } },
       else: { not: { properties: { sill: true }, required: ["sill"] } },
+    },
+  },
+};
+
+export const sketchInterpretationSchema: Record<string, unknown> = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  $id: "https://hellochapter.com/schemas/chapter-capture/v1/sketch-interpretation.schema.json",
+  title: "SketchInterpretation",
+  description:
+    "What Claude read from a photo of a floor-plan sketch (spec F16): returned by POST /v1/sketch-interpretations and kept in the package as Original Exports/{areaKey}/{captureId}/sketch-interpretation.json with role sketch_interpretation. The app turns the reading into sketch measurements. reading is Claude's structured output: every property is present and an absent value is null (the one exception to the contract's 'omitted, never null'). Drawing coordinates: origin at the image's top-left corner, x to the right, y down, the image's longer side is 1000 units.",
+  type: "object",
+  additionalProperties: false,
+  required: ["schemaVersion", "model", "interpretedAt", "image", "reading"],
+  properties: {
+    schemaVersion: { const: "1.0.0" },
+    model: {
+      description: "The Claude model that read the sketch, for example claude-opus-5-5.",
+      type: "string",
+      minLength: 1,
+      maxLength: 100,
+    },
+    interpretedAt: {
+      description: "UTC timestamp, whole seconds, RFC 3339 with Z.",
+      type: "string",
+      format: "date-time",
+      pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+    },
+    image: {
+      type: "object",
+      additionalProperties: false,
+      required: ["width", "height"],
+      properties: {
+        width: { type: "integer", minimum: 1 },
+        height: { type: "integer", minimum: 1 },
+      },
+      description: "Pixel size of the photo as sent.",
+    },
+    reading: { $ref: "#/$defs/reading" },
+  },
+  $defs: {
+    point: {
+      type: "object",
+      additionalProperties: false,
+      required: ["x", "y"],
+      properties: { x: { type: "number" }, y: { type: "number" } },
+      description: "A point in drawing coordinates.",
+    },
+    reading: {
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "isFloorPlan",
+        "problem",
+        "dimensionUnits",
+        "ceilingHeightMm",
+        "rooms",
+        "dimensions",
+      ],
+      properties: {
+        isFloorPlan: {
+          description: "False when the image is not a floor plan or sketch of one.",
+          type: "boolean",
+        },
+        problem: {
+          anyOf: [
+            {
+              type: "string",
+              description:
+                "Why the drawing could not be read fully (blurred, cut off, not a plan), or null.",
+            },
+            { type: "null" },
+          ],
+        },
+        dimensionUnits: {
+          description:
+            "Units of the dimensions written on the drawing: imperial, metric, or none written.",
+          enum: ["imperial", "metric", "none"],
+        },
+        ceilingHeightMm: {
+          anyOf: [
+            {
+              type: "number",
+              description: "A ceiling height written on the drawing, in millimetres, or null.",
+            },
+            { type: "null" },
+          ],
+        },
+        rooms: { type: "array", items: { $ref: "#/$defs/room" } },
+        dimensions: {
+          description: "Every dimension written on the drawing.",
+          type: "array",
+          items: { $ref: "#/$defs/dimension" },
+        },
+      },
+      description: "Claude's structured output.",
+    },
+    room: {
+      type: "object",
+      additionalProperties: false,
+      required: ["label", "type", "corners", "openings", "furniture"],
+      properties: {
+        label: {
+          description:
+            "The room's name as written, or a name from its use (Bedroom) when none is written.",
+          type: "string",
+        },
+        type: {
+          anyOf: [
+            {
+              enum: [
+                "living_room",
+                "dining_room",
+                "kitchen",
+                "bedroom",
+                "bathroom",
+                "closet",
+                "hallway",
+                "laundry",
+                "office",
+                "utility",
+                "other",
+              ],
+            },
+            { type: "null" },
+          ],
+        },
+        corners: {
+          description:
+            "The floor outline at the inside of the walls, corners in order around the room as drawn, first corner not repeated.",
+          type: "array",
+          items: { $ref: "#/$defs/point" },
+        },
+        openings: { type: "array", items: { $ref: "#/$defs/opening" } },
+        furniture: { type: "array", items: { $ref: "#/$defs/furniture" } },
+      },
+    },
+    opening: {
+      type: "object",
+      additionalProperties: false,
+      required: ["kind", "wall", "start", "end"],
+      properties: {
+        kind: {
+          description:
+            "door (a door or door swing), window, or opening (a gap in the wall without a door).",
+          enum: ["door", "window", "opening"],
+        },
+        wall: {
+          description:
+            "The wall the opening is in: wall i runs from corner i to corner i + 1 (the last wall back to corner 0).",
+          type: "integer",
+        },
+        start: {
+          description:
+            "Where the opening starts along that wall, 0 at corner i, 1 at corner i + 1.",
+          type: "number",
+        },
+        end: { description: "Where it ends along that wall, after start.", type: "number" },
+      },
+    },
+    furniture: {
+      type: "object",
+      additionalProperties: false,
+      required: ["category", "label", "center", "width", "depth", "angleDeg"],
+      properties: {
+        category: {
+          enum: [
+            "bathtub",
+            "bed",
+            "chair",
+            "dishwasher",
+            "fireplace",
+            "oven",
+            "refrigerator",
+            "sink",
+            "sofa",
+            "stairs",
+            "storage",
+            "stove",
+            "table",
+            "television",
+            "toilet",
+            "washer_dryer",
+            "other",
+          ],
+        },
+        label: {
+          anyOf: [
+            { type: "string", description: "What is written on it, or null." },
+            { type: "null" },
+          ],
+        },
+        center: { $ref: "#/$defs/point" },
+        width: { description: "Size along its own x axis, drawing units.", type: "number" },
+        depth: { description: "Size along its own y axis, drawing units.", type: "number" },
+        angleDeg: {
+          description: "Its rotation in the drawing, degrees clockwise.",
+          type: "number",
+        },
+      },
+    },
+    dimension: {
+      type: "object",
+      additionalProperties: false,
+      required: ["text", "valueMm", "room", "wall"],
+      properties: {
+        text: {
+          description: "The label exactly as written, for example 12'6\" or 3.80.",
+          type: "string",
+        },
+        valueMm: {
+          anyOf: [
+            {
+              type: "number",
+              description: "Its value in millimetres, or null when it cannot be read as a length.",
+            },
+            { type: "null" },
+          ],
+        },
+        room: {
+          anyOf: [
+            { type: "integer", description: "Index of the room it measures, or null." },
+            { type: "null" },
+          ],
+        },
+        wall: {
+          anyOf: [
+            {
+              type: "integer",
+              description:
+                "Index of the wall of that room it measures, or null when it measures something else (an overall size, a ceiling).",
+            },
+            { type: "null" },
+          ],
+        },
+      },
     },
   },
 };

@@ -41,12 +41,44 @@ public struct SketchMeasurements: Hashable, Sendable, Codable {
   /// What the operator measured from. `path` is present exactly when `kind` is not `none`.
   public struct Source: Hashable, Sendable, Codable {
     public var kind: SketchSourceKind
-    /// Package path of the sketch image (role `sketch_image`).
+    /// Package path of the sketch image (role `sketch_image`), or of the walkthrough log.
     public var path: String?
+    /// Package path of what Claude read from the sketch (role `sketch_interpretation`, F16).
+    public var interpretation: String?
 
-    public init(kind: SketchSourceKind, path: String? = nil) {
+    public init(kind: SketchSourceKind, path: String? = nil, interpretation: String? = nil) {
       self.kind = kind
       self.path = path
+      self.interpretation = interpretation
+    }
+  }
+
+  /// Furniture drawn in a room (spec F16), in the capture frame. Reference geometry only.
+  public struct Furniture: Hashable, Sendable, Codable {
+    public var id: String
+    public var category: ObjectCategory
+    /// Centre in the capture frame, metres.
+    public var x: Double
+    public var z: Double
+    public var widthM: Double
+    public var depthM: Double
+    /// Nil: a height by category.
+    public var heightM: Double?
+    /// Rotation about +Y, counter-clockwise seen from +Y, degrees.
+    public var angleDeg: Double
+
+    public init(
+      id: String, category: ObjectCategory, x: Double, z: Double, widthM: Double, depthM: Double,
+      heightM: Double? = nil, angleDeg: Double = 0
+    ) {
+      self.id = id
+      self.category = category
+      self.x = x
+      self.z = z
+      self.widthM = widthM
+      self.depthM = depthM
+      self.heightM = heightM
+      self.angleDeg = angleDeg
     }
   }
 
@@ -85,10 +117,13 @@ public struct SketchMeasurements: Hashable, Sendable, Codable {
     /// Where the room sits in the capture frame when it was measured there (an AR walkthrough):
     /// the solver keeps it there instead of placing it by `sharedWith`.
     public var placement: Placement?
+    /// Furniture drawn in the room (spec F16).
+    public var furniture: [Furniture]?
 
     public init(
       id: String, label: String, type: RoomType? = nil, walls: [Wall], diagonals: [Diagonal] = [],
-      openings: [Opening] = [], ceilingHeight: Length? = nil, placement: Placement? = nil
+      openings: [Opening] = [], ceilingHeight: Length? = nil, placement: Placement? = nil,
+      furniture: [Furniture]? = nil
     ) {
       self.id = id
       self.label = label
@@ -98,6 +133,7 @@ public struct SketchMeasurements: Hashable, Sendable, Codable {
       self.openings = openings
       self.ceilingHeight = ceilingHeight
       self.placement = placement
+      self.furniture = furniture
     }
   }
 

@@ -25,6 +25,7 @@ public enum FileRole: String, CaseIterable, Codable, Sendable {
   case sketchMeasurements = "sketch_measurements"
   case walkthroughVideo = "walkthrough_video"
   case walkthroughLog = "walkthrough_log"
+  case sketchInterpretation = "sketch_interpretation"
 
   /// Roles of visit-wide files. Their manifest entries carry no `captureId` or `areaKey`;
   /// entries of every other role carry both.
@@ -45,7 +46,9 @@ public enum FileRole: String, CaseIterable, Codable, Sendable {
 
   /// Roles added in manifest 1.2.0 (spec F14): the originals of a sketch capture. Only a 1.2.0
   /// manifest lists them.
-  public static let sketchRoles: [FileRole] = [.sketchImage, .sketchMeasurements]
+  public static let sketchRoles: [FileRole] = [
+    .sketchImage, .sketchMeasurements, .sketchInterpretation,
+  ]
 
   public var isSketchRole: Bool {
     FileRole.sketchRoles.contains(self)
@@ -142,6 +145,7 @@ public enum PackageFolder: String, CaseIterable, Codable, Sendable {
         .rawRoomplanJSON, .rawDepth, .captureModel, .planDXF, .roomsCSV, .planPDF,
         .spatialReportPDF, .planPNG, .planSVG, .meshGLB, .meshOBJ, .meshMTL, .texture,
         .pointCloudLAS, .sketchImage, .sketchMeasurements, .walkthroughVideo, .walkthroughLog,
+        .sketchInterpretation,
       ]
     case .sitePhotos: return [.photo]
     case .fieldMeasurements: return [.fieldControls]
@@ -169,6 +173,8 @@ public enum PackageLayout {
   public static let sketchMeasurementsFileName = "sketch-measurements.json"
   /// File name of an AR walkthrough's log in its capture's folder (manifest 1.2.0).
   public static let walkthroughLogFileName = "walkthrough-log.json"
+  /// File name of what Claude read from a sketch photo (manifest 1.2.0, spec F16).
+  public static let sketchInterpretationFileName = "sketch-interpretation.json"
   /// File name of the manifest in its folder.
   public static let manifestFileName = "manifest.json"
 }

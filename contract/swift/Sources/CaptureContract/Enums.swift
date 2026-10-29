@@ -42,6 +42,20 @@ public enum SketchMeasurementsSchemaVersion: String, CaseIterable, Codable, Send
   public static let current: SketchMeasurementsSchemaVersion = .v1
 }
 
+/// `schemaVersion` of the sketch interpretation (spec F16).
+public enum SketchInterpretationSchemaVersion: String, CaseIterable, Codable, Sendable {
+  case v1 = "1.0.0"
+
+  public static let current: SketchInterpretationSchemaVersion = .v1
+}
+
+/// Units of the dimensions written on a sketch (sketch interpretation `dimensionUnits`).
+public enum SketchDimensionUnits: String, CaseIterable, Codable, Sendable {
+  case imperial
+  case metric
+  case none
+}
+
 /// `schemaVersion` of the walkthrough log (spec F15).
 public enum WalkthroughLogSchemaVersion: String, CaseIterable, Codable, Sendable {
   case v1 = "1.0.0"

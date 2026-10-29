@@ -248,6 +248,7 @@ export const ROLE_LABEL: Record<Role, string> = {
   sketch_measurements: "Sketch measurements",
   walkthrough_video: "Walkthrough video",
   walkthrough_log: "Walkthrough log",
+  sketch_interpretation: "Sketch reading",
 };
 
 /** Files card role filter group of each role. */
@@ -273,6 +274,7 @@ export const ROLE_FILTER_GROUP: Record<Role, string> = {
   sketch_measurements: "Sketch",
   walkthrough_video: "Walkthrough",
   walkthrough_log: "Walkthrough",
+  sketch_interpretation: "Sketch",
 };
 
 /**

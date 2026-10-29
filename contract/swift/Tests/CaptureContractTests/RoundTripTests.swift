@@ -18,6 +18,7 @@ final class RoundTripTests: XCTestCase {
     "manifest": { try roundTrip(PackageManifest.self, $0) },
     "sketch-measurements": { try roundTrip(SketchMeasurements.self, $0) },
     "walkthrough-log": { try roundTrip(WalkthroughLog.self, $0) },
+    "sketch-interpretation": { try roundTrip(SketchInterpretation.self, $0) },
     "verdict": { try roundTrip(Verdict.self, $0) },
   ]
 
@@ -90,8 +91,12 @@ final class RoundTripTests: XCTestCase {
         XCTAssertEqual(
           differences, [],
           "\(name): re-encoded JSON differs:\n" + differences.joined(separator: "\n"))
-        XCTAssertFalse(
-          try JSONValue.parse(reencoded).containsNull, "\(name): re-encoded JSON contains null")
+        // The sketch interpretation's reading is Claude's structured output, whose absent values
+        // are null (the schema's one documented exception).
+        if schema != "sketch-interpretation" {
+          XCTAssertFalse(
+            try JSONValue.parse(reencoded).containsNull, "\(name): re-encoded JSON contains null")
+        }
         checked += 1
       }
     }

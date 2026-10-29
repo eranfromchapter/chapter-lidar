@@ -28,6 +28,15 @@ export type {
   SketchWall,
 } from "./generated/sketch-measurements.js";
 export type {
+  SketchInterpretation,
+  SketchReading,
+  SketchReadingDimension,
+  SketchReadingFurniture,
+  SketchReadingOpening,
+  SketchReadingPoint,
+  SketchReadingRoom,
+} from "./generated/sketch-interpretation.js";
+export type {
   WalkthroughFrame,
   WalkthroughLength,
   WalkthroughLog,
@@ -63,6 +72,7 @@ export type * as FieldControlsTypes from "./generated/field-controls.js";
 export type * as ManifestTypes from "./generated/manifest.js";
 export type * as SketchMeasurementsTypes from "./generated/sketch-measurements.js";
 export type * as WalkthroughLogTypes from "./generated/walkthrough-log.js";
+export type * as SketchInterpretationTypes from "./generated/sketch-interpretation.js";
 export type * as VerdictTypes from "./generated/verdict.js";
 
 export {
@@ -78,6 +88,7 @@ export {
   validateSketchMeasurements,
   validateVerdict,
   validateWalkthroughLog,
+  validateSketchInterpretation,
 } from "./validators.js";
 export type { ContractError, SchemaName, SchemaTypes, ValidationResult } from "./validators.js";
 
@@ -146,6 +157,7 @@ export function isRetiredRole(role: Role): role is RetiredRole {
 
 /** Roles added in manifest 1.2.0 (spec F14): the originals of a sketch capture. */
 export const SKETCH_ROLES = [
+  "sketch_interpretation",
   "sketch_image",
   "sketch_measurements",
 ] as const satisfies readonly Role[];

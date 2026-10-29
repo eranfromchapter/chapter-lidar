@@ -44,6 +44,10 @@
         "path": {
           "description": "Package path of the sketch image (role sketch_image), or of the walkthrough log (role walkthrough_log) for ar_walkthrough. Present exactly when kind is not none.",
           "$ref": "#/$defs/relativePath"
+        },
+        "interpretation": {
+          "description": "Package path of the sketch interpretation (role sketch_interpretation) when Claude read the sketch (spec F16). Only with hand_sketch or existing_plan.",
+          "$ref": "#/$defs/relativePath"
         }
       },
       "if": {
@@ -217,6 +221,13 @@
               "maximum": 360
             }
           }
+        },
+        "furniture": {
+          "description": "Furniture drawn in the room (spec F16), in the capture frame. Reference geometry only.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/furniture"
+          }
         }
       }
     },
@@ -325,6 +336,62 @@
             "sill": true
           },
           "required": ["sill"]
+        }
+      }
+    },
+    "furniture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "category", "x", "z", "widthM", "depthM", "angleDeg"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "category": {
+          "enum": [
+            "bathtub",
+            "bed",
+            "chair",
+            "dishwasher",
+            "fireplace",
+            "oven",
+            "refrigerator",
+            "sink",
+            "sofa",
+            "stairs",
+            "storage",
+            "stove",
+            "table",
+            "television",
+            "toilet",
+            "washer_dryer",
+            "other"
+          ]
+        },
+        "x": {
+          "description": "Centre x in the capture frame, metres.",
+          "type": "number"
+        },
+        "z": {
+          "description": "Centre z in the capture frame, metres.",
+          "type": "number"
+        },
+        "widthM": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "depthM": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "heightM": {
+          "description": "Omitted: a height by category.",
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "angleDeg": {
+          "description": "Rotation about +Y, counter-clockwise seen from +Y, degrees.",
+          "type": "number"
         }
       }
     }

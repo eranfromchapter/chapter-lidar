@@ -61,6 +61,7 @@ export interface SketchMeasurements {
      */
     kind: "hand_sketch" | "existing_plan" | "ar_walkthrough" | "none";
     path?: RelativePath;
+    interpretation?: RelativePath;
   };
   ceilingHeight?: SketchLength;
   /**
@@ -113,6 +114,10 @@ export interface SketchRoom {
     z: number;
     angleDeg: number;
   };
+  /**
+   * Furniture drawn in the room (spec F16), in the capture frame. Reference geometry only.
+   */
+  furniture?: SketchFurniture[];
 }
 export interface SketchWall {
   id: Id;
@@ -156,4 +161,43 @@ export interface SketchOpening {
    */
   fromCorner: "start" | "end";
   fromCornerDistance?: SketchLength;
+}
+export interface SketchFurniture {
+  id: Id;
+  category:
+    | "bathtub"
+    | "bed"
+    | "chair"
+    | "dishwasher"
+    | "fireplace"
+    | "oven"
+    | "refrigerator"
+    | "sink"
+    | "sofa"
+    | "stairs"
+    | "storage"
+    | "stove"
+    | "table"
+    | "television"
+    | "toilet"
+    | "washer_dryer"
+    | "other";
+  /**
+   * Centre x in the capture frame, metres.
+   */
+  x: number;
+  /**
+   * Centre z in the capture frame, metres.
+   */
+  z: number;
+  widthM: number;
+  depthM: number;
+  /**
+   * Omitted: a height by category.
+   */
+  heightM?: number;
+  /**
+   * Rotation about +Y, counter-clockwise seen from +Y, degrees.
+   */
+  angleDeg: number;
 }

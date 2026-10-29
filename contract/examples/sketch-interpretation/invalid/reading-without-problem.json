@@ -1,0 +1,127 @@
+{
+  "schemaVersion": "1.0.0",
+  "model": "claude-opus-5-5",
+  "interpretedAt": "2026-10-17T14:31:40Z",
+  "image": {
+    "width": 3024,
+    "height": 4032
+  },
+  "reading": {
+    "isFloorPlan": true,
+    "dimensionUnits": "imperial",
+    "ceilingHeightMm": 2438,
+    "rooms": [
+      {
+        "label": "Bedroom",
+        "type": "bedroom",
+        "corners": [
+          {
+            "x": 150,
+            "y": 220
+          },
+          {
+            "x": 610,
+            "y": 220
+          },
+          {
+            "x": 610,
+            "y": 565
+          },
+          {
+            "x": 150,
+            "y": 565
+          }
+        ],
+        "openings": [
+          {
+            "kind": "window",
+            "wall": 0,
+            "start": 0.35,
+            "end": 0.58
+          },
+          {
+            "kind": "door",
+            "wall": 2,
+            "start": 0.08,
+            "end": 0.29
+          }
+        ],
+        "furniture": [
+          {
+            "category": "bed",
+            "label": "Queen",
+            "center": {
+              "x": 300,
+              "y": 380
+            },
+            "width": 175,
+            "depth": 230,
+            "angleDeg": 0
+          },
+          {
+            "category": "storage",
+            "label": null,
+            "center": {
+              "x": 560,
+              "y": 300
+            },
+            "width": 60,
+            "depth": 120,
+            "angleDeg": 0
+          }
+        ]
+      },
+      {
+        "label": "Closet",
+        "type": "closet",
+        "corners": [
+          {
+            "x": 610,
+            "y": 300
+          },
+          {
+            "x": 700,
+            "y": 300
+          },
+          {
+            "x": 700,
+            "y": 480
+          },
+          {
+            "x": 610,
+            "y": 480
+          }
+        ],
+        "openings": [
+          {
+            "kind": "door",
+            "wall": 3,
+            "start": 0.2,
+            "end": 0.75
+          }
+        ],
+        "furniture": []
+      }
+    ],
+    "dimensions": [
+      {
+        "text": "13'1\"",
+        "valueMm": 3988,
+        "room": 0,
+        "wall": 0
+      },
+      {
+        "text": "9'10\"",
+        "valueMm": 2997,
+        "room": 0,
+        "wall": 1
+      },
+      {
+        "text": "8' clg",
+        "valueMm": 2438,
+        "room": null,
+        "wall": null
+      }
+    ]
+  }
+}

@@ -54,6 +54,7 @@ final class SchemaParityTests: XCTestCase {
         "manifest": PackageLayout.manifestFileName,
         "sketch_measurements": PackageLayout.sketchMeasurementsFileName,
         "walkthrough_log": PackageLayout.walkthroughLogFileName,
+        "sketch_interpretation": PackageLayout.sketchInterpretationFileName,
       ],
       "PackageLayout file names vs layout.json fileNames")
 
@@ -138,6 +139,7 @@ final class SchemaParityTests: XCTestCase {
       "manifest": ManifestSchemaVersion.allCases.map(\.rawValue),
       "sketch-measurements": SketchMeasurementsSchemaVersion.allCases.map(\.rawValue),
       "walkthrough-log": WalkthroughLogSchemaVersion.allCases.map(\.rawValue),
+      "sketch-interpretation": SketchInterpretationSchemaVersion.allCases.map(\.rawValue),
       "verdict": SchemaVersion.allCases.map(\.rawValue),
     ]
     XCTAssertEqual(

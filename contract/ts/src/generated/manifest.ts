@@ -16,7 +16,7 @@ export type DateTime = string;
  */
 export type RelativePath = string;
 /**
- * Closed set of file roles from the intake guide, plus capture_model (the normalized CaptureModel JSON of one capture) and, since 1.2.0, sketch_image (the photo, image or PDF of the hand sketch or existing plan a sketch capture was measured from) and sketch_measurements (the measurements the operator entered, sketch-measurements.schema.json), walkthrough_video (the camera video of an AR walkthrough) and walkthrough_log (its taps and camera poses, walkthrough-log.schema.json). Each role belongs to exactly one folder in layout.json. spatial_report_pdf is retired: written only in manifest 1.0.0 by app builds before v2; never in 1.1.0 or later. The spatial report is a station output, not a package file.
+ * Closed set of file roles from the intake guide, plus capture_model (the normalized CaptureModel JSON of one capture) and, since 1.2.0, sketch_image (the photo, image or PDF of the hand sketch or existing plan a sketch capture was measured from) and sketch_measurements (the measurements the operator entered, sketch-measurements.schema.json), walkthrough_video (the camera video of an AR walkthrough) and walkthrough_log (its taps and camera poses, walkthrough-log.schema.json) and sketch_interpretation (what Claude read from a sketch photo, sketch-interpretation.schema.json, spec F16). Each role belongs to exactly one folder in layout.json. spatial_report_pdf is retired: written only in manifest 1.0.0 by app builds before v2; never in 1.1.0 or later. The spatial report is a station output, not a package file.
  */
 export type Role =
   | "capture_record"
@@ -39,7 +39,8 @@ export type Role =
   | "sketch_image"
   | "sketch_measurements"
   | "walkthrough_video"
-  | "walkthrough_log";
+  | "walkthrough_log"
+  | "sketch_interpretation";
 /**
  * Key of the floor or area in the capture record, for example floor-1.
  */
