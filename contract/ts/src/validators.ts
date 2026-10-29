@@ -15,8 +15,10 @@ import {
   captureRecordSchema,
   fieldControlsSchema,
   manifestSchema,
+  sketchMeasurementsSchema,
   verdictSchema,
 } from "./generated/schemas.js";
+import type { SketchMeasurements } from "./generated/sketch-measurements.js";
 import type { Verdict } from "./generated/verdict.js";
 
 /** Short schema names: the schema file name without `.schema.json`. */
@@ -25,6 +27,7 @@ export const SCHEMA_NAMES = [
   "capture-model",
   "field-controls",
   "manifest",
+  "sketch-measurements",
   "verdict",
 ] as const;
 
@@ -36,6 +39,7 @@ export interface SchemaTypes {
   "capture-model": CaptureModel;
   "field-controls": FieldControls;
   manifest: PackageManifest;
+  "sketch-measurements": SketchMeasurements;
   verdict: Verdict;
 }
 
@@ -45,6 +49,7 @@ export const SCHEMAS: Readonly<Record<SchemaName, Record<string, unknown>>> = {
   "capture-model": captureModelSchema,
   "field-controls": fieldControlsSchema,
   manifest: manifestSchema,
+  "sketch-measurements": sketchMeasurementsSchema,
   verdict: verdictSchema,
 };
 
@@ -127,6 +132,10 @@ export function validateManifest(data: unknown): ValidationResult<PackageManifes
 
 export function validateVerdict(data: unknown): ValidationResult<Verdict> {
   return validate("verdict", data);
+}
+
+export function validateSketchMeasurements(data: unknown): ValidationResult<SketchMeasurements> {
+  return validate("sketch-measurements", data);
 }
 
 /** Formats errors as one line each: "<instancePath or /> <message>". */

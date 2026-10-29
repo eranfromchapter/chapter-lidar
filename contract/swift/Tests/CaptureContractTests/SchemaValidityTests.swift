@@ -71,7 +71,7 @@ final class SchemaValidityTests: XCTestCase {
     XCTAssertEqual(try validator("manifest").validate(json), [])
   }
 
-  func testANewManifestWithoutARetiredRoleIsWrittenAsValid1_1_0() throws {
+  func testANewManifestWithoutARetiredRoleIsWrittenAsValid1_2_0() throws {
     let source = try CaptureContractJSON.makeDecoder().decode(
       PackageManifest.self, from: example("manifest/valid/photo-direction-source.json"))
     let created = PackageManifest(
@@ -80,7 +80,7 @@ final class SchemaValidityTests: XCTestCase {
 
     let json = try written(created)
     guard case .object(let members) = json else { return XCTFail("not an object") }
-    XCTAssertEqual(members["schemaVersion"], .string("1.1.0"))
+    XCTAssertEqual(members["schemaVersion"], .string("1.2.0"))
     XCTAssertEqual(try validator("manifest").validate(json), [])
   }
 

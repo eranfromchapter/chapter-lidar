@@ -60,7 +60,7 @@ describe("capture record schema versions", () => {
   });
 
   it("rejects any other version", () => {
-    for (const version of ["1.2.0", "2.0.0", "1.1", ""]) {
+    for (const version of ["1.3.0", "2.0.0", "1.1", ""]) {
       assertRejectedAt({ ...v110, schemaVersion: version }, ["/schemaVersion"]);
     }
   });

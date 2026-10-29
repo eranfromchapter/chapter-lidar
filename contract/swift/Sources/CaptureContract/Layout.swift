@@ -21,6 +21,8 @@ public enum FileRole: String, CaseIterable, Codable, Sendable {
   case pointCloudLAS = "point_cloud_las"
   case photo
   case fieldControls = "field_controls"
+  case sketchImage = "sketch_image"
+  case sketchMeasurements = "sketch_measurements"
 
   /// Roles of visit-wide files. Their manifest entries carry no `captureId` or `areaKey`;
   /// entries of every other role carry both.
@@ -37,6 +39,14 @@ public enum FileRole: String, CaseIterable, Codable, Sendable {
 
   public var isRetired: Bool {
     FileRole.retiredRoles.contains(self)
+  }
+
+  /// Roles added in manifest 1.2.0 (spec F14): the originals of a sketch capture. Only a 1.2.0
+  /// manifest lists them.
+  public static let sketchRoles: [FileRole] = [.sketchImage, .sketchMeasurements]
+
+  public var isSketchRole: Bool {
+    FileRole.sketchRoles.contains(self)
   }
 
   /// The one folder files of this role are stored in.
@@ -123,7 +133,7 @@ public enum PackageFolder: String, CaseIterable, Codable, Sendable {
       return [
         .rawRoomplanJSON, .rawDepth, .captureModel, .planDXF, .roomsCSV, .planPDF,
         .spatialReportPDF, .planPNG, .planSVG, .meshGLB, .meshOBJ, .meshMTL, .texture,
-        .pointCloudLAS,
+        .pointCloudLAS, .sketchImage, .sketchMeasurements,
       ]
     case .sitePhotos: return [.photo]
     case .fieldMeasurements: return [.fieldControls]
@@ -147,6 +157,8 @@ public enum PackageLayout {
   public static let captureModelFileName = "capture-model.json"
   /// File name of the field controls in their folder.
   public static let fieldControlsFileName = "field-controls.json"
+  /// File name of a sketch capture's measurements in its capture's folder (manifest 1.2.0).
+  public static let sketchMeasurementsFileName = "sketch-measurements.json"
   /// File name of the manifest in its folder.
   public static let manifestFileName = "manifest.json"
 }

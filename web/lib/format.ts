@@ -244,6 +244,8 @@ export const ROLE_LABEL: Record<Role, string> = {
   field_controls: "Field controls",
   capture_record: "Capture record",
   spatial_report_pdf: "Spatial report · phone (retired)",
+  sketch_image: "Sketch image",
+  sketch_measurements: "Sketch measurements",
 };
 
 /** Files card role filter group of each role. */
@@ -265,6 +267,8 @@ export const ROLE_FILTER_GROUP: Record<Role, string> = {
   field_controls: "Field controls",
   capture_record: "Capture record",
   spatial_report_pdf: "Spatial report",
+  sketch_image: "Sketch",
+  sketch_measurements: "Sketch",
 };
 
 /**

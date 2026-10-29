@@ -3,6 +3,7 @@
 // "@chapter/capture-contract/node".
 
 import { LAYOUT, RETIRED_ROLES, ROLES, VISIT_ROLES } from "./generated/constants.js";
+import type { Capture } from "./generated/capture-record.js";
 import type { Photo, Role } from "./generated/manifest.js";
 
 export { LAYOUT, RETIRED_ROLES, ROLES, VISIT_ROLES };
@@ -18,6 +19,14 @@ export type {
   WallOpening,
 } from "./generated/capture-model.js";
 export type { Capture, CaptureMode, CaptureRecord, RoomNote } from "./generated/capture-record.js";
+export type {
+  SketchDiagonal,
+  SketchLength,
+  SketchMeasurements,
+  SketchOpening,
+  SketchRoom,
+  SketchWall,
+} from "./generated/sketch-measurements.js";
 export type {
   CaptureRef,
   CeilingHeight,
@@ -44,6 +53,7 @@ export type * as CaptureModelTypes from "./generated/capture-model.js";
 export type * as CaptureRecordTypes from "./generated/capture-record.js";
 export type * as FieldControlsTypes from "./generated/field-controls.js";
 export type * as ManifestTypes from "./generated/manifest.js";
+export type * as SketchMeasurementsTypes from "./generated/sketch-measurements.js";
 export type * as VerdictTypes from "./generated/verdict.js";
 
 export {
@@ -56,6 +66,7 @@ export {
   validateCaptureRecord,
   validateFieldControls,
   validateManifest,
+  validateSketchMeasurements,
   validateVerdict,
 } from "./validators.js";
 export type { ContractError, SchemaName, SchemaTypes, ValidationResult } from "./validators.js";
@@ -118,9 +129,29 @@ export type VisitRole = (typeof VISIT_ROLES)[number];
 /** Retired roles: listed only by manifest 1.0.0 packages from app builds before v2. */
 export type RetiredRole = (typeof RETIRED_ROLES)[number];
 
-/** True for a retired role (a 1.1.0 manifest never lists one). */
+/** True for a retired role (a 1.1.0 or later manifest never lists one). */
 export function isRetiredRole(role: Role): role is RetiredRole {
   return (RETIRED_ROLES as readonly Role[]).includes(role);
+}
+
+/** Roles added in manifest 1.2.0 (spec F14): the originals of a sketch capture. */
+export const SKETCH_ROLES = [
+  "sketch_image",
+  "sketch_measurements",
+] as const satisfies readonly Role[];
+
+export type SketchRole = (typeof SKETCH_ROLES)[number];
+
+/** True for a role only a 1.2.0 manifest lists. */
+export function isSketchRole(role: Role): role is SketchRole {
+  return (SKETCH_ROLES as readonly Role[]).includes(role);
+}
+
+/** How a capture was made: `captureSource`, with lidar for a record written before 1.2.0. */
+export type CaptureSource = NonNullable<Capture["captureSource"]>;
+
+export function captureSourceOf(capture: Pick<Capture, "captureSource">): CaptureSource {
+  return capture.captureSource ?? "lidar";
 }
 
 /** One folder of the package layout. */

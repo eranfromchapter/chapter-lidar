@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Chapter Capture station API
-  version: 1.1.0
+  version: 1.2.0
   summary: Upload, registration and verdicts for Chapter Capture intake packages.
   description: |
     The station receives intake packages from the Chapter Capture app, registers them, runs the
@@ -34,7 +34,9 @@ info:
     lowercase.
 
     1.1.0 is additive: new operations and new optional response properties. A client written
-    for 1.0.0 keeps working.
+    for 1.0.0 keeps working. 1.2.0 changes no operation: it carries contract 1.2 (capture record
+    1.2.0 with `captureSource` and `sketch`, manifest 1.2.0 with the roles `sketch_image` and
+    `sketch_measurements`, spec F14) through the same JSON bodies; a 1.1.0 client keeps working.
 
     Every operation except `GET /health` needs a Microsoft Entra ID bearer token. Each operation
     lists the app roles it accepts in `x-roles`; a valid token without one of them gets 403.

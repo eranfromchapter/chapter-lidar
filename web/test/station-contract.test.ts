@@ -127,8 +127,8 @@ function violations(station: FakeStation): string[] {
 }
 
 describe("station API contract", () => {
-  it("is station.yaml 1.1.0", () => {
-    expect(openapi.version).toBe("1.1.0");
+  it("is station.yaml 1.2.0", () => {
+    expect(openapi.version).toBe("1.2.0");
   });
 
   it("has every operation the review screen calls", () => {

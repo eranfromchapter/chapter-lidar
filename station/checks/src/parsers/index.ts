@@ -5,6 +5,7 @@ import {
   validateCaptureModel,
   validateCaptureRecord,
   validateFieldControls,
+  validateSketchMeasurements,
   type CaptureModel,
   type Role,
   type ValidationResult,
@@ -59,6 +60,8 @@ export const ROLE_FORMAT: Readonly<Record<Role, string>> = {
   point_cloud_las: "LAS",
   photo: "JPEG/HEIC photo",
   field_controls: "field controls JSON",
+  sketch_image: "JPEG/HEIC/PNG image or PDF",
+  sketch_measurements: "sketch measurements JSON",
 };
 
 function schemaChecked(
@@ -137,6 +140,18 @@ export function parseByRole(role: Role, bytes: Uint8Array): ParseResult<ParsedFi
       return wrap(parseImage(bytes, ["jpeg", "heic", "png"]), (value) => ({
         kind: "image",
         imageKind: value.kind,
+      }));
+    case "sketch_image": {
+      const image = parseImage(bytes, ["jpeg", "heic", "png"]);
+      if (image.ok) {
+        return ok({ kind: "image", imageKind: image.value.kind });
+      }
+      return wrap(parsePdf(bytes), () => ({ kind: "pdf" }));
+    }
+    case "sketch_measurements":
+      return wrap(schemaChecked(bytes, validateSketchMeasurements), (value) => ({
+        kind: "json",
+        value,
       }));
   }
 }

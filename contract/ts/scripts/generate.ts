@@ -24,6 +24,7 @@ export const SCHEMA_FILES = {
   "capture-model": "capture-model.schema.json",
   "field-controls": "field-controls.schema.json",
   manifest: "manifest.schema.json",
+  "sketch-measurements": "sketch-measurements.schema.json",
   verdict: "verdict.schema.json",
 } as const;
 
@@ -47,6 +48,13 @@ function isObject(value: Json | undefined): value is { [key: string]: Json } {
  */
 const TYPE_NAMES: Partial<Record<SchemaName, Record<string, string>>> = {
   "capture-model": { object: "CaptureObject" },
+  "sketch-measurements": {
+    room: "SketchRoom",
+    wall: "SketchWall",
+    opening: "SketchOpening",
+    diagonal: "SketchDiagonal",
+    length: "SketchLength",
+  },
 };
 
 /**

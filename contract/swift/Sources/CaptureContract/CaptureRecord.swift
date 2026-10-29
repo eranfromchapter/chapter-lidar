@@ -161,6 +161,14 @@ public struct CaptureRecord: Hashable, Sendable, Codable {
     public var headingRecordedAt: UTCTimestamp?
     /// Why there is no heading although the app tried (1.1.0). Never together with `heading`.
     public var headingIssue: HeadingIssue?
+    /// How the capture was made (1.2.0). Nil in an older record, which means lidar
+    /// (`source`). A sketch capture carries no compass field.
+    public var captureSource: CaptureSource?
+    /// What the sketch solver had (1.2.0). Set exactly when `captureSource` is `sketch`.
+    public var sketch: SketchSummary?
+
+    /// `captureSource`, with lidar for a record written before 1.2.0.
+    public var source: CaptureSource { captureSource ?? .lidar }
 
     public init(
       captureId: LowercaseUUID,
@@ -177,7 +185,9 @@ public struct CaptureRecord: Hashable, Sendable, Codable {
       headingAccuracy: Int? = nil,
       headingSource: HeadingSource? = nil,
       headingRecordedAt: UTCTimestamp? = nil,
-      headingIssue: HeadingIssue? = nil
+      headingIssue: HeadingIssue? = nil,
+      captureSource: CaptureSource? = nil,
+      sketch: SketchSummary? = nil
     ) {
       self.captureId = captureId
       self.areaKey = areaKey
@@ -194,6 +204,33 @@ public struct CaptureRecord: Hashable, Sendable, Codable {
       self.headingSource = headingSource
       self.headingRecordedAt = headingRecordedAt
       self.headingIssue = headingIssue
+      self.captureSource = captureSource
+      self.sketch = sketch
+    }
+
+    /// What the sketch solver had for a sketch capture (1.2.0, spec F14).
+    public struct SketchSummary: Hashable, Sendable, Codable {
+      /// complete: every wall, opening and the ceiling height measured; limited otherwise.
+      public var measurements: SketchCompleteness
+      /// Walls whose length the operator measured.
+      public var wallsMeasured: Int
+      /// Walls whose length was estimated.
+      public var wallsEstimated: Int
+      public var ceilingHeightSource: CeilingHeightSource
+      /// The largest closure residual of the capture's rooms in millimetres, after it was
+      /// distributed. Nil when no room had every wall measured.
+      public var closureResidualMm: Double?
+
+      public init(
+        measurements: SketchCompleteness, wallsMeasured: Int, wallsEstimated: Int,
+        ceilingHeightSource: CeilingHeightSource, closureResidualMm: Double? = nil
+      ) {
+        self.measurements = measurements
+        self.wallsMeasured = wallsMeasured
+        self.wallsEstimated = wallsEstimated
+        self.ceilingHeightSource = ceilingHeightSource
+        self.closureResidualMm = closureResidualMm
+      }
     }
 
     /// Records the result of the floor's compass reading: the four reading fields, or the issue

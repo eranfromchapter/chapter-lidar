@@ -11,25 +11,35 @@ public enum SchemaVersion: String, CaseIterable, Codable, Sendable {
 }
 
 /// `schemaVersion` of the capture record. 1.1.0 adds the optional compass reading of each capture
-/// (`heading`, `headingAccuracy`, `headingSource`, `headingRecordedAt`) and `headingIssue`, so
-/// every 1.0.0 document is also a valid 1.1.0 document. Both are read; `CaptureRecord` always
-/// writes `current`.
+/// (`heading`, `headingAccuracy`, `headingSource`, `headingRecordedAt`) and `headingIssue`; 1.2.0
+/// adds `captureSource` and `sketch` (spec F14). Every older document is also a valid newer one.
+/// Every version is read; `CaptureRecord` always writes `current`.
 public enum CaptureRecordSchemaVersion: String, CaseIterable, Codable, Sendable {
   case v1 = "1.0.0"
   case v1_1 = "1.1.0"
+  case v1_2 = "1.2.0"
 
-  public static let current: CaptureRecordSchemaVersion = .v1_1
+  public static let current: CaptureRecordSchemaVersion = .v1_2
 }
 
 /// `schemaVersion` of the manifest. 1.1.0 adds the optional `photo.directionSource` and retires
-/// the role `spatial_report_pdf` (`FileRole.retiredRoles`). Both are read; `PackageManifest`
-/// writes `current` except for a manifest that lists a retired role, which is written as 1.0.0
-/// (see `PackageManifest.writtenSchemaVersion`).
+/// the role `spatial_report_pdf` (`FileRole.retiredRoles`); 1.2.0 adds the sketch roles
+/// (`FileRole.sketchRoles`, spec F14). Every version is read; `PackageManifest` writes `current`
+/// except for a manifest that lists a retired role, which is written as 1.0.0 (see
+/// `PackageManifest.writtenSchemaVersion`).
 public enum ManifestSchemaVersion: String, CaseIterable, Codable, Sendable {
   case v1 = "1.0.0"
   case v1_1 = "1.1.0"
+  case v1_2 = "1.2.0"
 
-  public static let current: ManifestSchemaVersion = .v1_1
+  public static let current: ManifestSchemaVersion = .v1_2
+}
+
+/// `schemaVersion` of the sketch measurements (spec F14).
+public enum SketchMeasurementsSchemaVersion: String, CaseIterable, Codable, Sendable {
+  case v1 = "1.0.0"
+
+  public static let current: SketchMeasurementsSchemaVersion = .v1
 }
 
 /// `schemaVersion` of the capture model. 1.1.0 adds optional fields (room type and its source,
@@ -56,6 +66,54 @@ public enum CaptureMode: String, CaseIterable, Codable, Sendable {
   case room
   case floor
   case exterior
+}
+
+/// How a capture was made (capture record 1.2.0): a RoomPlan scan, or a hand sketch or existing
+/// plan with measurements entered by the operator (spec F14). Absent in older records: lidar.
+public enum CaptureSource: String, CaseIterable, Codable, Sendable {
+  case lidar
+  case sketch
+}
+
+/// Whether the sketch solver had every measurement (capture record 1.2.0 `sketch.measurements`).
+public enum SketchCompleteness: String, CaseIterable, Codable, Sendable {
+  case complete
+  case limited
+}
+
+/// Where a sketch capture's ceiling height came from (capture record 1.2.0).
+public enum CeilingHeightSource: String, CaseIterable, Codable, Sendable {
+  case measured
+  case assumed
+}
+
+// MARK: Sketch measurements
+
+/// What the operator measured a sketch capture from.
+public enum SketchSourceKind: String, CaseIterable, Codable, Sendable {
+  case handSketch = "hand_sketch"
+  case existingPlan = "existing_plan"
+  case none
+}
+
+/// The corner at the end of a sketched wall: `left`, a square convex corner; `right`, a square
+/// re-entrant corner (the inside corner of an L); `unsquare`, measured by a diagonal.
+public enum SketchTurn: String, CaseIterable, Codable, Sendable {
+  case left
+  case right
+  case unsquare
+}
+
+public enum SketchOpeningKind: String, CaseIterable, Codable, Sendable {
+  case door
+  case window
+  case opening
+}
+
+/// Which corner of a wall an opening's distance is measured from.
+public enum SketchWallCorner: String, CaseIterable, Codable, Sendable {
+  case start
+  case end
 }
 
 /// Geometry is always metres.

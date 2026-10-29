@@ -52,6 +52,7 @@ final class SchemaParityTests: XCTestCase {
         "capture_model": PackageLayout.captureModelFileName,
         "field_controls": PackageLayout.fieldControlsFileName,
         "manifest": PackageLayout.manifestFileName,
+        "sketch_measurements": PackageLayout.sketchMeasurementsFileName,
       ],
       "PackageLayout file names vs layout.json fileNames")
 
@@ -134,6 +135,7 @@ final class SchemaParityTests: XCTestCase {
       "capture-model": CaptureModelSchemaVersion.allCases.map(\.rawValue),
       "field-controls": SchemaVersion.allCases.map(\.rawValue),
       "manifest": ManifestSchemaVersion.allCases.map(\.rawValue),
+      "sketch-measurements": SketchMeasurementsSchemaVersion.allCases.map(\.rawValue),
       "verdict": SchemaVersion.allCases.map(\.rawValue),
     ]
     XCTAssertEqual(
@@ -172,17 +174,24 @@ final class SchemaParityTests: XCTestCase {
       CaptureRecordSchemaVersion.current.rawValue,
       try schema.strings(at: ["properties", "schemaVersion", "enum"]).last,
       "CaptureRecordSchemaVersion.current vs the newest capture-record.schema.json schemaVersion")
-    XCTAssertEqual(
-      CaptureRecordSchemaVersion.v1.rawValue,
-      try schema.string(at: ["if", "properties", "schemaVersion", "const"]),
-      "the version capture-record.schema.json refuses the compass fields in")
-    let refused = try XCTUnwrap(
-      try schema.value(at: ["then", "properties", "captures", "items", "properties"])
-        as? [String: Any])
+    let rules = try XCTUnwrap(try schema.value(at: ["allOf"]) as? [[String: Any]])
+    func refused(in version: CaptureRecordSchemaVersion) throws -> [String] {
+      let found = rules.first { rule in
+        let condition = (rule["if"] as? [String: Any])?["properties"] as? [String: Any]
+        return (condition?["schemaVersion"] as? [String: Any])?["const"] as? String
+          == version.rawValue
+      }
+      let properties = try XCTUnwrap(
+        ["then", "properties", "captures", "items", "properties"].reduce(found as Any?) {
+          ($0 as? [String: Any])?[$1]
+        } as? [String: Any], "no rule for \(version.rawValue)")
+      return Array(properties.keys)
+    }
+    let compass = ["heading", "headingAccuracy", "headingSource", "headingRecordedAt", "headingIssue"]
+    let sketch = ["captureSource", "sketch"]
     try assertSameValues(
-      Array(refused.keys),
-      ["heading", "headingAccuracy", "headingSource", "headingRecordedAt", "headingIssue"],
-      "fields refused in a 1.0.0 capture record")
+      try refused(in: .v1), compass + sketch, "fields refused in a 1.0.0 capture record")
+    try assertSameValues(try refused(in: .v1_1), sketch, "fields refused in a 1.1.0 capture record")
   }
 
   func testManifestWritesTheNewestVersionAndRetiresTheRetiredRoles() throws {
@@ -228,6 +237,14 @@ final class SchemaParityTests: XCTestCase {
       HeadingIssue.self, schema, ["$defs", "capture", "properties", "headingIssue", "enum"])
     try assertEnum(
       DeviceOSName.self, schema, ["properties", "device", "properties", "osName", "enum"])
+    try assertEnum(
+      CaptureSource.self, schema, ["$defs", "capture", "properties", "captureSource", "enum"])
+    try assertEnum(
+      SketchCompleteness.self, schema,
+      ["$defs", "capture", "properties", "sketch", "properties", "measurements", "enum"])
+    try assertEnum(
+      CeilingHeightSource.self, schema,
+      ["$defs", "capture", "properties", "sketch", "properties", "ceilingHeightSource", "enum"])
     try assertEnum(
       DisplayUnitSystem.self, schema,
       ["$defs", "capture", "properties", "units", "properties", "display", "enum"])

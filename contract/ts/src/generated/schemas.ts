@@ -25,8 +25,8 @@ export const captureRecordSchema: Record<string, unknown> = {
   properties: {
     schemaVersion: {
       description:
-        "1.1.0 adds the optional compass reading of each capture (heading, headingAccuracy, headingSource, headingRecordedAt) and headingIssue; a 1.0.0 document does not carry them. Readers accept both versions; writers write 1.1.0.",
-      enum: ["1.0.0", "1.1.0"],
+        "1.1.0 adds the optional compass reading of each capture (heading, headingAccuracy, headingSource, headingRecordedAt) and headingIssue; 1.2.0 adds captureSource and sketch. An older document does not carry the later fields. Readers accept every version; writers write 1.2.0.",
+      enum: ["1.0.0", "1.1.0", "1.2.0"],
     },
     visitId: { $ref: "#/$defs/uuid" },
     hub: {
@@ -137,25 +137,43 @@ export const captureRecordSchema: Record<string, unknown> = {
       items: { $ref: "#/$defs/capture" },
     },
   },
-  if: { properties: { schemaVersion: { const: "1.0.0" } } },
-  then: {
-    description: "A 1.0.0 document carries none of the fields added in 1.1.0.",
-    properties: {
-      captures: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            heading: false,
-            headingAccuracy: false,
-            headingSource: false,
-            headingRecordedAt: false,
-            headingIssue: false,
+  allOf: [
+    {
+      if: { properties: { schemaVersion: { const: "1.0.0" } } },
+      then: {
+        description: "A 1.0.0 document carries none of the fields added in 1.1.0 or 1.2.0.",
+        properties: {
+          captures: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                heading: false,
+                headingAccuracy: false,
+                headingSource: false,
+                headingRecordedAt: false,
+                headingIssue: false,
+                captureSource: false,
+                sketch: false,
+              },
+            },
           },
         },
       },
     },
-  },
+    {
+      if: { properties: { schemaVersion: { const: "1.1.0" } } },
+      then: {
+        description: "A 1.1.0 document carries none of the fields added in 1.2.0.",
+        properties: {
+          captures: {
+            type: "array",
+            items: { type: "object", properties: { captureSource: false, sketch: false } },
+          },
+        },
+      },
+    },
+  ],
   $defs: {
     uuid: {
       description: "Lowercase RFC 9562 UUID.",
@@ -271,12 +289,53 @@ export const captureRecordSchema: Record<string, unknown> = {
             "Why there is no heading although the app tried: rejected (readings disagreed or could not be matched to the scan), not_calibrated (the compass reported no valid accuracy), unavailable (no usable compass on the device). Never present together with heading.",
           enum: ["rejected", "not_calibrated", "unavailable"],
         },
+        captureSource: {
+          description:
+            "How the capture was made (1.2.0): lidar, a RoomPlan scan; sketch, a hand sketch or existing plan with measurements entered by the operator (spec F14). Absent in older documents, which means lidar. A sketch capture carries no compass field: there is no scan frame to read a heading into.",
+          enum: ["lidar", "sketch"],
+        },
+        sketch: {
+          description:
+            "What the sketch solver had (1.2.0). Present exactly when captureSource is sketch.",
+          type: "object",
+          additionalProperties: false,
+          required: ["measurements", "wallsMeasured", "wallsEstimated", "ceilingHeightSource"],
+          properties: {
+            measurements: {
+              description:
+                "complete: every wall and opening was measured and the ceiling height too; limited: at least one wall, opening or the ceiling height is estimated or assumed, or a closure residual is over the tolerance.",
+              enum: ["complete", "limited"],
+            },
+            wallsMeasured: {
+              description: "Walls whose length the operator measured.",
+              type: "integer",
+              minimum: 0,
+            },
+            wallsEstimated: {
+              description:
+                'Walls whose length was estimated (an "about" value, the sketch proportion, or a square corner that was not measured).',
+              type: "integer",
+              minimum: 0,
+            },
+            ceilingHeightSource: {
+              description: "measured: entered by the operator; assumed: the default 2.44 m.",
+              enum: ["measured", "assumed"],
+            },
+            closureResidualMm: {
+              description:
+                "The largest closure residual of the capture's rooms in millimetres (the lengths going one way along an axis against the lengths coming back), after the residual was distributed. Omitted when no room had every wall measured.",
+              type: "number",
+              minimum: 0,
+            },
+          },
+        },
       },
       dependentRequired: {
         heading: ["headingAccuracy", "headingSource", "headingRecordedAt"],
         headingAccuracy: ["heading"],
         headingSource: ["heading"],
         headingRecordedAt: ["heading"],
+        sketch: ["captureSource"],
       },
       not: {
         properties: {
@@ -285,6 +344,25 @@ export const captureRecordSchema: Record<string, unknown> = {
         },
         required: ["heading", "headingIssue"],
       },
+      allOf: [
+        {
+          if: { properties: { captureSource: { const: "sketch" } }, required: ["captureSource"] },
+          then: {
+            properties: { sketch: { $ref: "#/$defs/capture/properties/sketch" } },
+            required: ["sketch"],
+            not: {
+              anyOf: [
+                { properties: { heading: true }, required: ["heading"] },
+                { properties: { headingAccuracy: true }, required: ["headingAccuracy"] },
+                { properties: { headingSource: true }, required: ["headingSource"] },
+                { properties: { headingRecordedAt: true }, required: ["headingRecordedAt"] },
+                { properties: { headingIssue: true }, required: ["headingIssue"] },
+              ],
+            },
+          },
+          else: { not: { properties: { sketch: true }, required: ["sketch"] } },
+        },
+      ],
     },
   },
 };
@@ -822,8 +900,8 @@ export const manifestSchema: Record<string, unknown> = {
   properties: {
     schemaVersion: {
       description:
-        "1.1.0 adds the optional photo.directionSource and retires the role spatial_report_pdf; a 1.0.0 document does not carry directionSource, a 1.1.0 document lists no spatial_report_pdf file. Readers accept both versions; writers write 1.1.0.",
-      enum: ["1.0.0", "1.1.0"],
+        "1.1.0 adds the optional photo.directionSource and retires the role spatial_report_pdf; 1.2.0 adds the roles sketch_image and sketch_measurements (spec F14). A 1.0.0 document does not carry directionSource; a 1.1.0 or 1.2.0 document lists no spatial_report_pdf file; only a 1.2.0 document lists a sketch role. Readers accept every version; writers write 1.2.0.",
+      enum: ["1.0.0", "1.1.0", "1.2.0"],
     },
     layoutVersion: {
       description: "Version of contract/schema/layout.json the paths follow.",
@@ -859,13 +937,17 @@ export const manifestSchema: Record<string, unknown> = {
     {
       if: { properties: { schemaVersion: { const: "1.0.0" } } },
       then: {
-        description: "A 1.0.0 document carries none of the fields added in 1.1.0.",
+        description:
+          "A 1.0.0 document carries none of the fields added in 1.1.0 and lists no role added in 1.2.0.",
         properties: {
           files: {
             type: "array",
             items: {
               type: "object",
-              properties: { photo: { type: "object", properties: { directionSource: false } } },
+              properties: {
+                photo: { type: "object", properties: { directionSource: false } },
+                role: { not: { enum: ["sketch_image", "sketch_measurements"] } },
+              },
             },
           },
         },
@@ -874,7 +956,27 @@ export const manifestSchema: Record<string, unknown> = {
     {
       if: { properties: { schemaVersion: { const: "1.1.0" } } },
       then: {
-        description: "A 1.1.0 document lists no file with a retired role.",
+        description:
+          "A 1.1.0 document lists no file with a retired role and no role added in 1.2.0.",
+        properties: {
+          files: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                role: {
+                  not: { enum: ["spatial_report_pdf", "sketch_image", "sketch_measurements"] },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      if: { properties: { schemaVersion: { const: "1.2.0" } } },
+      then: {
+        description: "A 1.2.0 document lists no file with a retired role.",
         properties: {
           files: {
             type: "array",
@@ -915,7 +1017,7 @@ export const manifestSchema: Record<string, unknown> = {
     },
     role: {
       description:
-        "Closed set of file roles from the intake guide, plus capture_model (the normalized CaptureModel JSON of one capture). Each role belongs to exactly one folder in layout.json. spatial_report_pdf is retired: written only in manifest 1.0.0 by app builds before v2; never in 1.1.0. The spatial report is a station output, not a package file.",
+        "Closed set of file roles from the intake guide, plus capture_model (the normalized CaptureModel JSON of one capture) and, since 1.2.0, sketch_image (the photo, image or PDF of the hand sketch or existing plan a sketch capture was measured from) and sketch_measurements (the measurements the operator entered, sketch-measurements.schema.json). Each role belongs to exactly one folder in layout.json. spatial_report_pdf is retired: written only in manifest 1.0.0 by app builds before v2; never in 1.1.0 or later. The spatial report is a station output, not a package file.",
       enum: [
         "capture_record",
         "raw_roomplan_json",
@@ -934,6 +1036,8 @@ export const manifestSchema: Record<string, unknown> = {
         "point_cloud_las",
         "photo",
         "field_controls",
+        "sketch_image",
+        "sketch_measurements",
       ],
     },
     visitRole: {
@@ -1046,6 +1150,255 @@ export const manifestSchema: Record<string, unknown> = {
           else: { not: { properties: { photo: { $ref: "#/$defs/photo" } }, required: ["photo"] } },
         },
       ],
+    },
+  },
+};
+
+export const sketchMeasurementsSchema: Record<string, unknown> = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  $id: "https://hellochapter.com/schemas/chapter-capture/v1/sketch-measurements.schema.json",
+  title: "SketchMeasurements",
+  description:
+    "What the operator entered for one sketch capture (spec F14): the rooms as drawn, the walls around each room in order, the lengths, diagonals and openings that were measured, and the ceiling height. The sketch solver turns this into the capture model; the file is kept unchanged as the capture's original, next to the sketch image, as Original Exports/{areaKey}/{captureId}/sketch-measurements.json with role sketch_measurements. Lengths are stored in millimetres with the unit and text the operator entered. Optional fields are omitted, never null.",
+  type: "object",
+  additionalProperties: false,
+  required: ["schemaVersion", "visitId", "captureId", "areaKey", "displayUnits", "source", "rooms"],
+  properties: {
+    schemaVersion: { const: "1.0.0" },
+    visitId: { $ref: "#/$defs/uuid" },
+    captureId: { $ref: "#/$defs/uuid" },
+    areaKey: { $ref: "#/$defs/areaKey" },
+    displayUnits: {
+      description: "The unit system the operator worked in.",
+      enum: ["metric", "imperial"],
+    },
+    source: {
+      description: "What the operator measured from.",
+      type: "object",
+      additionalProperties: false,
+      required: ["kind"],
+      properties: {
+        kind: {
+          description:
+            "hand_sketch: a sketch drawn on site; existing_plan: a printed or drawn plan of the property; none: measurements only, no drawing.",
+          enum: ["hand_sketch", "existing_plan", "none"],
+        },
+        path: {
+          description:
+            "Package path of the sketch image (role sketch_image). Present exactly when kind is not none.",
+          $ref: "#/$defs/relativePath",
+        },
+      },
+      if: { properties: { kind: { const: "none" } } },
+      then: { not: { properties: { path: true }, required: ["path"] } },
+      else: { properties: { path: true }, required: ["path"] },
+    },
+    ceilingHeight: {
+      description:
+        "Floor-to-ceiling height of the floor, used by every room that has no ceilingHeight of its own. Omitted when the operator did not measure it: the solver then assumes 2440 mm and the capture is limited.",
+      $ref: "#/$defs/length",
+    },
+    rooms: { type: "array", minItems: 1, items: { $ref: "#/$defs/room" } },
+  },
+  $defs: {
+    uuid: {
+      description: "Lowercase RFC 9562 UUID.",
+      type: "string",
+      format: "uuid",
+      pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    },
+    areaKey: {
+      description: "Key of the floor or area in the capture record, for example floor-1.",
+      type: "string",
+      pattern: "^[a-z0-9]+(-[a-z0-9]+)*$",
+      maxLength: 64,
+    },
+    id: {
+      description:
+        "Element id, unique within the file. The solver keeps these ids in the capture model.",
+      type: "string",
+      minLength: 1,
+      maxLength: 128,
+    },
+    relativePath: {
+      description: "Path relative to the package root, forward slashes, no '.' or '..' segments.",
+      type: "string",
+      minLength: 1,
+      maxLength: 1024,
+      pattern: "^(?!/)(?!.*//)(?!.*/$)(?!(.*/)?\\.{1,2}(/|$))[^\\\\\\x00-\\x1f]+$",
+    },
+    enteredUnit: {
+      description:
+        "Unit the operator entered the value in. ft_in is feet and inches, for example 24' 8\".",
+      enum: ["mm", "cm", "m", "in", "ft", "ft_in"],
+    },
+    length: {
+      description:
+        'One entered length. measured false is an "about" value the operator estimated by eye; the solver marks what it builds from it as estimated.',
+      type: "object",
+      additionalProperties: false,
+      required: ["valueMm", "enteredUnit", "enteredText", "measured"],
+      properties: {
+        valueMm: { type: "number", exclusiveMinimum: 0, maximum: 200000 },
+        enteredUnit: { $ref: "#/$defs/enteredUnit" },
+        enteredText: {
+          description: "The value exactly as the operator entered it, in enteredUnit.",
+          type: "string",
+          minLength: 1,
+          maxLength: 40,
+        },
+        measured: {
+          description:
+            "True when read from a tape or laser (or printed on the existing plan); false for an estimate.",
+          type: "boolean",
+        },
+      },
+    },
+    roomType: {
+      enum: [
+        "living_room",
+        "dining_room",
+        "kitchen",
+        "bedroom",
+        "bathroom",
+        "closet",
+        "hallway",
+        "laundry",
+        "office",
+        "utility",
+        "other",
+      ],
+    },
+    turn: {
+      description:
+        "The corner at the end of a wall, where the next wall starts: left, a square convex corner (the outline turns 90 degrees left, counter-clockwise); right, a square re-entrant corner (90 degrees right, the inside corner of an L); unsquare, a corner that is not 90 degrees, measured by a diagonal across it. Absent means left.",
+      enum: ["left", "right", "unsquare"],
+    },
+    room: {
+      type: "object",
+      additionalProperties: false,
+      required: ["id", "label", "walls", "diagonals", "openings"],
+      properties: {
+        id: { $ref: "#/$defs/id" },
+        label: {
+          description: "Room name as the operator wrote it, for example Kitchen.",
+          type: "string",
+          minLength: 1,
+          maxLength: 100,
+        },
+        type: {
+          description: "What the room is used for, when the operator chose it.",
+          $ref: "#/$defs/roomType",
+        },
+        walls: {
+          description:
+            "The walls around the room in order, counter-clockwise seen from above as drawn. Corner i is the start of wall i; the last wall ends at corner 0.",
+          type: "array",
+          minItems: 3,
+          items: { $ref: "#/$defs/wall" },
+        },
+        diagonals: {
+          description:
+            "Corner-to-corner distances measured through the room: one across each unsquare corner, or one for a squareness check. Empty when none.",
+          type: "array",
+          items: { $ref: "#/$defs/diagonal" },
+        },
+        openings: {
+          description: "Doors, windows and openings in this room's walls. Empty when none.",
+          type: "array",
+          items: { $ref: "#/$defs/opening" },
+        },
+        ceilingHeight: {
+          description: "This room's ceiling height when it differs from the floor's.",
+          $ref: "#/$defs/length",
+        },
+      },
+    },
+    wall: {
+      type: "object",
+      additionalProperties: false,
+      required: ["id"],
+      properties: {
+        id: { $ref: "#/$defs/id" },
+        length: {
+          description:
+            "The wall's length along the inside face. Omitted when the operator did not enter one: the solver fills it from closure when it can, else from an estimate.",
+          $ref: "#/$defs/length",
+        },
+        turn: { $ref: "#/$defs/turn" },
+        exterior: {
+          description:
+            "True for an exterior wall (drawn thicker, 6 in; interior walls are 4.5 in). Absent means interior.",
+          type: "boolean",
+        },
+        sharedWith: {
+          description:
+            "The wall of an earlier room in this file that is the other side of the same partition. The solver places this room against that one.",
+          type: "object",
+          additionalProperties: false,
+          required: ["roomId", "wallId"],
+          properties: { roomId: { $ref: "#/$defs/id" }, wallId: { $ref: "#/$defs/id" } },
+        },
+      },
+    },
+    diagonal: {
+      type: "object",
+      additionalProperties: false,
+      required: ["from", "to", "length"],
+      properties: {
+        from: {
+          description: "Index of the first corner (the start of wall from).",
+          type: "integer",
+          minimum: 0,
+        },
+        to: {
+          description: "Index of the second corner; not from or a neighbour of it.",
+          type: "integer",
+          minimum: 0,
+        },
+        length: { $ref: "#/$defs/length" },
+      },
+    },
+    opening: {
+      type: "object",
+      additionalProperties: false,
+      required: ["id", "kind", "wallId", "fromCorner"],
+      properties: {
+        id: { $ref: "#/$defs/id" },
+        kind: {
+          description:
+            "door, a door; window, a window; opening, an opening without a door (passage, arch).",
+          enum: ["door", "window", "opening"],
+        },
+        wallId: { description: "The wall of this room the opening is in.", $ref: "#/$defs/id" },
+        width: {
+          description:
+            "Clear width. Omitted: the solver uses 914 mm for a door and 1219 mm for a window or opening, estimated.",
+          $ref: "#/$defs/length",
+        },
+        height: {
+          description:
+            "Height of the opening. Omitted: 2032 mm for a door, 1219 mm for a window, the wall height for an opening, estimated.",
+          $ref: "#/$defs/length",
+        },
+        sill: {
+          description:
+            "Windows: height of the sill above the floor. Omitted: 914 mm, estimated. Doors and openings have no sill.",
+          $ref: "#/$defs/length",
+        },
+        fromCorner: {
+          description:
+            "Which corner of the wall fromCornerDistance is measured from: start, the wall's start corner; end, its end corner.",
+          enum: ["start", "end"],
+        },
+        fromCornerDistance: {
+          description:
+            "Distance from that corner to the nearest jamb of the opening. Omitted: the opening is placed by the order of the openings on the wall, estimated.",
+          $ref: "#/$defs/length",
+        },
+      },
+      if: { properties: { kind: { const: "window" } } },
+      else: { not: { properties: { sill: true }, required: ["sill"] } },
     },
   },
 };
