@@ -3,10 +3,10 @@ import Foundation
 
 /// Words of the sketch screens, so the screens and the tests agree on them.
 public enum SketchText {
-  /// The Captures home's second button and its footnote (spec F14 2.1).
-  public static let homeButton = "Sketch capture"
+  /// The Captures home's second button and its footnote (spec F14 2.1, F15 2).
+  public static let homeButton = "Capture without LiDAR"
   public static let homeFootnote =
-    "No LiDAR? Photograph a sketch or plan and enter the measurements."
+    "No LiDAR? Walk the rooms with the camera, or enter the measurements from a sketch."
 
   /// The room type as the picker shows it; the capture model's labels use the same words
   /// (`RoomTyping.label(of:)`), with "Other" for a room of no particular type.

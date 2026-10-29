@@ -9,12 +9,15 @@
 //   SketchMesh     Foundation only. The capture model extruded into a MeshExport TriangleMesh
 //                  (floor, walls with openings cut, ceiling) for mesh.glb / mesh.obj.
 //   SketchEntry    Foundation only. The guided measurement entry: what is asked, in what order,
-//                  and the SketchMeasurements it builds. Tested on Linux.
+//                  and the SketchMeasurements it builds; the method choice; the walkthrough's
+//                  floor writer. Tested on Linux.
 //   SketchUI       APPLE ONLY (SwiftUI, on ChapterUI). The sketch screens. Carries `.apple-only`.
 //   Walkthrough    Foundation only. AR walkthrough taps -> SketchMeasurements (spec F15): drift,
 //                  wall lines, square corners, openings, scale check. Tested on Linux.
-//   WalkthroughUI  APPLE ONLY (ARKit, SwiftUI). The AR walkthrough screen, its session (live and
-//                  replay) and the recording. Carries `.apple-only`.
+//   WalkthroughUI  The AR walkthrough: its model, the session protocol and the replay session are
+//                  Foundation only (tested with SketchEntryTests); the live ARKit session, the
+//                  recording and the screens are APPLE ONLY (`#if canImport(ARKit)`, SwiftUI).
+//                  Carries `.apple-only`.
 //
 // No `.apple-only` marker at the package root: scripts/swift-test.sh runs the solver, mesh and
 // entry tests on Linux.
@@ -118,7 +121,8 @@ let package = Package(
     .testTarget(
       name: "SketchEntryTests",
       dependencies: [
-        "SketchEntry", "SketchSolver", .product(name: "CaptureContract", package: "swift"),
+        "SketchEntry", "SketchSolver", "Walkthrough", "WalkthroughUI",
+        .product(name: "CaptureContract", package: "swift"),
         .product(name: "CaptureTestSupport", package: "CaptureCore"),
       ]
     ),

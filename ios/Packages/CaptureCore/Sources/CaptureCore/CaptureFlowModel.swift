@@ -27,8 +27,9 @@
   }
 
   /// What the capture screens lead to: a LiDAR scan (steps 2 and 3 are What are you scanning?
-  /// and the live scan), or a sketch capture (spec F14: step 1 is the same New capture screen,
-  /// without the device gate, and the sketch screens follow).
+  /// and the live scan), or a capture without LiDAR (`sketch`: step 1 is the same New capture
+  /// screen, without the device gate; then How do you want to measure?, and the AR walkthrough
+  /// of spec F15 or the sketch screens of spec F14 follow).
   public enum CaptureFlowPurpose: Sendable, Equatable {
     case scan
     case sketch
@@ -221,15 +222,16 @@
       }
     }
 
-    /// The device gate's message on step 1: a phone that cannot scan. Nil for a sketch
-    /// capture, which needs no LiDAR (spec F14 2.4).
+    /// The device gate's message on step 1: a phone that cannot scan. Nil for a capture without
+    /// LiDAR (spec F14 2.4, F15 2).
     public var gateMessage: String? {
       purpose == .scan ? gate.message : nil
     }
 
-    /// The right-hand caption of step 1: "Step 1 of 3" (scan) or "Step 1 of 4" (sketch).
+    /// The right-hand caption of step 1: "Step 1 of 3" (scan) or "Step 1 of 5" (without LiDAR:
+    /// the method, then walk, scale and check, or source, rooms and check).
     public var newCaptureCaption: String {
-      purpose == .scan ? "Step 1 of 3" : "Step 1 of 4"
+      purpose == .scan ? "Step 1 of 3" : "Step 1 of 5"
     }
 
     /// Why Continue is disabled, as its label says it (phone-capture §3.2); nil when enabled.

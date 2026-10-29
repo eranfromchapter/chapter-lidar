@@ -378,6 +378,7 @@ public struct PackageReview: Equatable, Sendable {
 
     let rawRoles: Set<FileRole> = [
       .pointCloudLAS, .rawRoomplanJSON, .rawDepth, .captureModel, .sketchImage, .sketchMeasurements,
+      .walkthroughVideo, .walkthroughLog,
     ]
     var raw: [String] = []
     if present.contains(.pointCloudLAS) { raw.append("Point cloud LAS") }
@@ -387,8 +388,18 @@ public struct PackageReview: Equatable, Sendable {
     case (false, true): raw.append("raw depth")
     case (false, false): break
     }
+    // An AR walkthrough's originals (spec F15): the video, the log and the measurements
+    // derived from it ("walkthrough video + log + measurements").
+    if present.contains(.walkthroughVideo) || present.contains(.walkthroughLog) {
+      var walk: [String] = []
+      if present.contains(.walkthroughVideo) { walk.append("video") }
+      if present.contains(.walkthroughLog) { walk.append("log") }
+      if present.contains(.sketchMeasurements) { walk.append("measurements") }
+      raw.append("walkthrough " + walk.joined(separator: " + "))
+    }
     // A sketch capture's originals (spec F14): the sketch image and the measurements.
-    switch (present.contains(.sketchImage), present.contains(.sketchMeasurements)) {
+    let walked = present.contains(.walkthroughLog) && !present.contains(.sketchImage)
+    switch (present.contains(.sketchImage), present.contains(.sketchMeasurements) && !walked) {
     case (true, true): raw.append("sketch image + measurements")
     case (true, false): raw.append("sketch image")
     case (false, true): raw.append("sketch measurements")
@@ -406,9 +417,16 @@ public struct PackageReview: Equatable, Sendable {
   /// "compass: not recorded" (none). A capture has a reading when its state is verified or
   /// approximate (`CompassState.isUsable`).
   public static func compassText(_ captures: [CaptureRecord.Capture]) -> String {
-    // Sketch captures carry no compass (spec F14 1.7): none is expected of them.
-    let scanned = captures.filter { $0.source != .sketch }
-    if scanned.isEmpty, !captures.isEmpty { return "compass: not needed for a sketch" }
+    // Sketch and walkthrough captures carry no compass (spec F14 1.7, F15 5): none is expected
+    // of them.
+    let scanned = captures.filter { !$0.source.isMeasuredPlan }
+    if scanned.isEmpty, !captures.isEmpty {
+      if captures.allSatisfy({ $0.source == .sketch }) { return "compass: not needed for a sketch" }
+      if captures.allSatisfy({ $0.source == .walkthrough }) {
+        return "compass: not needed for a walkthrough"
+      }
+      return "compass: not needed"
+    }
     let captures = scanned
     let read = captures.filter { CompassState($0).isUsable }
     if read.isEmpty { return "compass: not recorded" }

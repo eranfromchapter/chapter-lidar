@@ -7,7 +7,8 @@
   public struct CapturesHomeActions {
     /// "New capture": step 1 of a new visit.
     public var newCapture: @MainActor () -> Void
-    /// "Sketch capture": step 1 of a new visit drawn from a sketch (spec F14), no LiDAR needed.
+    /// "Capture without LiDAR": step 1 of a new visit walked with the camera (spec F15) or drawn
+    /// from a sketch (spec F14); no LiDAR needed. The id stays `captures.sketchCapture`.
     public var sketchCapture: @MainActor () -> Void
     /// A row: the Capture overview (in progress) or Verdict received (sealed).
     public var open: @MainActor (CapturesHomeState.Row) -> Void
@@ -99,16 +100,16 @@
       .chapterScreenBackground()
       .chapterActionBar {
         // The primary button is the way in this phone can take: the scan with LiDAR, else the
-        // sketch (spec F14 2.1). The other stays as the tinted second button.
+        // capture without it (spec F14 2.1, F15 2). The other stays as the tinted second button.
         if state.canScan {
           Button("New capture") { actions.newCapture() }
             .buttonStyle(.chapter(.primary))
             .accessibilityIdentifier("captures.newCapture")
-          Button("Sketch capture") { actions.sketchCapture() }
+          Button(CapturesHomeState.withoutLidarButton) { actions.sketchCapture() }
             .buttonStyle(.chapter(.tinted))
             .accessibilityIdentifier("captures.sketchCapture")
         } else {
-          Button("Sketch capture") { actions.sketchCapture() }
+          Button(CapturesHomeState.withoutLidarButton) { actions.sketchCapture() }
             .buttonStyle(.chapter(.primary))
             .accessibilityIdentifier("captures.sketchCapture")
           Button("New capture") { actions.newCapture() }

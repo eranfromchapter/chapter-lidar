@@ -1,7 +1,8 @@
 import XCTest
 
 /// The sketch capture (spec F14, AC7) end to end in the Debug replay mode: Captures home →
-/// Sketch capture → New capture (no device gate) → What are you drawing from? (no sketch) →
+/// Capture without LiDAR → New capture (no device gate) → How do you want to measure? (Enter
+/// from a sketch, spec F15 2) → What are you drawing from? (no sketch) →
 /// Rooms and measurements (one rectangular bedroom with two walls, the ceiling, a door and a
 /// window) → Check ("Complete") → Finish floor → photos → the Capture overview's floor row
 /// says "sketch" → Before you leave → Package ready lists the sketch measurements and the mesh.
@@ -111,19 +112,20 @@ final class SketchFlowUITests: XCTestCase {
   func testSketchCaptureFromTheHomeToPackageReady() {
     launch()
 
-    // Captures home: "Sketch capture" next to "New capture", with the footnote (2.1).
+    // Captures home: "Capture without LiDAR" next to "New capture", with the footnote (2.1).
     XCTAssertTrue(app.staticTexts["Captures"].waitForExistence(timeout: 30))
     let sketch = app.buttons["captures.sketchCapture"]
     XCTAssertTrue(sketch.waitForExistence(timeout: 10))
+    XCTAssertEqual(sketch.label, "Capture without LiDAR")
     XCTAssertEqual(
       element("captures.sketchFootnote").label,
-      "No LiDAR? Photograph a sketch or plan and enter the measurements.")
-    shot("S01 Captures, with Sketch capture")
+      "No LiDAR? Walk the rooms with the camera, or enter the measurements from a sketch.")
+    shot("S01 Captures, with Capture without LiDAR")
     sketch.tap()
 
-    // New capture, step 1 of 4: the HUB project and the address, no device gate.
+    // New capture, step 1 of 5: the HUB project and the address, no device gate.
     XCTAssertTrue(app.staticTexts["New capture"].waitForExistence(timeout: 10))
-    XCTAssertTrue(app.staticTexts["Step 1 of 4"].exists)
+    XCTAssertTrue(app.staticTexts["Step 1 of 5"].exists)
     XCTAssertEqual(app.buttons["capture.continue"].label, "Choose a HUB project to continue")
     tap(app.buttons["capture.project"])
     tap(button("UI test visit"))
@@ -132,9 +134,18 @@ final class SketchFlowUITests: XCTestCase {
     shot("S02 New capture (sketch)")
     tap(app.buttons["capture.continue"])
 
+    // How do you want to measure? (spec F15 2): the walk is the default; enter from a sketch.
+    XCTAssertTrue(app.staticTexts["How to measure"].waitForExistence(timeout: 10))
+    XCTAssertTrue(app.staticTexts["Step 2 of 5"].exists)
+    waitForLabel(app.buttons["walkthrough.method.continue"], "Walk the rooms")
+    tap(app.buttons["walkthrough.method.sketch"])
+    waitForLabel(app.buttons["walkthrough.method.continue"], "Continue")
+    shot("S02b How do you want to measure, sketch")
+    tap(app.buttons["walkthrough.method.continue"])
+
     // What are you drawing from? No sketch; the floor and the mode as step 2 of a scan.
     XCTAssertTrue(app.staticTexts["What are you drawing from?"].waitForExistence(timeout: 10))
-    XCTAssertTrue(app.staticTexts["Step 2 of 4"].exists)
+    XCTAssertTrue(app.staticTexts["Step 3 of 5"].exists)
     XCTAssertEqual(app.textFields["sketch.floorName"].value as? String, "Floor 1")
     XCTAssertEqual(app.buttons["sketch.continue"].label, "Choose what you are drawing")
     tap(app.buttons["sketch.source.none"])
@@ -145,7 +156,7 @@ final class SketchFlowUITests: XCTestCase {
 
     // Rooms and measurements: the ceiling, then the one room's entry.
     XCTAssertTrue(app.staticTexts["Rooms and measurements"].waitForExistence(timeout: 10))
-    XCTAssertTrue(app.staticTexts["Step 3 of 4"].exists)
+    XCTAssertTrue(app.staticTexts["Step 4 of 5"].exists)
     enter("8' 0\"", into: "sketch.ceiling")
     let roomRow = app.buttons["sketch.room.room-1"]
     XCTAssertTrue(roomRow.waitForExistence(timeout: 10), "Continue adds the first room")
@@ -193,7 +204,7 @@ final class SketchFlowUITests: XCTestCase {
     // Check: the plan drawn from the solver, "Complete", Finish floor.
     XCTAssertTrue(app.buttons["sketch.finish"].waitForExistence(timeout: 10), "the Check screen")
     XCTAssertTrue(app.staticTexts["Check"].exists)
-    XCTAssertTrue(app.staticTexts["Step 4 of 4"].exists)
+    XCTAssertTrue(app.staticTexts["Step 5 of 5"].exists)
     let status = element("sketch.status")
     waitFor("the solver says Complete") { status.exists && status.label.contains("Complete") }
     XCTAssertTrue(element("sketch.plan").exists, "the Floorplan preview")

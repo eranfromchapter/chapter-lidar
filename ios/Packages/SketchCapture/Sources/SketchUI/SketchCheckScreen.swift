@@ -25,16 +25,58 @@
     }
 
     public var body: some View {
+      SketchCheckView(
+        result: model.result, solveError: model.solveError, missing: model.missingRequired,
+        completenessWord: model.completenessWord, caption: caption,
+        isFinishing: model.isFinishing, canFinish: model.canFinish, onFinish: onFinish
+      )
+      .task(id: model.measurements) { model.solve() }
+    }
+  }
+
+  /// The Check screen of a capture without LiDAR (spec F14 2.4, F15 2): the plan drawn from the
+  /// solver's model, the status, the notes (`leadingNotes` first: an AR walkthrough's
+  /// converter notes and scale, then the solver's), what is still to measure, and Finish floor.
+  /// The sketch flow and the walkthrough show the same screen with the same identifiers
+  /// (`sketch.plan`, `sketch.status`, `sketch.note.N`, `sketch.finish`).
+  public struct SketchCheckView: View {
+    let result: SketchSolveResult?
+    let solveError: String?
+    let leadingNotes: [String]
+    let missing: [String]
+    let completenessWord: String
+    let caption: String
+    let isFinishing: Bool
+    let canFinish: Bool
+    let onFinish: @MainActor () -> Void
+
+    public init(
+      result: SketchSolveResult?, solveError: String?, leadingNotes: [String] = [],
+      missing: [String] = [], completenessWord: String, caption: String, isFinishing: Bool,
+      canFinish: Bool, onFinish: @escaping @MainActor () -> Void
+    ) {
+      self.result = result
+      self.solveError = solveError
+      self.leadingNotes = leadingNotes
+      self.missing = missing
+      self.completenessWord = completenessWord
+      self.caption = caption
+      self.isFinishing = isFinishing
+      self.canFinish = canFinish
+      self.onFinish = onFinish
+    }
+
+    public var body: some View {
       ScrollView {
         VStack(alignment: .leading, spacing: ChapterTheme.Metric.sectionGapCompact) {
-          if let error = model.solveError {
+          if let error = solveError {
             Banner(icon: .blocked, text: error)
               .accessibilityIdentifier("sketch.solveError")
           }
           plan
           status
           notes
-          missing
+          missingSection
         }
         .sketchContent()
       }
@@ -44,12 +86,11 @@
       .chapterBackChevronOnly()
       .chapterScreenBackground()
       .chapterActionBar {
-        Button(model.isFinishing ? "Finishing\u{2026}" : "Finish floor") { onFinish() }
+        Button(isFinishing ? "Finishing\u{2026}" : "Finish floor") { onFinish() }
           .buttonStyle(.chapter(.primary))
-          .disabled(!model.canFinish)
+          .disabled(!canFinish)
           .accessibilityIdentifier("sketch.finish")
       }
-      .task(id: model.measurements) { model.solve() }
     }
 
     // MARK: Parts
@@ -57,10 +98,10 @@
     @ViewBuilder
     private var plan: some View {
       Group {
-        if let result = model.result {
+        if let result {
           SketchPlanCanvas(model: result.model)
         } else {
-          Text(model.solveError == nil ? "Solving\u{2026}" : "No plan")
+          Text(solveError == nil ? "Solving\u{2026}" : "No plan")
             .chapterTextStyle(.footnote)
             .foregroundStyle(ChapterTheme.Color.muted)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -76,7 +117,6 @@
     }
 
     private var status: some View {
-      let result = model.result
       let kind: StatusKind = result == nil ? .missing : (result!.isLimited ? .partly : .done)
       return ChapterSection(header: "Measurements") {
         HStack(spacing: ChapterTheme.Metric.rowGap) {
@@ -91,7 +131,7 @@
             }
           }
           .frame(maxWidth: .infinity, alignment: .leading)
-          StatusLabel(kind: kind, word: model.completenessWord)
+          StatusLabel(kind: kind, word: completenessWord)
         }
         .padding(.horizontal, ChapterTheme.Metric.rowPadding)
         .padding(.vertical, ChapterTheme.Metric.navigationRowVerticalPadding)
@@ -127,15 +167,19 @@
 
     @ViewBuilder
     private var notes: some View {
-      if let result = model.result {
+      if let result {
         ChapterSection(
           header: "Notes",
           footer: result.notes.isEmpty
             ? "Every wall and opening was measured; nothing was estimated."
             : "Estimated values carry low confidence in the capture model; the station names them."
         ) {
-          if result.notes.isEmpty {
+          if result.notes.isEmpty && leadingNotes.isEmpty {
             ProminentTextRow("Nothing derived, estimated or assumed.", isPlaceholder: true)
+          }
+          ForEach(Array(leadingNotes.enumerated()), id: \.offset) { index, note in
+            noteRow(note, kind: .done)
+              .accessibilityIdentifier("sketch.leadingNote.\(index)")
           }
           ForEach(Array(result.notes.enumerated()), id: \.offset) { index, note in
             HStack(alignment: .top, spacing: ChapterTheme.Metric.statusGlyphGap) {
@@ -171,9 +215,24 @@
       }
     }
 
+    private func noteRow(_ text: String, kind: StatusKind) -> some View {
+      HStack(alignment: .top, spacing: ChapterTheme.Metric.statusGlyphGap) {
+        StatusGlyph(kind, size: ChapterTheme.Metric.statusGlyph)
+          .padding(.top, 5)
+        Text(text)
+          .chapterTextStyle(.subhead)
+          .foregroundStyle(ChapterTheme.Color.ink)
+          .fixedSize(horizontal: false, vertical: true)
+          .frame(maxWidth: .infinity, alignment: .leading)
+      }
+      .padding(.horizontal, ChapterTheme.Metric.rowPadding)
+      .padding(.vertical, 10)
+      .accessibilityElement(children: .combine)
+    }
+
     @ViewBuilder
-    private var missing: some View {
-      let items = model.missingRequired
+    private var missingSection: some View {
+      let items = missing
       if !items.isEmpty {
         ChapterSection(
           header: "Still to measure",

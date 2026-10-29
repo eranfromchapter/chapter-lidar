@@ -11,11 +11,13 @@
   import Foundation
   import StationClient
   import SwiftUI
+  import WalkthroughUI
 
   enum UITestEnvironment {
     /// Replay scan of the bundled fixture capture, played step by step; the fixture's photo as
-    /// the camera; the scripted compass (`-ChapterUITestCompass`, critique R-24); and the
-    /// in-process station and token from AppCore. Nothing leaves the simulator.
+    /// the camera; the scripted compass (`-ChapterUITestCompass`, critique R-24); the scripted
+    /// AR walkthrough; and the in-process station and token from AppCore. Nothing leaves the
+    /// simulator.
     @MainActor
     static func services(fixture: String, cacheRoot: URL, options: UITestLaunchOptions)
       -> AppServices
@@ -75,6 +77,16 @@
         // Short, so a test sees the notice of a change without waiting 10 s.
         revisionNoticeDelay: 1.5)
       services.stationPhotoBlobs = { stub.erasePhotoBlobs() }
+      // The AR walkthrough (spec F15): ARKit does not run on the simulator, so a scripted walk
+      // of a 4 × 3 m bedroom stands in, one point per tap of + (UITestWalkthroughBedroom.json).
+      services.canWalk = true
+      services.makeWalkthroughSession = {
+        let url = Bundle.main.url(forResource: "UITestWalkthroughBedroom", withExtension: "json")
+        let script =
+          url.flatMap { try? WalkthroughReplayScript.load(from: $0) }
+          ?? WalkthroughReplayScript(floorY: 0, eye: Vec3(x: 0, y: 1.5, z: 0), points: [])
+        return ReplayWalkthroughSession(script: script)
+      }
       return services
     }
 

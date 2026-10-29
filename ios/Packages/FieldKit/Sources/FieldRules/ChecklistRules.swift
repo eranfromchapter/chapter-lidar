@@ -284,7 +284,7 @@ public enum ChecklistRules {
         skippedRooms(captures, input, wording),
         photoPerRoom(captures, input, wording),
         minimumControls(captures, input, policy),
-        compassItem(compass, hasCaptures: !captures.isEmpty),
+        compassItem(compass, captures: captures),
         visitDetails(input, wording),
       ],
       compass: compass)
@@ -412,10 +412,9 @@ public enum ChecklistRules {
       let checks =
         controls.distances.count + controls.ceilingHeights.count + controls.openings.count
         + controls.floorToFloor.count + controls.landmarks.count
-      // A visit of sketch captures only (spec F14): the measurements are the operator's.
-      let measured =
-        !captures.isEmpty && captures.allSatisfy({ $0.source == .sketch })
-        ? "Measured from the sketch" : "Measured by the LiDAR scan"
+      // A visit of sketch or walkthrough captures only (spec F14, F15): the measurements are
+      // the operator's.
+      let measured = measuredBy(captures)
       let detail =
         checks == 0
         ? measured
@@ -450,18 +449,30 @@ public enum ChecklistRules {
       gaps: gaps)
   }
 
+  /// Who measured a visit's floors, for the controls item when manual controls are optional:
+  /// the LiDAR scan, the sketch (spec F14), the AR walkthrough (spec F15), or both of the last.
+  static func measuredBy(_ captures: [CaptureRecord.Capture]) -> String {
+    guard !captures.isEmpty, captures.allSatisfy({ $0.source.isMeasuredPlan }) else {
+      return "Measured by the LiDAR scan"
+    }
+    if captures.allSatisfy({ $0.source == .sketch }) { return "Measured from the sketch" }
+    if captures.allSatisfy({ $0.source == .walkthrough }) { return "Measured by the AR walkthrough" }
+    return "Measured from the sketch and the AR walkthrough"
+  }
+
   // MARK: 5 Compass reading (advisory)
 
   /// Passes when every capture's compass is verified; otherwise ▲ with the per-capture words
-  /// and what the plans will say. Never blocks and carries no gaps. A visit of sketch captures
-  /// only has no compass to read (spec F14 1.7): the item passes and says so.
-  private static func compassItem(_ entries: [CompassSummary.Entry], hasCaptures: Bool)
-    -> ChecklistItem
-  {
+  /// and what the plans will say. Never blocks and carries no gaps. A visit of sketch or AR
+  /// walkthrough captures only has no compass to read (spec F14 1.7, F15 5): the item passes
+  /// and says so.
+  private static func compassItem(
+    _ entries: [CompassSummary.Entry], captures: [CaptureRecord.Capture]
+  ) -> ChecklistItem {
     guard !entries.isEmpty else {
-      if hasCaptures {
+      if !captures.isEmpty {
         return ChecklistItem(
-          id: .compass, passed: true, detail: CompassSummary.sketchOnlyDetail, gaps: [])
+          id: .compass, passed: true, detail: CompassSummary.noScanDetail(captures), gaps: [])
       }
       return ChecklistItem(
         id: .compass, passed: false, detail: "No floor or area has been captured", gaps: [])

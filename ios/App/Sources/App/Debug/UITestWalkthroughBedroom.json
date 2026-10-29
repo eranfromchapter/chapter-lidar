@@ -1,0 +1,19 @@
+{
+  "floorY": 0.0,
+  "eye": [2.0, 1.5, -1.5],
+  "points": [
+    { "note": "corner 1", "target": [0.0, 0.0, 0.0] },
+    { "note": "corner 2", "target": [4.0, 0.0, 0.0] },
+    { "note": "corner 3", "target": [4.0, 0.0, -3.0] },
+    { "note": "corner 4", "target": [0.0, 0.0, -3.0] },
+    { "note": "closing tap, 36 mm from corner 1", "target": [0.03, 0.0, 0.02] },
+    { "note": "ceiling line on wall 3", "target": [2.0, 2.44, -3.0] },
+    { "note": "door 1 left jamb, wall 3, at the floor", "target": [3.6, 0.0, -3.0] },
+    { "note": "door 1 right jamb", "target": [2.7, 0.0, -3.0] },
+    { "note": "door 1 head", "target": [3.15, 2.03, -3.0] },
+    { "note": "window 1 left jamb, wall 1", "target": [1.5, 1.5, 0.0] },
+    { "note": "window 1 right jamb", "target": [2.5, 1.5, 0.0] },
+    { "note": "window 1 sill", "target": [2.0, 0.9, 0.0] },
+    { "note": "window 1 head", "target": [2.0, 2.1, 0.0] }
+  ]
+}

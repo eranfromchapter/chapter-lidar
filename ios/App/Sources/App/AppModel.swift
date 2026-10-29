@@ -9,6 +9,7 @@ import Observation
 import PackageCore
 import PackageTransport
 import StationClient
+import WalkthroughUI
 
 /// What the app runs on: the station client, the project list, the blob transport, the scan
 /// session factory, the compass and the camera. `live` is the real phone; the UI-test and
@@ -39,6 +40,12 @@ struct AppServices {
   /// Erases the photo blobs the in-process stub station holds ("Delete all photos"); set by the
   /// field-test and UI-test environments only. Returns how many were removed.
   var stationPhotoBlobs: (@Sendable () -> Int)? = nil
+  /// The AR walkthrough's session (spec F15): ARKit world tracking on the phone, a scripted
+  /// replay in UI tests.
+  var makeWalkthroughSession: @MainActor () -> any WalkthroughSession = { LiveWalkthroughSession() }
+  /// The phone runs ARKit world tracking (every iPhone with iOS 17): "Walk the rooms with the
+  /// camera" can be chosen. The LiDAR gate (`DeviceGate`) is for scans only.
+  var canWalk: Bool = LiveWalkthroughSession.isSupported
 
   /// The photo step's heading provider over `compass`.
   @MainActor var photoHeading: PhotoHeadingProviding? {

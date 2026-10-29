@@ -122,13 +122,14 @@ extension VisitPackageBuilder {
   }
 
   /// The originals of every capture are still in the workspace (the scan's RoomPlan file, a
-  /// sketch capture's measurements): a revision or a re-seal can be built. False when the
+  /// sketch or AR walkthrough capture's measurements): a revision or a re-seal can be built.
+  /// False when the
   /// visit's folder no longer holds them (moved or removed).
   public func hasOriginals(of record: CaptureRecord) -> Bool {
     !record.captures.isEmpty
       && record.captures.allSatisfy { capture in
         let name =
-          capture.source == .sketch
+          capture.source.isMeasuredPlan
           ? PackageLayout.sketchMeasurementsFileName
           : RawOriginalsNaming.originals.roomPlanFileName
         return FileManager.default.fileExists(

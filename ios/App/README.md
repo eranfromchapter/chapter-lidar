@@ -31,9 +31,10 @@ overview** (floors, photos, field controls, compass, rooms not scanned; the gate
   (Tabloid 11 x 17, PlanExport), DXF, CSV, PNG and SVG; the phone no longer writes a Spatial
   Report PDF (the station makes the spatial report after its checks). The in-app Floorplan screen
   (`FloorplanView`) keeps the colour Floorplan, with the north arrow when the reading is usable.
-- **Sketch capture (spec F14).** The Captures home's second button (the primary one on a phone
-  without LiDAR, `CapturesHomeState.canScan`): the same New capture step without the device gate
-  (`CaptureFlowModel(purpose: .sketch)`), then `SketchUI`'s What are you drawing from? (camera,
+- **Sketch capture (spec F14).** The Captures home's second button, "Capture without LiDAR" (the
+  primary one on a phone without LiDAR, `CapturesHomeState.canScan`): the same New capture step
+  without the device gate (`CaptureFlowModel(purpose: .sketch)`), How to measure → Enter from a
+  sketch (below), then `SketchUI`'s What are you drawing from? (camera,
   Photos, a file, or no sketch), Rooms and measurements (`SketchEntryModel`, the required set of
   the spec's 1.6 per room) and Check (the solver's plan, "Complete" or "Limited"). Finish floor
   writes `sketch.<ext>` and `sketch-measurements.json` into the capture's originals folder
@@ -42,6 +43,25 @@ overview** (floors, photos, field controls, compass, rooms not scanned; the gate
   (`SketchMesh`), no point cloud. The capture record carries `captureSource: sketch` and the
   solver's `sketch` summary; the overview's floor row says "sketch" (and "limited"); no compass
   is asked for a sketch capture.
+- **AR walkthrough (spec F15).** "Capture without LiDAR" on the Captures home (id
+  `captures.sketchCapture`, the primary button on a phone without LiDAR) leads, after New capture,
+  to How to measure (`MeasureMethodScreen`): **Walk the rooms with the camera** (recommended, the
+  default wherever `ARWorldTrackingConfiguration.isSupported`, `AppServices.canWalk`) or **Enter
+  from a sketch** (the F14 screens above, unchanged). The walk is a full-screen cover
+  (`WalkthroughUI`'s `WalkthroughScreen` over `WalkthroughModel`): per room a name card, then the
+  floor corners with a centre reticle and the + button (or "Tap each wall" for furniture in a
+  corner), the closing tap on the first corner, the ceiling line, doors, windows and openings
+  (jambs, sill, head; points on a wall are where the centre ray meets the wall's vertical plane),
+  Undo, a live 2D outline with wall lengths, and tracking messages that disable +. The live
+  session (`LiveWalkthroughSession`, ARKit world tracking, no LiDAR) records `walkthrough.mp4`
+  (15 fps, 1280 px, HEVC or H.264) and every frame's pose (`WalkthroughRecorder`); in UI tests
+  `ReplayWalkthroughSession` plays `Debug/UITestWalkthroughBedroom.json`. Done → **Check the
+  scale** (tape one walked wall, or skip) → **Check** (the F14 Check screen, solved from the
+  converter's measurements) → Finish floor writes `walkthrough-log.json`, `walkthrough.mp4` and
+  the derived `sketch-measurements.json` (`WalkthroughFloorWriter`); the capture record carries
+  `captureSource: walkthrough` with the `sketch` and `walkthrough` summaries and no compass. The
+  package lists the log and video as originals, the measurements derived from the log, the model
+  from both, the plans and the extruded mesh; the overview's floor row says "walked".
 - **Rooms not scanned.** On Before you leave the skipped-rooms row fails until a room note exists
   or the operator taps **All rooms scanned**. The tap is kept in `VisitFlow`
   (`confirmNoRoomsSkipped()`, FieldRules' `NoRoomsSkippedConfirmation`) and covers only the
@@ -54,7 +74,7 @@ overview** (floors, photos, field controls, compass, rooms not scanned; the gate
 | `Sources/App/` | SwiftUI app: `AppModel`, `HomeModel`, `VisitModel`, `CompassPhotoHeading`, MSAL sign-in (`Auth/`), background upload hook (`AppDelegate`) (`.apple-only`) |
 | `Sources/App/Views/` | `AppNavigation` (the one stack), `RootView`, `PackageScreens`, `FloorplanView`, `ScanViewer` |
 | `Sources/App/Debug/` | UI-test and field-test modes (`UITest*`, `FieldTest*`), Debug only |
-| `UITests/` | `ReplayFlowUITests`: replays the box-room fixture through every screen to the verdict; `SketchFlowUITests`: the sketch capture (spec F14) from the Captures home to Package ready |
+| `UITests/` | `ReplayFlowUITests`: replays the box-room fixture through every screen to the verdict; `SketchFlowUITests`: the sketch capture (spec F14) from the Captures home to Package ready; `WalkthroughFlowUITests`: the AR walkthrough (spec F15) in the replay mode, from the Captures home to Package ready |
 | `Config/*.xcconfig` | Configuration (placeholders committed, no secrets; `Local.xcconfig` is not committed) |
 | `Resources/` | `Info.plist`, `App.entitlements` (MSAL Keychain group) |
 

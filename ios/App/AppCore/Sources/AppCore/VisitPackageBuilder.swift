@@ -37,8 +37,16 @@ public enum AppGenerators {
   public static let captureCore = "chapter-capture-ios/CaptureCore"
   public static let meshExport = "chapter-capture-ios/MeshExport"
   public static let fieldKit = "chapter-capture-ios/FieldKit"
-  /// The originals of a sketch capture (spec F14): the sketch image and the measurements.
+  /// The originals of a sketch capture (spec F14): the sketch image and the measurements; of
+  /// an AR walkthrough (spec F15): the video, the log and the measurements derived from it.
   public static let sketchCapture = "chapter-capture-ios/SketchCapture"
+}
+
+/// File names of an AR walkthrough's originals in its capture's folder (spec F15 2) besides
+/// `PackageLayout.walkthroughLogFileName` and `sketchMeasurementsFileName`.
+public enum WalkthroughOriginals {
+  /// The recorded camera video (role `walkthrough_video`); absent when nothing was recorded.
+  public static let videoFileName = "walkthrough.mp4"
 }
 
 /// One planned package: the draft (not yet sealed) and what the "Package ready" screen shows.
@@ -60,7 +68,9 @@ public struct VisitPackagePlan: Sendable {
 /// capture (spec F14, `captureSource == .sketch`) has the sketch image and
 /// `sketch-measurements.json` as its originals, its model solved from the measurements with
 /// both in `derivedFrom`, the same plan files, and the mesh extruded from the model (no point
-/// cloud). Visit-wide: `capture-record.json` and `field-controls.json`. Then every saved photo,
+/// cloud). An AR walkthrough (spec F15, `.walkthrough`) is built the same way from
+/// `walkthrough-log.json` (and `walkthrough.mp4` when recorded), with the measurements derived
+/// from the log. Visit-wide: `capture-record.json` and `field-controls.json`. Then every saved photo,
 /// with its recorded SHA-256 and size as the expected fingerprint (assembly fails if a photo
 /// changed).
 ///
@@ -92,7 +102,8 @@ public struct VisitPackageBuilder: Sendable {
       .appendingPathComponent(capture.captureId.rawValue, isDirectory: true)
   }
 
-  /// The sketch measurements of a sketch capture, read from its originals folder.
+  /// The sketch measurements of a sketch or AR walkthrough capture, read from its originals
+  /// folder.
   public func sketchMeasurements(of capture: CaptureRecord.Capture) throws -> SketchMeasurements {
     let url = originalsDirectory(of: capture)
       .appendingPathComponent(PackageLayout.sketchMeasurementsFileName)
@@ -113,7 +124,7 @@ public struct VisitPackageBuilder: Sendable {
   public func namedCaptureModel(
     of capture: CaptureRecord.Capture, visitId: LowercaseUUID, names: [RoomName]
   ) throws -> NamedCaptureModel {
-    if capture.source == .sketch {
+    if capture.source.isMeasuredPlan {
       return try namedSketchModel(of: capture, names: names)
     }
     let directory = originalsDirectory(of: capture)
@@ -139,7 +150,8 @@ public struct VisitPackageBuilder: Sendable {
     }
   }
 
-  /// A sketch capture's model, solved from `sketch-measurements.json` (spec F14 2.1). The
+  /// A sketch (or AR walkthrough) capture's model, solved from `sketch-measurements.json` (spec
+  /// F14 2.1, F15 3). The
   /// operator's room names are the solver's labels already; a later rename (`VisitRoomNames`)
   /// applies by room id and footprint as it does to a scan, so the rooms are relabelled here
   /// without mapping anything.
@@ -255,7 +267,7 @@ public struct VisitPackageBuilder: Sendable {
     _ capture: CaptureRecord.Capture, record: CaptureRecord, names: [RoomName], draftFolder: URL,
     to draft: inout PackageDraft
   ) throws {
-    if capture.source == .sketch {
+    if capture.source.isMeasuredPlan {
       try addSketchCapture(capture, record: record, names: names, draftFolder: draftFolder, to: &draft)
       return
     }
@@ -292,7 +304,9 @@ public struct VisitPackageBuilder: Sendable {
 
   /// A sketch capture (spec F14 2.1): the sketch image (when there is one) and the measurements
   /// as originals, the model solved from the measurements (`derivedFrom` both), the plan files,
-  /// and `mesh.glb`, `mesh.obj` + `mesh.mtl` extruded from the model. No point cloud.
+  /// and `mesh.glb`, `mesh.obj` + `mesh.mtl` extruded from the model. No point cloud. An AR
+  /// walkthrough (spec F15) has the video (when recorded) and the log as originals, the
+  /// measurements derived from the log, and the model derived from the measurements and the log.
   func addSketchCapture(
     _ capture: CaptureRecord.Capture, record: CaptureRecord, names: [RoomName], draftFolder: URL,
     to draft: inout PackageDraft
@@ -302,21 +316,25 @@ public struct VisitPackageBuilder: Sendable {
     let exports = exportsFolder(of: capture, in: draftFolder)
 
     var originalPaths: [String] = []
-    if let image = Self.sketchImage(in: originals) {
+    if capture.source == .walkthrough {
+      originalPaths = try addWalkthroughOriginals(ref: ref, originals: originals, to: &draft)
+    } else {
+      if let image = Self.sketchImage(in: originals) {
+        originalPaths.append(
+          try draft.add(
+            PackageFileInput(
+              source: image.url, role: .sketchImage, fileName: image.url.lastPathComponent,
+              capture: ref, mime: image.mime, generator: AppGenerators.sketchCapture,
+              generatorVersion: appVersion)))
+      }
       originalPaths.append(
         try draft.add(
           PackageFileInput(
-            source: image.url, role: .sketchImage, fileName: image.url.lastPathComponent,
-            capture: ref, mime: image.mime, generator: AppGenerators.sketchCapture,
+            source: originals.appendingPathComponent(PackageLayout.sketchMeasurementsFileName),
+            role: .sketchMeasurements, fileName: PackageLayout.sketchMeasurementsFileName,
+            capture: ref, mime: "application/json", generator: AppGenerators.sketchCapture,
             generatorVersion: appVersion)))
     }
-    originalPaths.append(
-      try draft.add(
-        PackageFileInput(
-          source: originals.appendingPathComponent(PackageLayout.sketchMeasurementsFileName),
-          role: .sketchMeasurements, fileName: PackageLayout.sketchMeasurementsFileName,
-          capture: ref, mime: "application/json", generator: AppGenerators.sketchCapture,
-          generatorVersion: appVersion)))
 
     let model = try captureModel(of: capture, visitId: record.visitId, names: names)
     let modelPath = try draft.add(
@@ -350,6 +368,35 @@ public struct VisitPackageBuilder: Sendable {
     }
   }
 
+  /// An AR walkthrough's originals (spec F15 4): `walkthrough.mp4` (when it was recorded),
+  /// `walkthrough-log.json`, and `sketch-measurements.json` derived from the log. Returns the
+  /// paths the capture model is derived from: the measurements, then the log.
+  func addWalkthroughOriginals(
+    ref: CaptureRef, originals: URL, to draft: inout PackageDraft
+  ) throws -> [String] {
+    let video = originals.appendingPathComponent(WalkthroughOriginals.videoFileName)
+    if FileManager.default.fileExists(atPath: video.path) {
+      try draft.add(
+        PackageFileInput(
+          source: video, role: .walkthroughVideo, fileName: WalkthroughOriginals.videoFileName,
+          capture: ref, mime: "video/mp4", generator: AppGenerators.sketchCapture,
+          generatorVersion: appVersion))
+    }
+    let logPath = try draft.add(
+      PackageFileInput(
+        source: originals.appendingPathComponent(PackageLayout.walkthroughLogFileName),
+        role: .walkthroughLog, fileName: PackageLayout.walkthroughLogFileName, capture: ref,
+        mime: "application/json", generator: AppGenerators.sketchCapture,
+        generatorVersion: appVersion))
+    let measurementsPath = try draft.add(
+      PackageFileInput(
+        source: originals.appendingPathComponent(PackageLayout.sketchMeasurementsFileName),
+        role: .sketchMeasurements, fileName: PackageLayout.sketchMeasurementsFileName,
+        capture: ref, mime: "application/json", generator: AppGenerators.sketchCapture,
+        generatorVersion: appVersion, derivedFrom: [logPath]))
+    return [measurementsPath, logPath]
+  }
+
   /// The sketch image of a sketch capture's originals folder: `sketch.jpg`, `.png`, `.heic` or
   /// `.pdf`, whichever exists (one per capture); nil for a capture without a sketch.
   static func sketchImage(in originals: URL) -> (url: URL, mime: String)? {
@@ -364,9 +411,16 @@ public struct VisitPackageBuilder: Sendable {
   }
 
   /// The package paths of a capture's originals as the draft holds them: the raw RoomPlan file
-  /// of a scan; the sketch image (when listed) and the measurements of a sketch capture.
+  /// of a scan; the sketch image (when listed) and the measurements of a sketch capture; the
+  /// measurements and the log of an AR walkthrough (the paths its model is derived from).
   func originalPaths(of capture: CaptureRecord.Capture, in draft: PackageDraft) throws -> [String] {
     let ref = CaptureRef(captureId: capture.captureId, areaKey: capture.areaKey)
+    if capture.source == .walkthrough {
+      let entries = draft.entries.filter { $0.input.capture == ref }
+      return [FileRole.sketchMeasurements, .walkthroughLog].compactMap { role in
+        entries.first { $0.input.role == role }?.path
+      }
+    }
     guard capture.source == .sketch else {
       return [
         try draft.path(

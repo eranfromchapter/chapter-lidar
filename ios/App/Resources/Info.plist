@@ -39,7 +39,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Chapter Capture uses the camera for site photos and the LiDAR room scan.</string>
+	<string>Chapter Capture uses the camera for site photos, the LiDAR room scan and the walkthrough of the rooms.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Chapter Capture uses your location only to turn the compass into true north on the plans. Your location is not saved.</string>
 	<key>UIBackgroundModes</key>

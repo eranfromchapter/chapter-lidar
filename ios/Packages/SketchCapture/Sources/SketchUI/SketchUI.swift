@@ -28,7 +28,7 @@
 
   extension View {
     /// The content column of a sketch screen, as the capture screens have it.
-    func sketchContent(top: CGFloat = ChapterTheme.Metric.contentTopCompact) -> some View {
+    public func sketchContent(top: CGFloat = ChapterTheme.Metric.contentTopCompact) -> some View {
       padding(.horizontal, ChapterTheme.Metric.screenPadding)
         .padding(.top, top)
         .padding(.bottom, ChapterTheme.Metric.sectionGap)
@@ -38,7 +38,7 @@
     /// The right-hand caption of the navigation bar at its own width ("Step 2 of 4", or the
     /// project title when adding a floor), cut short with "…" at 280 pt before it reaches the
     /// back button. Footnote, muted, one line; text, not a button.
-    func sketchNavigationCaption(_ text: String) -> some View {
+    public func sketchNavigationCaption(_ text: String) -> some View {
       toolbar {
         PlainToolbarItem(placement: .topBarTrailing) {
           SketchCappedWidth(maxWidth: 280) {
@@ -58,15 +58,28 @@
   /// aligned, the numbers-and-punctuation keyboard so feet and inch marks are at hand), the
   /// unit after it (footnote muted) and the Measured / About chip; under it, what is stored
   /// ("7,518 mm · 24' 8"") or why the value is refused. Min height 52, padding 8 × 16.
-  struct SketchLengthRow: View {
+  public struct SketchLengthRow: View {
     let title: String
     @Binding var field: SketchLengthField
     /// `sketch.wall.wall-1.length`: the field; `.measured` is appended for the chip.
     let identifier: String
     var subtitle: String? = nil
+    /// Draws the Measured / About chip (a tape check is always measured: no chip).
+    var showsMeasuredChip = true
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    var body: some View {
+    public init(
+      title: String, field: Binding<SketchLengthField>, identifier: String, subtitle: String? = nil,
+      showsMeasuredChip: Bool = true
+    ) {
+      self.title = title
+      self._field = field
+      self.identifier = identifier
+      self.subtitle = subtitle
+      self.showsMeasuredChip = showsMeasuredChip
+    }
+
+    public var body: some View {
       VStack(alignment: .leading, spacing: 4) {
         let stacked = dynamicTypeSize.isAccessibilitySize
         let layout =
@@ -102,22 +115,9 @@
               .chapterTextStyle(.footnote)
               .foregroundStyle(ChapterTheme.Color.muted)
               .accessibilityHidden(true)
-            Button(field.measured ? "Measured" : "About") {
-              field.measured.toggle()
+            if showsMeasuredChip {
+              measuredChip
             }
-            .buttonStyle(.plain)
-            .chapterTextStyle(.footnote)
-            .foregroundStyle(
-              field.measured ? ChapterTheme.Color.surface : ChapterTheme.Color.ink
-            )
-            .padding(.horizontal, 8)
-            .frame(minHeight: 28)
-            .background(
-              field.measured ? ChapterTheme.Color.ink : ChapterTheme.Color.nude,
-              in: RoundedRectangle(cornerRadius: ChapterTheme.Metric.chipRadius))
-            .accessibilityLabel(Text("\(title): \(field.measured ? "measured" : "about")"))
-            .accessibilityHint(Text("Switches between a measured value and an estimate"))
-            .accessibilityIdentifier("\(identifier).measured")
           }
         }
         if let error = field.errorMessage {
@@ -136,6 +136,25 @@
       .padding(.horizontal, ChapterTheme.Metric.rowPadding)
       .padding(.vertical, ChapterTheme.Metric.navigationRowVerticalPadding)
       .frame(maxWidth: .infinity, minHeight: ChapterTheme.Metric.navigationRowHeight, alignment: .leading)
+    }
+
+    private var measuredChip: some View {
+      Button(field.measured ? "Measured" : "About") {
+        field.measured.toggle()
+      }
+      .buttonStyle(.plain)
+      .chapterTextStyle(.footnote)
+      .foregroundStyle(
+        field.measured ? ChapterTheme.Color.surface : ChapterTheme.Color.ink
+      )
+      .padding(.horizontal, 8)
+      .frame(minHeight: 28)
+      .background(
+        field.measured ? ChapterTheme.Color.ink : ChapterTheme.Color.nude,
+        in: RoundedRectangle(cornerRadius: ChapterTheme.Metric.chipRadius))
+      .accessibilityLabel(Text("\(title): \(field.measured ? "measured" : "about")"))
+      .accessibilityHint(Text("Switches between a measured value and an estimate"))
+      .accessibilityIdentifier("\(identifier).measured")
     }
   }
 

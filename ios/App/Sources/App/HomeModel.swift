@@ -14,12 +14,19 @@ enum AppRoute: Hashable {
   case newCapture
   /// What are you scanning?, step 2 (a new visit's, or a further floor's).
   case scanSetup
-  /// What are you drawing from?, step 2 of a sketch capture (spec F14).
+  /// How do you want to measure?, step 2 of a capture without LiDAR (spec F15 2).
+  case measureMethod
+  /// What are you drawing from?, step 3 of a sketch capture (spec F14).
   case sketchSource
-  /// Rooms and measurements, step 3 of a sketch capture.
+  /// Rooms and measurements, step 4 of a sketch capture.
   case sketchRooms
-  /// Check, step 4 of a sketch capture.
+  /// Check, step 5 of a sketch capture.
   case sketchCheck
+  /// Check the scale, step 4 of an AR walkthrough (spec F15; the walk itself, step 3, is a
+  /// full-screen cover).
+  case walkthroughScale
+  /// Check, step 5 of an AR walkthrough.
+  case walkthroughCheck
   /// The Capture overview.
   case overview
   /// The photo step (viewfinder, then Label a photo).
@@ -114,8 +121,8 @@ final class HomeModel {
     openNewVisit(sketch: false)
   }
 
-  /// "Sketch capture" (spec F14): step 1 of a new visit drawn from a sketch, no LiDAR needed.
-  /// Nothing is written until the rooms screen opens.
+  /// "Capture without LiDAR" (spec F14, F15): step 1 of a new visit walked with the camera or
+  /// drawn from a sketch. Nothing is written until the walk starts or the rooms screen opens.
   func sketchCapture() {
     openNewVisit(sketch: true)
   }

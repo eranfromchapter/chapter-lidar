@@ -43,7 +43,7 @@
         named: "home-ax3", contentSize: .accessibilityExtraLarge)
     }
 
-    /// A phone without LiDAR (spec F14 2.1): "Sketch capture" is the primary button and "New
+    /// A phone without LiDAR (spec F14 2.1, F15 2): "Capture without LiDAR" is the primary button and "New
     /// capture" stays, tinted, to explain the device gate.
     func testHomeWithoutLidar() {
       var state = F.homeDrawn
