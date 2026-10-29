@@ -111,6 +111,8 @@ targets:
       - package: SketchCapture
         product: Walkthrough
       - package: SketchCapture
+        product: SketchReading
+      - package: SketchCapture
         product: WalkthroughUI
       - package: MSAL
         product: MSAL

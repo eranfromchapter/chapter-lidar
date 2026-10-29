@@ -35,6 +35,7 @@ let package = Package(
     .library(name: "SketchEntry", targets: ["SketchEntry"]),
     .library(name: "SketchUI", targets: ["SketchUI"]),
     .library(name: "Walkthrough", targets: ["Walkthrough"]),
+    .library(name: "SketchReading", targets: ["SketchReading"]),
     .library(name: "WalkthroughUI", targets: ["WalkthroughUI"]),
   ],
   dependencies: [
@@ -82,6 +83,20 @@ let package = Package(
     .target(
       name: "Walkthrough",
       dependencies: ["SketchSolver", .product(name: "CaptureContract", package: "swift")]
+    ),
+    // What Claude read from a sketch photo -> SketchMeasurements (spec F16). Linux-tested.
+    .target(
+      name: "SketchReading",
+      dependencies: ["SketchSolver", .product(name: "CaptureContract", package: "swift")]
+    ),
+    .testTarget(
+      name: "SketchReadingTests",
+      dependencies: [
+        "SketchReading", "SketchSolver", "SketchMesh",
+        .product(name: "CaptureContract", package: "swift"),
+        .product(name: "CaptureTestSupport", package: "CaptureCore"),
+        .product(name: "MeshExport", package: "MeshExport"),
+      ]
     ),
     .target(
       name: "WalkthroughUI",
