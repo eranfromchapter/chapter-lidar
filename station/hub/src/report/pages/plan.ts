@@ -190,8 +190,17 @@ export function drawPlanPage(
 ): void {
   const { canvas, model, index } = ctx;
   const floor = model.floors[floorIndex] as ModelFloor;
-  /** A sketch capture (spec F14 1.7): the page says so under the floor title and in the notes. */
-  const sketch = floor.capture !== undefined && captureSourceOf(floor.capture) === "sketch";
+  /**
+   * A sketch capture (spec F14 1.7) or an AR walkthrough (spec F15 5): the page says so under the
+   * floor title and in the notes. A LiDAR scan's page says nothing of the kind.
+   */
+  const source = floor.capture === undefined ? "lidar" : captureSourceOf(floor.capture);
+  const sourceNote =
+    source === "sketch"
+      ? { title: WORDS.sketchCapture, note: WORDS.sketchPlanNote }
+      : source === "walkthrough"
+        ? { title: WORDS.walkthroughCapture, note: WORDS.walkthroughPlanNote }
+        : undefined;
   drawFrame(ctx, {
     kicker: ["Floor plan", floorKicker(model, floorIndex)],
     statement: "short",
@@ -214,8 +223,8 @@ export function drawPlanPage(
   } else {
     canvas.line(floor.label, TYPE.section, LEFT_X, 102, { maxWidth: LEFT_WIDTH });
     let noteTop = 102 + 19 + 6;
-    if (sketch) {
-      canvas.line(WORDS.sketchCapture, { ...TYPE.table, color: COLOR.muted }, LEFT_X, noteTop);
+    if (sourceNote !== undefined) {
+      canvas.line(sourceNote.title, { ...TYPE.table, color: COLOR.muted }, LEFT_X, noteTop);
       noteTop += TYPE.table.line + 2;
     }
     const text =
@@ -240,8 +249,8 @@ export function drawPlanPage(
   const drawable =
     floor.metrics !== undefined &&
     !(floor.rooms.length === 0 && floor.metrics.geometry.walls.length === 0);
-  if (sketch) {
-    notes.push(WORDS.sketchPlanNote);
+  if (sourceNote !== undefined) {
+    notes.push(sourceNote.note);
   }
   if (drawable) {
     notes.push(WORDS.planNote);

@@ -26,8 +26,9 @@ import {
 
 /**
  * Station component and rule set version written into every verdict. 1.1.0 added
- * `orientation.compass` (13 rules); 1.2.0 adds `sketch.measurements` (14 rules, spec F14) and
- * leaves a sketch capture ungraded by `orientation.compass`. People read it as
+ * `orientation.compass` (13 rules); 1.2.0 adds `sketch.measurements` (14 rules, spec F14; AR
+ * walkthrough captures too, spec F15) and leaves a sketch or walkthrough capture ungraded by
+ * `orientation.compass`. People read it as
  * "station-checks v1.2.0" (contract `ruleSetLabel`).
  */
 export const EVALUATOR = { name: "chapter-capture-station/checks", version: "1.2.0" } as const;

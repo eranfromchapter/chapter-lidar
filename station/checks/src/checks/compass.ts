@@ -17,12 +17,15 @@
 // A sketch capture (capture record 1.2.0, `captureSource: sketch`; spec F14 1.7) is not graded
 // under either policy: it has no scan frame to read a heading into, so it gets one info finding,
 // "Sketch capture: the plan is oriented as drawn; north is not shown.", and does not count as a
-// graded capture.
+// graded capture. An AR walkthrough capture (`captureSource: walkthrough`, spec F15 5) is not
+// graded either: the app does not read a heading for it, so it gets "AR walkthrough: the plan is
+// oriented as walked; north is not shown."
 
 import {
   COMPASS_VERIFIED_MAX,
   captureSourceOf,
   compassDetail,
+  isMeasuredPlanSource,
   compassState,
   type Capture,
   type CaptureRecord,
@@ -45,6 +48,10 @@ export const ORIENTATION_NOT_VERIFIED = "Plan orientation is not verified; north
 /** The info finding of a sketch capture (spec F14 1.7): the plan is drawn as sketched. */
 export const SKETCH_ORIENTATION =
   "Sketch capture: the plan is oriented as drawn; north is not shown.";
+
+/** The info finding of an AR walkthrough capture (spec F15 5): the plan is oriented as walked. */
+export const WALKTHROUGH_ORIENTATION =
+  "AR walkthrough: the plan is oriented as walked; north is not shown.";
 
 /** What the rule expects of every capture. */
 export const COMPASS_EXPECTED = `a compass reading at scan start, true north, accuracy ±${COMPASS_VERIFIED_MAX}° or better`;
@@ -157,19 +164,25 @@ function legacyCaptureFinding(
   });
 }
 
-/** True for a sketch capture: not graded, there is no scan frame to read a heading into. */
+/**
+ * True for a sketch or AR walkthrough capture: not graded, there is no scan frame with a heading
+ * (a sketch has no frame at all; the app reads no heading for a walkthrough).
+ */
 function isSketch(capture: Capture): boolean {
-  return captureSourceOf(capture) === "sketch";
+  return isMeasuredPlanSource(captureSourceOf(capture));
 }
 
-/** The info finding of a sketch capture. Nothing is expected of it. */
+/** The info finding of a sketch or walkthrough capture. Nothing is expected of it. */
 function sketchCaptureFinding(capture: Capture, filePath: string): StationFinding {
+  const walkthrough = captureSourceOf(capture) === "walkthrough";
   return finding({
     ruleId: "orientation.compass",
     severity: "info",
-    message: SKETCH_ORIENTATION,
+    message: walkthrough ? WALKTHROUGH_ORIENTATION : SKETCH_ORIENTATION,
     filePath,
-    measured: "sketch capture (no scan frame)",
+    measured: walkthrough
+      ? "AR walkthrough (no compass reading)"
+      : "sketch capture (no scan frame)",
     nextAction: NO_ACTION,
     ...scopeOf(capture),
   });

@@ -8,9 +8,15 @@ export {
   COMPASS_LIMITATION_FOR_LEGACY_RECORDS,
   ORIENTATION_NOT_VERIFIED,
   SKETCH_ORIENTATION,
+  WALKTHROUGH_ORIENTATION,
   scannedBeforeCompass,
 } from "./checks/compass.js";
-export { ASSUMED_CEILING_M, SKETCH_EXPECTED, gradeClosure } from "./checks/sketch.js";
+export {
+  ASSUMED_CEILING_M,
+  SKETCH_EXPECTED,
+  WALKTHROUGH_EXPECTED,
+  gradeClosure,
+} from "./checks/sketch.js";
 export { CheckContext, resolveRelative, type CaptureInfo } from "./context.js";
 export { clip, finding, outcomeOf, NO_ACTION } from "./finding.js";
 export { PackageLoadError, packageFromFiles } from "./package.js";

@@ -2,7 +2,8 @@
 // `captureSource: sketch`, the scan originals (roomplan.json, depth-samples.bin, points.las)
 // replaced by the sketch image and the entered measurements, manifest 1.2.0, the capture model's
 // confidences set per scenario, every changed file re-fingerprinted. Shared by sketch.test.ts and
-// the single-change variants.
+// the single-change variants; the builder (measuredPlanPackage) also makes the AR walkthrough
+// package of walkthrough-package.ts.
 
 import { createHash } from "node:crypto";
 import type {
@@ -110,10 +111,32 @@ export interface Scenario {
   withoutModel?: boolean;
 }
 
-/** The box room as a sketch capture. */
-export function sketchPackage(scenario: Scenario): LoadedPackage {
-  const lowWalls = new Set(scenario.lowWalls ?? []);
-  const lowOpenings = new Set(scenario.lowOpenings ?? []);
+/** One original file of a sketch or walkthrough capture, added before the capture model. */
+export interface Original {
+  path: string;
+  bytes: Uint8Array;
+  role: PackageManifest["files"][number]["role"];
+  mime: string;
+  derivedFrom?: string[];
+}
+
+/** How the box room is rebuilt as a capture measured without LiDAR. */
+export interface MeasuredPlanBuild extends Pick<
+  Scenario,
+  "lowWalls" | "lowOpenings" | "heightM" | "withoutModel"
+> {
+  /** The capture record's fields for the source: captureSource, sketch, walkthrough. */
+  source: Pick<Capture, "captureSource" | "sketch" | "walkthrough">;
+  /** The originals that replace the scan files, in manifest order. */
+  originals: readonly Original[];
+  /** derivedFrom of the capture model. */
+  modelDerivedFrom: string[];
+}
+
+/** The box room with the scan originals replaced, record and manifest 1.2.0, re-fingerprinted. */
+export function measuredPlanPackage(build: MeasuredPlanBuild): LoadedPackage {
+  const lowWalls = new Set(build.lowWalls ?? []);
+  const lowOpenings = new Set(build.lowOpenings ?? []);
   let pkg = withJson<CaptureRecord>(box, RECORD_PATH, (record) => {
     record.schemaVersion = "1.2.0";
     for (const capture of record.captures) {
@@ -122,28 +145,27 @@ export function sketchPackage(scenario: Scenario): LoadedPackage {
       delete capture.headingSource;
       delete capture.headingRecordedAt;
       delete capture.headingIssue;
-      capture.captureSource = "sketch";
-      capture.sketch = structuredClone(scenario.sketch);
+      Object.assign(capture, structuredClone(build.source));
     }
   });
   pkg = withJson<CaptureModel>(pkg, MODEL_PATH, (model) => {
     model.refs = [];
     for (const wall of model.walls) {
       wall.confidence = lowWalls.has(wall.id) ? "low" : "high";
-      if (scenario.heightM !== undefined) {
-        wall.heightM = scenario.heightM;
+      if (build.heightM !== undefined) {
+        wall.heightM = build.heightM;
       }
     }
     for (const item of [...model.doors, ...model.windows, ...model.openings]) {
       item.confidence = lowOpenings.has(item.id) ? "low" : "high";
     }
     for (const room of model.rooms) {
-      if (scenario.heightM !== undefined) {
-        room.heightM = scenario.heightM;
+      if (build.heightM !== undefined) {
+        room.heightM = build.heightM;
       }
     }
   });
-  // The originals: the scan files go, the sketch files come, the model derives from them.
+  // The originals: the scan files go, the new originals come, the model derives from them.
   const files = new Map(pkg.files);
   const manifest = structuredClone(pkg.manifest);
   const dropped = new Set(["raw_roomplan_json", "raw_depth", "point_cloud_las"]);
@@ -154,39 +176,52 @@ export function sketchPackage(scenario: Scenario): LoadedPackage {
     (file) => !dropped.has(file.role),
   ) as PackageManifest["files"];
   manifest.schemaVersion = "1.2.0";
-  const image = box.files.get(pathOf(box, "photo")) as Uint8Array;
-  const measurements = encoder.encode(JSON.stringify(boxMeasurements(), null, 2));
-  const originals: Array<[string, Uint8Array, PackageManifest["files"][number]["role"], string]> = [
-    [IMAGE_PATH, image, "sketch_image", "image/jpeg"],
-    [MEASUREMENTS_PATH, measurements, "sketch_measurements", "application/json"],
-  ];
+  // Each original goes in just before the model, so the last one listed comes first.
   const modelIndex = manifest.files.findIndex((file) => file.role === "capture_model");
-  for (const [path, bytes, role, mime] of originals) {
-    const skip =
-      (role === "sketch_image" && scenario.withoutImage === true) ||
-      (role === "sketch_measurements" && scenario.withoutMeasurements === true);
-    if (skip) {
-      continue;
-    }
-    files.set(path, bytes);
+  for (const original of build.originals) {
+    files.set(original.path, original.bytes);
     manifest.files.splice(modelIndex, 0, {
-      path,
-      role,
+      path: original.path,
+      role: original.role,
       captureId: CAPTURE_ID,
       areaKey: AREA_KEY,
-      sha256: sha256(bytes),
-      bytes: bytes.length,
-      mime,
+      sha256: sha256(original.bytes),
+      bytes: original.bytes.length,
+      mime: original.mime,
       generator: "chapter-capture-ios/SketchCapture",
       generatorVersion: "1.0.0 (42)",
-      derivedFrom: [],
+      derivedFrom: original.derivedFrom ?? [],
     });
   }
   const model = manifest.files.find((file) => file.role === "capture_model");
   if (model !== undefined) {
-    model.derivedFrom = [MEASUREMENTS_PATH, IMAGE_PATH];
+    model.derivedFrom = build.modelDerivedFrom;
   }
   files.set(pkg.manifestPath, encoder.encode(JSON.stringify(manifest, null, 2)));
   const built = packageFromFiles(files);
-  return scenario.withoutModel === true ? withoutFile(built, MODEL_PATH) : built;
+  return build.withoutModel === true ? withoutFile(built, MODEL_PATH) : built;
+}
+
+/** The box room as a sketch capture. */
+export function sketchPackage(scenario: Scenario): LoadedPackage {
+  const image = box.files.get(pathOf(box, "photo")) as Uint8Array;
+  const measurements = encoder.encode(JSON.stringify(boxMeasurements(), null, 2));
+  const originals: Original[] = [];
+  if (scenario.withoutImage !== true) {
+    originals.push({ path: IMAGE_PATH, bytes: image, role: "sketch_image", mime: "image/jpeg" });
+  }
+  if (scenario.withoutMeasurements !== true) {
+    originals.push({
+      path: MEASUREMENTS_PATH,
+      bytes: measurements,
+      role: "sketch_measurements",
+      mime: "application/json",
+    });
+  }
+  return measuredPlanPackage({
+    ...scenario,
+    source: { captureSource: "sketch", sketch: structuredClone(scenario.sketch) },
+    originals,
+    modelDerivedFrom: [MEASUREMENTS_PATH, IMAGE_PATH],
+  });
 }
