@@ -7,8 +7,9 @@ group and everything inside it.
 No secret value is stored in this folder. Azure access from GitHub Actions uses an OIDC
 federated credential. Postgres uses Entra ID sign-in only: the api, the worker and the migration
 job each sign in with their own managed identity and an Entra access token (`DB_AUTH=entra`), so
-there is no database password anywhere. Storage has shared keys turned off. The one app secret,
-`hub-service-credential`, is set by an admin directly in Key Vault and referenced by name.
+there is no database password anywhere. Storage has shared keys turned off. The app secrets,
+`hub-service-credential` and (optional) `anthropic-api-key`, are set by an admin directly in Key
+Vault and referenced by name.
 
 ## What gets deployed
 
@@ -85,6 +86,7 @@ Names match `station/api/src/core/config.ts`. Set on the api, the worker and the
 | `STORAGE_REPORTS_CONTAINER`   | `reports`                                                                            |
 | `REPORT_TIME_ZONE`            | `America/New_York` (dates printed in the spatial report; the worker reads it)        |
 | `HUB_SERVICE_CREDENTIAL`      | Key Vault reference `hub-service-credential` (api and worker, not in bootstrap mode) |
+| `ANTHROPIC_API_KEY`           | Key Vault reference `anthropic-api-key` (api only, when `anthropicApiKeyInVault`)    |
 
 `DATABASE_URL`, `PGPASSWORD` and `AZURE_CLIENT_ID` are not set: the identities are
 system-assigned, and the station refuses a database password when `DB_AUTH` is `entra`.
@@ -182,6 +184,12 @@ export CAPTURE_WORKER_IMAGE=$(az containerapp show -g rg-chapter-capture-staging
    az keyvault secret set --vault-name kv-chapter-capture-stg \
      --name hub-service-credential --file <path-to-file-with-the-value>
    ```
+
+   **Anthropic API key (optional, spec F16 sketch reading).** Set the secret
+   `anthropic-api-key` the same way, then set `param anthropicApiKeyInVault = true` in the
+   environment's parameter file and deploy. Keep it `false` until the secret exists: a Key Vault
+   reference to a missing secret fails the api revision. While it is off, the api has no
+   `ANTHROPIC_API_KEY` and `POST /v1/sketch-interpretations` answers 503.
 
 7. **Postgres roles (one per identity).** The api, the worker and the migration job each sign in
    as their own Entra principal. The Postgres role name must equal the identity's name, which

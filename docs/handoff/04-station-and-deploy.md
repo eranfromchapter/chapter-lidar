@@ -152,6 +152,25 @@ the commit as label `org.opencontainers.image.revision` (`.github/workflows/depl
 | `HUB_PUBLISH_RETRY_BASE_MS`                                                                                         | `2000`                   |                                                                         |
 | `HUB_PUBLISH_RETRY_MAX_MS`                                                                                          | `30000`                  |                                                                         |
 
+### 4.3 Sketch reading (spec F16)
+
+`POST /v1/sketch-interpretations` (role `capture`) sends a sketch photo to Claude and returns
+the reading (`station/api/src/routes/sketch/`). The system prompt is
+`contract/prompts/sketch-interpretation.md`, read at startup (the API image copies
+`contract/prompts`).
+
+| Variable            | Default           | Rule                                                                                                                       |
+| ------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `ANTHROPIC_API_KEY` | unset             | Secret. In Azure the Key Vault reference `anthropic-api-key` (api only). Unset: the station starts and the route answers 503 |
+| `SKETCH_MODEL`      | `claude-opus-5-5` | Claude model id                                                                                                            |
+
+To turn it on in an environment: an admin sets the secret `anthropic-api-key` in the vault
+(`az keyvault secret set --vault-name kv-chapter-capture-stg --name anthropic-api-key --file <path>`),
+then `param anthropicApiKeyInVault = true` in `infra/params/<env>.bicepparam` and deploy. Keep
+it `false` until the secret exists: a Key Vault reference to a missing secret fails the api
+revision. Each call is audited as `sketch.interpret` (image size, model, outcome, tokens; never
+the image).
+
 ## 5. HUB connection
 
 The station calls the HUB REST API with a service credential. **Every HUB call below is marked

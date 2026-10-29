@@ -64,6 +64,9 @@ param registrySku string = 'Basic'
 @description('First deployment of this environment: skip ACR and Key Vault references, which need role assignments that do not exist yet.')
 param bootstrap bool = false
 
+@description('The Key Vault holds the secret anthropic-api-key: the api gets ANTHROPIC_API_KEY for the sketch reading (spec F16). Off until an admin has set the secret; while off, POST /v1/sketch-interpretations answers 503.')
+param anthropicApiKeyInVault bool = false
+
 @description('API image, also used by the migration job. Empty uses the public placeholder image (listens on 8080) until the first app deploy.')
 param apiImage string = ''
 
@@ -281,6 +284,7 @@ module apps 'modules/containerapps.bicep' = {
     hubBaseUrl: hubBaseUrl
     entraAudience: entraAudience
     bootstrap: bootstrap
+    anthropicApiKeyInVault: anthropicApiKeyInVault
     apiImage: empty(apiImage) ? placeholderImage : apiImage
     workerImage: empty(workerImage) ? placeholderImage : workerImage
     apiCpu: apiCpu
