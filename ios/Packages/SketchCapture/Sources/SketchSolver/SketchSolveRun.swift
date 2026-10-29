@@ -26,6 +26,7 @@ struct SketchSolveRun {
     var doors: [CaptureModel.WallOpening] = []
     var windows: [CaptureModel.WallOpening] = []
     var passages: [CaptureModel.WallOpening] = []
+    var objects: [CaptureModel.DetectedObject] = []
     var notes: [SketchSolveNote] = []
     var ceilingAssumed = false
     var wallsMeasured = 0
@@ -85,6 +86,11 @@ struct SketchSolveRun {
           }
         }
       }
+
+      // Furniture drawn in the room (spec F16): boxes standing on the floor, reference only.
+      objects.append(
+        contentsOf: SketchFurniture.objects(
+          room.furniture ?? [], roomId: room.id, roomHeightMm: ceilingMm))
     }
 
     if ceilingAssumed {
@@ -98,7 +104,7 @@ struct SketchSolveRun {
     let model = CaptureModel(
       visitId: measurements.visitId, captureId: measurements.captureId,
       areaKey: measurements.areaKey, label: context.label, rooms: modelRooms, walls: modelWalls,
-      doors: doors, windows: windows, openings: passages, objects: [], refs: context.refs)
+      doors: doors, windows: windows, openings: passages, objects: objects, refs: context.refs)
 
     let limited = notes.contains { note in
       switch note.kind {
@@ -124,6 +130,7 @@ struct SketchSolveRun {
     var roomIds: Set<String> = []
     var wallIds: Set<String> = []
     var openingIds: Set<String> = []
+    var furnitureIds: Set<String> = []
     for room in rooms {
       guard roomIds.insert(room.id).inserted else { throw SketchSolverError.duplicateId(room.id) }
       for wall in room.walls {
@@ -135,6 +142,11 @@ struct SketchSolveRun {
         }
         guard room.walls.contains(where: { $0.id == opening.wallId }) else {
           throw SketchSolverError.unknownWall(roomId: room.id, wallId: opening.wallId)
+        }
+      }
+      for item in room.furniture ?? [] {
+        guard furnitureIds.insert(item.id).inserted else {
+          throw SketchSolverError.duplicateId(item.id)
         }
       }
     }

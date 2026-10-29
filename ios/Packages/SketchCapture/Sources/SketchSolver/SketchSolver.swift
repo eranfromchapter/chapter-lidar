@@ -88,7 +88,9 @@ public struct SketchSolveContext: Sendable {
 public struct SketchSolveResult: Sendable {
   /// Contract 1.1 capture model: ids kept from the measurements, room polygons
   /// counter-clockwise from +Y at the inside faces, walls as centrelines with the assumed
-  /// thickness, openings by offset from the wall start, confidences per 1.5.
+  /// thickness, openings by offset from the wall start, confidences per 1.5, and each room's
+  /// furniture (spec F16) as objects: boxes on the floor, height by category when not given
+  /// (`SketchDefaults.furnitureHeightMm`), never above the room, confidence low.
   public var model: CaptureModel
   /// The capture record's `sketch` object.
   public var summary: CaptureRecord.Capture.SketchSummary

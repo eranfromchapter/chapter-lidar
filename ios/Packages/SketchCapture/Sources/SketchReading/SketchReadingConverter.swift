@@ -6,8 +6,10 @@ import SketchSolver
 // (`SketchInterpretation`) becomes the F14 document, so the one sketch solver builds the model.
 // Pure functions; nothing here touches the network.
 //
-// This file is the public API the app builds against. F16.3 fills in the implementation (and may
-// add files next to this one); the public names below stay.
+// This file is the public API the app builds against. The implementation is in the files next
+// to it: `SketchReadingRun` (scale, walls, turns, openings, placement, furniture, ceiling),
+// `RoomOutline` (repeated and straight corners, winding, wall renumbering), `SketchReadingScan`
+// (which written dimensions can set the scale) and `SketchReadingText`.
 
 /// Reads a sketch photo: the station in production, a direct call or a fixture in Debug builds.
 public protocol SketchInterpreting: Sendable {
@@ -117,12 +119,29 @@ public enum SketchReadingError: Error, Equatable, CustomStringConvertible {
 public enum SketchReadingConverter {
   /// True when no written dimension can set the scale: the app asks for one length.
   public static func needsOneLength(_ interpretation: SketchInterpretation) -> Bool {
-    true
+    SketchReadingScan.wallDimensions(interpretation.reading).usable.isEmpty
   }
 
-  /// Every drawn wall, for the one-length step.
+  /// Every drawn wall, for the one-length step: the drawing's own wall numbers (wall `i` runs
+  /// from corner `i` to corner `i + 1`), which `UserScaleLength` uses too. Rooms with fewer than
+  /// three corners and walls drawn with no length are left out (they cannot set the scale).
   public static func drawnWalls(_ interpretation: SketchInterpretation) -> [DrawnWall] {
-    []
+    var walls: [DrawnWall] = []
+    for (roomIndex, room) in interpretation.reading.rooms.enumerated() {
+      let n = room.corners.count
+      guard n >= 3 else { continue }
+      for wallIndex in 0..<n {
+        guard let length = SketchReadingScan.drawnLength(room, wall: wallIndex),
+          length >= RoomOutline.sameCornerUnits
+        else { continue }
+        walls.append(
+          DrawnWall(
+            roomIndex: roomIndex, wallIndex: wallIndex, roomLabel: room.label,
+            drawnLength: length, start: room.corners[wallIndex],
+            end: room.corners[(wallIndex + 1) % n]))
+      }
+    }
+    return walls
   }
 
   /// Converts what Claude read. `imagePath` and `interpretationPath` are the package paths of
@@ -133,6 +152,10 @@ public enum SketchReadingConverter {
     displayUnits: DisplayUnitSystem, sourceKind: SketchSourceKind, imagePath: String,
     interpretationPath: String
   ) throws -> SketchReadingConversion {
-    throw SketchReadingError.notImplemented
+    try SketchReadingRun(
+      interpretation: interpretation, userLength: userLength, visitId: visitId,
+      captureId: captureId, areaKey: areaKey, displayUnits: displayUnits, sourceKind: sourceKind,
+      imagePath: imagePath, interpretationPath: interpretationPath
+    ).run()
   }
 }

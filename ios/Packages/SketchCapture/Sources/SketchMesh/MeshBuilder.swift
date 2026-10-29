@@ -9,7 +9,10 @@ import MeshExport
 /// normals per vertex, so sharing across a box edge would only round the edge.
 struct MeshBuilder {
   private(set) var positions: [SIMD3<Float>] = []
+  private(set) var colors: [RGB8] = []
   private(set) var indices: [UInt32] = []
+  /// The colour every vertex added next gets.
+  var paint = SketchMeshPalette.wall
 
   /// The vertical direction of the model.
   static let up = SIMD3<Double>(0, 1, 0)
@@ -20,6 +23,7 @@ struct MeshBuilder {
     positions.append(SIMD3<Float>(Float(a.x), Float(a.y), Float(a.z)))
     positions.append(SIMD3<Float>(Float(b.x), Float(b.y), Float(b.z)))
     positions.append(SIMD3<Float>(Float(c.x), Float(c.y), Float(c.z)))
+    colors.append(contentsOf: [paint, paint, paint])
     indices.append(contentsOf: [base, base + 1, base + 2])
   }
 
@@ -55,7 +59,9 @@ struct MeshBuilder {
       let b = loop[j]
       let c = loop[k]
       // Counter-clockwise in (x, −z) is counter-clockwise seen from +Y: the floor faces up.
+      paint = SketchMeshPalette.floor
       addTriangle(point(a, 0), point(b, 0), point(c, 0))
+      paint = SketchMeshPalette.ceiling
       addTriangle(point(a, room.heightM), point(c, room.heightM), point(b, room.heightM))
     }
   }
@@ -97,6 +103,7 @@ struct MeshBuilder {
     }
 
     // The two faces, each as the rectangles left around the openings.
+    paint = SketchMeshPalette.wall
     for side in [-1.0, 1.0] {
       let c = side * thickness / 2
       let outward = across * side
@@ -108,6 +115,7 @@ struct MeshBuilder {
     }
 
     // Jambs, sill and head of each opening face into the hole.
+    paint = SketchMeshPalette.reveal
     for hole in holes {
       let width = hole.a1 - hole.a0
       let tall = hole.y1 - hole.y0
@@ -130,6 +138,7 @@ struct MeshBuilder {
     }
 
     // Ends, top and bottom.
+    paint = SketchMeshPalette.wall
     addRectangle(
       origin: local(0, -thickness / 2, 0), u: across * thickness, v: up * height, outward: -along)
     addRectangle(
@@ -140,6 +149,55 @@ struct MeshBuilder {
       outward: up)
     addRectangle(
       origin: local(0, -thickness / 2, 0), u: along * length, v: across * thickness, outward: -up)
+  }
+
+  // MARK: - Furniture
+
+  /// An object as a closed box: its oriented box turned by its rotation, the bottom kept at or
+  /// above the floor and the top at or below `ceilingM` so the model's extent stays the rooms'.
+  mutating func addObject(_ object: CaptureModel.DetectedObject, ceilingM: Double) {
+    let box = object.box
+    let size = SIMD3<Double>(box.sizeM.x, box.sizeM.y, box.sizeM.z)
+    let centre = SIMD3<Double>(box.center.x, box.center.y, box.center.z)
+    guard size.x > 0, size.y > 0, size.z > 0, size.x.isFinite, size.y.isFinite, size.z.isFinite,
+      centre.x.isFinite, centre.y.isFinite, centre.z.isFinite
+    else { return }
+    let axes = Self.axes(of: box.rotation)
+    // Sketch furniture turns about +Y only, so the box's height runs along `axes.y`; the
+    // vertical clamp is applied along it.
+    let halfHeight: Double = size.y / 2
+    let bottom: Double = max(0, centre.y - halfHeight)
+    let top: Double = min(ceilingM, centre.y + halfHeight)
+    guard top - bottom > 1e-6 else { return }
+    let ex = axes.x * size.x
+    let ez = axes.z * size.z
+    let ey = SIMD3<Double>(0, top - bottom, 0)
+    let base = SIMD3<Double>(centre.x, bottom, centre.z) - ex * 0.5 - ez * 0.5
+    paint = SketchMeshPalette.furniture(object.category)
+    addRectangle(origin: base, u: ex, v: ez, outward: -Self.up)
+    addRectangle(origin: base + ey, u: ex, v: ez, outward: Self.up)
+    addRectangle(origin: base, u: ex, v: ey, outward: -axes.z)
+    addRectangle(origin: base + ez, u: ex, v: ey, outward: axes.z)
+    addRectangle(origin: base, u: ez, v: ey, outward: -axes.x)
+    addRectangle(origin: base + ex, u: ez, v: ey, outward: axes.x)
+  }
+
+  /// The box's local x and z axes in the model frame, the rotation reduced to its turn about
+  /// +Y (the box stays upright).
+  static func axes(of rotation: Quaternion) -> (x: SIMD3<Double>, z: SIMD3<Double>) {
+    let q = SIMD4<Double>(rotation.x, rotation.y, rotation.z, rotation.w)
+    let norm: Double = (q * q).sum().squareRoot()
+    guard norm > 1e-12, norm.isFinite else { return (SIMD3(1, 0, 0), SIMD3(0, 0, 1)) }
+    let n = q / norm
+    // The image of +x under the rotation, flattened to the floor.
+    let xx: Double = 1 - 2 * (n.y * n.y + n.z * n.z)
+    let xz: Double = 2 * (n.x * n.z - n.w * n.y)
+    let length: Double = (xx * xx + xz * xz).squareRoot()
+    guard length > 1e-9 else { return (SIMD3(1, 0, 0), SIMD3(0, 0, 1)) }
+    let x = SIMD3<Double>(xx / length, 0, xz / length)
+    // +z is +x turned a quarter clockwise seen from +Y: (x, z) -> (−z, x).
+    let z = SIMD3<Double>(-x.z, 0, x.x)
+    return (x, z)
   }
 
   struct Hole {
