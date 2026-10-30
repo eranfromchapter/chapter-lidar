@@ -4,7 +4,7 @@
  */
 
 /**
- * What Claude read from a photo of a floor-plan sketch (spec F16): returned by POST /v1/sketch-interpretations and kept in the package as Original Exports/{areaKey}/{captureId}/sketch-interpretation.json with role sketch_interpretation. The app turns the reading into sketch measurements. reading is Claude's structured output: every property is present and an absent value is null (the one exception to the contract's 'omitted, never null'). Drawing coordinates: origin at the image's top-left corner, x to the right, y down, the image's longer side is 1000 units.
+ * What Claude read from a photo of a floor-plan sketch (spec F16): returned by POST /v1/sketch-interpretations and kept in the package as Original Exports/{areaKey}/{captureId}/sketch-interpretation.json with role sketch_interpretation. The app turns the reading into sketch measurements. reading is Claude's structured output: every property is present and an absent value is null (the one exception to the contract's 'omitted, never null'). Drawing coordinates: origin at the top-left corner of the image (for a PDF, of the page reading.planPage names), x to the right, y down, the image's longer side is 1000 units.
  */
 export interface SketchInterpretation {
   schemaVersion: "1.0.0";
@@ -17,7 +17,7 @@ export interface SketchInterpretation {
    */
   interpretedAt: string;
   /**
-   * Pixel size of the photo as sent.
+   * Pixel size of the photo as sent, or for a PDF the size in points of its first page.
    */
   image: {
     width: number;
@@ -33,6 +33,7 @@ export interface SketchReading {
    * False when the image is not a floor plan or sketch of one.
    */
   isFloorPlan: boolean;
+  planPage: number | null;
   problem: string | null;
   /**
    * Units of the dimensions written on the drawing: imperial, metric, or none written.

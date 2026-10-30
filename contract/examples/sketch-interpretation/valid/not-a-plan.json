@@ -8,6 +8,7 @@
   },
   "reading": {
     "isFloorPlan": false,
+    "planPage": null,
     "problem": "The photo shows a kitchen, not a drawing of a floor plan.",
     "dimensionUnits": "none",
     "ceilingHeightMm": null,

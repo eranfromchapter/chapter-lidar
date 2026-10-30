@@ -8,6 +8,7 @@
   },
   "reading": {
     "isFloorPlan": true,
+    "planPage": null,
     "dimensionUnits": "imperial",
     "ceilingHeightMm": 2438,
     "rooms": [

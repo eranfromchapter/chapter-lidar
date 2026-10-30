@@ -1799,7 +1799,7 @@ export const sketchInterpretationSchema: Record<string, unknown> = {
   $id: "https://hellochapter.com/schemas/chapter-capture/v1/sketch-interpretation.schema.json",
   title: "SketchInterpretation",
   description:
-    "What Claude read from a photo of a floor-plan sketch (spec F16): returned by POST /v1/sketch-interpretations and kept in the package as Original Exports/{areaKey}/{captureId}/sketch-interpretation.json with role sketch_interpretation. The app turns the reading into sketch measurements. reading is Claude's structured output: every property is present and an absent value is null (the one exception to the contract's 'omitted, never null'). Drawing coordinates: origin at the image's top-left corner, x to the right, y down, the image's longer side is 1000 units.",
+    "What Claude read from a photo of a floor-plan sketch (spec F16): returned by POST /v1/sketch-interpretations and kept in the package as Original Exports/{areaKey}/{captureId}/sketch-interpretation.json with role sketch_interpretation. The app turns the reading into sketch measurements. reading is Claude's structured output: every property is present and an absent value is null (the one exception to the contract's 'omitted, never null'). Drawing coordinates: origin at the top-left corner of the image (for a PDF, of the page reading.planPage names), x to the right, y down, the image's longer side is 1000 units.",
   type: "object",
   additionalProperties: false,
   required: ["schemaVersion", "model", "interpretedAt", "image", "reading"],
@@ -1825,7 +1825,8 @@ export const sketchInterpretationSchema: Record<string, unknown> = {
         width: { type: "integer", minimum: 1 },
         height: { type: "integer", minimum: 1 },
       },
-      description: "Pixel size of the photo as sent.",
+      description:
+        "Pixel size of the photo as sent, or for a PDF the size in points of its first page.",
     },
     reading: { $ref: "#/$defs/reading" },
   },
@@ -1842,6 +1843,7 @@ export const sketchInterpretationSchema: Record<string, unknown> = {
       additionalProperties: false,
       required: [
         "isFloorPlan",
+        "planPage",
         "problem",
         "dimensionUnits",
         "ceilingHeightMm",
@@ -1852,6 +1854,16 @@ export const sketchInterpretationSchema: Record<string, unknown> = {
         isFloorPlan: {
           description: "False when the image is not a floor plan or sketch of one.",
           type: "boolean",
+        },
+        planPage: {
+          anyOf: [
+            {
+              type: "integer",
+              description:
+                "For a PDF, the page (first page 1) whose floor plan the rooms are traced from; null for a single image.",
+            },
+            { type: "null" },
+          ],
         },
         problem: {
           anyOf: [

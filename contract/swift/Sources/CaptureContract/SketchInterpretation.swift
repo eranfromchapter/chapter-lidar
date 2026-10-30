@@ -10,7 +10,7 @@ public struct SketchInterpretation: Hashable, Sendable, Codable {
   /// The Claude model that read the sketch.
   public var model: String
   public var interpretedAt: UTCTimestamp
-  /// Pixel size of the photo as sent.
+  /// Pixel size of the photo as sent, or for a PDF the size in points of its first page.
   public var image: ImageSize
   public var reading: Reading
 
@@ -49,6 +49,8 @@ public struct SketchInterpretation: Hashable, Sendable, Codable {
   public struct Reading: Hashable, Sendable, Codable {
     /// False when the image is not a floor plan or a sketch of one.
     public var isFloorPlan: Bool
+    /// For a PDF, the page (first page 1) the rooms are traced from; nil for a single image.
+    public var planPage: Int?
     /// Why the drawing could not be read fully, or nil.
     public var problem: String?
     public var dimensionUnits: SketchDimensionUnits
@@ -59,10 +61,12 @@ public struct SketchInterpretation: Hashable, Sendable, Codable {
     public var dimensions: [Dimension]
 
     public init(
-      isFloorPlan: Bool, problem: String? = nil, dimensionUnits: SketchDimensionUnits,
+      isFloorPlan: Bool, planPage: Int? = nil, problem: String? = nil,
+      dimensionUnits: SketchDimensionUnits,
       ceilingHeightMm: Double? = nil, rooms: [Room], dimensions: [Dimension] = []
     ) {
       self.isFloorPlan = isFloorPlan
+      self.planPage = planPage
       self.problem = problem
       self.dimensionUnits = dimensionUnits
       self.ceilingHeightMm = ceilingHeightMm
@@ -71,12 +75,13 @@ public struct SketchInterpretation: Hashable, Sendable, Codable {
     }
 
     private enum CodingKeys: String, CodingKey {
-      case isFloorPlan, problem, dimensionUnits, ceilingHeightMm, rooms, dimensions
+      case isFloorPlan, planPage, problem, dimensionUnits, ceilingHeightMm, rooms, dimensions
     }
 
     public func encode(to encoder: Encoder) throws {
       var container = encoder.container(keyedBy: CodingKeys.self)
       try container.encode(isFloorPlan, forKey: .isFloorPlan)
+      try container.encode(planPage, forKey: .planPage)
       try container.encode(problem, forKey: .problem)
       try container.encode(dimensionUnits, forKey: .dimensionUnits)
       try container.encode(ceilingHeightMm, forKey: .ceilingHeightMm)
