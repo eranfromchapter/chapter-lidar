@@ -51,8 +51,8 @@
     public var body: some View {
       ScrollView {
         VStack(alignment: .leading, spacing: ChapterTheme.Metric.sectionGapCompact) {
-          if let notice = model.notice {
-            Banner(icon: .partly, text: notice)
+          if let banner = model.banner {
+            Banner(icon: .partly, text: banner)
               .accessibilityIdentifier("sketchPhoto.notice")
           }
           if let problem {
@@ -178,12 +178,17 @@
   // MARK: Reading, or why not
 
   /// Step 4 of 5 while Claude reads the photo: the photo, a spinner, "Reading your sketch…"
-  /// and Cancel. When the photo is not a floor plan or could not be read: why, "Retake the
-  /// photo" and "Enter it by hand" (`onEnterByHand`: the F14 screens, with this photo).
+  /// and Cancel. While it reads the phone does not lock, and a reading the app is sent to the
+  /// background during goes on as long as iOS allows. When the photo is not a floor plan: why,
+  /// "Retake the photo" and "Enter it by hand"; when the reading failed: why, "Try again" (the
+  /// same photo) and "Enter it by hand" (`onEnterByHand`: the F14 screens, with this photo).
+  /// Nothing goes to hand entry unless the operator chooses it.
   public struct SketchPhotoReadingScreen: View {
     let model: SketchPhotoModel
     let caption: String
     let onEnterByHand: @MainActor () -> Void
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var keepAlive = SketchReadingKeepAlive()
 
     public init(
       model: SketchPhotoModel, caption: String = "Step 4 of 5",
@@ -199,8 +204,8 @@
     public var body: some View {
       ScrollView {
         VStack(alignment: .leading, spacing: ChapterTheme.Metric.sectionGapCompact) {
-          if let notice = model.notice {
-            Banner(icon: .partly, text: notice)
+          if let banner = model.banner {
+            Banner(icon: .partly, text: banner)
               .accessibilityIdentifier("sketchPhoto.notice")
           }
           photo
@@ -220,9 +225,15 @@
       .chapterActionBar {
         if isProblem {
           VStack(spacing: ChapterTheme.Metric.rowGap) {
-            Button(SketchPhotoText.retake) { model.retake() }
-              .buttonStyle(.chapter(.primary))
-              .accessibilityIdentifier("sketchPhoto.retake")
+            if model.problemIsNotAPlan {
+              Button(SketchPhotoText.retake) { model.retake() }
+                .buttonStyle(.chapter(.primary))
+                .accessibilityIdentifier("sketchPhoto.retake")
+            } else {
+              Button(SketchPhotoText.tryAgain) { model.retry() }
+                .buttonStyle(.chapter(.primary))
+                .accessibilityIdentifier("sketchPhoto.tryAgain")
+            }
             Button(SketchPhotoText.enterByHand) { onEnterByHand() }
               .buttonStyle(.chapter(.tinted))
               .accessibilityIdentifier("sketchPhoto.enterByHand")
@@ -233,6 +244,13 @@
             .accessibilityIdentifier("sketchPhoto.cancel")
         }
       }
+      .onChange(of: model.phase == .reading, initial: true) { _, reading in
+        if reading { keepAlive.begin() } else { keepAlive.end() }
+      }
+      .onChange(of: scenePhase) { _, phase in
+        if phase == .background { model.appDidEnterBackground() }
+      }
+      .onDisappear { keepAlive.end() }
     }
 
     @ViewBuilder
@@ -285,13 +303,50 @@
         Banner(icon: .blocked, text: model.problem ?? "")
           .accessibilityIdentifier("sketchPhoto.problem")
         Text(
-          "Retake the photo of the whole drawing, or enter the walls, doors and windows by hand "
-            + "from the sketch.")
+          model.problemIsNotAPlan
+            ? "Retake the photo of the whole drawing, or enter the walls, doors and windows by "
+              + "hand from the sketch."
+            : "Try again, or enter the walls, doors and windows by hand from the sketch.")
           .chapterTextStyle(.footnote)
           .foregroundStyle(ChapterTheme.Color.muted)
           .fixedSize(horizontal: false, vertical: true)
           .padding(.horizontal, ChapterTheme.Metric.sectionInset)
       }
+    }
+  }
+
+  /// While a reading runs: the idle timer is off (the phone does not lock during a reading of
+  /// several minutes) and a background task asks iOS to let the request finish if the app is
+  /// sent to the background. `end()` restores the idle timer and ends the task.
+  @MainActor
+  final class SketchReadingKeepAlive {
+    private var isActive = false
+    private var idleTimerWasDisabled = false
+    private var task: UIBackgroundTaskIdentifier = .invalid
+
+    func begin() {
+      guard !isActive else { return }
+      isActive = true
+      let application = UIApplication.shared
+      idleTimerWasDisabled = application.isIdleTimerDisabled
+      application.isIdleTimerDisabled = true
+      task = application.beginBackgroundTask(withName: "Reading the sketch") { [weak self] in
+        // iOS is about to suspend the app: the reading stops; the model says so when it fails.
+        MainActor.assumeIsolated { self?.endTask() }
+      }
+    }
+
+    func end() {
+      guard isActive else { return }
+      isActive = false
+      UIApplication.shared.isIdleTimerDisabled = idleTimerWasDisabled
+      endTask()
+    }
+
+    private func endTask() {
+      guard task != .invalid else { return }
+      UIApplication.shared.endBackgroundTask(task)
+      task = .invalid
     }
   }
 
@@ -312,8 +367,8 @@
     public var body: some View {
       ScrollView {
         VStack(alignment: .leading, spacing: ChapterTheme.Metric.sectionGapCompact) {
-          if let notice = model.notice {
-            Banner(icon: .partly, text: notice)
+          if let banner = model.banner {
+            Banner(icon: .partly, text: banner)
               .accessibilityIdentifier("sketchPhoto.notice")
           }
           SketchDrawnPlanCanvas(
@@ -504,7 +559,8 @@
 
     public var body: some View {
       SketchCheckView(
-        result: model.result, solveError: model.solveError, leadingNotes: model.leadingNotes,
+        result: model.result, solveError: model.solveError, banner: model.banner,
+        leadingNotes: model.leadingNotes,
         completenessWord: model.completenessWord, caption: caption,
         isFinishing: model.isFinishing, canFinish: model.canFinish,
         mesh3D: model.result.flatMap { SketchModel3DView.mesh(of: $0.model) }, onFinish: onFinish)

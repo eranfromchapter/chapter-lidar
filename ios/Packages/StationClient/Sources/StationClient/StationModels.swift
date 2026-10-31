@@ -712,9 +712,9 @@ public struct ModelingDecisionListResponse: Hashable, Sendable, Codable {
 // MARK: - Sketch interpretations
 
 /// components.schemas.SketchInterpretationRequest (spec F16): a photo of a floor-plan sketch for
-/// Claude to read. `data` is the image, base64; `mediaType` one the Claude API accepts
-/// (`image/jpeg`, `image/png`, `image/webp`, `image/gif`; the app converts HEIC and PDF to JPEG).
-/// At most 10 MB of image.
+/// Claude to read. `data` is the image or PDF, base64; `mediaType` one the Claude API accepts
+/// (`image/jpeg`, `image/png`, `image/webp`, `image/gif`, or `application/pdf` for a whole PDF;
+/// the app converts HEIC to JPEG and trims a PDF over 24 MB or 100 pages to its first pages).
 public struct SketchInterpretationRequest: Hashable, Sendable, Codable {
   public var mediaType: String
   /// The image bytes, standard base64 with padding.

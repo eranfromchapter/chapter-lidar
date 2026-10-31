@@ -37,6 +37,18 @@ final class SketchInterpretationTests: XCTestCase {
     XCTAssertNil(body["hint"], "omitted when nil")
   }
 
+  func testAPDFIsSentWholeAsADocument() async throws {
+    let transport = StubTransport([.respond(.json(200, try Self.example("bedroom-and-closet")))])
+    let pdf = Data("%PDF-1.7\n% two pages\n%%EOF\n".utf8)
+    _ = try await makeClient(transport: transport).createSketchInterpretation(
+      SketchInterpretationRequest(mediaType: "application/pdf", imageData: pdf))
+    let request = try XCTUnwrap(transport.requests.first)
+    let body = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: try XCTUnwrap(request.httpBody)) as? [String: Any])
+    XCTAssertEqual(body["mediaType"] as? String, "application/pdf")
+    XCTAssertEqual(body["data"] as? String, pdf.base64EncodedString(), "the PDF's bytes, untouched")
+  }
+
   func testNotAPlanCarriesTheReadingsProblem() async throws {
     let interpretation = try Self.example("not-a-plan")
     let problem = """

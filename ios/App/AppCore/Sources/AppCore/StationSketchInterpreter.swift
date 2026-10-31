@@ -3,6 +3,10 @@ import Foundation
 import SketchReading
 import StationClient
 
+#if canImport(CoreGraphics)
+  import CoreGraphics
+#endif
+
 /// Why the station could not read a sketch photo, in the words the app shows.
 public enum SketchReaderError: Error, Equatable, LocalizedError, CustomStringConvertible {
   /// 503: no API key on the station, or Claude unavailable after the station's retries.
@@ -25,15 +29,16 @@ public enum SketchReaderError: Error, Equatable, LocalizedError, CustomStringCon
   public var errorDescription: String? { description }
 }
 
-/// Reads a sketch photo through the station (spec F16 3): `POST /v1/sketch-interpretations`
-/// with the photo as base64 and the bearer token, as every station call. 200 is what Claude
-/// read; 422 `sketch_not_a_plan` is `SketchReadingError.notAFloorPlan` with the reading's
-/// problem; 503 is `SketchReaderError.unavailable`; anything else fails with the problem's
-/// title. Give `station` a transport with a long timeout (reading takes 10 to 40 s; the station
-/// waits up to 120 s for Claude): `StationSketchInterpreter.timeout`.
+/// Reads a sketch photo or PDF through the station (spec F16 3): `POST
+/// /v1/sketch-interpretations` with the bytes as base64, their media type (`image/jpeg`,
+/// `image/png`, or `application/pdf` for a whole PDF) and the bearer token, as every station
+/// call. 200 is what Claude read; 422 `sketch_not_a_plan` is `SketchReadingError.notAFloorPlan`
+/// with the reading's problem; 503 is `SketchReaderError.unavailable`; anything else fails with
+/// the problem's title. Give `station` a transport with a long timeout (a photo takes about a
+/// minute, a multi-page PDF a few): `StationSketchInterpreter.timeout`.
 public struct StationSketchInterpreter: SketchInterpreting {
-  /// Seconds the phone waits for the station's answer.
-  public static let timeout: TimeInterval = 150
+  /// Seconds the phone waits for the station's answer (a 20-page PDF takes about 3 minutes).
+  public static let timeout: TimeInterval = 600
 
   private let station: StationClient
 
@@ -75,10 +80,12 @@ public struct StationSketchInterpreter: SketchInterpreting {
   }
 }
 
-/// The pixel size of a JPEG or PNG from its header (no decoding), for the interpretation's
-/// `image` of a reading made without the station.
+/// The pixel size of a JPEG or PNG from its header (no decoding), or the first page's size in
+/// points of a PDF (its media box, rounded; Apple platforms), for the interpretation's `image`
+/// of a reading made without the station.
 public enum ImageHeader {
   public static func size(of data: Data) -> SketchInterpretation.ImageSize? {
+    if data.starts(with: Array("%PDF".utf8)) { return pdfPageSize(of: data) }
     let bytes = [UInt8](data.prefix(256 * 1024))
     if bytes.count >= 24, bytes[0] == 0x89, bytes[1] == 0x50, bytes[2] == 0x4E, bytes[3] == 0x47 {
       let width = Int(bytes[16]) << 24 | Int(bytes[17]) << 16 | Int(bytes[18]) << 8 | Int(bytes[19])
@@ -107,5 +114,20 @@ public enum ImageHeader {
       offset += length
     }
     return nil
+  }
+
+  /// The first page's media box of a PDF in points, rounded; nil without CoreGraphics.
+  static func pdfPageSize(of data: Data) -> SketchInterpretation.ImageSize? {
+    #if canImport(CoreGraphics)
+      guard let provider = CGDataProvider(data: data as CFData),
+        let document = CGPDFDocument(provider), let page = document.page(at: 1)
+      else { return nil }
+      let box = page.getBoxRect(.mediaBox)
+      let width = Int(Double(box.width).rounded())
+      let height = Int(Double(box.height).rounded())
+      return width > 0 && height > 0 ? .init(width: width, height: height) : nil
+    #else
+      return nil
+    #endif
   }
 }

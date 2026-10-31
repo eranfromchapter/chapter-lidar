@@ -88,10 +88,103 @@
       XCTAssertEqual(model.phase, .oneLength, "Back goes to the one length")
     }
 
-    func testANoticeLeadsTheNotes() async throws {
-      let model = model(StubInterpreter(result: .success(try Self.fixture())), notice: "Demo")
+    func testTheDemoReadingIsUnmistakable() async throws {
+      let demo = model(StubInterpreter(result: .success(try Self.fixture())))
+      XCTAssertNil(demo.banner, "nothing read yet")
+      await demo.read(Self.jpeg)
+      XCTAssertTrue(demo.isDemoReading, "the fixture's model is demo-fixture")
+      XCTAssertEqual(
+        demo.banner, "Demo reading \u{2014} not your sketch. Add an API key to read real sketches.")
+
+      var real = try Self.fixture()
+      real.model = "claude-opus-5-5"
+      let read = model(StubInterpreter(result: .success(real)))
+      await read.read(Self.jpeg)
+      XCTAssertFalse(read.isDemoReading)
+      XCTAssertNil(read.banner)
+
+      let noticed = model(StubInterpreter(result: .success(real)), notice: "Field test")
+      XCTAssertEqual(noticed.banner, "Field test", "the host's notice before and after reading")
+    }
+
+    func testAnUploadNoteLeadsTheNotes() async throws {
+      let model = SketchPhotoModel(
+        floorLabel: "Floor 1", areaKey: "floor-1", mode: .room, displayUnits: .imperial,
+        interpreter: StubInterpreter(result: .success(try Self.fixture())),
+        prepare: { SketchPhotoUploadImage(data: $0.data, mediaType: $0.format.mime, note: "First 3 pages.") })
       await model.read(Self.jpeg)
-      XCTAssertEqual(model.leadingNotes.first, "Demo")
+      model.selectWall("0-0")
+      model.length.text = "13'"
+      model.continueFromLength()
+      XCTAssertEqual(model.phase, .check)
+      XCTAssertEqual(model.leadingNotes.first, "First 3 pages.")
+    }
+
+    /// Answers each call with the next result (the last one again when they run out), after
+    /// `delay` nanoseconds; counts the calls.
+    private final class ScriptedInterpreter: SketchInterpreting, @unchecked Sendable {
+      private let lock = NSLock()
+      private var results: [Result<SketchInterpretation, Error>]
+      private(set) var calls = 0
+      let delay: UInt64
+
+      init(_ results: [Result<SketchInterpretation, Error>], delay: UInt64 = 0) {
+        self.results = results
+        self.delay = delay
+      }
+
+      func interpret(imageData: Data, mediaType: String) async throws -> SketchInterpretation {
+        let result = lock.withLock { () -> Result<SketchInterpretation, Error> in
+          calls += 1
+          return results.count > 1 ? results.removeFirst() : results[0]
+        }
+        if delay > 0 { try await Task.sleep(nanoseconds: delay) }
+        return try result.get()
+      }
+    }
+
+    private struct Failed: Error, CustomStringConvertible {
+      var description: String { "The Claude API answered 529: overloaded_error" }
+    }
+
+    func testAFailedReadingCanBeTriedAgainWithTheSamePhoto() async throws {
+      let interpreter = ScriptedInterpreter([.failure(Failed()), .success(try Self.fixture())])
+      let model = SketchPhotoModel(
+        floorLabel: "Floor 1", areaKey: "floor-1", interpreter: interpreter,
+        prepare: { SketchPhotoUploadImage(data: $0.data, mediaType: $0.format.mime) })
+      await model.read(Self.jpeg)
+      XCTAssertEqual(model.phase, .problem, "a failure waits for the operator, never hand entry")
+      XCTAssertFalse(model.problemIsNotAPlan)
+      XCTAssertEqual(model.problem, "The Claude API answered 529: overloaded_error")
+      model.retry()
+      let deadline = Date().addingTimeInterval(5)
+      while model.phase != .oneLength, Date() < deadline {
+        try await Task.sleep(nanoseconds: 20_000_000)
+      }
+      XCTAssertEqual(model.phase, .oneLength, "the same photo read again")
+      XCTAssertEqual(interpreter.calls, 2)
+      XCTAssertEqual(model.image, Self.jpeg)
+    }
+
+    func testAReadingStoppedByTheBackgroundSaysTheAppWasClosed() async throws {
+      let interpreter = ScriptedInterpreter([.failure(URLError(.networkConnectionLost))], delay: 200_000_000)
+      let model = SketchPhotoModel(
+        floorLabel: "Floor 1", areaKey: "floor-1", interpreter: interpreter,
+        prepare: { SketchPhotoUploadImage(data: $0.data, mediaType: $0.format.mime) })
+      let reading = Task { await model.read(Self.jpeg) }
+      try await Task.sleep(nanoseconds: 50_000_000)
+      XCTAssertEqual(model.phase, .reading)
+      model.appDidEnterBackground()
+      await reading.value
+      XCTAssertEqual(model.phase, .problem)
+      XCTAssertEqual(
+        model.problem,
+        "The reading stopped because the app was closed. Try again and keep the app open.")
+
+      // In the foreground the same failure says its own words.
+      await model.read(Self.jpeg)
+      XCTAssertEqual(model.phase, .problem)
+      XCTAssertNotEqual(model.problem, SketchPhotoText.closedDuringReading)
     }
 
     func testAPhotoThatIsNotAPlanSaysWhy() async throws {
@@ -157,7 +250,75 @@
       XCTAssertTrue(text.contains("\"ceilingHeightMm\" : null"), "the reading writes its nulls")
     }
 
+    /// A PDF goes as the PDF itself, every page; the package keeps the original bytes.
+    func testAPDFIsSentWhole() throws {
+      #if canImport(ImageIO)
+        let data = try Self.pdf(pages: 3)
+      #else
+        let data = Data("%PDF-1.7\n% not parsed on Linux\n%%EOF\n".utf8)
+      #endif
+      let upload = try SketchPhotoUpload.prepare(SketchImageSelection(data: data, format: .pdf))
+      XCTAssertEqual(upload, SketchPhotoUploadImage(data: data, mediaType: "application/pdf"))
+      XCTAssertNil(upload.note)
+    }
+
+    #if canImport(PDFKit)
+      /// A PDF over the page or size limit is trimmed to its first pages, with a note; one whose
+      /// first page alone is too large goes as that page drawn as a JPEG.
+      func testAPDFOverTheLimitsIsTrimmedToItsFirstPages() throws {
+        let data = try Self.pdf(pages: 6)
+        let byPages = try SketchPhotoUpload.preparePDF(data, maxPages: 4)
+        XCTAssertEqual(byPages.mediaType, "application/pdf")
+        XCTAssertEqual(try Self.pageCount(byPages.data), 4)
+        XCTAssertEqual(
+          byPages.note,
+          "The PDF has 6 pages and is too large to send whole: Claude read the first 4 pages.")
+
+        let limit = data.count / 2
+        let bySize = try SketchPhotoUpload.preparePDF(data, maxBytes: limit)
+        XCTAssertEqual(bySize.mediaType, "application/pdf")
+        XCTAssertLessThanOrEqual(bySize.data.count, limit)
+        let kept = try Self.pageCount(bySize.data)
+        XCTAssertGreaterThanOrEqual(kept, 1)
+        XCTAssertLessThan(kept, 6)
+        XCTAssertNotNil(bySize.note)
+
+        let tiny = try SketchPhotoUpload.preparePDF(data, maxBytes: 100)
+        XCTAssertEqual(tiny.mediaType, "image/jpeg", "not even one page fits")
+        XCTAssertNotNil(tiny.note)
+      }
+    #endif
+
     #if canImport(ImageIO)
+      /// A PDF of `pages` US Letter pages, each with 400 random lines (so pages weigh alike).
+      static func pdf(pages: Int) throws -> Data {
+        let data = NSMutableData()
+        var box = CGRect(x: 0, y: 0, width: 612, height: 792)
+        let consumer = try XCTUnwrap(CGDataConsumer(data: data as CFMutableData))
+        let context = try XCTUnwrap(CGContext(consumer: consumer, mediaBox: &box, nil))
+        var generator = SystemRandomNumberGenerator()
+        for _ in 0..<pages {
+          context.beginPDFPage(nil)
+          for _ in 0..<400 {
+            let x0 = Double.random(in: 0...612, using: &generator)
+            let y0 = Double.random(in: 0...792, using: &generator)
+            let x1 = Double.random(in: 0...612, using: &generator)
+            let y1 = Double.random(in: 0...792, using: &generator)
+            context.move(to: CGPoint(x: x0, y: y0))
+            context.addLine(to: CGPoint(x: x1, y: y1))
+          }
+          context.strokePath()
+          context.endPDFPage()
+        }
+        context.closePDF()
+        return data as Data
+      }
+
+      static func pageCount(_ data: Data) throws -> Int {
+        let provider = try XCTUnwrap(CGDataProvider(data: data as CFData))
+        return try XCTUnwrap(CGPDFDocument(provider)).numberOfPages
+      }
+
       /// A large PNG goes as a JPEG at most 2048 px long; a small upright one as it is.
       func testTheUploadIsDownscaledToJPEG() throws {
         func png(width: Int, height: Int) throws -> Data {

@@ -151,10 +151,18 @@ final class SketchPhotoFlowUITests: XCTestCase {
     XCTAssertTrue(app.buttons["sketchPhoto.cancel"].exists)
     XCTAssertTrue(element("sketchPhoto.photo").exists, "the photo is shown")
     XCTAssertTrue(app.staticTexts["Step 4 of 5"].exists)
+    XCTAssertTrue(
+      app.staticTexts[
+        "About a minute for a photo, a few minutes for a multi-page PDF. Keep the app open."
+      ].exists, "the wait, in plain words")
     shot("P04 Reading your sketch")
 
-    // One length: the sketch has no written dimensions. Wall 1 of the bedroom is 13' 1.5".
+    // One length: the sketch has no written dimensions. Wall 1 of the bedroom is 13' 1.5". The
+    // UI tests' reading is the demo one (model demo-fixture): every screen after it says so.
     XCTAssertTrue(app.staticTexts["One length"].waitForExistence(timeout: 30), "the one-length step")
+    let demo = "Demo reading \u{2014} not your sketch. Add an API key to read real sketches."
+    XCTAssertTrue(element("sketchPhoto.notice").exists, "the demo banner on One length")
+    XCTAssertTrue(app.staticTexts[demo].exists, "the demo banner's words")
     XCTAssertTrue(element("sketchPhoto.plan").exists, "the drawn plan")
     let lengthContinue = app.buttons["sketchPhoto.length.continue"]
     XCTAssertEqual(lengthContinue.label, "Tap a wall on the plan")
@@ -177,6 +185,10 @@ final class SketchPhotoFlowUITests: XCTestCase {
     let status = element("sketch.status")
     waitFor("the solver says Limited") { status.exists && status.label.contains("Limited") }
     XCTAssertFalse(element("sketch.solveError").exists)
+    XCTAssertTrue(element("sketch.banner").exists, "the demo banner on Check")
+    let banner = app.staticTexts[demo]
+    XCTAssertTrue(banner.exists, "the demo banner's words")
+    XCTAssertLessThan(banner.frame.minY, model3D.frame.minY, "above the 3D preview")
     shot("P06 Check with the 3D preview")
     let finish = app.buttons["sketch.finish"]
     waitFor("Finish floor enabled") { finish.isEnabled }

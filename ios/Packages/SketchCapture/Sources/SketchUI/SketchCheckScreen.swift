@@ -46,6 +46,8 @@
     let result: SketchSolveResult?
     let mesh3D: TriangleMesh?
     let solveError: String?
+    /// A notice over everything (the demo reading of a field-test build), or nil.
+    let banner: String?
     let leadingNotes: [String]
     let missing: [String]
     let completenessWord: String
@@ -55,13 +57,15 @@
     let onFinish: @MainActor () -> Void
 
     public init(
-      result: SketchSolveResult?, solveError: String?, leadingNotes: [String] = [],
+      result: SketchSolveResult?, solveError: String?, banner: String? = nil,
+      leadingNotes: [String] = [],
       missing: [String] = [], completenessWord: String, caption: String, isFinishing: Bool,
       canFinish: Bool, mesh3D: TriangleMesh? = nil, onFinish: @escaping @MainActor () -> Void
     ) {
       self.result = result
       self.mesh3D = mesh3D
       self.solveError = solveError
+      self.banner = banner
       self.leadingNotes = leadingNotes
       self.missing = missing
       self.completenessWord = completenessWord
@@ -74,6 +78,10 @@
     public var body: some View {
       ScrollView {
         VStack(alignment: .leading, spacing: ChapterTheme.Metric.sectionGapCompact) {
+          if let banner {
+            Banner(icon: .partly, text: banner)
+              .accessibilityIdentifier("sketch.banner")
+          }
           if let error = solveError {
             Banner(icon: .blocked, text: error)
               .accessibilityIdentifier("sketch.solveError")

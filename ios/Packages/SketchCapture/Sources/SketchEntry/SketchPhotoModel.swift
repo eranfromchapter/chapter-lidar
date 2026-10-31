@@ -28,12 +28,15 @@
     public static let sourceTitle = "Photograph the sketch"
     public static let readingTitle = "Reading your sketch\u{2026}"
     public static let readingSubtitle =
-      "Claude is reading the rooms, doors, windows, furniture and any written dimensions. This "
-      + "usually takes 10 to 40 seconds."
+      "About a minute for a photo, a few minutes for a multi-page PDF. Keep the app open."
     public static let notAPlanTitle = "This photo is not a floor plan"
     public static let unreadableTitle = "The sketch could not be read"
     public static let retake = "Retake the photo"
+    public static let tryAgain = "Try again"
     public static let enterByHand = "Enter it by hand"
+    /// A reading that failed after the app went to the background.
+    public static let closedDuringReading =
+      "The reading stopped because the app was closed. Try again and keep the app open."
     public static let lengthTitle = "One length"
     public static let lengthQuestion = "Tap a wall you know, then type its length"
     public static let lengthFooter =
@@ -42,19 +45,25 @@
     public static let chooseWall = "Tap a wall on the plan"
     public static let enterLength = "Enter the wall's length"
     /// The field-test build without an API key answers a fixed reading.
-    public static let demoNotice = "Demo reading: add an API key to read real sketches"
+    public static let demoNotice =
+      "Demo reading \u{2014} not your sketch. Add an API key to read real sketches."
+    /// The `model` of that fixed reading.
+    public static let demoModel = "demo-fixture"
   }
 
-  /// The photo as it goes to the reader: JPEG or PNG bytes (HEIC and PDF converted, the longer
-  /// side at most 2048 px) and their MIME type. The original bytes are kept unchanged for the
-  /// package.
+  /// The photo as it goes to the reader: JPEG or PNG bytes (HEIC converted, the longer side at
+  /// most 2048 px) or the PDF (trimmed to its first pages when too large), their MIME type, and
+  /// a note when not all of it was sent. The original bytes are kept unchanged for the package.
   public struct SketchPhotoUploadImage: Sendable, Equatable {
     public var data: Data
     public var mediaType: String
+    /// What was left out ("Claude read the first 40 pages"), shown on Check; nil when whole.
+    public var note: String?
 
-    public init(data: Data, mediaType: String) {
+    public init(data: Data, mediaType: String, note: String? = nil) {
       self.data = data
       self.mediaType = mediaType
+      self.note = note
     }
   }
 
@@ -86,6 +95,10 @@
     public private(set) var problem: String?
     /// The problem is "not a floor plan" (else the reading failed).
     public private(set) var problemIsNotAPlan = false
+    /// What the upload left out of the photo (a PDF trimmed to its first pages), or nil.
+    public private(set) var uploadNote: String?
+    /// The app went to the background while this reading ran.
+    public private(set) var wasBackgroundedDuringReading = false
 
     /// The drawn walls of the one-length step.
     public private(set) var drawnWalls: [DrawnWall] = []
@@ -147,6 +160,8 @@
       solveError = nil
       problem = nil
       problemIsNotAPlan = false
+      uploadNote = nil
+      wasBackgroundedDuringReading = false
       drawnWalls = []
       selectedWallId = nil
       length = SketchLengthField(unit: SketchUnits(display: displayUnits).long)
@@ -154,6 +169,8 @@
       do {
         let prepare = self.prepare
         let upload = try await Task.detached(priority: .userInitiated) { try prepare(selection) }.value
+        guard number == readingNumber, phase == .reading else { return }
+        uploadNote = upload.note
         let read = try await interpreter.interpret(imageData: upload.data, mediaType: upload.mediaType)
         guard number == readingNumber, phase == .reading else { return }
         guard read.reading.isFloorPlan else {
@@ -169,7 +186,14 @@
         }
       } catch {
         guard number == readingNumber, phase == .reading, !(error is CancellationError) else { return }
-        fail(error)
+        if wasBackgroundedDuringReading, !(error is SketchReadingError) {
+          // The request died with the app in the background, not because of the photo.
+          problem = SketchPhotoText.closedDuringReading
+          problemIsNotAPlan = false
+          phase = .problem
+        } else {
+          fail(error)
+        }
       }
     }
 
@@ -179,6 +203,18 @@
       reading?.cancel()
       reading = nil
       phase = .source
+    }
+
+    /// "Try again" after a reading that failed: the same photo read again.
+    public func retry() {
+      guard let image else { return }
+      start(image, kind: sourceKind)
+    }
+
+    /// The app went to the background (the reading screen calls this): a reading that then
+    /// fails says the app was closed, not the network's words.
+    public func appDidEnterBackground() {
+      if phase == .reading { wasBackgroundedDuringReading = true }
     }
 
     /// "Retake the photo", or Back from the one-length step: choose the photo again.
@@ -289,10 +325,21 @@
       }
     }
 
-    /// The converter's notes (scale, dimensions used or dropped), shown before the solver's.
+    /// The reading is the field-test build's fixed demo reading, not the operator's sketch.
+    public var isDemoReading: Bool { interpretation?.model == SketchPhotoText.demoModel }
+
+    /// The banner over the reading, one-length and Check screens: the demo notice whenever the
+    /// reading is the demo one, else the host's notice.
+    public var banner: String? {
+      if isDemoReading { return SketchPhotoText.demoNotice }
+      return notice
+    }
+
+    /// What the upload left out, then the converter's notes (scale, dimensions used or
+    /// dropped), shown before the solver's.
     public var leadingNotes: [String] {
       var notes = conversion?.notes ?? []
-      if let notice { notes.insert(notice, at: 0) }
+      if let uploadNote { notes.insert(uploadNote, at: 0) }
       return notes
     }
 

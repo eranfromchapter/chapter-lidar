@@ -8,6 +8,10 @@ import XCTest
 
 @testable import AppCore
 
+#if canImport(CoreGraphics)
+  import CoreGraphics
+#endif
+
 #if canImport(FoundationNetworking)
   import FoundationNetworking
 #endif
@@ -119,12 +123,37 @@ final class SketchPhotoCaptureTests: XCTestCase {
     }
   }
 
+  /// One server-sent event: its `event:` line, its `data:` line and the blank line after.
+  private func event(_ type: String, _ object: [String: Any]) throws -> String {
+    var data = object
+    data["type"] = type
+    let json = String(decoding: try JSONSerialization.data(withJSONObject: data), as: UTF8.self)
+    return "event: \(type)\ndata: \(json)\n\n"
+  }
+
+  /// A streamed answer: thinking, then `text` in two deltas, then the stop reason.
   private func message(text: String, stopReason: String = "end_turn") throws -> Data {
-    try JSONSerialization.data(withJSONObject: [
-      "id": "msg_1", "type": "message", "role": "assistant", "model": "claude-opus-5-5",
-      "content": [["type": "thinking", "thinking": ""], ["type": "text", "text": text]],
-      "stop_reason": stopReason,
-    ])
+    let half = text.index(text.startIndex, offsetBy: text.count / 2)
+    var stream = try event(
+      "message_start",
+      ["message": ["id": "msg_1", "type": "message", "role": "assistant", "model": "claude-opus-5-5"]])
+    stream += try event(
+      "content_block_start", ["index": 0, "content_block": ["type": "thinking", "thinking": ""]])
+    stream += try event(
+      "content_block_delta", ["index": 0, "delta": ["type": "thinking_delta", "thinking": "Hmm."]])
+    stream += try event("content_block_stop", ["index": 0])
+    stream += try event("ping", [:])
+    stream += try event(
+      "content_block_start", ["index": 1, "content_block": ["type": "text", "text": ""]])
+    for part in [String(text[..<half]), String(text[half...])] {
+      stream += try event(
+        "content_block_delta", ["index": 1, "delta": ["type": "text_delta", "text": part]])
+    }
+    stream += try event("content_block_stop", ["index": 1])
+    stream += try event(
+      "message_delta", ["delta": ["stop_reason": stopReason], "usage": ["output_tokens": 10]])
+    stream += try event("message_stop", [:])
+    return Data(stream.utf8)
   }
 
   private func reader(_ transport: Recorder) throws -> FieldTestSketchReader {
@@ -154,17 +183,21 @@ final class SketchPhotoCaptureTests: XCTestCase {
     let body = try XCTUnwrap(
       JSONSerialization.jsonObject(with: try XCTUnwrap(request.httpBody)) as? [String: Any])
     XCTAssertEqual(body["model"] as? String, "claude-opus-5-5")
-    XCTAssertEqual(body["max_tokens"] as? Int, 16000)
+    XCTAssertEqual(body["max_tokens"] as? Int, 48000)
+    XCTAssertEqual(body["stream"] as? Bool, true, "streamed: a PDF takes minutes")
     XCTAssertEqual(body["system"] as? String, "PROMPT")
     XCTAssertNil(body["thinking"], "Opus 5.5 always thinks; effort sets how hard")
     let config = try XCTUnwrap(body["output_config"] as? [String: Any])
-    XCTAssertEqual(config["effort"] as? String, "high")
+    XCTAssertEqual(config["effort"] as? String, "medium")
     let format = try XCTUnwrap(config["format"] as? [String: Any])
     XCTAssertEqual(format["type"] as? String, "json_schema")
     let schema = try XCTUnwrap(format["schema"] as? [String: Any])
     XCTAssertEqual(
       Set((schema["required"] as? [String]) ?? []),
-      ["isFloorPlan", "problem", "dimensionUnits", "ceilingHeightMm", "rooms", "dimensions"])
+      [
+        "isFloorPlan", "planPage", "problem", "dimensionUnits", "ceilingHeightMm", "rooms",
+        "dimensions",
+      ])
     let schemaText = String(
       decoding: try JSONSerialization.data(withJSONObject: schema), as: UTF8.self)
     XCTAssertFalse(schemaText.contains("$ref"), "references resolved")
@@ -178,6 +211,83 @@ final class SketchPhotoCaptureTests: XCTestCase {
     XCTAssertEqual(source["media_type"] as? String, "image/png")
     XCTAssertEqual(source["data"] as? String, Self.png.base64EncodedString())
     XCTAssertEqual(content[1]["text"] as? String, "Read this floor-plan sketch.")
+    XCTAssertEqual(request.timeoutInterval, 600)
+  }
+
+  /// A two-page PDF, US Letter (612 x 792 pt); nil without CoreGraphics.
+  static func pdf() -> Data? {
+    #if canImport(CoreGraphics)
+      let data = NSMutableData()
+      var box = CGRect(x: 0, y: 0, width: 612, height: 792)
+      guard let consumer = CGDataConsumer(data: data as CFMutableData),
+        let context = CGContext(consumer: consumer, mediaBox: &box, nil)
+      else { return nil }
+      for _ in 0..<2 {
+        context.beginPDFPage(nil)
+        context.endPDFPage()
+      }
+      context.closePDF()
+      return data as Data
+    #else
+      return nil
+    #endif
+  }
+
+  func testAPDFIsSentWholeAsADocument() async throws {
+    let fixture = try CaptureContractJSON.makeDecoder().decode(
+      SketchInterpretation.self, from: try Data(contentsOf: Self.fixtureURL))
+    var reading = fixture.reading
+    reading.planPage = 2
+    let readingJSON = String(
+      decoding: try CaptureContractJSON.makeEncoder().encode(reading), as: UTF8.self)
+    let transport = Recorder(status: 200, body: try message(text: readingJSON))
+    let pdf = Self.pdf() ?? Data("%PDF-1.7\n%%EOF\n".utf8)
+    let read = try await reader(transport).read(imageData: pdf, mediaType: "application/pdf")
+    XCTAssertEqual(read.reading.planPage, 2)
+    #if canImport(CoreGraphics)
+      XCTAssertEqual(read.image, .init(width: 612, height: 792), "the first page in points")
+    #endif
+
+    let request = try XCTUnwrap(transport.requests.first)
+    let body = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: try XCTUnwrap(request.httpBody)) as? [String: Any])
+    let messages = try XCTUnwrap(body["messages"] as? [[String: Any]])
+    let content = try XCTUnwrap(messages.first?["content"] as? [[String: Any]])
+    XCTAssertEqual(content.map { $0["type"] as? String }, ["document", "text"])
+    let source = try XCTUnwrap(content[0]["source"] as? [String: Any])
+    XCTAssertEqual(source["type"] as? String, "base64")
+    XCTAssertEqual(source["media_type"] as? String, "application/pdf")
+    XCTAssertEqual(source["data"] as? String, pdf.base64EncodedString(), "every page")
+    XCTAssertEqual(content[1]["text"] as? String, "Read this floor plan.")
+  }
+
+  func testACutOffOrBrokenStreamIsAnError() async throws {
+    do {
+      _ = try await reader(Recorder(status: 200, body: try message(text: "{\"isFl", stopReason: "max_tokens")))
+        .read(imageData: Self.png, mediaType: "image/png")
+      XCTFail("expected truncated")
+    } catch {
+      XCTAssertEqual(error as? FieldTestSketchReaderError, .truncated)
+    }
+    let overloaded = try event("message_start", ["message": ["model": "claude-opus-5-5"]])
+      + (try event("error", ["error": ["type": "overloaded_error", "message": "Overloaded"]]))
+    do {
+      _ = try await reader(Recorder(status: 200, body: Data(overloaded.utf8)))
+        .read(imageData: Self.png, mediaType: "image/png")
+      XCTFail("expected a stream error")
+    } catch {
+      XCTAssertEqual(
+        error as? FieldTestSketchReaderError, .streamError("overloaded_error: Overloaded"))
+    }
+    let unfinished = try event("message_start", ["message": ["model": "claude-opus-5-5"]])
+    do {
+      _ = try await reader(Recorder(status: 200, body: Data(unfinished.utf8)))
+        .read(imageData: Self.png, mediaType: "image/png")
+      XCTFail("expected an unfinished answer")
+    } catch {
+      XCTAssertEqual(
+        error as? FieldTestSketchReaderError, .unreadableAnswer("the answer ended early"))
+    }
   }
 
   func testARefusalAndAnAPIErrorAreErrors() async throws {
@@ -256,6 +366,14 @@ final class SketchPhotoCaptureTests: XCTestCase {
   }
 
   // MARK: Image headers
+
+  func testTheHeaderGivesAPDFsFirstPageInPoints() throws {
+    #if canImport(CoreGraphics)
+      XCTAssertEqual(ImageHeader.size(of: try XCTUnwrap(Self.pdf())), .init(width: 612, height: 792))
+    #else
+      throw XCTSkip("CoreGraphics reads PDF pages")
+    #endif
+  }
 
   func testTheHeaderGivesThePixelSize() {
     XCTAssertEqual(ImageHeader.size(of: Self.png), .init(width: 1600, height: 1200))

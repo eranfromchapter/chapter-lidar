@@ -66,15 +66,21 @@ overview** (floors, photos, field controls, compass, rooms not scanned; the gate
   the default; `walkthrough.method.photo`), then the walk and the typed sketch. It asks the floor,
   what the sketch shows and the units on the same screen, then `SketchUI`'s **Photograph the
   sketch** (camera, Photos or a file; the F14 pickers) → **Reading your sketch…** (the photo, a
-  spinner, Cancel; `SketchPhotoModel` sends it through `StationSketchInterpreter`, `POST
-  /v1/sketch-interpretations`, 150 s timeout; HEIC and PDF are sent as JPEG and anything over
-  2048 px is redrawn upright at 2048 px, JPEG 0.85, the original bytes are kept) → **One length**
+  spinner, Cancel, "about a minute for a photo, a few minutes for a multi-page PDF"; the phone
+  does not lock while it reads, and a background task lets the request finish if the app is
+  sent away; `SketchPhotoModel` sends it through `StationSketchInterpreter`, `POST
+  /v1/sketch-interpretations`, 600 s timeout; a PDF is sent whole as `application/pdf` (over
+  24 MB or 100 pages it is trimmed to its first pages, and Check says so), HEIC is sent as JPEG
+  and anything over 2048 px is redrawn upright at 2048 px, JPEG 0.85, the original bytes are
+  kept) → **One length**
   when the sketch has no written dimensions (tap a wall on the drawn plan or its chip, type its
   length) → **Check** (a SceneKit 3D preview of `SketchMesh.extrude` with vertex colours on top,
   the plan, the converter's notes, Complete or Limited). A photo that is not a plan (422
   `sketch_not_a_plan`) shows Claude's reason with **Retake the photo** and **Enter it by hand**
-  (the F14 screens with the photo as the sketch); 503 says the station cannot read sketches
-  now. Finish floor writes `sketch.<ext>` (as taken), `sketch-interpretation.json` and
+  (the F14 screens with the photo as the sketch); a reading that failed shows why with **Try
+  again** (the same photo) and **Enter it by hand**, and one that died because the app was sent
+  to the background says so; nothing goes to hand entry unless the operator chooses it. 503 says
+  the station cannot read sketches now. Finish floor writes `sketch.<ext>` (as taken), `sketch-interpretation.json` and
   `sketch-measurements.json`; the record says `captureSource: sketch`. The package lists the
   interpretation (role `sketch_interpretation`, derived from the image), the measurements
   (derived from the interpretation and the image), the model (from all three) and the mesh;
@@ -183,8 +189,10 @@ key and the phone never does. The field-test build has no station, so "Photograp
 answered in process: with an API key in `Local.xcconfig` the app calls the Claude API itself
 (`FieldTestSketchReader` in AppCore, `#if DEBUG`; the contract prompt
 `contract/prompts/sketch-interpretation.md` and `contract/schema/sketch-interpretation.schema.json`
-are bundled in Debug only); without one it answers the UI tests' fixture reading and says
-"Demo reading: add an API key to read real sketches". With a key, the sketch photo (and only it)
+are bundled in Debug only; the call is streamed, `effort: medium`, `max_tokens: 48000`, and a
+PDF goes as a `document` block); without one it answers the UI tests' fixture reading (model
+`demo-fixture`), and the reading, one-length and Check screens say "Demo reading — not your
+sketch. Add an API key to read real sketches." With a key, the sketch photo or PDF (and only it)
 leaves the phone, to `api.anthropic.com`.
 
 ```

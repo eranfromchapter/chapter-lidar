@@ -182,7 +182,8 @@ public struct StationClient: Sendable {
   /// or cannot be read (422) throws `SketchInterpretationRejected` with the station's problem
   /// and, when it sent one, its interpretation (the reading's `problem` says why). Any other
   /// error status throws `StationError` as usual (503: the station cannot read sketches now).
-  /// Reading takes 10 to 40 s; give this client a transport with a long timeout (150 s).
+  /// A photo takes about a minute and a multi-page PDF a few; give this client a transport with
+  /// a long timeout (`StationSketchInterpreter.timeout`, 600 s).
   public func createSketchInterpretation(_ request: SketchInterpretationRequest) async throws
     -> SketchInterpretation
   {

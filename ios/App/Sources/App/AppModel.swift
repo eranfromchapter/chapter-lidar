@@ -178,8 +178,8 @@ final class AppModel {
       capabilities: DeviceCapabilities.current(), device: DeviceInfo.current(),
       makeSession: { _ in LiveCaptureSession(compass: compass) },
       photoSource: .camera(CameraEngine()), compass: compass, fixedOperator: nil)
-    // Reading a sketch photo takes 10 to 40 s (the station waits up to 120 s for Claude): its
-    // own client with a long timeout.
+    // Reading a sketch photo takes about a minute, a multi-page PDF a few: its own client with
+    // a long timeout (600 s).
     services.sketchInterpreter = StationSketchInterpreter(
       station: StationAPI(
         configuration: configuration.station, tokenProvider: EntraTokenProvider(signIn: signIn),

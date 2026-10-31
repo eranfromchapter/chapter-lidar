@@ -427,7 +427,7 @@
           case .refused: (status, code) = (422, "sketch_refused")
           case .truncated: (status, code) = (502, "sketch_truncated")
           case .unreadableAnswer: (status, code) = (502, "sketch_unreadable_response")
-          case .api, .missingResource: (status, code) = (502, "sketch_request_rejected")
+          case .api, .missingResource, .streamError: (status, code) = (502, "sketch_request_rejected")
           }
           return problem(status, code, url, title: error.description)
         }

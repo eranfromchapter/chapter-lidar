@@ -10,6 +10,7 @@
     "dimensionUnits": "none",
     "dimensions": [],
     "isFloorPlan": true,
+    "planPage": null,
     "problem": null,
     "rooms": [
       {
