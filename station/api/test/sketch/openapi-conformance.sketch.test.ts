@@ -10,7 +10,11 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import type { FastifySchema } from "fastify";
 import { SKETCH_INTERPRETATION_BODY_SCHEMA } from "../../src/routes/sketch/schemas.js";
-import { MAX_IMAGE_BASE64_LENGTH } from "../../src/routes/sketch/image.js";
+import {
+  MAX_IMAGE_BASE64_LENGTH,
+  MAX_PDF_BASE64_LENGTH,
+  SKETCH_MEDIA_TYPES,
+} from "../../src/routes/sketch/image.js";
 import { OpenApi } from "../packages/openapi.js";
 import {
   BEDROOM_READING,
@@ -20,6 +24,7 @@ import {
   type SketchTestApp,
   bearer,
   claudeMessage,
+  pdfDocument,
   pngImage,
   refusalMessage,
   sdkErrors,
@@ -30,6 +35,7 @@ import {
 const OPERATION = "createSketchInterpretation";
 const openapi = new OpenApi();
 const PHOTO = pngImage(64, 48);
+const PDF = pdfDocument();
 
 let t: SketchTestApp;
 let unconfigured: SketchTestApp;
@@ -132,6 +138,7 @@ describe("createSketchInterpretation route", () => {
     const data = PHOTO.toString("base64");
     const valid = [
       { mediaType: "image/png", data },
+      { mediaType: "application/pdf", data: PDF.toString("base64") },
       { mediaType: "image/heic", data },
       { mediaType: "image/png", data, hint: "existing printed plan" },
     ];
@@ -151,6 +158,24 @@ describe("createSketchInterpretation route", () => {
       assert.notDeepEqual(openapi.requestBodyErrors(OPERATION, body), [], JSON.stringify(body));
     }
   });
+
+  it("documents exactly the media types the route accepts", () => {
+    const op = openapi.operation(OPERATION);
+    const documented = (openapi.doc.components as Record<string, Record<string, unknown>>).schemas
+      ?.SketchInterpretationRequest as { properties: { mediaType: { description: string } } };
+    const listed = [...documented.properties.mediaType.description.matchAll(/`([a-z]+\/[a-z]+)`/g)]
+      .map((match) => match[1])
+      .sort();
+    assert.deepEqual(listed, [...SKETCH_MEDIA_TYPES].sort());
+    assert.deepEqual(SKETCH_MEDIA_TYPES, [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/gif",
+      "application/pdf",
+    ]);
+    assert.match(String(op.node.description), /PDF/);
+  });
 });
 
 describe("createSketchInterpretation responses", () => {
@@ -160,10 +185,18 @@ describe("createSketchInterpretation responses", () => {
     assert.deepEqual(body.reading, BEDROOM_READING);
   });
 
+  it("200 for a whole PDF", async () => {
+    claude.responder = () => claudeMessage(BEDROOM_READING);
+    const body = await conforms(t, sketchBody(PDF, "application/pdf"), 200);
+    assert.deepEqual(body.image, { width: 595, height: 842 });
+  });
+
   it("400 for a body outside the schema and for data that is not an image", async () => {
     await conforms(t, { mediaType: "image/png" }, 400);
     const body = await conforms(t, { mediaType: "image/png", data: "not base64" }, 400);
     assert.equal(body.code, "sketch_image_invalid");
+    const notPdf = await conforms(t, sketchBody(PHOTO, "application/pdf"), 400);
+    assert.equal(notPdf.code, "sketch_image_invalid");
   });
 
   it("401 without a token", async () => {
@@ -174,18 +207,25 @@ describe("createSketchInterpretation responses", () => {
     await conforms(t, sketchBody(PHOTO), 403, { roles: ["bim"] });
   });
 
-  it("413 above 10 MB", async () => {
+  it("413 above 10 MB (an image), 24 MB (a PDF) and the route body limit", async () => {
     const body = await conforms(
       t,
       { mediaType: "image/png", data: "A".repeat(MAX_IMAGE_BASE64_LENGTH + 4) },
       413,
     );
     assert.equal(body.code, "sketch_image_too_large");
-    await conforms(
+    const pdf = await conforms(
       t,
-      { mediaType: "image/png", data: "A".repeat(MAX_IMAGE_BASE64_LENGTH + 128 * 1024) },
+      { mediaType: "application/pdf", data: "A".repeat(MAX_PDF_BASE64_LENGTH + 4) },
       413,
     );
+    assert.equal(pdf.code, "sketch_image_too_large");
+    const tooLong = await conforms(
+      t,
+      { mediaType: "application/pdf", data: "A".repeat(MAX_PDF_BASE64_LENGTH + 128 * 1024) },
+      413,
+    );
+    assert.equal(tooLong.code, "payload_too_large");
   });
 
   it("415 for HEIC", async () => {

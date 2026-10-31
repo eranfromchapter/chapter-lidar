@@ -796,16 +796,21 @@ paths:
     post:
       tags: [sketches]
       operationId: createSketchInterpretation
-      summary: Read a photo of a floor-plan sketch
+      summary: Read a photo of a floor-plan sketch, or a whole PDF of a floor plan
       description: |
-        Sends the photo to Claude (Anthropic API, vision) with the contract prompt
-        `contract/prompts/sketch-interpretation.md` and answers what it read: rooms, walls,
-        openings, furniture and the dimensions written on the drawing, as a sketch
-        interpretation (contract `sketch-interpretation` 1.0.0). The app turns the reading into
-        sketch measurements and keeps the photo and the interpretation in the package; the
-        station stores neither. Each call that reaches Claude is audited (who, when, image size,
-        model, outcome, tokens; never the image). Typically 10 to 40 seconds; the station waits
-        at most 120 seconds per attempt.
+        Sends the photo (an image block) or the whole PDF (a document block) to Claude
+        (Anthropic API) with the contract prompt `contract/prompts/sketch-interpretation.md` and
+        answers what it read: rooms, walls, openings, furniture and the dimensions written on
+        the drawing, as a sketch interpretation (contract `sketch-interpretation` 1.0.0). For a
+        PDF, Claude reads every page and traces the plan from one page, named in
+        `reading.planPage`; `image` is then the first page's size in points (US Letter,
+        612 x 792, when the station cannot read it). The app turns the reading into sketch
+        measurements and keeps the file and the interpretation in the package; the station
+        stores neither. Each call that reaches Claude is audited (who, when, file size, media
+        type, model, outcome, tokens; never the file). A photo typically takes 10 to 60
+        seconds; a 20-page PDF about 3 minutes. The station waits at most 600 seconds per
+        attempt, but in Azure the Container Apps ingress closes a request after 240 seconds,
+        so a long PDF reading can end without a response there.
       x-roles: [capture]
       requestBody:
         required: true
@@ -823,7 +828,8 @@ paths:
         "400":
           description: |
             The body is malformed, or `data` is not standard padded base64 or not an image of
-            `mediaType` (code `sketch_image_invalid`).
+            `mediaType`, or not a PDF (no `%PDF-` header) for `application/pdf` (code
+            `sketch_image_invalid`).
           content:
             application/problem+json:
               schema:
@@ -834,16 +840,18 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "413":
           description: |
-            The image is larger than 10 MB decoded (code `sketch_image_too_large`), or the whole
-            body is too large to read (code `payload_too_large`).
+            The image is larger than 10 MB decoded, or the PDF larger than 24 MB (24 000 000
+            bytes) decoded (code `sketch_image_too_large`), or the whole body is too large to
+            read (code `payload_too_large`).
           content:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
         "415":
           description: |
-            `mediaType` is not `image/jpeg`, `image/png`, `image/webp` or `image/gif` (code
-            `sketch_unsupported_media_type`). The app converts HEIC photos to JPEG.
+            `mediaType` is not `image/jpeg`, `image/png`, `image/webp`, `image/gif` or
+            `application/pdf` (code `sketch_unsupported_media_type`). The app converts HEIC
+            photos to JPEG.
           content:
             application/problem+json:
               schema:
@@ -1032,23 +1040,24 @@ components:
                 type: string
 
     SketchInterpretationRequest:
-      description: One photo of a floor-plan sketch (spec F16).
+      description: One photo of a floor-plan sketch, or one whole PDF of a floor plan (spec F16).
       type: object
       additionalProperties: false
       required: [mediaType, data]
       properties:
         mediaType:
           description: |
-            Media type of the image: `image/jpeg`, `image/png`, `image/webp` or `image/gif`.
-            Any other value answers 415.
+            Media type of the file: `image/jpeg`, `image/png`, `image/webp`, `image/gif` or
+            `application/pdf`. Any other value answers 415.
           type: string
           minLength: 1
           maxLength: 100
           examples: [image/jpeg]
         data:
           description: |
-            The image, standard base64 with padding and no line breaks. At most 10 MB decoded
-            (13 981 016 base64 characters); a larger image answers 413.
+            The image or PDF, standard base64 with padding and no line breaks. An image is at
+            most 10 MB decoded (13 981 016 base64 characters), a PDF at most 24 MB (24 000 000
+            bytes, 32 000 000 base64 characters); a larger file answers 413.
           type: string
           minLength: 1
         hint:

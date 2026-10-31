@@ -1,16 +1,20 @@
 // Sketch photo reading (spec F16 §3, §6; OpenAPI operation createSketchInterpretation).
 //
-// POST /v1/sketch-interpretations sends one sketch photo to Claude (vision, structured output
-// in the contract's reading format) and answers the sketch interpretation:
+// POST /v1/sketch-interpretations sends one sketch photo, or one whole PDF, to Claude (vision or
+// document input, structured output in the contract's reading format, streamed) and answers the
+// sketch interpretation:
 //
 // - 200: the interpretation (contract sketch-interpretation 1.0.0), validated before it is sent.
 // - 422 sketch_not_a_plan: Claude read the image and it is not a floor plan; the problem body
 //   carries the interpretation so the app can show reading.problem. 422 sketch_refused: Claude
 //   and the server-side fallback declined.
-// - 400/413/415: the image is not base64 or not an image of mediaType / larger than 10 MB / not
-//   a media type the Claude API reads.
+// - 400/413/415: the file is not base64 or not an image of mediaType (or not a PDF) / larger than
+//   10 MB (an image) or 24 MB (a PDF) / not a media type the Claude API reads.
 // - 502: the answer was cut off, not a valid reading, or the API refused the request itself.
 // - 503 sketch_unavailable: no API key, or Claude unreachable after the SDK's retries.
+//
+// A PDF reading takes minutes (about 3 for 20 pages): close to the 240 s request timeout of the
+// Azure Container Apps HTTP ingress. See docs/handoff/04-station-and-deploy.md §4.3.
 //
 // The station never stores the image and never logs it or the API key. Every call that sends
 // the image to Anthropic writes one audit row (sketch.interpret): who, when, image bytes, model,
@@ -36,11 +40,15 @@ import {
 } from "./claude.js";
 import {
   type ImageSize,
-  MAX_IMAGE_BYTES,
+  PDF_MEDIA_TYPE,
   SKETCH_MEDIA_TYPES,
+  type SketchMediaType,
   base64DecodedLength,
   imageSize,
+  isPdf,
   isSketchMediaType,
+  maxBytes,
+  pdfPageSize,
 } from "./image.js";
 import {
   SKETCH_BODY_LIMIT_BYTES,
@@ -160,6 +168,14 @@ function interpret(
   return { interpretation: result.value };
 }
 
+/** The size reported as `image`: pixels of an image, first-page points of a PDF; null if unreadable. */
+function fileSize(bytes: Buffer, mediaType: SketchMediaType): ImageSize | null {
+  if (mediaType === PDF_MEDIA_TYPE) {
+    return isPdf(bytes) ? pdfPageSize(bytes) : null;
+  }
+  return imageSize(bytes, mediaType);
+}
+
 /** Maps an SDK error to the answer; null for anything that is not an API error (a bug). */
 function upstreamProblem(
   error: unknown,
@@ -212,6 +228,15 @@ function upstreamProblem(
     log.warn({ sketch: where }, "Claude API error or overloaded after retries");
     return {
       outcome: "server_error",
+      problem: new ProblemError(503, SKETCH_PROBLEMS.unavailable, { detail: UNAVAILABLE_DETAIL }),
+    };
+  }
+  if (error.status === undefined) {
+    // An error event inside the stream (for example overloaded_error after the response began):
+    // the SDK raises a plain APIError without a status, and does not retry it.
+    log.warn({ sketch: where }, "Claude API stream ended with an error event");
+    return {
+      outcome: "stream_error",
       problem: new ProblemError(503, SKETCH_PROBLEMS.unavailable, { detail: UNAVAILABLE_DETAIL }),
     };
   }
@@ -278,26 +303,29 @@ export default async function sketchRoutes(app: FastifyInstance): Promise<void> 
 
       if (!isSketchMediaType(mediaType)) {
         throw new ProblemError(415, SKETCH_PROBLEMS.unsupportedMediaType, {
-          detail: `The image must be one of ${SKETCH_MEDIA_TYPES.join(", ")}. Convert HEIC to JPEG.`,
+          detail: `The file must be one of ${SKETCH_MEDIA_TYPES.join(", ")}. Convert HEIC to JPEG.`,
         });
       }
       const bytes = base64DecodedLength(data);
       if (bytes === null) {
         throw new ProblemError(400, SKETCH_PROBLEMS.invalidImage, {
-          detail: "data must be the image in standard base64 (no line breaks, padded).",
+          detail: "data must be the file in standard base64 (no line breaks, padded).",
           errors: [{ pointer: "/data", message: "is not base64" }],
         });
       }
-      if (bytes > MAX_IMAGE_BYTES) {
+      const limit = maxBytes(mediaType);
+      if (bytes > limit) {
+        const what = mediaType === PDF_MEDIA_TYPE ? "PDF" : "image";
         throw new ProblemError(413, SKETCH_PROBLEMS.tooLarge, {
-          detail: `The image is ${bytes} bytes; at most ${MAX_IMAGE_BYTES} are accepted.`,
+          detail: `The ${what} is ${bytes} bytes; at most ${limit} are accepted.`,
         });
       }
-      const size = imageSize(Buffer.from(data, "base64"), mediaType);
+      const size = fileSize(Buffer.from(data, "base64"), mediaType);
       if (size === null) {
+        const what = mediaType === PDF_MEDIA_TYPE ? "PDF document" : `${mediaType} image`;
         throw new ProblemError(400, SKETCH_PROBLEMS.invalidImage, {
-          detail: `data is not a readable ${mediaType} image.`,
-          errors: [{ pointer: "/data", message: `is not a ${mediaType} image` }],
+          detail: `data is not a readable ${what}.`,
+          errors: [{ pointer: "/data", message: `is not a ${what}` }],
         });
       }
 
@@ -321,7 +349,9 @@ export default async function sketchRoutes(app: FastifyInstance): Promise<void> 
 
       let message: BetaMessage;
       try {
-        message = await client.beta.messages.create(params, { timeout: SKETCH_TIMEOUT_MS });
+        message = await client.beta.messages
+          .stream(params, { timeout: SKETCH_TIMEOUT_MS })
+          .finalMessage();
       } catch (error) {
         const mapped = upstreamProblem(error, request.log);
         await record(request, bytes, mediaType, { outcome: mapped?.outcome ?? "error" });

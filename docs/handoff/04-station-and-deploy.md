@@ -154,10 +154,41 @@ the commit as label `org.opencontainers.image.revision` (`.github/workflows/depl
 
 ### 4.3 Sketch reading (spec F16)
 
-`POST /v1/sketch-interpretations` (role `capture`) sends a sketch photo to Claude and returns
-the reading (`station/api/src/routes/sketch/`). The system prompt is
-`contract/prompts/sketch-interpretation.md`, read at startup (the API image copies
+`POST /v1/sketch-interpretations` (role `capture`) sends a sketch photo, or a whole PDF of a
+floor plan, to Claude and returns the reading (`station/api/src/routes/sketch/`). The system
+prompt is `contract/prompts/sketch-interpretation.md`, read at startup (the API image copies
 `contract/prompts`).
+
+- Files: `image/jpeg`, `image/png`, `image/webp`, `image/gif` (at most 10 MB decoded, sent as an
+  image block) and `application/pdf` (at most 24 000 000 bytes decoded, `%PDF-` header checked,
+  sent as a document block; Claude names the page it traced in `reading.planPage`). The route
+  body limit is 32 000 000 + 64 KiB bytes (the 24 MB PDF in base64), for this route only.
+- `image` in the interpretation: pixels for a photo; for a PDF, the first page in points from
+  the first direct `/MediaBox` in the file, best effort (no PDF parser: compressed object
+  streams, an indirect `/MediaBox`, `/Rotate` and `/CropBox` are not read). When it cannot be
+  read the station reports US Letter, 612 x 792.
+- Request: streamed (`client.beta.messages.stream(...).finalMessage()`), `effort: "medium"`,
+  `max_tokens: 48000`, structured output, server-side fallback (`fallbacks: "default"`, beta
+  `server-side-fallback-2026-07-01`), timeout 600 s per attempt, 2 SDK retries. Live test from
+  a Mac: a 14.7 MB, 20-page PDF took about 3 minutes (44k input, 14k output tokens) and was cut
+  off with `max_tokens: 16000`.
+
+**Risk: the Azure ingress closes long requests.** The Container Apps HTTP ingress has a fixed
+request timeout of 240 seconds (Microsoft Learn, "Ingress in Azure Container Apps": "Request
+time out is 240 seconds"). A photo is well inside it; a multi-page PDF reading (about 3 minutes
+for 20 pages) is close to it, and a larger document will exceed it: the app then gets no
+answer (the client connection is closed) while the station may still finish the call to Claude
+and pay for it. `infra/` cannot raise the limit: the api's `ingress` block
+(`infra/modules/containerapps.bicep`, `Microsoft.App/containerApps@2024-03-01`) has no request
+timeout property, and the documentation lists none. Recommended follow-up, before PDFs are used
+in the field: make the reading asynchronous (`202 Accepted` with a job id, the reading done by
+the worker or in the background, the app polls `GET /v1/sketch-interpretations/{id}`). A
+gateway in front (Front Door, Application Gateway) does not help on its own: traffic still
+passes the Container Apps HTTP ingress. The only longer-timeout alternative is to leave the HTTP
+ingress (TCP ingress, which needs a VNet-integrated environment and TLS in the station; not
+tried). Not verified: whether the 240 s is a total or an idle timeout. Until then, keep PDFs
+short (a few pages) in Azure. The station itself does not cut the request: Fastify's
+`requestTimeout` and `connectionTimeout` are left at 0 (no limit).
 
 | Variable            | Default           | Rule                                                                                                                       |
 | ------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------- |
@@ -168,8 +199,8 @@ To turn it on in an environment: an admin sets the secret `anthropic-api-key` in
 (`az keyvault secret set --vault-name kv-chapter-capture-stg --name anthropic-api-key --file <path>`),
 then `param anthropicApiKeyInVault = true` in `infra/params/<env>.bicepparam` and deploy. Keep
 it `false` until the secret exists: a Key Vault reference to a missing secret fails the api
-revision. Each call is audited as `sketch.interpret` (image size, model, outcome, tokens; never
-the image).
+revision. Each call is audited as `sketch.interpret` (file size, media type, model, outcome,
+tokens; never the file).
 
 ## 5. HUB connection
 

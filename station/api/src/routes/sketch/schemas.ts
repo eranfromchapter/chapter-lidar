@@ -1,7 +1,7 @@
 // Request schema and problem codes of POST /v1/sketch-interpretations (OpenAPI operation
 // createSketchInterpretation).
 
-import { MAX_IMAGE_BASE64_LENGTH } from "./image.js";
+import { MAX_PDF_BASE64_LENGTH } from "./image.js";
 
 export interface SketchInterpretationBody {
   mediaType: string;
@@ -13,7 +13,7 @@ export interface SketchInterpretationBody {
 export const MAX_HINT_LENGTH = 500;
 
 /**
- * The JSON body. mediaType and the image size are checked by the route (415 and 413, not 400),
+ * The JSON body. mediaType and the file size are checked by the route (415 and 413, not 400),
  * so the schema only bounds them loosely.
  */
 export const SKETCH_INTERPRETATION_BODY_SCHEMA = {
@@ -28,16 +28,16 @@ export const SKETCH_INTERPRETATION_BODY_SCHEMA = {
 } as const;
 
 /**
- * Route body limit: a 10 MB image in base64 plus room for the rest of the JSON. A larger body
- * is refused by Fastify before it is read (413 payload_too_large).
+ * Route body limit: a 24 MB PDF in base64 (the largest file accepted) plus room for the rest of
+ * the JSON. A larger body is refused by Fastify before it is read (413 payload_too_large).
  */
-export const SKETCH_BODY_LIMIT_BYTES = MAX_IMAGE_BASE64_LENGTH + 64 * 1024;
+export const SKETCH_BODY_LIMIT_BYTES = MAX_PDF_BASE64_LENGTH + 64 * 1024;
 
 /** Problem codes of the operation. */
 export const SKETCH_PROBLEMS = {
-  /** 400: data is not base64, or the bytes are not an image of mediaType. */
+  /** 400: data is not base64, or the bytes are not an image of mediaType (or not a PDF). */
   invalidImage: "sketch_image_invalid",
-  /** 413: the decoded image is larger than 10 MB. */
+  /** 413: the decoded image is larger than 10 MB, or the decoded PDF larger than 24 MB. */
   tooLarge: "sketch_image_too_large",
   /** 415: mediaType is not one the Claude API reads. */
   unsupportedMediaType: "sketch_unsupported_media_type",

@@ -1,10 +1,11 @@
 // Test support for POST /v1/sketch-interpretations: a fake Claude client (no network), tiny
-// images of each accepted type, Claude messages built from the contract examples and an app
+// images of each accepted type and a tiny PDF, Claude messages built from the contract examples and an app
 // with every route area, a test Entra issuer and the fake database.
 
 import { readFileSync } from "node:fs";
 import { crc32, deflateSync } from "node:zlib";
 import Anthropic from "@anthropic-ai/sdk";
+import type { BetaMessageStreamParams } from "@anthropic-ai/sdk/resources/beta/messages/messages.js";
 import type { FastifyInstance } from "fastify";
 import { buildServer } from "../../src/core/app.js";
 import type { SketchClaudeClient } from "../../src/routes/sketch/claude.js";
@@ -18,7 +19,7 @@ import {
 } from "../core/helpers.js";
 
 type BetaMessage = Anthropic.Beta.Messages.BetaMessage;
-type CreateParams = Anthropic.Beta.Messages.MessageCreateParamsNonStreaming;
+type StreamParams = BetaMessageStreamParams;
 
 const EXAMPLES = new URL("../../../../contract/examples/sketch-interpretation/", import.meta.url);
 
@@ -33,13 +34,19 @@ export const BEDROOM_READING = example("valid/bedroom-and-closet.json").reading;
 export const NOT_A_PLAN_READING = example("valid/not-a-plan.json").reading;
 
 export interface RecordedCall {
-  readonly body: CreateParams;
+  /** The SDK method the route called: always "stream" (there is no create on the fake). */
+  readonly method: "stream";
+  readonly body: StreamParams;
   readonly options: Anthropic.RequestOptions | undefined;
 }
 
-type Responder = (body: CreateParams) => BetaMessage | Promise<BetaMessage>;
+type Responder = (body: StreamParams) => BetaMessage | Promise<BetaMessage>;
 
-/** Records every request and answers with the responder (which may throw an SDK error). */
+/**
+ * Records every request and answers with the responder (which may throw an SDK error). Like
+ * the SDK's beta.messages.stream(), stream() returns at once and errors surface from
+ * finalMessage().
+ */
 export class FakeSketchClaude implements SketchClaudeClient {
   readonly calls: RecordedCall[] = [];
   responder: Responder;
@@ -50,9 +57,10 @@ export class FakeSketchClaude implements SketchClaudeClient {
 
   readonly beta = {
     messages: {
-      create: async (body: CreateParams, options?: Anthropic.RequestOptions) => {
-        this.calls.push({ body: structuredClone(body), options });
-        return this.responder(body);
+      stream: (body: StreamParams, options?: Anthropic.RequestOptions) => {
+        this.calls.push({ method: "stream", body: structuredClone(body), options });
+        const responder = this.responder;
+        return { finalMessage: async () => responder(body) };
       },
     },
   };
@@ -126,6 +134,15 @@ export const sdkErrors = {
       headers(),
     ),
   connection: () => new Anthropic.APIConnectionError({ message: "Connection error." }),
+  /** An error event inside the stream: the SDK raises a plain APIError without a status. */
+  streamError: () =>
+    new Anthropic.APIError(
+      undefined,
+      errorBody("overloaded_error"),
+      undefined,
+      headers(),
+      "overloaded_error",
+    ),
   timeout: () => new Anthropic.APIConnectionTimeoutError(),
   badRequest: () =>
     new Anthropic.BadRequestError(
@@ -202,6 +219,26 @@ export function webpHeader(width: number, height: number): Buffer {
   bytes.writeUIntLE(width - 1, 24, 3);
   bytes.writeUIntLE(height - 1, 27, 3);
   return bytes;
+}
+
+/**
+ * A minimal one-page PDF (no xref table: enough for the route's checks, which read the header
+ * and the first /MediaBox). `mediaBox` is written as given, so tests can pass odd forms.
+ */
+export function pdfDocument(mediaBox = "[0 0 595.28 841.89]"): Buffer {
+  return Buffer.from(
+    [
+      "%PDF-1.7",
+      "%\xe2\xe3\xcf\xd3",
+      "1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj",
+      "2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj",
+      `3 0 obj << /Type /Page /Parent 2 0 R /MediaBox ${mediaBox} >> endobj`,
+      "trailer << /Root 1 0 R >>",
+      "%%EOF",
+      "",
+    ].join("\n"),
+    "latin1",
+  );
 }
 
 /** The request body for an image. */

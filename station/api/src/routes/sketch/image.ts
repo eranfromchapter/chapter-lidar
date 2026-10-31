@@ -1,12 +1,25 @@
-// The sketch photo as sent to POST /v1/sketch-interpretations: strict base64, the media types
-// the Claude API accepts, and the pixel size read from the image header (no image library, no
-// decoding of the pixels).
+// The sketch file as sent to POST /v1/sketch-interpretations: strict base64, the media types
+// the Claude API accepts (four image types and PDF), and the size reported as `image` in the
+// interpretation, read from the file header (no image or PDF library, no decoding of pixels).
 //
-// The size is the stored pixel size (JPEG SOF, PNG IHDR, GIF screen, WebP VP8/VP8L/VP8X). A
-// JPEG EXIF orientation is not applied: the app sends upright pixels.
+// - An image's size is the stored pixel size (JPEG SOF, PNG IHDR, GIF screen, WebP
+//   VP8/VP8L/VP8X). A JPEG EXIF orientation is not applied: the app sends upright pixels.
+// - A PDF's size is its first page in points, best effort (see pdfPageSize).
 
-/** Media types the Claude API accepts for an image block. HEIC is not one: the app converts it. */
-export const SKETCH_MEDIA_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
+/** Image media types the Claude API accepts for an image block. HEIC is not one: the app converts it. */
+export const SKETCH_IMAGE_MEDIA_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+] as const;
+export type SketchImageMediaType = (typeof SKETCH_IMAGE_MEDIA_TYPES)[number];
+
+/** A whole PDF, sent to Claude as a document block. */
+export const PDF_MEDIA_TYPE = "application/pdf";
+
+/** Every media type the route accepts; anything else answers 415. */
+export const SKETCH_MEDIA_TYPES = [...SKETCH_IMAGE_MEDIA_TYPES, PDF_MEDIA_TYPE] as const;
 export type SketchMediaType = (typeof SKETCH_MEDIA_TYPES)[number];
 
 /** Largest decoded image (spec F16 §3: at most 10 MB). */
@@ -14,6 +27,21 @@ export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
 /** Base64 length of a MAX_IMAGE_BYTES image. */
 export const MAX_IMAGE_BASE64_LENGTH = Math.ceil(MAX_IMAGE_BYTES / 3) * 4;
+
+/**
+ * Largest decoded PDF: 24 MB (decimal). In base64 that is 32 000 000 characters (30.5 MiB), so
+ * the request to Claude, with the system prompt and the schema, stays under the Messages API's
+ * 32 MB request limit.
+ */
+export const MAX_PDF_BYTES = 24_000_000;
+
+/** Base64 length of a MAX_PDF_BYTES document. */
+export const MAX_PDF_BASE64_LENGTH = Math.ceil(MAX_PDF_BYTES / 3) * 4;
+
+/** Largest decoded file of a media type. */
+export function maxBytes(mediaType: SketchMediaType): number {
+  return mediaType === PDF_MEDIA_TYPE ? MAX_PDF_BYTES : MAX_IMAGE_BYTES;
+}
 
 export function isSketchMediaType(value: string): value is SketchMediaType {
   return (SKETCH_MEDIA_TYPES as readonly string[]).includes(value);
@@ -134,7 +162,7 @@ function webpSize(bytes: Buffer): ImageSize | null {
 }
 
 /** Pixel size from the image header, or null when the bytes are not an image of that type. */
-export function imageSize(bytes: Buffer, mediaType: SketchMediaType): ImageSize | null {
+export function imageSize(bytes: Buffer, mediaType: SketchImageMediaType): ImageSize | null {
   switch (mediaType) {
     case "image/jpeg":
       return jpegSize(bytes);
@@ -145,4 +173,47 @@ export function imageSize(bytes: Buffer, mediaType: SketchMediaType): ImageSize 
     case "image/webp":
       return webpSize(bytes);
   }
+}
+
+/** US Letter in points: the size reported when a PDF's first page size cannot be read. */
+export const PDF_FALLBACK_PAGE: ImageSize = { width: 612, height: 792 };
+
+/** True when the bytes start with the PDF header `%PDF-`. */
+export function isPdf(bytes: Buffer): boolean {
+  return bytes.length >= 5 && bytes.toString("latin1", 0, 5) === "%PDF-";
+}
+
+const MEDIA_BOX = Buffer.from("/MediaBox", "latin1");
+const NUMBER = String.raw`[+-]?(?:\d+\.?\d*|\.\d+)`;
+const MEDIA_BOX_ARRAY = new RegExp(
+  String.raw`^\s*\[\s*(${NUMBER})\s+(${NUMBER})\s+(${NUMBER})\s+(${NUMBER})\s*\]`,
+);
+
+/**
+ * First page size of a PDF in points (rounded), best effort: the first `/MediaBox` written as a
+ * direct array of four numbers, in file order. It is not a PDF parser, so the size can be
+ * another page's, or an inherited box of the page tree, and `/Rotate`, `/CropBox` and
+ * `/UserUnit` are not applied. Page dictionaries inside compressed object streams (common since
+ * PDF 1.5) and a `/MediaBox` given as an indirect reference are not read; then, or when no box
+ * gives a positive size, the answer is PDF_FALLBACK_PAGE (US Letter, 612 x 792). The size only
+ * labels the interpretation: the reading's coordinates do not depend on it.
+ */
+export function pdfPageSize(bytes: Buffer): ImageSize {
+  let at = bytes.indexOf(MEDIA_BOX);
+  while (at !== -1) {
+    const start = at + MEDIA_BOX.length;
+    const match = MEDIA_BOX_ARRAY.exec(bytes.toString("latin1", start, start + 200));
+    if (match !== null) {
+      const [x0, y0, x1, y1] = match.slice(1, 5).map(Number) as [number, number, number, number];
+      const width = Math.round(Math.abs(x1 - x0));
+      const height = Math.round(Math.abs(y1 - y0));
+      const size =
+        Number.isSafeInteger(width) && Number.isSafeInteger(height) ? sized(width, height) : null;
+      if (size !== null) {
+        return size;
+      }
+    }
+    at = bytes.indexOf(MEDIA_BOX, start);
+  }
+  return PDF_FALLBACK_PAGE;
 }

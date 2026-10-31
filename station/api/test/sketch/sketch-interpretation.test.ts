@@ -1,5 +1,6 @@
-// F16 AC4: POST /v1/sketch-interpretations calls Claude with the image and the reading schema,
-// answers 200 with a contract-valid interpretation, 422 for a non-plan, 503 without a key.
+// F16 AC4: POST /v1/sketch-interpretations calls Claude with the image (or a whole PDF) and the
+// reading schema, answers 200 with a contract-valid interpretation, 422 for a non-plan, 503
+// without a key.
 // Claude is a fake injected as app.services.sketchClaude: no test reaches the network, and no
 // test needs Postgres (the audit rows go to the fake database).
 
@@ -18,9 +19,15 @@ import {
 import {
   MAX_IMAGE_BASE64_LENGTH,
   MAX_IMAGE_BYTES,
+  MAX_PDF_BASE64_LENGTH,
+  MAX_PDF_BYTES,
+  PDF_FALLBACK_PAGE,
   base64DecodedLength,
   imageSize,
+  isPdf,
+  pdfPageSize,
 } from "../../src/routes/sketch/image.js";
+import { SKETCH_BODY_LIMIT_BYTES } from "../../src/routes/sketch/schemas.js";
 import { testEnv } from "../core/helpers.js";
 import {
   BEDROOM_READING,
@@ -35,6 +42,7 @@ import {
   example,
   gifHeader,
   jpegHeader,
+  pdfDocument,
   pngImage,
   refusalMessage,
   sdkErrors,
@@ -44,6 +52,7 @@ import {
 } from "./support.js";
 
 const PHOTO = pngImage(3024 / 8, 4032 / 8); // 378 x 504, portrait like a phone photo
+const PDF = pdfDocument(); // one A4 page
 
 interface Answer {
   status: number;
@@ -95,18 +104,20 @@ describe("a sketch photo read by Claude", () => {
     assert.equal(claude.calls.length, 1);
     const { body: sent, options } = claude.calls[0]!;
 
+    assert.equal(claude.calls[0]?.method, "stream");
     assert.equal(sent.model, "claude-opus-5-5");
-    assert.equal(sent.max_tokens, 16000);
+    assert.equal(sent.max_tokens, 48000);
     assert.equal(sent.system, readFileSync(SKETCH_PROMPT_PATH, "utf8"));
     assert.deepEqual(sent.thinking, { type: "adaptive" });
-    assert.equal(sent.output_config?.effort, "high");
+    assert.equal(sent.output_config?.effort, "medium");
     assert.equal(sent.output_config?.format?.type, "json_schema");
     assert.deepEqual(sent.output_config?.format?.schema, readingOutputSchema());
     assert.equal(sent.fallbacks, "default");
     assert.deepEqual(sent.betas, [SKETCH_FALLBACK_BETA]);
     assert.equal(SKETCH_FALLBACK_BETA, "server-side-fallback-2026-07-01");
+    // stream() sets stream: true itself; the body leaves it out.
     assert.equal(sent.stream, undefined);
-    assert.equal(options?.timeout, 120_000);
+    assert.equal(options?.timeout, 600_000);
 
     assert.equal(sent.messages.length, 1);
     const [message] = sent.messages;
@@ -130,6 +141,7 @@ describe("a sketch photo read by Claude", () => {
     }
     assert.deepEqual(schema.required, [
       "isFloorPlan",
+      "planPage",
       "problem",
       "dimensionUnits",
       "ceilingHeightMm",
@@ -237,6 +249,133 @@ describe("a sketch photo read by Claude", () => {
   });
 });
 
+describe("a whole PDF read by Claude", () => {
+  let t: SketchTestApp;
+  const claude = new FakeSketchClaude();
+
+  before(async () => {
+    t = await sketchTestApp(claude);
+  });
+  after(async () => t.close());
+
+  it("sends the PDF as a document block before the instruction", async () => {
+    claude.calls.length = 0;
+    const body = sketchBody(PDF, "application/pdf", "architect's set, ground floor");
+    const answer = await post(t, body);
+    assert.equal(answer.status, 200, JSON.stringify(answer.body));
+    assert.equal(claude.calls.length, 1);
+    const { method, body: sent, options } = claude.calls[0]!;
+    assert.equal(method, "stream");
+    assert.equal(sent.max_tokens, 48000);
+    assert.equal(sent.output_config?.effort, "medium");
+    assert.deepEqual(sent.output_config?.format?.schema, readingOutputSchema());
+    assert.equal(sent.fallbacks, "default");
+    assert.deepEqual(sent.betas, [SKETCH_FALLBACK_BETA]);
+    assert.equal(options?.timeout, 600_000);
+    const content = sent.messages[0]?.content as { type: string; [key: string]: unknown }[];
+    assert.equal(content.length, 2);
+    assert.deepEqual(content[0], {
+      type: "document",
+      source: { type: "base64", media_type: "application/pdf", data: body.data },
+    });
+    assert.equal(
+      content[1]?.text,
+      "Read this floor plan.\n\nNote from the field operator: architect's set, ground floor",
+    );
+  });
+
+  it("answers the first page size in points as image, and audits the PDF", async () => {
+    const reading = { ...(BEDROOM_READING as Record<string, unknown>), planPage: 3 };
+    claude.responder = () => claudeMessage(reading);
+    const before = auditRows(t.db).length;
+    const answer = await post(t, sketchBody(PDF, "application/pdf"));
+    claude.responder = () => claudeMessage(BEDROOM_READING);
+    assert.equal(answer.status, 200, JSON.stringify(answer.body));
+    assert.deepEqual(validateSketchInterpretation(answer.body).errors, []);
+    assert.deepEqual(answer.body.image, { width: 595, height: 842 });
+    assert.equal((answer.body.reading as { planPage: unknown }).planPage, 3);
+    const row = auditRows(t.db)[before];
+    assert.equal(row?.details.mediaType, "application/pdf");
+    assert.equal(row?.details.bytes, PDF.length);
+    assert.equal(row?.details.outcome, "ok");
+  });
+
+  it("reads the first direct /MediaBox, else falls back to US Letter", () => {
+    assert.ok(isPdf(PDF));
+    assert.deepEqual(pdfPageSize(pdfDocument("[0 0 612 792]")), { width: 612, height: 792 });
+    assert.deepEqual(pdfPageSize(pdfDocument("[ -10.5 -10.5 831.5 1180.5 ]")), {
+      width: 842,
+      height: 1191,
+    });
+    assert.deepEqual(pdfPageSize(pdfDocument("[0 0 2384 1684]")), { width: 2384, height: 1684 });
+    for (const box of ["7 0 R", "[0 0 0 0]", "[0 0 1e999 792]", "[0 0 612]", "[a b c d]"]) {
+      assert.deepEqual(pdfPageSize(pdfDocument(box)), PDF_FALLBACK_PAGE, box);
+    }
+    // An indirect first box is skipped for a later direct one.
+    const twoBoxes = Buffer.concat([pdfDocument("7 0 R"), Buffer.from("/MediaBox [0 0 300 400]")]);
+    assert.deepEqual(pdfPageSize(twoBoxes), { width: 300, height: 400 });
+    assert.deepEqual(pdfPageSize(Buffer.from("%PDF-1.7\n%%EOF\n")), PDF_FALLBACK_PAGE);
+  });
+
+  it("answers the fallback size for a PDF whose page box is not readable", async () => {
+    const answer = await post(t, sketchBody(pdfDocument("7 0 R"), "application/pdf"));
+    assert.equal(answer.status, 200);
+    assert.deepEqual(answer.body.image, { width: 612, height: 792 });
+  });
+
+  it("keeps images on the image block and the sketch instruction", async () => {
+    claude.calls.length = 0;
+    await post(t, sketchBody(PHOTO));
+    const content = claude.calls[0]?.body.messages[0]?.content as { type: string; text?: string }[];
+    assert.equal(content[0]?.type, "image");
+    assert.equal(content[1]?.text, "Read this floor-plan sketch.");
+  });
+
+  it("400 sketch_image_invalid for application/pdf data that is not a PDF", async () => {
+    claude.calls.length = 0;
+    for (const bytes of [PHOTO, Buffer.from("just text, not a PDF"), Buffer.from(" %PDF-1.7")]) {
+      const answer = await post(t, sketchBody(bytes, "application/pdf"));
+      assert.equal(answer.status, 400);
+      assert.equal(answer.body.code, "sketch_image_invalid");
+      assert.match(String(answer.body.detail), /PDF/);
+    }
+    // And a PDF declared as an image is not an image.
+    const declaredPng = await post(t, sketchBody(PDF, "image/png"));
+    assert.equal(declaredPng.status, 400);
+    assert.equal(claude.calls.length, 0);
+  });
+
+  it("413 sketch_image_too_large above 24 MB decoded", async () => {
+    const data = "A".repeat(MAX_PDF_BASE64_LENGTH + 4);
+    assert.ok((base64DecodedLength(data) ?? 0) > MAX_PDF_BYTES);
+    const answer = await post(t, { mediaType: "application/pdf", data });
+    assert.equal(answer.status, 413);
+    assert.equal(answer.body.code, "sketch_image_too_large");
+    assert.match(String(answer.body.detail), /PDF/);
+  });
+
+  it("accepts a 24 MB PDF body (read and checked, not refused as too large)", async () => {
+    const data = "A".repeat(MAX_PDF_BASE64_LENGTH);
+    assert.equal(base64DecodedLength(data), MAX_PDF_BYTES);
+    const answer = await post(t, { mediaType: "application/pdf", data });
+    assert.equal(answer.status, 400);
+    assert.equal(answer.body.code, "sketch_image_invalid");
+  });
+
+  it("an image above 10 MB is still too large, even below the PDF limit", async () => {
+    const data = "A".repeat(MAX_IMAGE_BASE64_LENGTH + 4);
+    const answer = await post(t, { mediaType: "image/jpeg", data });
+    assert.equal(answer.status, 413);
+    assert.equal(answer.body.code, "sketch_image_too_large");
+  });
+
+  it("sizes the route body limit for a 24 MB PDF (about 32 MB of base64)", () => {
+    assert.equal(MAX_PDF_BYTES, 24_000_000);
+    assert.equal(MAX_PDF_BASE64_LENGTH, 32_000_000);
+    assert.equal(SKETCH_BODY_LIMIT_BYTES, 32_000_000 + 64 * 1024);
+  });
+});
+
 describe("answers that are not a reading", () => {
   let t: SketchTestApp;
   const claude = new FakeSketchClaude();
@@ -320,6 +459,7 @@ describe("Claude unavailable", () => {
     ["overloaded", sdkErrors.overloaded, "server_error"],
     ["unreachable", sdkErrors.connection, "unreachable"],
     ["timed out", sdkErrors.timeout, "unreachable"],
+    ["ending the stream with an error event", sdkErrors.streamError, "stream_error"],
     ["rejecting the API key", sdkErrors.authentication, "auth_failed"],
   ];
   for (const [label, error, outcome] of cases) {
@@ -440,8 +580,8 @@ describe("request checks", () => {
   });
 
   it("413 payload_too_large for a body above the route limit", async () => {
-    const data = "A".repeat(MAX_IMAGE_BASE64_LENGTH + 128 * 1024);
-    const answer = await post(t, { mediaType: "image/png", data });
+    const data = "A".repeat(MAX_PDF_BASE64_LENGTH + 128 * 1024);
+    const answer = await post(t, { mediaType: "application/pdf", data });
     assert.equal(answer.status, 413);
     assert.equal(answer.body.code, "payload_too_large");
   });
@@ -499,10 +639,10 @@ describe("configuration", () => {
     assert.throws(() => loadConfig(testEnv({ SKETCH_MODEL: "claude opus" })), /SKETCH_MODEL/);
   });
 
-  it("builds the SDK client with a 120 s timeout and 2 retries (no request is made)", () => {
+  it("builds the SDK client with a 600 s timeout and 2 retries (no request is made)", () => {
     const client = createSketchClaudeClient(TEST_API_KEY) as Anthropic;
     assert.ok(client instanceof Anthropic);
-    assert.equal(client.timeout, 120_000);
+    assert.equal(client.timeout, 600_000);
     assert.equal(client.maxRetries, 2);
   });
 

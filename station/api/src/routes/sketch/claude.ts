@@ -14,19 +14,30 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import Anthropic from "@anthropic-ai/sdk";
+// The stream() body type is not re-exported on the Anthropic namespace.
+import type { BetaMessageStreamParams } from "@anthropic-ai/sdk/resources/beta/messages/messages.js";
 import type { FastifyInstance } from "fastify";
 import { SCHEMAS } from "@chapter/capture-contract";
 import "../../core/fastify-types.js";
-import type { SketchMediaType } from "./image.js";
+import { PDF_MEDIA_TYPE, type SketchMediaType } from "./image.js";
 
-/** What the route needs of the SDK client: the beta Messages API (server-side fallbacks). */
+/** What the route needs of a message stream: the whole message once it has ended. */
+export interface SketchMessageStream {
+  finalMessage(): PromiseLike<Anthropic.Beta.Messages.BetaMessage>;
+}
+
+/**
+ * What the route needs of the SDK client: the beta Messages API (server-side fallbacks),
+ * streamed. A PDF reading takes minutes and up to 48 000 output tokens; the SDK refuses a
+ * non-streaming request that may run that long, and a stream keeps the connection busy.
+ */
 export interface SketchClaudeClient {
   readonly beta: {
     readonly messages: {
-      create(
-        body: Anthropic.Beta.Messages.MessageCreateParamsNonStreaming,
+      stream(
+        body: BetaMessageStreamParams,
         options?: Anthropic.RequestOptions,
-      ): PromiseLike<Anthropic.Beta.Messages.BetaMessage>;
+      ): SketchMessageStream;
     };
   };
 }
@@ -38,14 +49,20 @@ declare module "../../core/services.js" {
   }
 }
 
-/** Per-request timeout (spec F16 §6). */
-export const SKETCH_TIMEOUT_MS = 120_000;
+/**
+ * Per-attempt timeout. A 20-page, 14.7 MB PDF took about 3 minutes (44k input, 14k output
+ * tokens) in a live test; 10 minutes leaves room for a larger document.
+ */
+export const SKETCH_TIMEOUT_MS = 600_000;
 /** SDK retries on connection errors, 408, 409, 429 and 5xx (the SDK default). */
 export const SKETCH_MAX_RETRIES = 2;
-/** Room for adaptive thinking and the reading; non-streaming stays well inside the timeout. */
-export const SKETCH_MAX_TOKENS = 16_000;
-/** Geometry from a photo: more thinking than Claude Opus 5.5's default (medium). */
-export const SKETCH_EFFORT = "high";
+/**
+ * Room for adaptive thinking and the reading. A 20-page PDF was cut off at 16 000 and complete
+ * at 48 000 (14k output tokens used) in a live test.
+ */
+export const SKETCH_MAX_TOKENS = 48_000;
+/** Claude Opus 5.5's default; a whole PDF at high effort takes too long for one request. */
+export const SKETCH_EFFORT = "medium";
 /** Server-side refusal fallback, "default" form (beta header for that form). */
 export const SKETCH_FALLBACK_BETA = "server-side-fallback-2026-07-01";
 
@@ -136,21 +153,29 @@ export interface SketchRequestInput {
   readonly systemPrompt: string;
   readonly outputSchema: Record<string, unknown>;
   readonly mediaType: SketchMediaType;
-  /** Base64 image data, as received. */
+  /** Base64 image or PDF data, as received. */
   readonly data: string;
   readonly hint?: string;
 }
 
-/** The user instruction after the image; the hint (from the field operator) is appended. */
-export function sketchInstruction(hint?: string): string {
-  const base = "Read this floor-plan sketch.";
+/** The user instruction after the file; the hint (from the field operator) is appended. */
+export function sketchInstruction(hint?: string, mediaType?: SketchMediaType): string {
+  const base =
+    mediaType === PDF_MEDIA_TYPE ? "Read this floor plan." : "Read this floor-plan sketch.";
   return hint === undefined ? base : `${base}\n\nNote from the field operator: ${hint}`;
 }
 
-/** The Messages API request for one sketch photo. */
-export function buildSketchRequest(
-  input: SketchRequestInput,
-): Anthropic.Beta.Messages.MessageCreateParamsNonStreaming {
+/** The file as a content block: an image block, or a document block for a PDF. */
+function fileBlock(input: SketchRequestInput): Anthropic.Beta.Messages.BetaContentBlockParam {
+  const { mediaType, data } = input;
+  if (mediaType === PDF_MEDIA_TYPE) {
+    return { type: "document", source: { type: "base64", media_type: mediaType, data } };
+  }
+  return { type: "image", source: { type: "base64", media_type: mediaType, data } };
+}
+
+/** The Messages API request (streamed by the route) for one sketch photo or PDF. */
+export function buildSketchRequest(input: SketchRequestInput): BetaMessageStreamParams {
   return {
     model: input.model,
     max_tokens: SKETCH_MAX_TOKENS,
@@ -168,11 +193,8 @@ export function buildSketchRequest(
       {
         role: "user",
         content: [
-          {
-            type: "image",
-            source: { type: "base64", media_type: input.mediaType, data: input.data },
-          },
-          { type: "text", text: sketchInstruction(input.hint) },
+          fileBlock(input),
+          { type: "text", text: sketchInstruction(input.hint, input.mediaType) },
         ],
       },
     ],
