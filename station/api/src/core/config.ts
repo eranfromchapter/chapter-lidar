@@ -86,6 +86,16 @@ export interface StationConfig {
     /** Blob endpoint as seen by clients, when it differs from the one the service uses. */
     readonly publicBlobEndpoint?: string;
   };
+  /** Sketch photo reading with Claude (POST /v1/sketch-interpretations, spec F16). */
+  readonly sketch: {
+    /** Claude model that reads the sketch. */
+    readonly model: string;
+    /**
+     * Anthropic API key. Secret: non-enumerable. Optional: without it the route answers 503
+     * and the app offers the manual sketch.
+     */
+    readonly anthropicApiKey?: string;
+  };
   /** Web pages the API links to (PackageLinks). Optional: links are omitted when unset. */
   readonly links: {
     /** Web review screen base URL (same value as the worker's REVIEW_BASE_URL). */
@@ -94,6 +104,9 @@ export interface StationConfig {
     readonly hubDealUrlTemplate?: string;
   };
 }
+
+/** Default of SKETCH_MODEL. */
+export const DEFAULT_SKETCH_MODEL = "claude-opus-5-5";
 
 /** Placeholder of HUB_WEB_DEAL_URL_TEMPLATE. */
 export const DEAL_ID_PLACEHOLDER = "{dealId}";
@@ -120,6 +133,7 @@ const LOG_LEVELS: readonly LogLevel[] = [
   "trace",
   "silent",
 ];
+const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:@-]{0,99}$/;
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const CONTAINER_NAME = /^[a-z0-9](?!.*--)[a-z0-9-]{1,61}[a-z0-9]$/;
 const HOSTNAME =
@@ -391,6 +405,9 @@ export function loadMaintenanceConfig(env: Env = process.env): {
  * - REVIEW_BASE_URL (https unless loopback): the web review screen, for links.review; links are
  *   omitted while unset. HUB_WEB_DEAL_URL_TEMPLATE (https unless loopback, contains {dealId}):
  *   the HUB page of a deal, for links.hub; omitted while unset.
+ * - ANTHROPIC_API_KEY (secret; Key Vault secret anthropic-api-key in Azure): the key for the
+ *   sketch reading; without it POST /v1/sketch-interpretations answers 503.
+ *   SKETCH_MODEL [claude-opus-5-5]: the Claude model that reads sketches.
  */
 export function loadConfig(env: Env = process.env): StationConfig {
   const read = new Reader(env);
@@ -459,6 +476,12 @@ export function loadConfig(env: Env = process.env): StationConfig {
     }
   }
 
+  const sketchModel = read.raw("SKETCH_MODEL") ?? DEFAULT_SKETCH_MODEL;
+  if (!MODEL_ID.test(sketchModel)) {
+    read.issues.push("SKETCH_MODEL must be a model id (letters, digits, . _ : @ -; at most 100)");
+  }
+  const anthropicApiKey = read.raw("ANTHROPIC_API_KEY");
+
   const config: StationConfig = {
     env: stationEnv,
     version,
@@ -485,6 +508,13 @@ export function loadConfig(env: Env = process.env): StationConfig {
       "serviceCredential",
     ),
     storage,
+    sketch: hideSecret(
+      {
+        model: sketchModel,
+        ...(anthropicApiKey === undefined ? {} : { anthropicApiKey }),
+      },
+      "anthropicApiKey",
+    ),
     links: {
       ...(reviewBaseUrl === undefined ? {} : { reviewBaseUrl }),
       ...(hubDealUrlTemplate === undefined ? {} : { hubDealUrlTemplate }),
@@ -528,6 +558,8 @@ export function describeConfig(config: StationConfig): Record<string, unknown> {
     hubCredential: config.hub.serviceCredential === undefined ? "unset" : "set",
     originalsContainer: config.storage.originalsContainer,
     reportsContainer: config.storage.reportsContainer,
+    sketchModel: config.sketch.model,
+    sketchKey: config.sketch.anthropicApiKey === undefined ? "unset" : "set",
     reviewBaseUrl: config.links.reviewBaseUrl ?? "unset",
     hubDealUrlTemplate: config.links.hubDealUrlTemplate ?? "unset",
     storage: config.storage.accountUrl

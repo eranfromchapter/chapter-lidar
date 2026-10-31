@@ -8,7 +8,9 @@ import Foundation
 import Observation
 import PackageCore
 import PackageTransport
+import SketchReading
 import StationClient
+import WalkthroughUI
 
 /// What the app runs on: the station client, the project list, the blob transport, the scan
 /// session factory, the compass and the camera. `live` is the real phone; the UI-test and
@@ -39,6 +41,18 @@ struct AppServices {
   /// Erases the photo blobs the in-process stub station holds ("Delete all photos"); set by the
   /// field-test and UI-test environments only. Returns how many were removed.
   var stationPhotoBlobs: (@Sendable () -> Int)? = nil
+  /// The AR walkthrough's session (spec F15): ARKit world tracking on the phone, a scripted
+  /// replay in UI tests.
+  var makeWalkthroughSession: @MainActor () -> any WalkthroughSession = { LiveWalkthroughSession() }
+  /// The phone runs ARKit world tracking (every iPhone with iOS 17): "Walk the rooms with the
+  /// camera" can be chosen. The LiDAR gate (`DeviceGate`) is for scans only.
+  var canWalk: Bool = LiveWalkthroughSession.isSupported
+  /// Reads a sketch photo (spec F16): the station's `POST /v1/sketch-interpretations` with a
+  /// long timeout (`StationSketchInterpreter`); in the UI-test and field-test modes the same
+  /// client over the in-process station. Nil only before the services are made.
+  var sketchInterpreter: (any SketchInterpreting)? = nil
+  /// Shown on the sketch photo screens: the field-test build's demo reading without an API key.
+  var sketchReaderNotice: String? = nil
 
   /// The photo step's heading provider over `compass`.
   @MainActor var photoHeading: PhotoHeadingProviding? {
@@ -155,7 +169,7 @@ final class AppModel {
     let station = StationAPI(
       configuration: configuration.station, tokenProvider: EntraTokenProvider(signIn: signIn))
     let compass = CompassService()
-    let services = AppServices(
+    var services = AppServices(
       station: station,
       projects: ProjectStore(
         source: station,
@@ -164,6 +178,12 @@ final class AppModel {
       capabilities: DeviceCapabilities.current(), device: DeviceInfo.current(),
       makeSession: { _ in LiveCaptureSession(compass: compass) },
       photoSource: .camera(CameraEngine()), compass: compass, fixedOperator: nil)
+    // Reading a sketch photo takes about a minute, a multi-page PDF a few: its own client with
+    // a long timeout (600 s).
+    services.sketchInterpreter = StationSketchInterpreter(
+      station: StationAPI(
+        configuration: configuration.station, tokenProvider: EntraTokenProvider(signIn: signIn),
+        transport: URLSessionTransport(timeout: StationSketchInterpreter.timeout)))
     let model = AppModel(screen: .signIn, services: services, visitsRoot: visitsRoot)
     model.configureBackgroundRefresh()
     if let current = signIn.currentOperator() {

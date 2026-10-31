@@ -4,11 +4,14 @@ import CaptureModelMapping
 import CaptureUI
 import ChapterUI
 import FieldRules
+import MeshExport
 import Foundation
 import Observation
 import PlanExport
 import RoomPlan
 import SceneKit
+import SketchSolver
+import SketchUI
 import SwiftUI
 import UIKit
 
@@ -45,19 +48,31 @@ struct ScanItem: Identifiable, Hashable {
 
   /// When the scan was made: the capture record's time, else the file's.
   var scanDate: Date { capturedAt ?? date }
+
+  /// A sketch, sketch photo or AR walkthrough capture (spec F14, F15, F16): the folder holds
+  /// `sketch-measurements.json`, not `roomplan.json`; its plan is solved from the measurements
+  /// and its 3D view is the model extruded by `SketchMesh` (no RoomPlan model).
+  var isSketch: Bool {
+    FileManager.default.fileExists(
+      atPath: folder.appendingPathComponent(ScanLibrary.sketchFile).path)
+  }
 }
 
 /// One scan's folder as the viewer needs it (the Capture overview's floor rows, a v1 visit's
 /// scans). Reads; changes nothing.
 enum ScanLibrary {
   static let roomPlanFile = "roomplan.json"
+  static let sketchFile = PackageLayout.sketchMeasurementsFileName
 
   static func item(
     folder: URL, title: String, address: String? = nil, displayUnits: DisplayUnitSystem? = nil,
     capturedAt: Date? = nil, captureLabel: String? = nil, roomNames: [RoomName] = []
   ) -> ScanItem? {
-    let file = folder.appendingPathComponent(roomPlanFile)
-    guard
+    // The scan's RoomPlan file, or a sketch capture's measurements (spec F14).
+    let file = [roomPlanFile, sketchFile].map(folder.appendingPathComponent).first {
+      FileManager.default.fileExists(atPath: $0.path)
+    }
+    guard let file,
       let values = try? file.resourceValues(forKeys: [.contentModificationDateKey]),
       let date = values.contentModificationDate
     else { return nil }
@@ -88,6 +103,9 @@ final class ScanViewerModel {
   private(set) var isLoading = true
   private(set) var isExporting = false
   var modelURL: URL?
+  /// The extruded model of a sketch or walkthrough floor, shown by "View in 3D".
+  private(set) var sketchMesh: TriangleMesh?
+  var showsSketch3D = false
 
   init(item: ScanItem) {
     self.item = item
@@ -104,15 +122,35 @@ final class ScanViewerModel {
       visitId: planContext.flatMap { LowercaseUUID(rawValue: $0.visitId) } ?? LowercaseUUID(),
       captureId: planContext.flatMap { LowercaseUUID(rawValue: $0.captureId) } ?? LowercaseUUID(),
       areaKey: planContext?.areaKey ?? "scan", label: label)
+    let sketchFile = item.folder.appendingPathComponent(ScanLibrary.sketchFile)
+    let isSketch = item.isSketch
     do {
       let result = try await Task.detached(priority: .userInitiated) {
-        let data = try Data(contentsOf: file)
-        let document = try RoomPlanDocument.decode(from: data)
-        // With the operator's room names, as the package's capture model has them.
-        let model = try RoomNaming.map(document, context: mapping, names: names).model
+        let model: CaptureModel
+        if isSketch {
+          // A sketch capture: solved again from the measurements, with the operator's names
+          // applied by room id as the package's capture model has them (VisitPackageBuilder).
+          let measurements = try CaptureContractJSON.makeDecoder().decode(
+            SketchMeasurements.self, from: try Data(contentsOf: sketchFile))
+          var solved = try SketchSolver.solve(
+            measurements, context: SketchSolveContext(label: mapping.label)
+          ).model
+          for (index, room) in RoomNaming.scannedRooms(of: solved).enumerated() {
+            if let name = names.first(where: { RoomNaming.applies($0, to: room) }) {
+              solved.rooms[index].label = name.name
+            }
+          }
+          model = solved
+        } else {
+          let data = try Data(contentsOf: file)
+          let document = try RoomPlanDocument.decode(from: data)
+          // With the operator's room names, as the package's capture model has them.
+          model = try RoomNaming.map(document, context: mapping, names: names).model
+        }
         return (model, ScanMeasurements(model: model), model.walls.count, model.rooms.count)
       }.value
       measurements = result.1
+      if isSketch { sketchMesh = SketchModel3DView.mesh(of: result.0) }
       counts = "\(result.3) \(result.3 == 1 ? "room" : "rooms") \u{00B7} \(result.2) walls"
       self.floorplan = FloorplanModel(
         model: result.0, address: item.address, units: item.displayUnits ?? .imperial,
@@ -227,18 +265,33 @@ struct ScanViewer: View {
           measurements(scan, units: model.floorplan?.units ?? .imperial)
         }
 
-        Button {
-          Task { await model.open3D() }
-        } label: {
-          HStack(spacing: 8) {
-            if model.isExporting { ProgressView().tint(ChapterTheme.Color.surface) }
-            Image(systemName: "cube")
-            Text(model.isExporting ? "Making the 3D model\u{2026}" : "View in 3D")
+        // A sketch or walkthrough floor: its model extruded as the package's mesh (spec F16 5).
+        if model.item.isSketch {
+          Button {
+            model.showsSketch3D = true
+          } label: {
+            HStack(spacing: 8) {
+              Image(systemName: "cube")
+              Text("View in 3D")
+            }
           }
+          .buttonStyle(.chapter(.primary))
+          .disabled(model.sketchMesh == nil)
+          .accessibilityIdentifier("scan.view3D")
+        } else {
+          Button {
+            Task { await model.open3D() }
+          } label: {
+            HStack(spacing: 8) {
+              if model.isExporting { ProgressView().tint(ChapterTheme.Color.surface) }
+              Image(systemName: "cube")
+              Text(model.isExporting ? "Making the 3D model\u{2026}" : "View in 3D")
+            }
+          }
+          .buttonStyle(.chapter(.primary))
+          .disabled(model.isExporting)
+          .accessibilityIdentifier("scan.view3D")
         }
-        .buttonStyle(.chapter(.primary))
-        .disabled(model.isExporting)
-        .accessibilityIdentifier("scan.view3D")
       }
       .padding(.horizontal, ChapterTheme.Metric.screenPadding)
       .padding(.top, 8)
@@ -256,6 +309,11 @@ struct ScanViewer: View {
     }
     .fullScreenCover(item: $model.modelURL) { url in
       ModelViewer(url: url, title: model.item.title)
+    }
+    .fullScreenCover(isPresented: $model.showsSketch3D) {
+      if let mesh = model.sketchMesh {
+        SketchModelViewer(mesh: mesh, title: model.item.title)
+      }
     }
     .task { await model.load() }
   }
@@ -391,5 +449,45 @@ struct ModelViewer: View {
       ? Float(size.width / size.height) : ModelStyle.defaultAspect
     camera = ModelStyle.apply(to: loaded, background: ModelStyle.backgroundColor, aspect: aspect)
     scene = loaded
+  }
+}
+
+/// A sketch or walkthrough floor's 3D model on its own (spec F16 5): the extruded mesh with its
+/// colours, drag to turn it, pinch to zoom; Close at the top.
+struct SketchModelViewer: View {
+  let mesh: TriangleMesh
+  let title: String
+  /// Bumped by Reset view, which rebuilds the scene and its camera.
+  @State private var generation = 0
+  @Environment(\.dismiss) private var dismiss
+
+  var body: some View {
+    ZStack {
+      ChapterTheme.Color.ground.ignoresSafeArea()
+      SketchModel3DView(mesh: mesh, accessibilityText: "3D model of \(title)")
+        .id(generation)
+        .ignoresSafeArea()
+    }
+    .overlay(alignment: .top) {
+      HStack {
+        Button { dismiss() } label: {
+          Image(systemName: "xmark").font(ChapterTheme.Font.bodyEmphasis)
+            .frame(width: Control.minTouch, height: Control.minTouch)
+        }
+        .accessibilityLabel("Close")
+        .accessibilityIdentifier("scan.sketch3D.close")
+        Spacer()
+        Text(title).font(Typo.sans(15, weight: .semibold)).lineLimit(1)
+        Spacer()
+        Button { generation += 1 } label: {
+          Image(systemName: "arrow.counterclockwise").font(ChapterTheme.Font.bodyEmphasis)
+            .frame(width: Control.minTouch, height: Control.minTouch)
+        }
+        .accessibilityLabel("Reset view")
+      }
+      .foregroundStyle(Palette.ink)
+      .padding(.horizontal, Space.s4)
+      .background(ChapterTheme.Color.ground.opacity(0.9))
+    }
   }
 }

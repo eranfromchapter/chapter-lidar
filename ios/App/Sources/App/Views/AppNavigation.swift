@@ -6,8 +6,11 @@ import CaptureUI
 import ChapterUI
 import FieldKitUI
 import FieldRules
+import SketchEntry
+import SketchUI
 import SwiftUI
 import UIKit
+import WalkthroughUI
 
 /// The app's one NavigationStack (phone-capture §3.0, critique R-18c): the Captures home at the
 /// root, the open visit's screens pushed from its flow (`VisitModel.routes`), a floor's scan or a
@@ -32,11 +35,22 @@ struct AppNavigation: View {
         LiveScanScreen(model: model) { CaptureSessionPreview(model: model) }
       }
     }
+    // The AR walkthrough (spec F15 2), full screen like the live scan.
+    .fullScreenCover(
+      isPresented: Binding(get: { home.visit?.isWalking ?? false }, set: { _ in })
+    ) {
+      if let visit = home.visit, let model = visit.walkthroughModel {
+        WalkthroughScreen(model: model) { visit.leaveWalkthrough() }
+      }
+    }
     .onChange(of: home.visit?.captureModel?.step) { _, step in
       home.visit?.captureStepChanged(step)
       #if DEBUG
         UITestHooks.captureStepChanged(step, home: home)
       #endif
+    }
+    .onChange(of: home.visit?.sketchModel?.step) { _, step in
+      home.visit?.sketchStepChanged(step)
     }
     .sheet(
       item: Binding(
@@ -64,8 +78,8 @@ struct AppNavigation: View {
   /// of a Debug build.
   private var homeActions: CapturesHomeActions {
     var actions = CapturesHomeActions(
-      newCapture: { home.newCapture() }, open: { home.open($0) },
-      signOut: { home.signOut() }, refresh: { await home.refresh() })
+      newCapture: { home.newCapture() }, sketchCapture: { home.sketchCapture() },
+      open: { home.open($0) }, signOut: { home.signOut() }, refresh: { await home.refresh() })
     #if DEBUG
       if home.offersPhotoDeletion {
         actions.deletePhotos = { await home.deleteAllPhotos() }
@@ -94,6 +108,60 @@ struct AppNavigation: View {
     case .scanSetup:
       if let model = visit?.captureModel {
         ScanSetupScreen(model: model)
+      }
+    case .measureMethod:
+      if let visit, let model = visit.methodModel {
+        MeasureMethodScreen(model: model, caption: visit.sketchCaption(step: 2)) {
+          visit.continueFromMethod()
+        }
+      }
+    case .sketchSource:
+      if let visit, let model = visit.sketchModel {
+        SketchSourceScreen(
+          model: model,
+          options: SketchSourceOptions(fixedPhoto: visit.fixedPhoto, caption: visit.sketchCaption(step: 3)))
+      }
+    case .sketchRooms:
+      if let visit, let model = visit.sketchModel {
+        SketchRoomsScreen(model: model, caption: visit.sketchCaption(step: 4))
+      }
+    case .sketchCheck:
+      if let visit, let model = visit.sketchModel {
+        SketchCheckScreen(model: model, caption: visit.sketchCaption(step: 5)) {
+          visit.finishSketchFloor()
+        }
+      }
+    case .photoSource:
+      if let visit, let model = visit.sketchPhotoModel {
+        SketchPhotoSourceScreen(
+          model: model,
+          options: SketchSourceOptions(fixedPhoto: visit.fixedPhoto, caption: visit.sketchCaption(step: 3)))
+      }
+    case .photoReading:
+      if let visit, let model = visit.sketchPhotoModel {
+        SketchPhotoReadingScreen(model: model, caption: visit.sketchCaption(step: 4)) {
+          visit.enterSketchByHand()
+        }
+      }
+    case .photoLength:
+      if let visit, let model = visit.sketchPhotoModel {
+        SketchPhotoLengthScreen(model: model, caption: visit.sketchCaption(step: 4))
+      }
+    case .photoCheck:
+      if let visit, let model = visit.sketchPhotoModel {
+        SketchPhotoCheckScreen(model: model, caption: visit.sketchCaption(step: 5)) {
+          visit.finishSketchPhotoFloor()
+        }
+      }
+    case .walkthroughScale:
+      if let visit, let model = visit.walkthroughModel {
+        WalkthroughScaleScreen(model: model, caption: visit.sketchCaption(step: 4))
+      }
+    case .walkthroughCheck:
+      if let visit, let model = visit.walkthroughModel {
+        WalkthroughCheckScreen(model: model, caption: visit.sketchCaption(step: 5)) {
+          visit.finishWalkthroughFloor()
+        }
       }
     case .overview:
       if let visit {

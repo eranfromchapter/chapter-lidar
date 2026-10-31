@@ -16,8 +16,8 @@
   ],
   "properties": {
     "schemaVersion": {
-      "description": "1.1.0 adds the optional photo.directionSource and retires the role spatial_report_pdf; a 1.0.0 document does not carry directionSource, a 1.1.0 document lists no spatial_report_pdf file. Readers accept both versions; writers write 1.1.0.",
-      "enum": ["1.0.0", "1.1.0"]
+      "description": "1.1.0 adds the optional photo.directionSource and retires the role spatial_report_pdf; 1.2.0 adds the roles sketch_image and sketch_measurements (spec F14) and walkthrough_video and walkthrough_log (spec F15). A 1.0.0 document does not carry directionSource; a 1.1.0 or 1.2.0 document lists no spatial_report_pdf file; only a 1.2.0 document lists a sketch or walkthrough role. Readers accept every version; writers write 1.2.0.",
+      "enum": ["1.0.0", "1.1.0", "1.2.0"]
     },
     "layoutVersion": {
       "description": "Version of contract/schema/layout.json the paths follow.",
@@ -84,7 +84,7 @@
         }
       },
       "then": {
-        "description": "A 1.0.0 document carries none of the fields added in 1.1.0.",
+        "description": "A 1.0.0 document carries none of the fields added in 1.1.0 and lists no role added in 1.2.0.",
         "properties": {
           "files": {
             "type": "array",
@@ -95,6 +95,17 @@
                   "type": "object",
                   "properties": {
                     "directionSource": false
+                  }
+                },
+                "role": {
+                  "not": {
+                    "enum": [
+                      "sketch_image",
+                      "sketch_measurements",
+                      "walkthrough_video",
+                      "walkthrough_log",
+                      "sketch_interpretation"
+                    ]
                   }
                 }
               }
@@ -112,7 +123,41 @@
         }
       },
       "then": {
-        "description": "A 1.1.0 document lists no file with a retired role.",
+        "description": "A 1.1.0 document lists no file with a retired role and no role added in 1.2.0.",
+        "properties": {
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "role": {
+                  "not": {
+                    "enum": [
+                      "spatial_report_pdf",
+                      "sketch_image",
+                      "sketch_measurements",
+                      "walkthrough_video",
+                      "walkthrough_log",
+                      "sketch_interpretation"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "schemaVersion": {
+            "const": "1.2.0"
+          }
+        }
+      },
+      "then": {
+        "description": "A 1.2.0 document lists no file with a retired role.",
         "properties": {
           "files": {
             "type": "array",
@@ -158,7 +203,7 @@
       "pattern": "^(?!/)(?!.*//)(?!.*/$)(?!(.*/)?\\.{1,2}(/|$))[^\\\\\\x00-\\x1f]+$"
     },
     "role": {
-      "description": "Closed set of file roles from the intake guide, plus capture_model (the normalized CaptureModel JSON of one capture). Each role belongs to exactly one folder in layout.json. spatial_report_pdf is retired: written only in manifest 1.0.0 by app builds before v2; never in 1.1.0. The spatial report is a station output, not a package file.",
+      "description": "Closed set of file roles from the intake guide, plus capture_model (the normalized CaptureModel JSON of one capture) and, since 1.2.0, sketch_image (the photo, image or PDF of the hand sketch or existing plan a sketch capture was measured from) and sketch_measurements (the measurements the operator entered, sketch-measurements.schema.json), walkthrough_video (the camera video of an AR walkthrough) and walkthrough_log (its taps and camera poses, walkthrough-log.schema.json) and sketch_interpretation (what Claude read from a sketch photo, sketch-interpretation.schema.json, spec F16). Each role belongs to exactly one folder in layout.json. spatial_report_pdf is retired: written only in manifest 1.0.0 by app builds before v2; never in 1.1.0 or later. The spatial report is a station output, not a package file.",
       "enum": [
         "capture_record",
         "raw_roomplan_json",
@@ -176,7 +221,12 @@
         "texture",
         "point_cloud_las",
         "photo",
-        "field_controls"
+        "field_controls",
+        "sketch_image",
+        "sketch_measurements",
+        "walkthrough_video",
+        "walkthrough_log",
+        "sketch_interpretation"
       ]
     },
     "visitRole": {

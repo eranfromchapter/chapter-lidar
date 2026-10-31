@@ -16,6 +16,7 @@ import {
   withText,
   withUnlistedFile,
 } from "./helpers.js";
+import { sketchPackage } from "./sketch-package.js";
 
 export interface Variant {
   name: string;
@@ -192,6 +193,21 @@ export function variants(): Variant[] {
       if (entry !== undefined) {
         entry.derivedFrom = [p("capture_model")];
       }
+    }),
+  );
+  // Check 14 (every scenario: sketch.test.ts)
+  add(
+    "limited sketch capture",
+    sketchPackage({
+      sketch: {
+        measurements: "limited",
+        wallsMeasured: 2,
+        wallsEstimated: 2,
+        ceilingHeightSource: "assumed",
+      },
+      lowWalls: ["wall-2", "wall-3"],
+      lowOpenings: ["door-1"],
+      heightM: 2.44,
     }),
   );
   return list;

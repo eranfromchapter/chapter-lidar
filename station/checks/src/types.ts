@@ -60,6 +60,7 @@ export const RULES = [
   { id: "geometry.plausibility", title: "Plausibility" },
   { id: "floors.registration", title: "Floor registration" },
   { id: "evidence.independence", title: "Independence of evidence" },
+  { id: "sketch.measurements", title: "Sketch measurements" },
 ] as const;
 
 export type RuleId = (typeof RULES)[number]["id"];

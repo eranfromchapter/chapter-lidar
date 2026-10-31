@@ -26,6 +26,15 @@
     public var mappingError: String?
   }
 
+  /// What the capture screens lead to: a LiDAR scan (steps 2 and 3 are What are you scanning?
+  /// and the live scan), or a capture without LiDAR (`sketch`: step 1 is the same New capture
+  /// screen, without the device gate; then How do you want to measure?, and the AR walkthrough
+  /// of spec F15 or the sketch screens of spec F14 follow).
+  public enum CaptureFlowPurpose: Sendable, Equatable {
+    case scan
+    case sketch
+  }
+
   /// What the live scan shows (phone-capture §3.4): the normal scan or one of its states.
   public enum LiveScanPhase: Sendable, Equatable {
     case scanning
@@ -92,6 +101,8 @@
 
     public let gate: DeviceGateResult
     public let hasLidar: Bool
+    /// A scan or a sketch capture: the device gate blocks only a scan.
+    public let purpose: CaptureFlowPurpose
 
     /// Area keys already captured in this visit, set by the host when adding a floor: Start scan
     /// refuses a name whose key is one of them, and the name is prefilled with the next free
@@ -130,6 +141,7 @@
       makeSession: @escaping @MainActor (CaptureSessionConfiguration) throws -> any CaptureSession,
       compass: (any CompassProviding)? = nil, existingAreaKeys: Set<String> = [],
       clock: @escaping @Sendable () -> Date = { Date() }, timeZone: TimeZone = .current,
+      purpose: CaptureFlowPurpose = .scan,
       onFinished: @escaping @MainActor (CaptureFlowResult) -> Void = { _ in }
     ) {
       var draft = draft
@@ -140,6 +152,7 @@
       self.areaKeys = existingAreaKeys
       self.gate = DeviceGate.evaluate(capabilities)
       self.hasLidar = capabilities.supportsSceneReconstructionMesh
+      self.purpose = purpose
       self.projectProvider = projectProvider
       self.originalsRoot = originalsRoot
       self.makeSession = makeSession
@@ -209,9 +222,21 @@
       }
     }
 
+    /// The device gate's message on step 1: a phone that cannot scan. Nil for a capture without
+    /// LiDAR (spec F14 2.4, F15 2).
+    public var gateMessage: String? {
+      purpose == .scan ? gate.message : nil
+    }
+
+    /// The right-hand caption of step 1: "Step 1 of 3" (scan) or "Step 1 of 5" (without LiDAR:
+    /// the method, then walk, scale and check, or source, rooms and check).
+    public var newCaptureCaption: String {
+      purpose == .scan ? "Step 1 of 3" : "Step 1 of 5"
+    }
+
     /// Why Continue is disabled, as its label says it (phone-capture §3.2); nil when enabled.
     public var continueBlocker: String? {
-      if !gate.isSupported { return "This phone cannot scan" }
+      if purpose == .scan, !gate.isSupported { return "This phone cannot scan" }
       if draft.project == nil {
         return isOfflineWithoutList ? "Connect to load projects" : "Choose a HUB project to continue"
       }

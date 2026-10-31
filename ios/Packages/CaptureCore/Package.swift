@@ -14,7 +14,8 @@
 //                        it compiles to an empty module on Linux. Carries the `.apple-only` marker.
 //   CaptureUI            APPLE ONLY (SwiftUI, on ChapterUI). The capture screens. Guarded by
 //                        `#if canImport(SwiftUI)`. Carries the `.apple-only` marker.
-//   CaptureTestSupport   test helper (fixture paths, JSON Schema subset validator). Not a product.
+//   CaptureTestSupport   test helper (fixture paths, JSON Schema subset validator), a product so
+//                        other packages' tests (SketchCapture) can use it.
 //
 // Test targets: CaptureModelMappingTests and CaptureCoreTests run everywhere; CaptureUITests (the
 // screens' snapshots, ChapterUISnapshotTesting) and CaptureCompassTests (CompassService on the
@@ -36,6 +37,8 @@ let package = Package(
     .library(name: "CaptureCompass", targets: ["CaptureCompass"]),
     .library(name: "CaptureRoomPlan", targets: ["CaptureRoomPlan"]),
     .library(name: "CaptureUI", targets: ["CaptureUI"]),
+    // Test helper (fixture paths, JSON Schema subset validator) for other packages' tests.
+    .library(name: "CaptureTestSupport", targets: ["CaptureTestSupport"]),
   ],
   dependencies: [
     // Package identity of a path dependency is the directory name, here "swift".

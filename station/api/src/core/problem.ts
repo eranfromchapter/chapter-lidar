@@ -32,6 +32,11 @@ export interface ProblemOptions {
   type?: string;
   /** Extra response headers, for example WWW-Authenticate. */
   headers?: Record<string, string>;
+  /**
+   * Extension members (RFC 9457 §3.2) documented for the operation, for example the
+   * interpretation of a sketch that is not a floor plan. They never replace a standard member.
+   */
+  extensions?: Record<string, unknown>;
 }
 
 const CODE_PATTERN = /^[a-z][a-z0-9_]*$/;
@@ -66,8 +71,14 @@ export function defaultCode(status: number): string {
     .replace(/^_+|_+$/g, "");
 }
 
-export function problemBody(status: number, code: string, options: ProblemOptions = {}): Problem {
-  const body: Problem = {
+const STANDARD_MEMBERS = new Set(["type", "title", "status", "code", "detail", "errors"]);
+
+export function problemBody(
+  status: number,
+  code: string,
+  options: ProblemOptions = {},
+): Problem & Record<string, unknown> {
+  const body: Problem & Record<string, unknown> = {
     type: options.type ?? "about:blank",
     title: options.title ?? STATUS_CODES[status] ?? "Error",
     status,
@@ -78,6 +89,11 @@ export function problemBody(status: number, code: string, options: ProblemOption
   }
   if (options.errors !== undefined && options.errors.length > 0) {
     body.errors = options.errors;
+  }
+  for (const [name, value] of Object.entries(options.extensions ?? {})) {
+    if (!STANDARD_MEMBERS.has(name) && value !== undefined) {
+      body[name] = value;
+    }
   }
   return body;
 }

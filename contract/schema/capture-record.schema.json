@@ -18,10 +18,12 @@
   ],
   "properties": {
     "schemaVersion": {
-      "description": "1.1.0 adds the optional compass reading of each capture (heading, headingAccuracy, headingSource, headingRecordedAt) and headingIssue; a 1.0.0 document does not carry them. Readers accept both versions; writers write 1.1.0.",
-      "enum": ["1.0.0", "1.1.0"]
+      "description": "1.1.0 adds the optional compass reading of each capture (heading, headingAccuracy, headingSource, headingRecordedAt) and headingIssue; 1.2.0 adds captureSource, sketch and walkthrough. An older document does not carry the later fields. Readers accept every version; writers write 1.2.0.",
+      "enum": ["1.0.0", "1.1.0", "1.2.0"]
     },
-    "visitId": { "$ref": "#/$defs/uuid" },
+    "visitId": {
+      "$ref": "#/$defs/uuid"
+    },
     "hub": {
       "description": "The HUB project this visit belongs to.",
       "type": "object",
@@ -34,7 +36,11 @@
           "minLength": 1,
           "maxLength": 64
         },
-        "projectName": { "type": "string", "minLength": 1, "maxLength": 200 }
+        "projectName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
       }
     },
     "address": {
@@ -53,16 +59,32 @@
           "description": "True only when the operator confirmed on site that this is the address being captured.",
           "type": "boolean"
         },
-        "confirmedAt": { "$ref": "#/$defs/dateTime" }
+        "confirmedAt": {
+          "$ref": "#/$defs/dateTime"
+        }
       },
-      "if": { "properties": { "confirmedOnSite": { "const": true } } },
+      "if": {
+        "properties": {
+          "confirmedOnSite": {
+            "const": true
+          }
+        }
+      },
       "then": {
-        "properties": { "confirmedAt": { "$ref": "#/$defs/dateTime" } },
+        "properties": {
+          "confirmedAt": {
+            "$ref": "#/$defs/dateTime"
+          }
+        },
         "required": ["confirmedAt"]
       },
       "else": {
         "not": {
-          "properties": { "confirmedAt": { "$ref": "#/$defs/dateTime" } },
+          "properties": {
+            "confirmedAt": {
+              "$ref": "#/$defs/dateTime"
+            }
+          },
           "required": ["confirmedAt"]
         }
       }
@@ -73,7 +95,11 @@
       "additionalProperties": false,
       "required": ["name"],
       "properties": {
-        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
         "userId": {
           "description": "Directory id of the signed-in user, when known.",
           "type": "string",
@@ -99,12 +125,16 @@
           "minLength": 1,
           "maxLength": 100
         },
-        "osName": { "enum": ["iOS", "iPadOS"] },
+        "osName": {
+          "enum": ["iOS", "iPadOS"]
+        },
         "osVersion": {
           "type": "string",
           "pattern": "^[0-9]+(\\.[0-9]+){0,2}$"
         },
-        "hasLidar": { "type": "boolean" }
+        "hasLidar": {
+          "type": "boolean"
+        }
       }
     },
     "app": {
@@ -117,7 +147,11 @@
           "type": "string",
           "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
         },
-        "build": { "type": "string", "minLength": 1, "maxLength": 32 }
+        "build": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        }
       }
     },
     "visitedAt": {
@@ -128,28 +162,68 @@
       "description": "Every capture made during the visit, one per floor or area scan. captureId and areaKey are each unique within the record.",
       "type": "array",
       "minItems": 1,
-      "items": { "$ref": "#/$defs/capture" }
+      "items": {
+        "$ref": "#/$defs/capture"
+      }
     }
   },
-  "if": { "properties": { "schemaVersion": { "const": "1.0.0" } } },
-  "then": {
-    "description": "A 1.0.0 document carries none of the fields added in 1.1.0.",
-    "properties": {
-      "captures": {
-        "type": "array",
-        "items": {
-          "type": "object",
-          "properties": {
-            "heading": false,
-            "headingAccuracy": false,
-            "headingSource": false,
-            "headingRecordedAt": false,
-            "headingIssue": false
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "schemaVersion": {
+            "const": "1.0.0"
+          }
+        }
+      },
+      "then": {
+        "description": "A 1.0.0 document carries none of the fields added in 1.1.0 or 1.2.0.",
+        "properties": {
+          "captures": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "heading": false,
+                "headingAccuracy": false,
+                "headingSource": false,
+                "headingRecordedAt": false,
+                "headingIssue": false,
+                "captureSource": false,
+                "sketch": false,
+                "walkthrough": false
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "schemaVersion": {
+            "const": "1.1.0"
+          }
+        }
+      },
+      "then": {
+        "description": "A 1.1.0 document carries none of the fields added in 1.2.0.",
+        "properties": {
+          "captures": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "captureSource": false,
+                "sketch": false,
+                "walkthrough": false
+              }
+            }
           }
         }
       }
     }
-  },
+  ],
   "$defs": {
     "uuid": {
       "description": "Lowercase RFC 9562 UUID.",
@@ -178,8 +252,16 @@
       "additionalProperties": false,
       "required": ["name"],
       "properties": {
-        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
-        "reason": { "type": "string", "minLength": 1, "maxLength": 300 }
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        }
       }
     },
     "capture": {
@@ -198,30 +280,42 @@
         "inaccessibleRooms"
       ],
       "properties": {
-        "captureId": { "$ref": "#/$defs/uuid" },
-        "areaKey": { "$ref": "#/$defs/areaKey" },
+        "captureId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "areaKey": {
+          "$ref": "#/$defs/areaKey"
+        },
         "label": {
           "description": "Floor or area label shown to people, for example Floor 1.",
           "type": "string",
           "minLength": 1,
           "maxLength": 100
         },
-        "mode": { "$ref": "#/$defs/captureMode" },
+        "mode": {
+          "$ref": "#/$defs/captureMode"
+        },
         "units": {
           "description": "Geometry is always metres. Display is the unit system shown to the operator.",
           "type": "object",
           "additionalProperties": false,
           "required": ["length", "display"],
           "properties": {
-            "length": { "const": "m" },
-            "display": { "enum": ["metric", "imperial"] }
+            "length": {
+              "const": "m"
+            },
+            "display": {
+              "enum": ["metric", "imperial"]
+            }
           }
         },
         "capturedAt": {
           "description": "Start of this capture (the capture date).",
           "$ref": "#/$defs/dateTime"
         },
-        "finishedAt": { "$ref": "#/$defs/dateTime" },
+        "finishedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
         "coverageNotes": {
           "description": "Free-text notes on coverage, obscured surfaces and gaps. Empty string when there is nothing to note.",
           "type": "string",
@@ -230,12 +324,16 @@
         "omittedRooms": {
           "description": "Rooms the operator chose not to scan. Empty when none.",
           "type": "array",
-          "items": { "$ref": "#/$defs/roomNote" }
+          "items": {
+            "$ref": "#/$defs/roomNote"
+          }
         },
         "inaccessibleRooms": {
           "description": "Rooms or spaces that could not be entered. Empty when none.",
           "type": "array",
-          "items": { "$ref": "#/$defs/roomNote" }
+          "items": {
+            "$ref": "#/$defs/roomNote"
+          }
         },
         "heading": {
           "description": "Compass bearing of this capture's -Z axis (plan up: plan y is -Z), in degrees clockwise from north, 0 <= heading < 360, one decimal. True north when headingSource is true, magnetic north when magnetic. Read by the phone compass at the start of the scan and matched to the scan frame; never typed. Omitted when there is no reading: the orientation is then not verified.",
@@ -260,21 +358,202 @@
         "headingIssue": {
           "description": "Why there is no heading although the app tried: rejected (readings disagreed or could not be matched to the scan), not_calibrated (the compass reported no valid accuracy), unavailable (no usable compass on the device). Never present together with heading.",
           "enum": ["rejected", "not_calibrated", "unavailable"]
+        },
+        "captureSource": {
+          "description": "How the capture was made (1.2.0): lidar, a RoomPlan scan; sketch, a hand sketch or existing plan with measurements entered by the operator (spec F14); walkthrough, an AR walkthrough on any iPhone, the operator tapping the corners, openings and ceiling line with the camera (spec F15). Absent in older documents, which means lidar. A sketch or walkthrough capture carries no compass field.",
+          "enum": ["lidar", "sketch", "walkthrough"]
+        },
+        "sketch": {
+          "description": "What the solver had (1.2.0). Present exactly when captureSource is sketch or walkthrough (a walkthrough is converted into sketch measurements and solved the same way).",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["measurements", "wallsMeasured", "wallsEstimated", "ceilingHeightSource"],
+          "properties": {
+            "measurements": {
+              "description": "complete: every wall and opening was measured and the ceiling height too; limited: at least one wall, opening or the ceiling height is estimated or assumed, or a closure residual is over the tolerance.",
+              "enum": ["complete", "limited"]
+            },
+            "wallsMeasured": {
+              "description": "Walls whose length the operator measured.",
+              "type": "integer",
+              "minimum": 0
+            },
+            "wallsEstimated": {
+              "description": "Walls whose length was estimated (an \"about\" value, the sketch proportion, or a square corner that was not measured).",
+              "type": "integer",
+              "minimum": 0
+            },
+            "ceilingHeightSource": {
+              "description": "measured: entered by the operator; assumed: the default 2.44 m.",
+              "enum": ["measured", "assumed"]
+            },
+            "closureResidualMm": {
+              "description": "The largest closure residual of the capture's rooms in millimetres (the lengths going one way along an axis against the lengths coming back), after the residual was distributed. Omitted when no room had every wall measured.",
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        },
+        "walkthrough": {
+          "description": "How the AR walkthrough was measured (1.2.0, spec F15). Present exactly when captureSource is walkthrough.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["scaleSource", "loopClosureMm", "trackingLimitedSeconds", "recorded"],
+          "properties": {
+            "scaleSource": {
+              "description": "tape: one wall was taped and every length scaled by scaleFactor; ar: the phone's motion tracking only (about 1 to 3 %).",
+              "enum": ["tape", "ar"]
+            },
+            "scaleFactor": {
+              "description": "tape length / AR length of the taped wall. Present exactly when scaleSource is tape.",
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "loopClosureMm": {
+              "description": "The largest gap, over the capture's rooms, between the first corner tap and the closing tap, before it was distributed.",
+              "type": "number",
+              "minimum": 0
+            },
+            "trackingLimitedSeconds": {
+              "description": "Seconds of the walk during which tracking was limited.",
+              "type": "number",
+              "minimum": 0
+            },
+            "recorded": {
+              "description": "True when the walkthrough video is in the package.",
+              "type": "boolean"
+            }
+          },
+          "if": {
+            "properties": {
+              "scaleSource": {
+                "const": "tape"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "scaleFactor": true
+            },
+            "required": ["scaleFactor"]
+          },
+          "else": {
+            "not": {
+              "properties": {
+                "scaleFactor": true
+              },
+              "required": ["scaleFactor"]
+            }
+          }
         }
       },
       "dependentRequired": {
         "heading": ["headingAccuracy", "headingSource", "headingRecordedAt"],
         "headingAccuracy": ["heading"],
         "headingSource": ["heading"],
-        "headingRecordedAt": ["heading"]
+        "headingRecordedAt": ["heading"],
+        "sketch": ["captureSource"],
+        "walkthrough": ["captureSource"]
       },
       "not": {
         "properties": {
-          "heading": { "$ref": "#/$defs/capture/properties/heading" },
-          "headingIssue": { "$ref": "#/$defs/capture/properties/headingIssue" }
+          "heading": {
+            "$ref": "#/$defs/capture/properties/heading"
+          },
+          "headingIssue": {
+            "$ref": "#/$defs/capture/properties/headingIssue"
+          }
         },
         "required": ["heading", "headingIssue"]
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "captureSource": {
+                "enum": ["sketch", "walkthrough"]
+              }
+            },
+            "required": ["captureSource"]
+          },
+          "then": {
+            "properties": {
+              "sketch": {
+                "$ref": "#/$defs/capture/properties/sketch"
+              }
+            },
+            "required": ["sketch"],
+            "not": {
+              "anyOf": [
+                {
+                  "properties": {
+                    "heading": true
+                  },
+                  "required": ["heading"]
+                },
+                {
+                  "properties": {
+                    "headingAccuracy": true
+                  },
+                  "required": ["headingAccuracy"]
+                },
+                {
+                  "properties": {
+                    "headingSource": true
+                  },
+                  "required": ["headingSource"]
+                },
+                {
+                  "properties": {
+                    "headingRecordedAt": true
+                  },
+                  "required": ["headingRecordedAt"]
+                },
+                {
+                  "properties": {
+                    "headingIssue": true
+                  },
+                  "required": ["headingIssue"]
+                }
+              ]
+            }
+          },
+          "else": {
+            "not": {
+              "properties": {
+                "sketch": true
+              },
+              "required": ["sketch"]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "captureSource": {
+                "const": "walkthrough"
+              }
+            },
+            "required": ["captureSource"]
+          },
+          "then": {
+            "properties": {
+              "walkthrough": {
+                "$ref": "#/$defs/capture/properties/walkthrough"
+              }
+            },
+            "required": ["walkthrough"]
+          },
+          "else": {
+            "not": {
+              "properties": {
+                "walkthrough": true
+              },
+              "required": ["walkthrough"]
+            }
+          }
+        }
+      ]
     }
   }
 }

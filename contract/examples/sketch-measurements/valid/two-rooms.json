@@ -1,0 +1,182 @@
+{
+  "schemaVersion": "1.0.0",
+  "visitId": "7c4e1b9a-2d3f-4a68-9b5c-e0f1a2b3c4d5",
+  "captureId": "a81d5f03-6c2e-4b97-8d14-2f9e7b3c5a60",
+  "areaKey": "floor-2",
+  "displayUnits": "imperial",
+  "source": {
+    "kind": "hand_sketch",
+    "path": "Original Exports/floor-2/a81d5f03-6c2e-4b97-8d14-2f9e7b3c5a60/sketch.jpg"
+  },
+  "ceilingHeight": {
+    "valueMm": 2438,
+    "enteredUnit": "ft_in",
+    "enteredText": "8' 0\"",
+    "measured": true
+  },
+  "rooms": [
+    {
+      "id": "room-1",
+      "label": "Bedroom",
+      "type": "bedroom",
+      "walls": [
+        {
+          "id": "wall-1",
+          "length": {
+            "valueMm": 4001,
+            "enteredUnit": "ft_in",
+            "enteredText": "13' 1.5\"",
+            "measured": true
+          },
+          "exterior": true
+        },
+        {
+          "id": "wall-2",
+          "length": {
+            "valueMm": 3010,
+            "enteredUnit": "ft_in",
+            "enteredText": "9' 10.5\"",
+            "measured": true
+          },
+          "exterior": true
+        },
+        {
+          "id": "wall-3",
+          "length": {
+            "valueMm": 3988,
+            "enteredUnit": "ft_in",
+            "enteredText": "13' 1\"",
+            "measured": true
+          }
+        },
+        {
+          "id": "wall-4",
+          "length": {
+            "valueMm": 2997,
+            "enteredUnit": "ft_in",
+            "enteredText": "9' 10\"",
+            "measured": true
+          }
+        }
+      ],
+      "diagonals": [
+        {
+          "from": 0,
+          "to": 2,
+          "length": {
+            "valueMm": 5004,
+            "enteredUnit": "ft_in",
+            "enteredText": "16' 5\"",
+            "measured": true
+          }
+        }
+      ],
+      "openings": [
+        {
+          "id": "door-1",
+          "kind": "door",
+          "wallId": "wall-3",
+          "width": {
+            "valueMm": 813,
+            "enteredUnit": "in",
+            "enteredText": "32",
+            "measured": true
+          },
+          "height": {
+            "valueMm": 2032,
+            "enteredUnit": "ft_in",
+            "enteredText": "6' 8\"",
+            "measured": true
+          },
+          "fromCorner": "start",
+          "fromCornerDistance": {
+            "valueMm": 305,
+            "enteredUnit": "in",
+            "enteredText": "12",
+            "measured": true
+          }
+        },
+        {
+          "id": "window-1",
+          "kind": "window",
+          "wallId": "wall-1",
+          "width": {
+            "valueMm": 914,
+            "enteredUnit": "in",
+            "enteredText": "36",
+            "measured": true
+          },
+          "height": {
+            "valueMm": 1219,
+            "enteredUnit": "in",
+            "enteredText": "48",
+            "measured": true
+          },
+          "sill": {
+            "valueMm": 914,
+            "enteredUnit": "in",
+            "enteredText": "36",
+            "measured": true
+          },
+          "fromCorner": "end",
+          "fromCornerDistance": {
+            "valueMm": 1219,
+            "enteredUnit": "in",
+            "enteredText": "48",
+            "measured": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "room-2",
+      "label": "Closet",
+      "type": "closet",
+      "walls": [
+        {
+          "id": "wall-5",
+          "length": {
+            "valueMm": 1500,
+            "enteredUnit": "ft_in",
+            "enteredText": "4' 11\"",
+            "measured": true
+          },
+          "sharedWith": {
+            "roomId": "room-1",
+            "wallId": "wall-4"
+          }
+        },
+        {
+          "id": "wall-6",
+          "length": {
+            "valueMm": 700,
+            "enteredUnit": "in",
+            "enteredText": "27.5",
+            "measured": false
+          }
+        },
+        {
+          "id": "wall-7"
+        },
+        {
+          "id": "wall-8",
+          "length": {
+            "valueMm": 700,
+            "enteredUnit": "in",
+            "enteredText": "27.5",
+            "measured": false
+          }
+        }
+      ],
+      "diagonals": [],
+      "openings": [
+        {
+          "id": "door-2",
+          "kind": "door",
+          "wallId": "wall-5",
+          "fromCorner": "start"
+        }
+      ]
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Chapter Capture station API
-  version: 1.1.0
+  version: 1.2.0
   summary: Upload, registration and verdicts for Chapter Capture intake packages.
   description: |
     The station receives intake packages from the Chapter Capture app, registers them, runs the
@@ -34,7 +34,11 @@ info:
     lowercase.
 
     1.1.0 is additive: new operations and new optional response properties. A client written
-    for 1.0.0 keeps working.
+    for 1.0.0 keeps working. 1.2.0 carries contract 1.2 (capture record 1.2.0 with
+    `captureSource` and `sketch`, manifest 1.2.0 with the roles `sketch_image`,
+    `sketch_measurements` and `sketch_interpretation`, specs F14 and F16) through the same JSON
+    bodies, and adds one operation, `POST /sketch-interpretations` (spec F16: Claude reads a
+    photo of a floor-plan sketch); a 1.1.0 client keeps working.
 
     Every operation except `GET /health` needs a Microsoft Entra ID bearer token. Each operation
     lists the app roles it accepts in `x-roles`; a valid token without one of them gets 403.
@@ -59,6 +63,8 @@ tags:
     description: Log of the package source a BIM operator used for each modeling decision.
   - name: review
     description: Project and package lists for the review screen.
+  - name: sketches
+    description: Reading a photo of a floor-plan sketch (spec F16).
 paths:
   /health:
     get:
@@ -786,6 +792,105 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
+  /sketch-interpretations:
+    post:
+      tags: [sketches]
+      operationId: createSketchInterpretation
+      summary: Read a photo of a floor-plan sketch, or a whole PDF of a floor plan
+      description: |
+        Sends the photo (an image block) or the whole PDF (a document block) to Claude
+        (Anthropic API) with the contract prompt `contract/prompts/sketch-interpretation.md` and
+        answers what it read: rooms, walls, openings, furniture and the dimensions written on
+        the drawing, as a sketch interpretation (contract `sketch-interpretation` 1.0.0). For a
+        PDF, Claude reads every page and traces the plan from one page, named in
+        `reading.planPage`; `image` is then the first page's size in points (US Letter,
+        612 x 792, when the station cannot read it). The app turns the reading into sketch
+        measurements and keeps the file and the interpretation in the package; the station
+        stores neither. Each call that reaches Claude is audited (who, when, file size, media
+        type, model, outcome, tokens; never the file). A photo typically takes 10 to 60
+        seconds; a 20-page PDF about 3 minutes. The station waits at most 600 seconds per
+        attempt, but in Azure the Container Apps ingress closes a request after 240 seconds,
+        so a long PDF reading can end without a response there.
+      x-roles: [capture]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SketchInterpretationRequest"
+      responses:
+        "200":
+          description: What Claude read. `reading.isFloorPlan` is true.
+          content:
+            application/json:
+              schema:
+                $ref: "../schema/sketch-interpretation.schema.json"
+        "400":
+          description: |
+            The body is malformed, or `data` is not standard padded base64 or not an image of
+            `mediaType`, or not a PDF (no `%PDF-` header) for `application/pdf` (code
+            `sketch_image_invalid`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "413":
+          description: |
+            The image is larger than 10 MB decoded, or the PDF larger than 24 MB (24 000 000
+            bytes) decoded (code `sketch_image_too_large`), or the whole body is too large to
+            read (code `payload_too_large`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "415":
+          description: |
+            `mediaType` is not `image/jpeg`, `image/png`, `image/webp`, `image/gif` or
+            `application/pdf` (code `sketch_unsupported_media_type`). The app converts HEIC
+            photos to JPEG.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: |
+            The image could not be read as a plan: it is not a floor plan (code
+            `sketch_not_a_plan`; `interpretation` carries the reading, whose `problem` says what
+            the photo shows), or Claude declined to read it (code `sketch_refused`, no
+            `interpretation`). The app offers to retake the photo or to enter the sketch by hand.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/SketchProblem"
+        "502":
+          description: |
+            Claude's answer was cut off (code `sketch_truncated`) or is not a contract-valid
+            reading (code `sketch_unreadable_response`), or the Anthropic API refused the
+            request (code `sketch_request_rejected`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: |
+            Sketch reading is unavailable (code `sketch_unavailable`): the station has no
+            Anthropic API key, or Claude is unreachable, overloaded or rate-limited after the
+            station's retries. The app offers the manual sketch.
+          headers:
+            Retry-After:
+              description: Seconds to wait, when the Anthropic API gave one.
+              schema:
+                type: integer
+                minimum: 0
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
 components:
   securitySchemes:
     entra:
@@ -933,6 +1038,45 @@ components:
                 type: string
               message:
                 type: string
+
+    SketchInterpretationRequest:
+      description: One photo of a floor-plan sketch, or one whole PDF of a floor plan (spec F16).
+      type: object
+      additionalProperties: false
+      required: [mediaType, data]
+      properties:
+        mediaType:
+          description: |
+            Media type of the file: `image/jpeg`, `image/png`, `image/webp`, `image/gif` or
+            `application/pdf`. Any other value answers 415.
+          type: string
+          minLength: 1
+          maxLength: 100
+          examples: [image/jpeg]
+        data:
+          description: |
+            The image or PDF, standard base64 with padding and no line breaks. An image is at
+            most 10 MB decoded (13 981 016 base64 characters), a PDF at most 24 MB (24 000 000
+            bytes, 32 000 000 base64 characters); a larger file answers 413.
+          type: string
+          minLength: 1
+        hint:
+          description: |
+            What the photo shows, from the field operator, appended to Claude's instruction, for
+            example `existing printed plan`.
+          type: string
+          minLength: 1
+          maxLength: 500
+
+    SketchProblem:
+      description: Problem details of a sketch that could not be read as a plan.
+      allOf:
+        - $ref: "#/components/schemas/Problem"
+        - type: object
+          properties:
+            interpretation:
+              description: What Claude read (code `sketch_not_a_plan` only).
+              $ref: "../schema/sketch-interpretation.schema.json"
 
     HubProject:
       description: A HUB deal with its confirmed property address.

@@ -2,3 +2,6 @@
 
 // The field-test mode is never part of a Release build.
 CHAPTER_FIELD_TEST = NO
+
+// No Anthropic API key is ever part of a Release build (the station holds it).
+CHAPTER_ANTHROPIC_API_KEY =

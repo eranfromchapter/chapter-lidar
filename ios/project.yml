@@ -38,6 +38,8 @@ packages:
     path: Packages/PackageKit
   StationClient:
     path: Packages/StationClient
+  SketchCapture:
+    path: Packages/SketchCapture
   AppCore:
     path: App/AppCore
   MSAL:
@@ -58,6 +60,12 @@ targets:
       - path: ../fixtures/generated/box-room/package
         type: folder
         buildPhase: resources
+      # The sketch reader's prompt and schema (spec F16), for the field-test build's direct
+      # Claude call. Debug only: excluded from Release below.
+      - path: ../contract/prompts/sketch-interpretation.md
+        buildPhase: resources
+      - path: ../contract/schema/sketch-interpretation.schema.json
+        buildPhase: resources
     settings:
       base:
         PRODUCT_NAME: ChapterCapture
@@ -70,8 +78,9 @@ targets:
       configs:
         Release:
           # The UI-test and field-test stubs and the fixture never ship: `UITest*` and `FieldTest*`
-          # sources (also #if DEBUG) and the fixture folder are not built into Release.
-          EXCLUDED_SOURCE_FILE_NAMES: "UITest* FieldTest* package"
+          # sources (also #if DEBUG), the fixture folder and the sketch reader's prompt and schema
+          # (only the field test reads them) are not built into Release.
+          EXCLUDED_SOURCE_FILE_NAMES: "UITest* FieldTest* package sketch-interpretation.md sketch-interpretation.schema.json"
     dependencies:
       - package: AppCore
         product: AppCore
@@ -98,6 +107,20 @@ targets:
         product: PackageKit
       - package: StationClient
         product: StationClient
+      - package: SketchCapture
+        product: SketchSolver
+      - package: SketchCapture
+        product: SketchMesh
+      - package: SketchCapture
+        product: SketchEntry
+      - package: SketchCapture
+        product: SketchUI
+      - package: SketchCapture
+        product: Walkthrough
+      - package: SketchCapture
+        product: SketchReading
+      - package: SketchCapture
+        product: WalkthroughUI
       - package: MSAL
         product: MSAL
 

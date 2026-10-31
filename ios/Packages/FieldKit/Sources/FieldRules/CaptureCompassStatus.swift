@@ -82,12 +82,30 @@ public enum CompassSummary {
     public var isVerified: Bool { self == .verified }
   }
 
-  /// Every capture of the record (exterior included), in record order, with its status:
-  /// `overrides[captureId]` when given, else the capture's stored reading.
+  /// The compass detail of a visit whose captures are all sketches (spec F14 1.7): nothing is
+  /// read, nothing is asked.
+  public static let sketchOnlyDetail = "Sketch capture: the plan is oriented as drawn"
+  /// The same for a visit of AR walkthroughs only (spec F15 5): the walk has no compass frame.
+  public static let walkthroughOnlyDetail = "AR walkthrough: the plan is oriented as walked"
+  /// The same for a visit of sketches and walkthroughs, no scan.
+  public static let measuredOnlyDetail = "No floor was scanned: the plans are oriented as measured"
+
+  /// The compass detail of a visit without a scanned capture: the words of its one source, or
+  /// `measuredOnlyDetail` for a mix.
+  public static func noScanDetail(_ captures: [CaptureRecord.Capture]) -> String {
+    if captures.allSatisfy({ $0.source == .sketch }) { return sketchOnlyDetail }
+    if captures.allSatisfy({ $0.source == .walkthrough }) { return walkthroughOnlyDetail }
+    return measuredOnlyDetail
+  }
+
+  /// Every scanned capture of the record (exterior included), in record order, with its
+  /// status: `overrides[captureId]` when given, else the capture's stored reading. A sketch or
+  /// AR walkthrough capture has no scan frame to read a heading into (spec F14 1.7, F15 5) and
+  /// is left out.
   public static func entries(
     record: CaptureRecord, overrides: [LowercaseUUID: CaptureCompassStatus] = [:]
   ) -> [Entry] {
-    record.captures.map { capture in
+    record.captures.filter { !$0.source.isMeasuredPlan }.map { capture in
       Entry(
         captureId: capture.captureId,
         label: capture.label.trimmingCharacters(in: .whitespaces),

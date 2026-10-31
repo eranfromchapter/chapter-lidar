@@ -13,6 +13,7 @@ import { checkPlausibility } from "./checks/plausibility.js";
 import { checkProperty } from "./checks/property.js";
 import { checkRegistration } from "./checks/registration.js";
 import { checkScale } from "./checks/scale.js";
+import { checkSketchMeasurements } from "./checks/sketch.js";
 import { CheckContext } from "./context.js";
 import { NO_ACTION, clip, count, isActionable, outcomeOf } from "./finding.js";
 import {
@@ -24,11 +25,13 @@ import {
 } from "./types.js";
 
 /**
- * Station component and rule set version written into every verdict. 1.1.0 adds
- * `orientation.compass` (13 rules). People read it as "station-checks v1.1.0" (contract
- * `ruleSetLabel`).
+ * Station component and rule set version written into every verdict. 1.1.0 added
+ * `orientation.compass` (13 rules); 1.2.0 adds `sketch.measurements` (14 rules, spec F14; AR
+ * walkthrough captures too, spec F15) and leaves a sketch or walkthrough capture ungraded by
+ * `orientation.compass`. People read it as
+ * "station-checks v1.2.0" (contract `ruleSetLabel`).
  */
-export const EVALUATOR = { name: "chapter-capture-station/checks", version: "1.1.0" } as const;
+export const EVALUATOR = { name: "chapter-capture-station/checks", version: "1.2.0" } as const;
 
 /** The preliminary task outcomes apply to, unless the caller names another. */
 export const DEFAULT_TASK = "Preliminary existing-condition plans";
@@ -55,9 +58,10 @@ const RUNNERS: Readonly<Record<RuleId, Check>> = {
   "geometry.plausibility": checkPlausibility,
   "floors.registration": checkRegistration,
   "evidence.independence": checkIndependence,
+  "sketch.measurements": checkSketchMeasurements,
 };
 
-/** The thirteen checks in checklist order. */
+/** The fourteen checks in checklist order. */
 export const CHECKS: ReadonlyArray<{ ruleId: RuleId; title: string; run: Check }> = RULES.map(
   (rule) => ({ ruleId: rule.id, title: rule.title, run: RUNNERS[rule.id] }),
 );

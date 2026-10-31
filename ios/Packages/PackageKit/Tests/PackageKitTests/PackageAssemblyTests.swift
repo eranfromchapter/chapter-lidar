@@ -81,8 +81,9 @@ final class PackageAssemblyTests: XCTestCase {
         entry.sha256, SHA256.hexDigest(of: try Data(contentsOf: sealed.url(for: entry.path))))
     }
 
-    // Same files, roles, captures, fingerprints, provenance and labels as the fixture's manifest.
-    XCTAssertEqual(sealed.manifest, fixture.manifest)
+    // Same files, roles, captures, fingerprints, provenance and labels as the fixture's manifest
+    // (the fixtures are 1.1.0 manifests; the assembler writes the current version).
+    XCTAssertEqual(sealed.manifest, fixture.manifest.asCurrentVersion)
     XCTAssertEqual(sealed.verify(), [])
   }
 
@@ -90,7 +91,7 @@ final class PackageAssemblyTests: XCTestCase {
     for name in ["box-room", "l-shaped-room", "two-room-apartment", "two-floor-house"] {
       let fixture = try FixturePackage(name)
       let sealed = try assemble(fixture)
-      XCTAssertEqual(sealed.manifest, fixture.manifest, name)
+      XCTAssertEqual(sealed.manifest, fixture.manifest.asCurrentVersion, name)
       XCTAssertEqual(try Fixtures.manifestValidator().validate(jsonData: sealed.manifestData), [], name)
       XCTAssertEqual(sealed.verify(), [], name)
     }
@@ -290,5 +291,14 @@ final class PackageLayoutRuleTests: XCTestCase {
     XCTAssertThrowsError(try PackageAssembler().assemble(PackageDraft(visitId: visitId), at: folder.url.appendingPathComponent("empty"))) {
       XCTAssertEqual($0 as? PackageError, .emptyPackage)
     }
+  }
+}
+
+extension PackageManifest {
+  /// The same manifest read as the version the assembler writes.
+  fileprivate var asCurrentVersion: PackageManifest {
+    var copy = self
+    copy.schemaVersion = .current
+    return copy
   }
 }

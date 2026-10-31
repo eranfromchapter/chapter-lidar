@@ -21,6 +21,11 @@ public enum FileRole: String, CaseIterable, Codable, Sendable {
   case pointCloudLAS = "point_cloud_las"
   case photo
   case fieldControls = "field_controls"
+  case sketchImage = "sketch_image"
+  case sketchMeasurements = "sketch_measurements"
+  case walkthroughVideo = "walkthrough_video"
+  case walkthroughLog = "walkthrough_log"
+  case sketchInterpretation = "sketch_interpretation"
 
   /// Roles of visit-wide files. Their manifest entries carry no `captureId` or `areaKey`;
   /// entries of every other role carry both.
@@ -38,6 +43,22 @@ public enum FileRole: String, CaseIterable, Codable, Sendable {
   public var isRetired: Bool {
     FileRole.retiredRoles.contains(self)
   }
+
+  /// Roles added in manifest 1.2.0 (spec F14): the originals of a sketch capture. Only a 1.2.0
+  /// manifest lists them.
+  public static let sketchRoles: [FileRole] = [
+    .sketchImage, .sketchMeasurements, .sketchInterpretation,
+  ]
+
+  public var isSketchRole: Bool {
+    FileRole.sketchRoles.contains(self)
+  }
+
+  /// Roles added in manifest 1.2.0 (spec F15): the originals of an AR walkthrough.
+  public static let walkthroughRoles: [FileRole] = [.walkthroughVideo, .walkthroughLog]
+
+  /// Every role only a 1.2.0 manifest lists.
+  public static let rolesAddedIn1_2: [FileRole] = sketchRoles + walkthroughRoles
 
   /// The one folder files of this role are stored in.
   public var folder: PackageFolder {
@@ -123,7 +144,8 @@ public enum PackageFolder: String, CaseIterable, Codable, Sendable {
       return [
         .rawRoomplanJSON, .rawDepth, .captureModel, .planDXF, .roomsCSV, .planPDF,
         .spatialReportPDF, .planPNG, .planSVG, .meshGLB, .meshOBJ, .meshMTL, .texture,
-        .pointCloudLAS,
+        .pointCloudLAS, .sketchImage, .sketchMeasurements, .walkthroughVideo, .walkthroughLog,
+        .sketchInterpretation,
       ]
     case .sitePhotos: return [.photo]
     case .fieldMeasurements: return [.fieldControls]
@@ -147,6 +169,12 @@ public enum PackageLayout {
   public static let captureModelFileName = "capture-model.json"
   /// File name of the field controls in their folder.
   public static let fieldControlsFileName = "field-controls.json"
+  /// File name of a sketch capture's measurements in its capture's folder (manifest 1.2.0).
+  public static let sketchMeasurementsFileName = "sketch-measurements.json"
+  /// File name of an AR walkthrough's log in its capture's folder (manifest 1.2.0).
+  public static let walkthroughLogFileName = "walkthrough-log.json"
+  /// File name of what Claude read from a sketch photo (manifest 1.2.0, spec F16).
+  public static let sketchInterpretationFileName = "sketch-interpretation.json"
   /// File name of the manifest in its folder.
   public static let manifestFileName = "manifest.json"
 }

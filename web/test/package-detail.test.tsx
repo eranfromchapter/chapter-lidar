@@ -204,7 +204,7 @@ describe("the drawn sample (2j)", () => {
       "iPhone 16 Pro · app 1.0.0",
       "whole floor × 1",
       "sealed Oct 17, 2026",
-      "checked Oct 17, 2026 11:20 · rules station-checks v1.1.0",
+      "checked Oct 17, 2026 11:20 · rules station-checks v1.2.0",
       "capture 33ede7f4-cfcb-4cd6-9af5-7daffee829a9",
     ]);
   });
@@ -265,7 +265,7 @@ describe("the drawn sample (2j)", () => {
       "12 scanned · 807.5 sq ft, sum of rooms · 5 unlabeled",
     );
     expect(region("Capture checks").textContent).toContain(
-      "13 rules · evaluated Oct 17, 2026 11:20 · same table as page 4 of the spatial report",
+      "14 rules · evaluated Oct 17, 2026 11:20 · same table as page 4 of the spatial report",
     );
   });
 
@@ -371,7 +371,7 @@ describe("the drawn sample (2j)", () => {
     const station = region("Station");
     expect([...station.querySelectorAll(".station-row")].map((row) => row.textContent)).toEqual([
       "RegisteredOct 17 · 11:05",
-      "Checks run · 13 rules11:20",
+      "Checks run · 14 rules11:20",
       "Verdict · Limited11:20",
       "Published to the HUB11:21",
     ]);

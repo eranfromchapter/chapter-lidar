@@ -24,6 +24,9 @@ const DEFECT_AT: Record<string, string> = {
   "capture-record/heading-and-issue.json": "/captures/0",
   "capture-record/heading-360.json": "/captures/0/heading",
   "capture-record/unknown-heading-source.json": "/captures/0/headingSource",
+  "capture-record/sketch-in-1.1.0.json": "",
+  "capture-record/sketch-without-source.json": "/captures/1",
+  "capture-record/sketch-with-heading.json": "/captures/1",
   "capture-model/z-up.json": "/coordinateSystem/up",
   "capture-model/unknown-room-type.json": "/rooms/0/type",
   // schemaVersion (root) decides which fields are allowed, so Ajv also reports at the root;
@@ -40,6 +43,15 @@ const DEFECT_AT: Record<string, string> = {
   // checks the exact pointers.
   "manifest/direction-source-in-1.0.0.json": "",
   "manifest/retired-spatial-report-role-1.1.0.json": "",
+  "manifest/sketch-role-in-1.1.0.json": "",
+  "sketch-measurements/door-with-sill.json": "/rooms/0/openings/0",
+  "sketch-measurements/source-without-path.json": "/source",
+  "capture-record/walkthrough-without-summary.json": "/captures/1",
+  "capture-record/scale-factor-without-tape.json": "/captures/1",
+  "walkthrough-log/corners-with-walls.json": "/rooms/0",
+  "walkthrough-log/door-with-sill.json": "/rooms/0/openings/0",
+  "sketch-interpretation/reading-without-problem.json": "/reading",
+  "sketch-interpretation/unknown-furniture.json": "/reading/rooms/0/furniture/0/category",
   // outcome (root) contradicts findings, so Ajv reports at the root and /findings.
   "verdict/ready-with-blocker.json": "",
 };

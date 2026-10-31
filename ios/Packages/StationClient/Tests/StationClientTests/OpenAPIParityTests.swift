@@ -142,7 +142,7 @@ final class OpenAPIParityTests: XCTestCase {
     XCTAssertEqual(
       client.subtracting(documented), [], "client operations not in station.yaml")
     XCTAssertEqual(document.operations.count, StationOperation.allCases.count)
-    XCTAssertEqual(StationOperation.allCases.count, 13)
+    XCTAssertEqual(StationOperation.allCases.count, 14)
   }
 
   func testSecurityAndSuccessStatusesMatchDocument() throws {
@@ -190,6 +190,8 @@ final class OpenAPIParityTests: XCTestCase {
       case "listModelingDecisions": body = Fixtures.decisions
       case "createModelingDecision": body = Fixtures.decision
       case "putNextRevisionNotice": body = Fixtures.nextRevisionNotice
+      case "createSketchInterpretation":
+        body = (try? SketchInterpretationTests.example("bedroom-and-closet")) ?? "{}"
       default: return .respond(.problem(500, code: "no_fixture"))
       }
       return .respond(.json(operation.successStatuses.min() ?? 200, body))
@@ -226,6 +228,8 @@ final class OpenAPIParityTests: XCTestCase {
         sources: [DecisionSource(path: "Field Measurements/field-controls.json")]))
     _ = try await client.putNextRevisionNotice(
       packageId: packageId, Fixtures.nextRevisionNoticeInput)
+    _ = try await client.createSketchInterpretation(
+      SketchInterpretationRequest(mediaType: "image/jpeg", imageData: Data([0xFF, 0xD8, 0xFF])))
 
     XCTAssertEqual(unmatched.items, [], "client sent requests that are not in station.yaml")
     XCTAssertEqual(

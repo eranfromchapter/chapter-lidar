@@ -5,7 +5,7 @@
 // Each has a system-assigned managed identity for ACR pulls, Key Vault references, Blob access
 // and Postgres sign-in (DB_AUTH=entra: an Entra access token, never a password; PGUSER is the
 // identity's own Postgres role, named after the app or job). No secret value is set here: the
-// HUB credential is a Key Vault reference by name.
+// HUB credential and the Anthropic API key are Key Vault references by name.
 //
 // Environment variable names match station/api/src/core/config.ts.
 //
@@ -69,6 +69,9 @@ param entraAudience string
 @description('First deployment: no registry or Key Vault references and no probes yet.')
 param bootstrap bool
 
+@description('The Key Vault holds anthropic-api-key, so the api gets ANTHROPIC_API_KEY (sketch reading).')
+param anthropicApiKeyInVault bool = false
+
 @description('API image reference (also used by the migration job).')
 param apiImage string
 
@@ -99,8 +102,12 @@ param workerMinReplicas int
 @minValue(1)
 param workerMaxReplicas int
 
-// Key Vault secret name. Only the name lives here; an admin sets the value.
+// Key Vault secret names. Only the names live here; an admin sets the values.
 var hubSecretName = 'hub-service-credential'
+// Anthropic API key for the sketch reading (api only). A Key Vault reference to a secret that
+// does not exist fails the revision, so it is wired only once anthropicApiKeyInVault is on.
+var anthropicSecretName = 'anthropic-api-key'
+var anthropicKeyWired = !bootstrap && anthropicApiKeyInVault
 
 // The api image's migration entrypoint (see station/api/src/core/migrate-main.ts). The runtime
 // image has production dependencies and dist/ only, so `npm run migrate` (tsx on src/) cannot
@@ -156,6 +163,28 @@ var databaseEnv = [
     value: 'require'
   }
 ]
+
+var anthropicSecrets = anthropicKeyWired
+  ? [
+      {
+        name: anthropicSecretName
+        keyVaultUrl: '${keyVaultUri}secrets/${anthropicSecretName}'
+        identity: 'system'
+      }
+    ]
+  : []
+
+// The worker gets only the shared secrets: it never calls Claude.
+var apiSecrets = concat(appSecrets, anthropicSecrets)
+
+var anthropicSecretEnv = anthropicKeyWired
+  ? [
+      {
+        name: 'ANTHROPIC_API_KEY'
+        secretRef: anthropicSecretName
+      }
+    ]
+  : []
 
 var hubSecretEnv = bootstrap
   ? []
@@ -311,7 +340,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
         ]
       }
       registries: registries
-      secrets: appSecrets
+      secrets: apiSecrets
     }
     template: {
       containers: [
@@ -337,7 +366,8 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
                 value: apiAppName
               }
             ],
-            hubSecretEnv
+            hubSecretEnv,
+            anthropicSecretEnv
           )
           probes: apiProbes
         }

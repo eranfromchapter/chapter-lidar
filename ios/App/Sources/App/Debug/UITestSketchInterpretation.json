@@ -1,0 +1,51 @@
+{
+  "image": {
+    "height": 750,
+    "width": 1000
+  },
+  "interpretedAt": "2026-10-29T12:00:00Z",
+  "model": "demo-fixture",
+  "reading": {
+    "ceilingHeightMm": null,
+    "dimensionUnits": "none",
+    "dimensions": [],
+    "isFloorPlan": true,
+    "planPage": null,
+    "problem": null,
+    "rooms": [
+      {
+        "corners": [
+          { "x": 100, "y": 100 },
+          { "x": 900, "y": 100 },
+          { "x": 900, "y": 700 },
+          { "x": 100, "y": 700 }
+        ],
+        "furniture": [
+          {
+            "angleDeg": 0,
+            "category": "bed",
+            "center": { "x": 400, "y": 450 },
+            "depth": 400,
+            "label": null,
+            "width": 320
+          },
+          {
+            "angleDeg": 0,
+            "category": "storage",
+            "center": { "x": 830, "y": 400 },
+            "depth": 400,
+            "label": "Wardrobe",
+            "width": 120
+          }
+        ],
+        "label": "Bedroom",
+        "openings": [
+          { "end": 0.9, "kind": "door", "start": 0.7, "wall": 2 },
+          { "end": 0.65, "kind": "window", "start": 0.35, "wall": 0 }
+        ],
+        "type": "bedroom"
+      }
+    ]
+  },
+  "schemaVersion": "1.0.0"
+}

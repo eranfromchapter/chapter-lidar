@@ -138,8 +138,9 @@ const SEVERITY_ORDER = { blocker: 0, limitation: 1, info: 2 } as const;
  * Adds the v2 rule `orientation.compass` (compass spec 8.2, built in station/checks by track T3)
  * to a verdict of a station that does not run it yet, as that station will report it: the row
  * right after `orientation.up`, one finding per capture in the station's field order, findings
- * by severity then check order, evaluator version 1.1.0 (13 rules). A verdict that has the rule
- * already is returned unchanged. Only the info states (verified, approximate) are written: a
+ * by severity then check order, and the F14 rule `sketch.measurements` last (not applicable to
+ * a scan), evaluator version 1.2.0 (14 rules). A verdict that has the rule already is returned
+ * unchanged. Only the info states (verified, approximate) are written: a
  * reading that is not verified adds a limitation and changes the outcome, so it throws.
  */
 export function withCompassRule(
@@ -151,12 +152,19 @@ export function withCompassRule(
     return verdict;
   }
   const out = structuredClone(verdict);
-  out.evaluator = { ...out.evaluator, version: "1.1.0" };
+  out.evaluator = { ...out.evaluator, version: "1.2.0" };
   const up = out.checks.findIndex((check) => check.ruleId === "orientation.up");
   if (up < 0) {
     throw new Error("the verdict has no orientation.up row");
   }
   out.checks.splice(up + 1, 0, { ...COMPASS_RULE, status: "passed" });
+  if (!out.checks.some((check) => check.ruleId === "sketch.measurements")) {
+    out.checks.push({
+      ruleId: "sketch.measurements",
+      title: "Sketch measurements",
+      status: "not_applicable",
+    });
+  }
   const compass = record.captures.map((capture): Finding => {
     const state = compassState(capture);
     if (state.kind === "not_verified") {

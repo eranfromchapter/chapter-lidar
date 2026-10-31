@@ -43,6 +43,16 @@
         named: "home-ax3", contentSize: .accessibilityExtraLarge)
     }
 
+    /// A phone without LiDAR (spec F14 2.1, F15 2): "Capture without LiDAR" is the primary button and "New
+    /// capture" stays, tinted, to explain the device gate.
+    func testHomeWithoutLidar() {
+      var state = F.homeDrawn
+      state.canScan = false
+      assertChapterSnapshot(
+        of: NavigationStack { CapturesHomeScreen(state: state, actions: .none) },
+        named: "home-no-lidar")
+    }
+
     // MARK: 2 New capture (2b-1, 1b, 1c)
 
     func testNewCaptureDrawn() async {

@@ -61,6 +61,8 @@ WORKDIR /app
 COPY --from=deps /repo /app
 COPY --from=build /repo/contract/ts/dist contract/ts/dist
 COPY contract/schema contract/schema
+# The sketch reading's system prompt, read at startup (src/routes/sketch/claude.ts).
+COPY contract/prompts contract/prompts
 COPY --from=build /repo/station/api/dist station/api/dist
 COPY station/db/migrations station/db/migrations
 USER node

@@ -49,6 +49,14 @@ export const WORDS = {
     "Each room has a plan page. Site photos are in the package (left out of this report: size limit).",
   otherFloorNote:
     "One plan page per floor. The contents list is on the first plan page only. Floors are drawn in their own scan frame: the station does not align captures to each other.",
+  /** Under the floor title of a sketch capture's plan page (spec F14 1.7). */
+  sketchCapture: "Sketch capture",
+  sketchPlanNote:
+    "Sketch capture: the plan is drawn from the operator's measured sketch, not a scan; it is oriented as drawn.",
+  /** Under the floor title of an AR walkthrough capture's plan page (spec F15 5). */
+  walkthroughCapture: "AR walkthrough",
+  walkthroughPlanNote:
+    "AR walkthrough: the plan is measured from the corners and openings tapped with the phone's camera, not a scan; it is oriented as walked.",
   legend: "Legend",
   scheduleFootnote:
     "(B) bounding box · (I) inscribed rectangle, shown only when the room is not a rectangle · approx.: part of the ceiling was not captured · wall area excludes openings · volume assumes a flat ceiling.",

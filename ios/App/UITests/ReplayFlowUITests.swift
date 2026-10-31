@@ -538,12 +538,12 @@ final class ReplayFlowUITests: XCTestCase {
     XCTAssertTrue(app.staticTexts["Revision 1 \u{00B7} sealed"].exists)
     assertFonts("Package status")
     shot("17 Uploaded")
-    // The capture record the station stored (compass §13.4): schema 1.1.0 and the four heading
-    // fields of the verified reading.
+    // The capture record the station stored (compass §13.4): schema 1.2.0 (contract 1.2) and
+    // the four heading fields of the verified reading.
     let uploaded = element("debug.uploadedRecord")
     waitFor("the station has the capture record") {
       let value = uploaded.value as? String ?? ""
-      return value.hasPrefix("schemaVersion 1.1.0 \u{00B7} Floor 1: heading ")
+      return value.hasPrefix("schemaVersion 1.2.0 \u{00B7} Floor 1: heading ")
     }
     let stored = uploaded.value as? String ?? ""
     XCTAssertFalse(stored.contains("heading none"), stored)

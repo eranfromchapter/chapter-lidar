@@ -16,6 +16,9 @@ final class RoundTripTests: XCTestCase {
     "capture-model": { try roundTrip(CaptureModel.self, $0) },
     "field-controls": { try roundTrip(FieldControls.self, $0) },
     "manifest": { try roundTrip(PackageManifest.self, $0) },
+    "sketch-measurements": { try roundTrip(SketchMeasurements.self, $0) },
+    "walkthrough-log": { try roundTrip(WalkthroughLog.self, $0) },
+    "sketch-interpretation": { try roundTrip(SketchInterpretation.self, $0) },
     "verdict": { try roundTrip(Verdict.self, $0) },
   ]
 
@@ -88,8 +91,12 @@ final class RoundTripTests: XCTestCase {
         XCTAssertEqual(
           differences, [],
           "\(name): re-encoded JSON differs:\n" + differences.joined(separator: "\n"))
-        XCTAssertFalse(
-          try JSONValue.parse(reencoded).containsNull, "\(name): re-encoded JSON contains null")
+        // The sketch interpretation's reading is Claude's structured output, whose absent values
+        // are null (the schema's one documented exception).
+        if schema != "sketch-interpretation" {
+          XCTAssertFalse(
+            try JSONValue.parse(reencoded).containsNull, "\(name): re-encoded JSON contains null")
+        }
         checked += 1
       }
     }
@@ -198,10 +205,35 @@ final class RoundTripTests: XCTestCase {
     let new = try decoder.decode(
       CaptureRecord.self, from: example("capture-record/valid/compass-two-captures.json"))
     XCTAssertEqual(new.schemaVersion, .v1_1)
-    for record in [old, new] {
-      XCTAssertEqual(try writtenVersion(record), .string("1.1.0"))
+    let sketch = try decoder.decode(
+      CaptureRecord.self, from: example("capture-record/valid/sketch-capture.json"))
+    XCTAssertEqual(sketch.schemaVersion, .v1_2)
+    for record in [old, new, sketch] {
+      XCTAssertEqual(try writtenVersion(record), .string("1.2.0"))
     }
-    XCTAssertEqual(CaptureRecordSchemaVersion.current, .v1_1)
+    XCTAssertEqual(CaptureRecordSchemaVersion.current, .v1_2)
+  }
+
+  func testCaptureRecordSourceIsLidarUnlessTheRecordSaysSketch() throws {
+    let decoder = CaptureContractJSON.makeDecoder()
+    let old = try decoder.decode(
+      CaptureRecord.self, from: example("capture-record/valid/compass-two-captures.json"))
+    XCTAssertNil(old.captures[0].captureSource)
+    XCTAssertEqual(old.captures[0].source, .lidar)
+    XCTAssertNil(old.captures[0].sketch)
+    let record = try decoder.decode(
+      CaptureRecord.self, from: example("capture-record/valid/sketch-capture.json"))
+    XCTAssertEqual(record.captures[0].captureSource, .lidar)
+    XCTAssertEqual(record.captures[1].captureSource, .sketch)
+    XCTAssertEqual(record.captures[1].source, .sketch)
+    let summary = try XCTUnwrap(record.captures[1].sketch)
+    XCTAssertEqual(summary.measurements, .limited)
+    XCTAssertEqual(summary.wallsMeasured, 7)
+    XCTAssertEqual(summary.wallsEstimated, 1)
+    XCTAssertEqual(summary.ceilingHeightSource, .measured)
+    XCTAssertEqual(summary.closureResidualMm, 12)
+    XCTAssertNil(record.captures[1].heading)
+    XCTAssertNil(record.captures[1].headingIssue)
   }
 
   func testCaptureRecordCompassFieldsDecode() throws {
@@ -220,7 +252,7 @@ final class RoundTripTests: XCTestCase {
   func testCaptureRecordRejectsAnUnknownVersionOrSource() throws {
     let text = String(
       decoding: try example("capture-record/valid/compass-two-captures.json"), as: UTF8.self)
-    for (from, to) in [("\"1.1.0\"", "\"1.2.0\""), ("\"headingSource\": \"true\"", "\"headingSource\": \"grid\"")] {
+    for (from, to) in [("\"1.1.0\"", "\"1.3.0\""), ("\"headingSource\": \"true\"", "\"headingSource\": \"grid\"")] {
       XCTAssertThrowsError(
         try CaptureContractJSON.makeDecoder().decode(
           CaptureRecord.self, from: Data(text.replacingOccurrences(of: from, with: to).utf8)),
@@ -276,13 +308,18 @@ final class RoundTripTests: XCTestCase {
     let old = try decoder.decode(
       PackageManifest.self, from: example("manifest/valid/two-captures.json"))
     XCTAssertEqual(old.schemaVersion, .v1)
-    XCTAssertEqual(old.writtenSchemaVersion, .v1_1)
-    XCTAssertEqual(try writtenVersion(old), .string("1.1.0"))
+    XCTAssertEqual(old.writtenSchemaVersion, .v1_2)
+    XCTAssertEqual(try writtenVersion(old), .string("1.2.0"))
     let new = try decoder.decode(
       PackageManifest.self, from: example("manifest/valid/photo-direction-source.json"))
     XCTAssertEqual(new.schemaVersion, .v1_1)
-    XCTAssertEqual(try writtenVersion(new), .string("1.1.0"))
-    XCTAssertEqual(ManifestSchemaVersion.current, .v1_1)
+    XCTAssertEqual(try writtenVersion(new), .string("1.2.0"))
+    let sketch = try decoder.decode(
+      PackageManifest.self, from: example("manifest/valid/sketch-capture.json"))
+    XCTAssertEqual(sketch.schemaVersion, .v1_2)
+    XCTAssertEqual(try writtenVersion(sketch), .string("1.2.0"))
+    XCTAssertEqual(sketch.files.filter { $0.role.isSketchRole }.map(\.role), [.sketchImage, .sketchMeasurements])
+    XCTAssertEqual(ManifestSchemaVersion.current, .v1_2)
   }
 
   func testAManifestWithARetiredRoleIsWrittenAs1_0_0() throws {
@@ -294,7 +331,7 @@ final class RoundTripTests: XCTestCase {
 
     var dropped = legacy
     dropped.files.removeAll { $0.role.isRetired }
-    XCTAssertEqual(dropped.writtenSchemaVersion, .v1_1)
+    XCTAssertEqual(dropped.writtenSchemaVersion, .v1_2)
 
     // Built new (as PackageAssembler does) while PlanExport still writes the phone report:
     // 1.1.0 would not allow the file, so it is written as 1.0.0 too.
@@ -303,7 +340,7 @@ final class RoundTripTests: XCTestCase {
     XCTAssertEqual(created.writtenSchemaVersion, .v1)
     XCTAssertEqual(try writtenVersion(created), .string("1.0.0"))
     created.files.removeAll { $0.role.isRetired }
-    XCTAssertEqual(try writtenVersion(created), .string("1.1.0"))
+    XCTAssertEqual(try writtenVersion(created), .string("1.2.0"))
   }
 
   func testPhotoDirectionSourceDecodesAndIsOmittedWhenNil() throws {

@@ -22,6 +22,9 @@ param createRegistry = false
 param registryResourceGroupName = 'rg-chapter-capture-production'
 
 param bootstrap = bool(readEnvironmentVariable('CAPTURE_BOOTSTRAP', 'false'))
+
+// Turn on once an admin has set the Key Vault secret anthropic-api-key (infra/README.md, step 6).
+param anthropicApiKeyInVault = false
 param apiImage = readEnvironmentVariable('CAPTURE_API_IMAGE', '')
 param workerImage = readEnvironmentVariable('CAPTURE_WORKER_IMAGE', '')
 

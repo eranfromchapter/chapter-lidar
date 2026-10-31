@@ -25,9 +25,9 @@ export type CaptureMode = "room" | "floor" | "exterior";
  */
 export interface CaptureRecord {
   /**
-   * 1.1.0 adds the optional compass reading of each capture (heading, headingAccuracy, headingSource, headingRecordedAt) and headingIssue; a 1.0.0 document does not carry them. Readers accept both versions; writers write 1.1.0.
+   * 1.1.0 adds the optional compass reading of each capture (heading, headingAccuracy, headingSource, headingRecordedAt) and headingIssue; 1.2.0 adds captureSource, sketch and walkthrough. An older document does not carry the later fields. Readers accept every version; writers write 1.2.0.
    */
-  schemaVersion: "1.0.0" | "1.1.0";
+  schemaVersion: "1.0.0" | "1.1.0" | "1.2.0";
   visitId: Uuid;
   /**
    * The HUB project this visit belongs to.
@@ -140,6 +140,60 @@ export interface Capture {
    * Why there is no heading although the app tried: rejected (readings disagreed or could not be matched to the scan), not_calibrated (the compass reported no valid accuracy), unavailable (no usable compass on the device). Never present together with heading.
    */
   headingIssue?: "rejected" | "not_calibrated" | "unavailable";
+  /**
+   * How the capture was made (1.2.0): lidar, a RoomPlan scan; sketch, a hand sketch or existing plan with measurements entered by the operator (spec F14); walkthrough, an AR walkthrough on any iPhone, the operator tapping the corners, openings and ceiling line with the camera (spec F15). Absent in older documents, which means lidar. A sketch or walkthrough capture carries no compass field.
+   */
+  captureSource?: "lidar" | "sketch" | "walkthrough";
+  /**
+   * What the solver had (1.2.0). Present exactly when captureSource is sketch or walkthrough (a walkthrough is converted into sketch measurements and solved the same way).
+   */
+  sketch?: {
+    /**
+     * complete: every wall and opening was measured and the ceiling height too; limited: at least one wall, opening or the ceiling height is estimated or assumed, or a closure residual is over the tolerance.
+     */
+    measurements: "complete" | "limited";
+    /**
+     * Walls whose length the operator measured.
+     */
+    wallsMeasured: number;
+    /**
+     * Walls whose length was estimated (an "about" value, the sketch proportion, or a square corner that was not measured).
+     */
+    wallsEstimated: number;
+    /**
+     * measured: entered by the operator; assumed: the default 2.44 m.
+     */
+    ceilingHeightSource: "measured" | "assumed";
+    /**
+     * The largest closure residual of the capture's rooms in millimetres (the lengths going one way along an axis against the lengths coming back), after the residual was distributed. Omitted when no room had every wall measured.
+     */
+    closureResidualMm?: number;
+  };
+  /**
+   * How the AR walkthrough was measured (1.2.0, spec F15). Present exactly when captureSource is walkthrough.
+   */
+  walkthrough?: {
+    /**
+     * tape: one wall was taped and every length scaled by scaleFactor; ar: the phone's motion tracking only (about 1 to 3 %).
+     */
+    scaleSource: "tape" | "ar";
+    /**
+     * tape length / AR length of the taped wall. Present exactly when scaleSource is tape.
+     */
+    scaleFactor?: number;
+    /**
+     * The largest gap, over the capture's rooms, between the first corner tap and the closing tap, before it was distributed.
+     */
+    loopClosureMm: number;
+    /**
+     * Seconds of the walk during which tracking was limited.
+     */
+    trackingLimitedSeconds: number;
+    /**
+     * True when the walkthrough video is in the package.
+     */
+    recorded: boolean;
+  };
 }
 export interface RoomNote {
   name: string;

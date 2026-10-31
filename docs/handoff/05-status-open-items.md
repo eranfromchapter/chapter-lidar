@@ -72,6 +72,98 @@ Source of truth: `docs/waves/design/DESIGN.md` section "Design v2 (Oct 21, 2026)
   class, compass state and date; checked by PlanExport `ReportParityGoldenTests` and the station's
   `plan-sheet-parity.test.ts` and `metrics-parity.test.ts` (`DESIGN.md:137-148`).
 
+### 2.1 Sketch capture, no LiDAR (F14, Oct 29, 2026, branch `feat/f14-sketch-capture`)
+
+Spec and measurement study: `docs/waves/specs/F14-sketch-capture.md` (Part 1 answers the
+owner's question: one wall, one window and one door are not enough; a rectangle needs two
+adjacent walls, the ceiling height and each opening's width and distance from a corner; an
+`n`-corner rectilinear room needs `n − 2` walls; every wall measured gives the closure check).
+
+- **Contract 1.2:** capture record 1.2.0 (`captureSource: lidar | sketch`, `sketch` summary; a
+  sketch capture carries no compass field), manifest 1.2.0 (roles `sketch_image`,
+  `sketch_measurements`), new schema `sketch-measurements` 1.0.0 (what the operator entered),
+  OpenAPI 1.2.0 (no new operation). Readers accept every older version; writers write the newest.
+- **iOS:** "Sketch capture" on the Captures home (primary on a phone without LiDAR); What are
+  you drawing from? (photo, Photos, file or no sketch); Rooms and measurements (guided entry of
+  the required set, Measured/About per value); Check (the plan drawn from the solver, what was
+  derived, estimated or assumed); Finish floor writes `sketch.<ext>` and
+  `sketch-measurements.json` as the originals. New package `ios/Packages/SketchCapture`:
+  `SketchSolver` (closure by the compass rule, estimates with `confidence` low, unsquare corners
+  by least squares on diagonals, rooms placed by shared walls), `SketchMesh` (floor, walls with
+  openings cut, ceiling, extruded for `mesh.glb`/`mesh.obj`), `SketchEntry`, `SketchUI`. The
+  package builder branches on `captureSource`; a visit can mix scanned and sketched floors.
+  Overview, Before you leave and Package ready know a sketch needs no compass.
+- **Station:** rule 14 `sketch.measurements` (evaluator 1.2.0): a complete sketch is an info
+  finding; estimated walls, an assumed ceiling, estimated openings and a closure residual over
+  the scale tolerance are limitations. The compass rule does not grade a sketch capture. LiDAR
+  verdicts keep their outcome (the rule is not applicable; the report's checks table gains a row).
+  The spatial report prints "Sketch capture" under the floor title. No migration: the station
+  reads `captureSource` from the stored capture record JSON.
+- **Tests:** SketchCapture 51 (solver, closure, estimates, diagonals, mesh, entry), AppCore
+  `SketchCaptureTests`, station `sketch.test.ts` (+24), App UI test `SketchFlowUITests` (home →
+  Package ready with one rectangular room, a door and a window), CapturesHome snapshots
+  re-recorded (iOS 26.0, iPhone 17 Pro) plus `home-no-lidar.png`.
+- **Not verified on a real device:** the whole sketch flow on a phone without LiDAR (the UI
+  test ran on the simulator in replay mode); the camera, Photos and file-import pickers on a
+  phone; a sealed sketch package through a live station and the HUB; the extruded mesh in
+  Revit; the scan browser with a sketch visit (it lists originals generically and draws from the
+  draft's capture model, so nothing was added for it).
+- **Open:** vectorising the sketch (line detection, OCR of printed dimensions) is out of scope;
+  the 14th rule changes `Checks run · 14 rules` in the web and the report for every new
+  verdict; sketch screens have no snapshot tests (the UI test's screenshots cover them).
+
+### 2.2 AR walkthrough, any iPhone (F15, Oct 29, 2026, same branch)
+
+The owner tried the typed sketch flow on the phone and rejected it: every user should get the
+quality of a scan. Spec `docs/waves/specs/F15-ar-walkthrough.md` (section 1 says plainly what a
+phone without LiDAR can and cannot match).
+
+- **Flow:** "Capture without LiDAR" → How to measure: **Walk the rooms with the camera**
+  (recommended) or Enter from a sketch (F14). The walk (ARKit world tracking, floor reticle, tap
+  button) records floor corners (or two points per wall behind furniture), the closing tap,
+  door and window jambs, sills and heads, and the ceiling line; the camera video and its poses
+  are recorded. A tape check of one wall scales the floor. The taps become the F14 sketch
+  measurements (`WalkthroughConverter`) and the F14 solver builds the model.
+- **Contract (1.2, extended):** `captureSource: walkthrough` with a `walkthrough` summary,
+  roles `walkthrough_video` and `walkthrough_log`, schema `walkthrough-log` 1.0.0, source kind
+  `ar_walkthrough` and room `placement` in sketch measurements.
+- **Station:** rule 14 also grades walkthroughs (scale from the phone only, loop drift,
+  tracking, missing originals); the compass rule does not grade them; the report prints
+  "AR walkthrough".
+- **Tests:** converter 25, placement 4, walkthrough model 10, AppCore `WalkthroughCaptureTests`,
+  station `walkthrough.test.ts` 29, App UI test `WalkthroughFlowUITests` (replay session).
+- **Not verified on a real phone:** the live ARKit session (floor raycast, wall-plane taps,
+  tracking messages), the SceneKit overlay, the video recorder (HEVC, orientation, intrinsics),
+  real drift and accuracy. Known limit: a re-entrant corner more than 5° off square may solve
+  mirrored (the solver starts unsquare corners convex).
+
+### 2.3 Sketch photo to 3D (F16, Oct 29, 2026, same branch)
+
+The owner's target: photograph a sketch, get the 3D model. Spec
+`docs/waves/specs/F16-sketch-photo-to-3d.md`.
+
+- **Flow:** "Capture without LiDAR" → How to measure: **Photograph a sketch** (first) → camera,
+  Photos or file → Reading your sketch → one length (only when no dimension is written) → Check
+  with a 3D preview (rotate with a finger) and the plan → Finish floor. "View in 3D" for every
+  sketch and walkthrough floor.
+- **Claude reads the sketch** through the station: `POST /v1/sketch-interpretations` sends the
+  photo to `claude-opus-5-5` (adaptive thinking, structured output on the reading schema,
+  server-side refusal fallback) with the shared prompt `contract/prompts/sketch-interpretation.md`.
+  The station does not store the image; one audit row per call. Key: Key Vault secret
+  `anthropic-api-key` → `ANTHROPIC_API_KEY`, behind `anthropicApiKeyInVault` (off until the secret
+  exists); without a key the route answers 503 and the app offers the manual sketch.
+- **Plan and 3D:** `SketchReadingConverter` scales from the written dimensions (median, outliers
+  dropped) or the one length; walls not written on the sketch are estimated and the station says
+  Limited. The 3D model is coloured, with the drawn furniture as blocks.
+- **Contract:** schema `sketch-interpretation` 1.0.0 (its `reading` keeps nulls: Claude's
+  structured output), role `sketch_interpretation`, furniture in sketch measurements.
+- **Field test:** a Debug field-test build with `CHAPTER_ANTHROPIC_API_KEY` in the untracked
+  `ios/App/Config/Local.xcconfig` reads real sketches directly; without it, a demo reading.
+  Release builds never read the key.
+- **Not verified:** a real Claude call (no key was available while building), the pickers and
+  HEIC/EXIF handling on a phone, the 3D view's look and speed on a phone, the real station with
+  Entra, Azure ingress for a ~14 MB body, the Bicep (no compiler here).
+
 ## 3. Test results (last known)
 
 ### 3.1 GitHub Actions

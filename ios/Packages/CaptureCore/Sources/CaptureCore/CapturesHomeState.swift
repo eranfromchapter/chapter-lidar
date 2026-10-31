@@ -30,6 +30,12 @@ public struct CapturesHomeState: Hashable, Sendable {
     "Files stay on this phone until the station confirms each one. Verdict details are in the HUB."
   public static let emptyText = "No captures on this phone yet."
   public static let emptyFootnote = "Tap New capture to scan a floor or room."
+  /// The second way in, for a phone without LiDAR (spec F15 2): an AR walkthrough with the
+  /// camera, or the measurements of a sketch (spec F14).
+  public static let withoutLidarButton = "Capture without LiDAR"
+  /// Under the two buttons (spec F14 2.1, F15 2): what the second way in does.
+  public static let sketchFootnote =
+    "No LiDAR? Walk the rooms with the camera, or enter the measurements from a sketch."
   /// The account dialog's message while sealed packages wait for the station.
   public static let pendingUploadsMessage = "Uploads resume after you sign in again."
 
@@ -157,10 +163,16 @@ public struct CapturesHomeState: Hashable, Sendable {
   public var hasPendingUploads: Bool
   /// Reading the disk took longer than 300 ms: a spinner instead of the sections.
   public var isLoading: Bool
+  /// The device gate passes (LiDAR and RoomPlan): "New capture" is the primary button and
+  /// "Capture without LiDAR" the second. On a phone that cannot scan it is the other way round
+  /// (spec F14 2.1, F15 2): "Capture without LiDAR" primary, "New capture" kept to explain the
+  /// gate.
+  public var canScan: Bool
 
   /// Sorts `rows` into the two sections by destination.
   public init(
-    rows: [Row], operatorName: String, hasPendingUploads: Bool = false, isLoading: Bool = false
+    rows: [Row], operatorName: String, hasPendingUploads: Bool = false, isLoading: Bool = false,
+    canScan: Bool = true
   ) {
     let newestFirst = rows.sorted {
       $0.sortDate != $1.sortDate ? $0.sortDate > $1.sortDate : $0.id < $1.id
@@ -170,6 +182,7 @@ public struct CapturesHomeState: Hashable, Sendable {
     self.operatorName = operatorName
     self.hasPendingUploads = hasPendingUploads
     self.isLoading = isLoading
+    self.canScan = canScan
   }
 
   /// No capture on this phone: the empty card and its footnote.

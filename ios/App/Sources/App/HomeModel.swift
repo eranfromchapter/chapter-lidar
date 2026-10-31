@@ -14,6 +14,27 @@ enum AppRoute: Hashable {
   case newCapture
   /// What are you scanning?, step 2 (a new visit's, or a further floor's).
   case scanSetup
+  /// How do you want to measure?, step 2 of a capture without LiDAR (spec F15 2).
+  case measureMethod
+  /// What are you drawing from?, step 3 of a sketch capture (spec F14).
+  case sketchSource
+  /// Rooms and measurements, step 4 of a sketch capture.
+  case sketchRooms
+  /// Check, step 5 of a sketch capture.
+  case sketchCheck
+  /// Photograph the sketch, step 3 of a sketch photo (spec F16).
+  case photoSource
+  /// Reading your sketch… (or why it could not be read), step 4 of a sketch photo.
+  case photoReading
+  /// One length, step 4 of a sketch photo without written dimensions.
+  case photoLength
+  /// Check with the 3D preview, step 5 of a sketch photo.
+  case photoCheck
+  /// Check the scale, step 4 of an AR walkthrough (spec F15; the walk itself, step 3, is a
+  /// full-screen cover).
+  case walkthroughScale
+  /// Check, step 5 of an AR walkthrough.
+  case walkthroughCheck
   /// The Capture overview.
   case overview
   /// The photo step (viewfinder, then Label a photo).
@@ -69,7 +90,9 @@ final class HomeModel {
     revisionNotices = RevisionNoticeSchedule(
       sender: StationNextRevisionNotices(client: services.station),
       delay: services.revisionNoticeDelay)
-    state = CapturesHomeState(rows: [], operatorName: operatorInfo.name, isLoading: true)
+    state = CapturesHomeState(
+      rows: [], operatorName: operatorInfo.name, isLoading: true,
+      canScan: DeviceGate.evaluate(services.capabilities).isSupported)
     snapshots = app.liveSnapshots
     reload()
   }
@@ -103,15 +126,29 @@ final class HomeModel {
 
   /// "New capture": step 1 of a new visit. Nothing is written until its first Start scan.
   func newCapture() {
+    openNewVisit(sketch: false)
+  }
+
+  /// "Capture without LiDAR" (spec F14, F15): step 1 of a new visit walked with the camera or
+  /// drawn from a sketch. Nothing is written until the walk starts or the rooms screen opens.
+  func sketchCapture() {
+    openNewVisit(sketch: true)
+  }
+
+  private func openNewVisit(sketch: Bool) {
     extra = []
     visit?.close()
     do {
       visit = try VisitModel(
-        newIn: visitsRoot, services: services, operatorInfo: operatorInfo, home: self)
+        newIn: visitsRoot, services: services, operatorInfo: operatorInfo, home: self,
+        sketch: sketch)
     } catch {
       alertMessage = "A new capture could not be started: \(error)"
     }
   }
+
+  /// The device gate passes: the home's primary button is "New capture" (spec F14 2.1).
+  var canScan: Bool { DeviceGate.evaluate(services.capabilities).isSupported }
 
   /// A Captures home row: the Capture overview (in progress), Verdict received (sealed), or the
   /// scans of a v1 visit that kept no capture record.
@@ -240,7 +277,7 @@ final class HomeModel {
     let rows = visits.compactMap { CaptureLibrary.row(for: $0, live: snapshots) }
     state = CapturesHomeState(
       rows: rows, operatorName: operatorInfo.name,
-      hasPendingUploads: (app?.pendingUploadCount ?? 0) > 0)
+      hasPendingUploads: (app?.pendingUploadCount ?? 0) > 0, canScan: canScan)
   }
 
   /// On appear, when the app becomes active and on pull to refresh: the disk, then the station

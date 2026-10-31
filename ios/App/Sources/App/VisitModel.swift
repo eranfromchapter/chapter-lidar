@@ -10,7 +10,11 @@ import Observation
 import PackageCore
 import PhotoStore
 import PlanExport
+import SketchEntry
+import SketchReading
+import SketchSolver
 import UIKit
+import WalkthroughUI
 
 /// One visit on screen: a new capture, or one reopened from the Captures home. All rules live
 /// in AppCore (`VisitFlow`, `OverviewBuilder`, `VisitPackageBuilder`, `UploadCoordinator`); this
@@ -22,6 +26,21 @@ final class VisitModel {
   private(set) var flow: VisitFlow
   /// New capture / What are you scanning? / Live scan of the floor being added.
   private(set) var captureModel: CaptureFlowModel?
+  /// How do you want to measure? of a capture without LiDAR (spec F15 2): set when the capture
+  /// screens' step 1 continues with the sketch purpose, nil again at Finish floor.
+  private(set) var methodModel: MeasureMethodModel?
+  /// The sketch screens of the floor being drawn (spec F14): What are you drawing from?,
+  /// Rooms and measurements, Check. Set when How do you want to measure? continues with
+  /// "Enter from a sketch", nil again at Finish floor.
+  private(set) var sketchModel: SketchEntryModel?
+  /// "Photograph a sketch" of the floor being captured (spec F16): the photo, Claude's reading,
+  /// the one length and Check. Set when How do you want to measure? continues with the photo,
+  /// nil again at Finish floor, Back to How to measure, or "Enter it by hand".
+  private(set) var sketchPhotoModel: SketchPhotoModel?
+  /// The AR walkthrough of the floor being walked (spec F15): the walk (a full-screen cover),
+  /// Check the scale and Check. Set when How do you want to measure? continues with the walk,
+  /// nil again at Finish floor or when the walk is left.
+  private(set) var walkthroughModel: WalkthroughModel?
   private(set) var photoModel: PhotoLabelingModel?
   private(set) var controlsModel: FieldControlsModel?
   /// Package ready's plan (revision 1).
@@ -63,10 +82,12 @@ final class VisitModel {
   @ObservationIgnored private var mapping: Task<Void, Never>?
   @ObservationIgnored private var cachedVerdicts: [LowercaseUUID: VerdictStatus] = [:]
 
-  /// A new capture at "New capture". Its workspace folder is created by the first Start scan,
-  /// so an abandoned New capture leaves nothing on the phone.
+  /// A new capture at "New capture". Its workspace folder is created by the first Start scan
+  /// (or, for a sketch capture, when its rooms screen opens), so an abandoned New capture
+  /// leaves nothing on the phone. `sketch`: the Captures home's "Capture without LiDAR".
   init(
-    newIn visitsRoot: URL, services: AppServices, operatorInfo: SignedInOperator, home: HomeModel
+    newIn visitsRoot: URL, services: AppServices, operatorInfo: SignedInOperator, home: HomeModel,
+    sketch: Bool = false
   ) throws {
     self.services = services
     self.workspace = VisitWorkspace.allocate(in: visitsRoot)
@@ -80,7 +101,8 @@ final class VisitModel {
     photos = []
     packages = []
     createdAt = .now()
-    captureModel = makeCaptureModel(draft: newDraft(), existingAreaKeys: [])
+    captureModel = makeCaptureModel(
+      draft: newDraft(), existingAreaKeys: [], purpose: sketch ? .sketch : .scan)
   }
 
   /// A visit read back from its `visit.json`: at the Capture overview, its scans mapped in the
@@ -131,7 +153,11 @@ final class VisitModel {
   /// capture or What are you scanning? before the scan, a photo taken and not saved, a field
   /// control or room names being typed.
   var hasWorkToLose: Bool {
-    if captureModel != nil || renaming != nil { return true }
+    if captureModel != nil || methodModel != nil || sketchModel != nil || walkthroughModel != nil
+      || sketchPhotoModel != nil || renaming != nil
+    {
+      return true
+    }
     switch flow.step {
     case .photos: return photoModel?.pendingOriginal != nil
     case .controls: return controlsModel?.entry != nil
@@ -145,7 +171,39 @@ final class VisitModel {
   var routes: [AppRoute] {
     switch flow.step {
     case .captureRecord, .scan:
-      if flow.captures.isEmpty && !flow.isRevisionMode {
+      let first = flow.captures.isEmpty && !flow.isRevisionMode
+      if captureModel?.purpose == .sketch {
+        // A capture without LiDAR after step 1 (spec F15 2): How do you want to measure? as
+        // soon as step 1 continues (its model follows a moment later), then the sketch screens
+        // (spec F14 2.4) or the walkthrough's (the walk itself is a full-screen cover).
+        if first, captureModel?.step == .newCapture { return [.newCapture] }
+        let base: [AppRoute] = first ? [.newCapture, .measureMethod] : [.overview, .measureMethod]
+        if let sketchModel {
+          switch sketchModel.step {
+          case .source: return base + [.sketchSource]
+          case .rooms: return base + [.sketchSource, .sketchRooms]
+          case .check, .finished: return base + [.sketchSource, .sketchRooms, .sketchCheck]
+          }
+        }
+        if let photo = sketchPhotoModel {
+          switch photo.phase {
+          case .source: return base + [.photoSource]
+          case .reading, .problem: return base + [.photoSource, .photoReading]
+          case .oneLength: return base + [.photoSource, .photoLength]
+          case .check, .finished:
+            return base + [.photoSource] + (photo.needsOneLength ? [.photoLength] : []) + [.photoCheck]
+          }
+        }
+        if let walkthroughModel {
+          switch walkthroughModel.phase {
+          case .walking: return base
+          case .scale: return base + [.walkthroughScale]
+          case .check, .finished: return base + [.walkthroughScale, .walkthroughCheck]
+          }
+        }
+        return base
+      }
+      if first {
         let step = captureModel?.step ?? .newCapture
         return step == .newCapture ? [.newCapture] : [.newCapture, .scanSetup]
       }
@@ -175,13 +233,45 @@ final class VisitModel {
     while routes.count > count, guardCount < 4 {
       guardCount += 1
       switch routes.last {
-      case .scanSetup:
+      case .scanSetup, .measureMethod:
+        if flow.step == .scan { try? flow.scanCancelled() }
+        methodModel = nil
+        sketchModel = nil
+        sketchPhotoModel?.cancelReading()
+        sketchPhotoModel = nil
+        walkthroughModel = nil
         if flow.captures.isEmpty && !flow.isRevisionMode {
           captureModel?.back()
         } else {
           try? flow.cancelAddFloor()
           captureModel = nil
         }
+      case .sketchSource:
+        // Back to How do you want to measure?.
+        if flow.step == .scan { try? flow.scanCancelled() }
+        sketchModel = nil
+      case .photoSource:
+        // Back to How do you want to measure?.
+        sketchPhotoModel?.cancelReading()
+        sketchPhotoModel = nil
+      case .photoReading:
+        if sketchPhotoModel?.phase == .reading {
+          sketchPhotoModel?.cancelReading()
+        } else {
+          sketchPhotoModel?.retake()
+        }
+      case .photoLength:
+        sketchPhotoModel?.retake()
+      case .photoCheck:
+        sketchPhotoModel?.backFromCheck()
+      case .sketchRooms:
+        sketchModel?.backToSource()
+      case .sketchCheck:
+        sketchModel?.backToRooms()
+      case .walkthroughScale:
+        walkthroughModel?.backToWalking()
+      case .walkthroughCheck:
+        walkthroughModel?.backToScale()
       case .photos:
         photosDone()
       case .controls:
@@ -197,8 +287,13 @@ final class VisitModel {
   }
 
   /// Follows the capture screens' own step: Start scan creates the workspace folder (the first
-  /// one of a new capture), a cancelled scan goes back to step 2.
+  /// one of a new capture), a cancelled scan goes back to step 2. Step 1 of a capture without
+  /// LiDAR continues into How do you want to measure? instead (`methodModel`).
   func captureStepChanged(_ step: CaptureFlowStep?) {
+    if step == .scanSetup, captureModel?.purpose == .sketch {
+      makeMethodModel()
+      return
+    }
     switch (step, flow.step) {
     case (.scanning?, .captureRecord):
       do {
@@ -208,6 +303,25 @@ final class VisitModel {
         message = String(describing: error)
       }
     case (.scanSetup?, .scan), (.newCapture?, .scan):
+      try? flow.scanCancelled()
+    default:
+      break
+    }
+  }
+
+  /// Follows the sketch screens' step (spec F14 2.4): the rooms screen opening is the floor's
+  /// "Start scan" (the workspace folder, `VisitFlow.scanStarted`); back to the source screen
+  /// cancels it.
+  func sketchStepChanged(_ step: SketchEntryStep?) {
+    switch (step, flow.step) {
+    case (.rooms?, .captureRecord):
+      do {
+        try workspace.createFolder()
+        try flow.scanStarted()
+      } catch {
+        message = String(describing: error)
+      }
+    case (.source?, .scan):
       try? flow.scanCancelled()
     default:
       break
@@ -225,21 +339,235 @@ final class VisitModel {
       device: services.device, app: appInfo)
   }
 
-  private func makeCaptureModel(draft: CaptureRecordDraft, existingAreaKeys: Set<String>)
-    -> CaptureFlowModel
-  {
+  private func makeCaptureModel(
+    draft: CaptureRecordDraft, existingAreaKeys: Set<String>, purpose: CaptureFlowPurpose = .scan
+  ) -> CaptureFlowModel {
     CaptureFlowModel(
       draft: draft, capabilities: services.capabilities,
       projectProvider: StationProjectProvider(store: services.projects),
       originalsRoot: workspace.originalsRoot, makeSession: services.makeSession,
-      compass: services.compass, existingAreaKeys: existingAreaKeys,
-      onFinished: { [weak self] result in self?.floorFinished(result) })
+      compass: services.compass, existingAreaKeys: existingAreaKeys, purpose: purpose,
+      onFinished: { [weak self] result in self?.floorRecordFinished(result.record) })
   }
 
-  private func floorFinished(_ result: CaptureFlowResult) {
+  /// How do you want to measure? for the floor step 1 describes: the draft's label, mode and
+  /// units, the visit's area keys and the capture record's area-key rule.
+  private func makeMethodModel() {
+    guard let capture = captureModel, methodModel == nil else { return }
+    let draft = capture.draft
+    methodModel = MeasureMethodModel(
+      canWalk: services.canWalk, floorLabel: draft.floorLabel, mode: draft.mode ?? .floor,
+      displayUnits: draft.displayUnits, existingAreaKeys: Set(flow.captures.map(\.areaKey)),
+      areaKey: { CaptureRecordDraft.areaKey(for: $0) })
+  }
+
+  /// How do you want to measure?'s Continue: the sketch screens (spec F14), or the AR walk
+  /// (spec F15), which is the floor's "Start scan" (the workspace folder, `VisitFlow`).
+  func continueFromMethod() {
+    guard let method = methodModel, method.canContinue else { return }
+    switch method.method {
+    case .photo:
+      guard sketchPhotoModel == nil, let areaKey = method.areaKey,
+        let interpreter = services.sketchInterpreter
+      else { return }
+      sketchPhotoModel = SketchPhotoModel(
+        visitId: flow.record?.visitId ?? LowercaseUUID(), floorLabel: method.cleanedLabel,
+        areaKey: areaKey, mode: method.mode ?? .floor, displayUnits: method.displayUnits,
+        notice: services.sketchReaderNotice, interpreter: interpreter)
+    case .sketch:
+      makeSketchModel()
+    case .walk:
+      guard walkthroughModel == nil, let areaKey = method.areaKey else { return }
+      do {
+        try workspace.createFolder()
+        if flow.step == .captureRecord { try flow.scanStarted() }
+      } catch {
+        message = String(describing: error)
+        return
+      }
+      let captureId = LowercaseUUID()
+      walkthroughModel = WalkthroughModel(
+        visitId: flow.record?.visitId ?? LowercaseUUID(), captureId: captureId,
+        floorLabel: method.cleanedLabel, areaKey: areaKey, mode: method.mode ?? .floor,
+        displayUnits: method.displayUnits, session: services.makeWalkthroughSession(),
+        videoURL: FileManager.default.temporaryDirectory.appendingPathComponent(
+          "walkthrough-\(captureId.rawValue).mp4"))
+    }
+  }
+
+  /// True while the AR walk covers the screen.
+  var isWalking: Bool { walkthroughModel?.phase == .walking }
+
+  /// "Leave" on the AR walk: the walk and its recording are dropped; How do you want to
+  /// measure? again.
+  func leaveWalkthrough() {
+    guard let walk = walkthroughModel else { return }
+    walkthroughModel = nil
+    if flow.step == .scan { try? flow.scanCancelled() }
+    Task { await walk.cancel() }
+  }
+
+  /// "Finish floor" on the walkthrough's Check (spec F15 2): the recording finishes, the log
+  /// is converted and solved once more, the capture record of the floor gets
+  /// `captureSource: walkthrough`, the solver's `sketch` summary and the converter's
+  /// `walkthrough` summary (no compass field), and `walkthrough-log.json`,
+  /// `sketch-measurements.json` and `walkthrough.mp4` (when recorded) are written into the
+  /// capture's folder; then the visit goes on as after a scanned floor.
+  func finishWalkthroughFloor() {
+    guard let walk = walkthroughModel, let capture = captureModel, !walk.isFinishing else { return }
+    walk.isFinishing = true
+    Task { @MainActor in
+      defer { walk.isFinishing = false }
+      do {
+        let finished = try await walk.finish()
+        var draft = capture.draft
+        draft.floorLabel = walk.floorLabel
+        draft.mode = walk.mode
+        draft.displayUnits = walk.displayUnits
+        let now = UTCTimestamp.now()
+        var record = try draft.build(
+          visitId: walk.visitId, captureId: walk.captureId, visitedAt: finished.log.startedAt,
+          capturedAt: finished.log.startedAt)
+        record.captures[0].finishedAt = now
+        record.captures[0].captureSource = .walkthrough
+        record.captures[0].sketch = finished.result.summary
+        record.captures[0].walkthrough = finished.conversion.summary
+        try workspace.createFolder()
+        try WalkthroughFloorWriter.write(
+          log: finished.log, measurements: finished.conversion.measurements,
+          video: finished.videoURL, to: builder.originalsDirectory(of: record.captures[0]))
+        walk.markFinished()
+        floorRecordFinished(record)
+        walkthroughModel = nil
+        methodModel = nil
+        if let problem = finished.recordingProblem { message = problem }
+      } catch {
+        message = String(describing: error)
+      }
+    }
+  }
+
+  /// "Enter it by hand" after a photo that could not be read (spec F16 2): the F14 screens with
+  /// the photo as the sketch and the floor, mode and units chosen for the photo.
+  func enterSketchByHand() {
+    guard let photo = sketchPhotoModel else { return }
+    photo.cancelReading()
+    methodModel?.choose(.sketch)
+    sketchPhotoModel = nil
+    makeSketchModel()
+    guard let sketch = sketchModel else { return }
+    sketch.floorLabel = photo.floorLabel
+    sketch.mode = photo.mode
+    sketch.setDisplayUnits(photo.displayUnits)
+    if let image = photo.image { sketch.setImage(image, kind: photo.sourceKind) }
+  }
+
+  /// "Finish floor" on the sketch photo's Check (spec F16 2): the capture record of the floor
+  /// with `captureSource: sketch` and the solver's summary; `sketch.<ext>` (the photo as
+  /// taken), `sketch-interpretation.json` (what Claude read) and `sketch-measurements.json`
+  /// (converted from it) written into the capture's folder; then the visit goes on as after a
+  /// scanned floor.
+  func finishSketchPhotoFloor() {
+    guard let photo = sketchPhotoModel, let capture = captureModel, !photo.isFinishing else { return }
+    guard let result = photo.result ?? photo.solve(), let measurements = photo.measurements,
+      let interpretation = photo.interpretation
+    else {
+      message = photo.solveError ?? "The sketch has no model to finish."
+      return
+    }
+    photo.isFinishing = true
+    defer { photo.isFinishing = false }
+    var draft = capture.draft
+    draft.floorLabel = photo.floorLabel
+    draft.mode = photo.mode
+    draft.displayUnits = photo.displayUnits
+    do {
+      let now = UTCTimestamp.now()
+      var record = try draft.build(
+        visitId: photo.visitId, captureId: photo.captureId, visitedAt: now, capturedAt: now)
+      record.captures[0].finishedAt = now
+      record.captures[0].captureSource = .sketch
+      record.captures[0].sketch = result.summary
+      try workspace.createFolder()
+      _ = try SketchFloorWriter.write(
+        measurements: measurements, image: photo.image, interpretation: interpretation,
+        to: builder.originalsDirectory(of: record.captures[0]))
+      photo.markFinished()
+      floorRecordFinished(record)
+      sketchPhotoModel = nil
+      methodModel = nil
+    } catch {
+      message = String(describing: error)
+    }
+  }
+
+  /// The sketch screens' model for the floor step 1 describes: the capture record draft's
+  /// label, mode and units, the visit's ids, and the capture record's area-key rule.
+  private func makeSketchModel() {
+    guard let capture = captureModel, sketchModel == nil else { return }
+    let draft = capture.draft
+    sketchModel = SketchEntryModel(
+      visitId: flow.record?.visitId ?? LowercaseUUID(), floorLabel: draft.floorLabel,
+      mode: draft.mode, displayUnits: draft.displayUnits,
+      existingAreaKeys: Set(flow.captures.map(\.areaKey)),
+      areaKey: { CaptureRecordDraft.areaKey(for: $0) })
+  }
+
+  /// The right-hand caption of a screen of a capture without LiDAR: "Step N of 5", or the
+  /// project title when adding a floor, as step 2 of a scan has it.
+  func sketchCaption(step: Int) -> String {
+    flow.captures.isEmpty ? "Step \(step) of 5" : (flow.record.map(ProjectTitle.of) ?? "")
+  }
+
+  /// The fixture photo standing in for the camera on the sketch source screen (UI tests);
+  /// nil on the phone, which uses its camera.
+  var fixedPhoto: (@Sendable () async throws -> Data)? {
+    if case .fixed(let source) = services.photoSource { return source }
+    return nil
+  }
+
+  /// "Finish floor" on the Check screen (spec F14 2.4): the capture record of the floor with
+  /// `captureSource: sketch` and the solver's summary, the originals (`sketch.<ext>` and
+  /// `sketch-measurements.json`) written into the capture's folder, then the visit goes on as
+  /// after a scanned floor (photos, the overview).
+  func finishSketchFloor() {
+    guard let sketch = sketchModel, let capture = captureModel, !sketch.isFinishing else { return }
+    guard let result = sketch.result ?? sketch.solve() else {
+      message = sketch.solveError
+      return
+    }
+    sketch.isFinishing = true
+    defer { sketch.isFinishing = false }
+    var draft = capture.draft
+    draft.floorLabel = sketch.floorLabel
+    draft.mode = sketch.mode
+    draft.displayUnits = sketch.displayUnits
+    do {
+      let now = UTCTimestamp.now()
+      var record = try draft.build(
+        visitId: sketch.visitId, captureId: sketch.captureId, visitedAt: now, capturedAt: now)
+      record.captures[0].finishedAt = now
+      record.captures[0].captureSource = .sketch
+      record.captures[0].sketch = result.summary
+      try workspace.createFolder()
+      _ = try SketchFloorWriter.write(
+        measurements: sketch.measurements, image: sketch.image,
+        to: builder.originalsDirectory(of: record.captures[0]))
+      sketch.markFinished()
+      floorRecordFinished(record)
+      sketchModel = nil
+      methodModel = nil
+    } catch {
+      message = String(describing: error)
+    }
+  }
+
+  /// A finished floor (a scan's `CaptureFlowResult`, or a sketch floor): its one capture joins
+  /// the visit and the photo step opens.
+  private func floorRecordFinished(_ floorRecord: CaptureRecord) {
     do {
       if flow.step == .captureRecord { try flow.scanStarted() }
-      try flow.floorFinished(result.record)
+      try flow.floorFinished(floorRecord)
       guard let record = flow.record, let capture = record.captures.last else { return }
       if controls == nil {
         controls = FieldControlsEditor(visitId: record.visitId).controls
@@ -322,9 +650,12 @@ final class VisitModel {
 
   /// "Scan another floor or room" (overview, Package ready, Revision n): step 2 with the visit's
   /// project and the address confirmation carried over, the next free "Floor N", and the visit's
-  /// area keys refused.
-  func addFloor() {
+  /// area keys refused. On a phone that cannot scan the floor is captured without LiDAR
+  /// instead: How do you want to measure? (spec F14, F15: a visit can mix scanned, walked and
+  /// sketched floors).
+  func addFloor(sketch: Bool? = nil) {
     guard let record = flow.record else { return }
+    let sketch = sketch ?? !DeviceGate.evaluate(services.capabilities).isSupported
     do {
       try flow.addFloor()
     } catch {
@@ -341,9 +672,14 @@ final class VisitModel {
     draft.setAddressConfirmed(true, at: UTCTimestamp.now())
     draft.displayUnits = record.captures.first?.units.display ?? draft.displayUnits
     let next = makeCaptureModel(
-      draft: draft, existingAreaKeys: Set(record.captures.map(\.areaKey)))
+      draft: draft, existingAreaKeys: Set(record.captures.map(\.areaKey)),
+      purpose: sketch ? .sketch : .scan)
     next.step = .scanSetup
     captureModel = next
+    methodModel = nil
+    sketchModel = nil
+    walkthroughModel = nil
+    if sketch { makeMethodModel() }
   }
 
   /// A "Before you leave" row of the overview.
