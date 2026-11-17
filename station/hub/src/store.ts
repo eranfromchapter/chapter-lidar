@@ -16,7 +16,7 @@ export interface PublishedFile {
   readonly folder: string | null;
   /** Package path; null for the spatial report. */
   readonly path: string | null;
-  /** Manifest role, "manifest" or "spatial_report" (older rows: "verdict_report"). */
+  /** Manifest role, "manifest", "spatial_report" (older rows: "verdict_report") or "room_summary". */
   readonly role: string;
   readonly sha256: string;
   readonly bytes: number;

@@ -235,6 +235,7 @@ export function makeTestPackage(options: TestPackageOptions = {}): TestPackage {
       const visit = `Capture/${visitId}/r1`;
       const out = [
         { folder: visit, name: `spatial-report-${verdict.verdictId}.pdf` },
+        { folder: visit, name: `room-summary-${verdict.verdictId}.json` },
         { folder: visit, name: "manifest.json" },
       ];
       for (const record of records) {

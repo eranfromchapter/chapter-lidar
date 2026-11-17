@@ -19,7 +19,7 @@ import {
 import { syntheticModel } from "./report/support.js";
 
 describe("HubPublisher publish", () => {
-  it("uploads exactly the report, the manifest and the plan files into their folders", async () => {
+  it("uploads exactly the report, the room summary, the manifest and the plan files into their folders", async () => {
     const test = makeTestPackage();
     const { hub, store, publisher } = harness();
     const result = await publisher.publish(test.request());
@@ -27,11 +27,11 @@ describe("HubPublisher publish", () => {
     assert.equal(result.status, "published");
     assert.equal(result.attempts, 1);
     assert.deepEqual(sortPairs(storedPairs(hub)), sortPairs(test.expectedUploads()));
-    // 2 visit-wide files (spatial report, manifest) + 4 plan files per capture.
-    assert.equal(hub.documents.length, 10);
+    // 3 visit-wide files (spatial report, room summary, manifest) + 4 plan files per capture.
+    assert.equal(hub.documents.length, 11);
 
     const uploads = hub.requestsOf("upload");
-    assert.equal(uploads.length, 10);
+    assert.equal(uploads.length, 11);
     for (const upload of uploads) {
       assert.equal(upload.status, 201);
       assert.equal(upload.dealId, test.pkg.dealId);
@@ -48,6 +48,24 @@ describe("HubPublisher publish", () => {
       hub.documents.find((doc) => doc.folder === folder && doc.name === name);
     assert.ok(byName(visit, "manifest.json"));
     assert.ok(byName(visit, `spatial-report-${test.verdict.verdictId}.pdf`));
+    // The room summary sits next to the report: JSON naming this package and verdict. The test
+    // package has no capture model, so its floors are listed as not measured.
+    const summaryDoc = byName(visit, `room-summary-${test.verdict.verdictId}.json`);
+    assert.equal(summaryDoc?.contentType.startsWith("application/json"), true);
+    const summary = JSON.parse(Buffer.from(summaryDoc?.data ?? []).toString("utf8")) as {
+      schema: string;
+      packageId: string;
+      dealId: string;
+      verdictId: string;
+      totals: { rooms: number };
+      floors: { status: string }[];
+    };
+    assert.deepEqual(
+      [summary.schema, summary.packageId, summary.dealId, summary.verdictId],
+      ["chapter.room-summary", test.pkg.packageId, test.pkg.dealId, test.verdict.verdictId],
+    );
+    assert.equal(summary.totals.rooms, 0);
+    assert.ok(summary.floors.every((floor) => floor.status !== "ok"));
     for (const file of test.pkg.files.filter((f) => f.role === "plan_dxf")) {
       assert.ok(byName(`Capture/${file.areaKey}/${file.captureId}/r1`, "plan.dxf"));
     }
@@ -71,12 +89,17 @@ describe("HubPublisher publish", () => {
     assert.equal(row?.error, null);
     const uploaded = row?.files.filter((f) => f.kind === "uploaded") ?? [];
     const linked = row?.files.filter((f) => f.kind === "linked") ?? [];
-    assert.equal(uploaded.length, 10);
+    assert.equal(uploaded.length, 11);
     // The report is recorded with role spatial_report and its verdict.
     const reportEntry = uploaded.find((f) => f.name.startsWith("spatial-report-"));
     assert.equal(reportEntry?.role, "spatial_report");
     assert.equal(reportEntry?.verdictId, test.verdict.verdictId);
     assert.equal(reportEntry?.path, null);
+    // The room summary is recorded with role room_summary and the same verdict.
+    const summaryEntry = uploaded.find((f) => f.name.startsWith("room-summary-"));
+    assert.equal(summaryEntry?.role, "room_summary");
+    assert.equal(summaryEntry?.verdictId, test.verdict.verdictId);
+    assert.equal(summaryEntry?.path, null);
     assert.deepEqual(linked.map((f) => f.role).sort(), [
       "capture_record",
       "field_controls",
@@ -115,7 +138,7 @@ describe("HubPublisher publish", () => {
     const { hub, store, publisher } = harness();
     const result = await publisher.publish(test.request());
     assert.equal(result.status, "published");
-    assert.equal(hub.documents.length, 10);
+    assert.equal(hub.documents.length, 11);
     assert.ok(!hub.documents.some((doc) => doc.name === "spatial-report.pdf"));
     const legacy = store
       .get(test.pkg.packageId)

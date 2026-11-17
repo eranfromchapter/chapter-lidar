@@ -27,7 +27,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx --test \"test/**/*.test.ts\"",
     "brand-assets": "node scripts/generate-brand-assets.mjs",
-    "brand-assets:check": "node scripts/generate-brand-assets.mjs --check"
+    "brand-assets:check": "node scripts/generate-brand-assets.mjs --check",
+    "room-summary:demo": "tsx scripts/room-summary-demo.ts"
   },
   "dependencies": {
     "@chapter/capture-contract": "1.1.0",
