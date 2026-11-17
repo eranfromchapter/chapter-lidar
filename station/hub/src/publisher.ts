@@ -30,13 +30,18 @@ import {
 } from "./plan.js";
 import { renderSpatialReport, type RenderedReport, type ReportFile } from "./report.js";
 import { DEFAULT_REPORT_TIME_ZONE } from "./report/format.js";
+import type { ReportFloorSource } from "./report/input.js";
 import { loadReportSources } from "./report/sources.js";
 import { fileKey, type PublicationStore, type PublishedFile } from "./store.js";
+import { buildRoomSummary, roomSummaryFileName, roomSummaryJson } from "./summary/room-summary.js";
 import type { HubApi, HubLogger } from "./types.js";
 
 export const DEFAULT_MAX_ATTEMPTS = 5;
 /** Role of the spatial report's entry in hub_publications.files (older rows: verdict_report). */
 export const SPATIAL_REPORT_ROLE = "spatial_report";
+/** The room summary published next to the spatial report (src/summary/room-summary.ts). */
+export const ROOM_SUMMARY_ROLE = "room_summary";
+export const ROOM_SUMMARY_CONTENT_TYPE = "application/json";
 export const DEFAULT_BASE_DELAY_MS = 2_000;
 export const DEFAULT_MAX_DELAY_MS = 30_000;
 
@@ -96,6 +101,12 @@ interface UploadItem extends PlannedUpload {
   readonly verdictId?: string;
 }
 
+/** The files the publisher makes itself; summary is undefined when it could not be built. */
+interface GeneratedFiles {
+  readonly report: Buffer;
+  readonly summary?: Buffer;
+}
+
 /** Where each file of a publication plan is, for the report's package record. */
 export function reportFilesOf(plan: PublicationPlan): ReportFile[] {
   return plan.files.map((file) =>
@@ -115,6 +126,18 @@ export function reportFilesOf(plan: PublicationPlan): ReportFile[] {
           location: { kind: "link", url: file.url, reason: file.reason },
         },
   );
+}
+
+/** The publication role of an upload. */
+function roleOf(item: UploadItem): string {
+  switch (item.source) {
+    case "report":
+      return SPATIAL_REPORT_ROLE;
+    case "summary":
+      return ROOM_SUMMARY_ROLE;
+    default:
+      return item.role ?? "manifest";
+  }
 }
 
 function sha256Hex(data: Uint8Array): string {
@@ -246,6 +269,7 @@ export class HubPublisher {
       },
       this.#photoBudgetBytes === undefined ? {} : { photoBudgetBytes: this.#photoBudgetBytes },
     );
+    const summary = this.#roomSummary(pkg, verdict.verdictId, sources.floors);
     try {
       rendered = await renderSpatialReport({
         verdict,
@@ -276,6 +300,20 @@ export class HubPublisher {
           bytes: report.byteLength,
           verdictId: verdict.verdictId,
         },
+        ...(summary === undefined
+          ? []
+          : [
+              {
+                kind: "upload" as const,
+                source: "summary" as const,
+                folder: plan.report.folder,
+                name: roomSummaryFileName(verdict.verdictId),
+                contentType: ROOM_SUMMARY_CONTENT_TYPE,
+                sha256: sha256Hex(summary),
+                bytes: summary.byteLength,
+                verdictId: verdict.verdictId,
+              },
+            ]),
         ...plan.files.filter((file): file is PlannedUpload => file.kind === "upload"),
       ];
       for (const file of plan.files) {
@@ -333,7 +371,7 @@ export class HubPublisher {
     for (let attempt = 1; ; attempt += 1) {
       await this.#store.countAttempt(pkg.packageId);
       try {
-        await this.#uploadMissing(request, uploads, report, recorded, record);
+        await this.#uploadMissing(request, uploads, { report, summary }, recorded, record);
         await this.#verify(pkg.dealId, uploads, recorded);
         await storeCall(() => this.#store.markPublished(pkg.packageId));
         this.#logger?.info(
@@ -406,7 +444,7 @@ export class HubPublisher {
   async #uploadMissing(
     request: PublishRequest,
     uploads: readonly UploadItem[],
-    report: Buffer,
+    generated: GeneratedFiles,
     recorded: Map<string, PublishedFile>,
     record: (file: PublishedFile) => Promise<void>,
   ): Promise<void> {
@@ -415,7 +453,8 @@ export class HubPublisher {
       const key = fileKey({ kind: "uploaded", folder: item.folder, name: item.name });
       const existing = recorded.get(key);
       if (existing !== undefined) {
-        if (existing.sha256 !== item.sha256 && item.source !== "report") {
+        const generatedSource = item.source === "report" || item.source === "summary";
+        if (existing.sha256 !== item.sha256 && !generatedSource) {
           throw new HubError(
             "conflict",
             `A different file named ${item.name} is already published in ${item.folder}`,
@@ -428,7 +467,7 @@ export class HubPublisher {
         name: item.name,
         folder: item.folder,
         path: item.path ?? null,
-        role: item.source === "report" ? SPATIAL_REPORT_ROLE : (item.role ?? "manifest"),
+        role: roleOf(item),
         sha256: item.sha256,
         bytes: item.bytes,
         ...(item.verdictId === undefined ? {} : { verdictId: item.verdictId }),
@@ -448,7 +487,7 @@ export class HubPublisher {
         continue;
       }
 
-      const data = await this.#read(request, item, report);
+      const data = await this.#read(request, item, generated);
       const result = await this.#hub.uploadDocument({
         dealId: pkg.dealId,
         folder: item.folder,
@@ -464,11 +503,51 @@ export class HubPublisher {
     }
   }
 
-  async #read(request: PublishRequest, item: UploadItem, report: Buffer): Promise<Uint8Array> {
+  /**
+   * The room summary of the package's floors as published, or undefined (logged) when it cannot
+   * be built: the summary goes next to the spatial report and never holds it back.
+   */
+  #roomSummary(
+    pkg: PublishPackage,
+    verdictId: string,
+    floors: readonly ReportFloorSource[],
+  ): Buffer | undefined {
+    try {
+      const summary = buildRoomSummary({
+        packageId: pkg.packageId,
+        dealId: pkg.dealId,
+        verdictId,
+        ...(pkg.sealedAt === undefined ? {} : { sealedAt: pkg.sealedAt }),
+        floors,
+      });
+      return Buffer.from(roomSummaryJson(summary), "utf8");
+    } catch (error) {
+      this.#logger?.warn(
+        {
+          packageId: pkg.packageId,
+          verdictId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "room summary not built; publishing the spatial report without it",
+      );
+      return undefined;
+    }
+  }
+
+  async #read(
+    request: PublishRequest,
+    item: UploadItem,
+    generated: GeneratedFiles,
+  ): Promise<Uint8Array> {
     let data: Uint8Array;
     switch (item.source) {
       case "report":
-        return report;
+        return generated.report;
+      case "summary":
+        if (generated.summary === undefined) {
+          throw new HubError("integrity", `Upload ${item.name} has no room summary`);
+        }
+        return generated.summary;
       case "manifest":
         data = await request.readManifest();
         break;
